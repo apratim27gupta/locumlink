@@ -1,9 +1,11 @@
-import { Module }          from '@nestjs/common';
+import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module.js';
 import { LocumController } from './locum.controller.js';
-import { LocumService }    from './locum.service.js';
+import { LocumService } from './locum.service.js';
 
 @Module({
+  imports: [AuthModule],
   controllers: [LocumController],
-  providers:   [LocumService],
+  providers: [LocumService],
 })
 export class LocumModule {}

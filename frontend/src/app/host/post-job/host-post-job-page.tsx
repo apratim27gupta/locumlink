@@ -4,12 +4,27 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { hostApi } from '@/lib/api';
+import { useHostProfile } from '@/hooks/useHostProfile';
+import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
+import { isCpsnsVerified } from '@/lib/cpsnsVerify';
 
 const NAV = [
-  { label: 'My Postings', href: '/host/dashboard', icon: <NavIcon name="postings" /> },
+  {
+    label: 'My Postings',
+    href: '/host/dashboard',
+    icon: <NavIcon name="postings" />,
+  },
   { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile" /> },
-  { label: 'Messages', href: '/host/messages', icon: <NavIcon name="messages" /> },
-  { label: 'Resources', href: '/host/resources', icon: <NavIcon name="resources" /> },
+  {
+    label: 'Messages',
+    href: '/host/messages',
+    icon: <NavIcon name="messages" />,
+  },
+  {
+    label: 'Resources',
+    href: '/host/resources',
+    icon: <NavIcon name="resources" />,
+  },
 ];
 
 const inp: React.CSSProperties = {
@@ -33,8 +48,17 @@ const lbl: React.CSSProperties = {
   marginBottom: 6,
 };
 
-export default function HostPostJobPage() {
+export default function HostPostJobPage(props: {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  useNextPageClientProps(props);
   const router = useRouter();
+  const { profile, loading: profileLoading } = useHostProfile();
+
+  // ── FIX Issue 6: verified = can publish; unverified = saved as DRAFT ──────
+  const verified = isCpsnsVerified(profile?.cpsnsNumber);
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
@@ -44,15 +68,19 @@ export default function HostPostJobPage() {
   const [accommodationProvided, setAccommodationProvided] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [savedAsDraft, setSavedAsDraft] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr('');
+    setSavedAsDraft(false);
+
     const t = title.trim();
     if (!t) {
       setErr('Please enter a job title.');
       return;
     }
+
     const servicesRequired = servicesRaw
       .split(',')
       .map((s) => s.trim())
@@ -60,29 +88,48 @@ export default function HostPostJobPage() {
 
     setBusy(true);
     try {
+      // ── FIX Issue 6: pass status based on CPSNS verification ─────────────
+      // Verified hosts → ACTIVE (visible to locums immediately)
+      // Unverified hosts → DRAFT (saved but not shown in browse until admin verifies)
       await hostApi.createJob({
         title: t,
         description: description.trim() || undefined,
         location: location.trim() || undefined,
         expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
-        servicesRequired: servicesRequired.length ? servicesRequired : undefined,
+        servicesRequired: servicesRequired.length
+          ? servicesRequired
+          : undefined,
         isRural: isRural || undefined,
         accommodationProvided: accommodationProvided || undefined,
+        // Pass status so backend can persist it correctly
+        status: verified ? 'ACTIVE' : 'DRAFT',
       });
-      router.push('/host/dashboard');
+
+      if (verified) {
+        // Verified: redirect to dashboard so they can see the live posting
+        router.push('/host/dashboard');
+      } else {
+        // Unverified: stay on page and show confirmation that draft was saved
+        setSavedAsDraft(true);
+        setBusy(false);
+      }
     } catch (e: unknown) {
       const msg =
         e && typeof e === 'object' && 'message' in e
           ? String((e as { message: string }).message)
           : 'Could not create the job. Please try again.';
       setErr(msg);
-    } finally {
       setBusy(false);
     }
   }
 
   return (
-    <DashLayout navItems={NAV} activeHref="/host/dashboard">
+    <DashLayout
+      navItems={NAV}
+      activeHref="/host/dashboard"
+      topbarFirstName={profile?.contactFirstName}
+      topbarLastName={profile?.contactLastName}
+    >
       <div style={{ maxWidth: 560 }}>
         <h1
           style={{
@@ -94,9 +141,66 @@ export default function HostPostJobPage() {
         >
           Post a new job
         </h1>
+
+        {/* ── FIX Issue 6: banner tells unverified hosts their job will be a draft ── */}
+        {!profileLoading && !verified && (
+          <div
+            style={{
+              background: '#fff7ed',
+              border: '1px solid #fdba74',
+              color: '#9a3412',
+              padding: '10px 14px',
+              borderRadius: 8,
+              fontSize: 13,
+              marginBottom: 16,
+              lineHeight: 1.6,
+            }}
+          >
+            <strong>Your CPSNS number is pending verification.</strong> You can
+            still fill in and save this job, but it will be stored as a{' '}
+            <strong>Draft</strong> and won&apos;t be visible to locums until an admin
+            verifies your account.
+          </div>
+        )}
+
+        {/* Draft saved confirmation */}
+        {savedAsDraft && (
+          <div
+            style={{
+              background: '#f0fdf4',
+              border: '1px solid #86efac',
+              color: '#166534',
+              padding: '10px 14px',
+              borderRadius: 8,
+              fontSize: 13,
+              marginBottom: 16,
+            }}
+          >
+            ✓ Job saved as Draft. It will go live once your CPSNS number is
+            verified.{' '}
+            <button
+              type="button"
+              onClick={() => router.push('/host/dashboard')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#166534',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                fontSize: 13,
+                fontFamily: 'inherit',
+                padding: 0,
+              }}
+            >
+              View in Dashboard →
+            </button>
+          </div>
+        )}
+
         <p style={{ fontSize: 14, color: '#6b7280', marginBottom: 24 }}>
-          Locums will see this listing when it is active. You can edit details later from
-          your dashboard.
+          {verified
+            ? 'Locums will see this listing immediately once published.'
+            : 'Fill in the details below and save. Your listing will be activated once verified.'}
         </p>
 
         <form onSubmit={handleSubmit}>
@@ -159,7 +263,15 @@ export default function HostPostJobPage() {
               marginBottom: 20,
             }}
           >
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+            >
               <input
                 type="checkbox"
                 checked={isRural}
@@ -167,7 +279,15 @@ export default function HostPostJobPage() {
               />
               Rural placement
             </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+            >
               <input
                 type="checkbox"
                 checked={accommodationProvided}
@@ -178,7 +298,9 @@ export default function HostPostJobPage() {
           </div>
 
           {err && (
-            <p style={{ fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{err}</p>
+            <p style={{ fontSize: 13, color: '#dc2626', marginBottom: 12 }}>
+              {err}
+            </p>
           )}
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -189,7 +311,11 @@ export default function HostPostJobPage() {
                 padding: '12px 20px',
                 borderRadius: 8,
                 border: 'none',
-                background: busy ? '#9ca3af' : 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
+                background: busy
+                  ? '#9ca3af'
+                  : verified
+                    ? 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)'
+                    : '#6B7280',
                 color: '#fff',
                 fontWeight: 600,
                 fontSize: 15,
@@ -197,7 +323,13 @@ export default function HostPostJobPage() {
                 fontFamily: 'inherit',
               }}
             >
-              {busy ? 'Publishing…' : 'Publish job'}
+              {busy
+                ? verified
+                  ? 'Publishing…'
+                  : 'Saving draft…'
+                : verified
+                  ? 'Publish job'
+                  : 'Save as Draft'}
             </button>
             <button
               type="button"

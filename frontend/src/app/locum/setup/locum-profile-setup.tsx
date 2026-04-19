@@ -7,7 +7,6 @@ import { useAuth } from '@/providers/AuthProvider';
 import { locumApi } from '@/lib/api';
 import type { LocumProfile } from '@/types';
 
-/** Frame 1948760021 / 1948760022 / Rectangle 846074 — locum card (6px radius) */
 const LOCUM_SETUP_MODAL = {
   widthPx: 476,
   heightPx: 790,
@@ -16,15 +15,34 @@ const LOCUM_SETUP_MODAL = {
   borderRadiusPx: 6,
   contentWidthPx: 412,
   headerHeightPx: 100,
-  /** Step 3 uses same 100px header as steps 1–2 (Frame 1948760037) */
   headerHeightStep3Px: 100,
   formToActionsGapStep1Px: 28,
   formToActionsGapStep2Px: 28,
-  /** Frame 1948760053 — gap between upload block and Done */
   formToActionsGapStep3Px: 167,
   bodyTopGapPx: 24,
   boxShadow: '0 20px 60px rgba(0, 0, 0, 0.28)',
 } as const;
+
+// ── FIX Issue 4 (locum): preset specialization options ───────────────────────
+const SPECIALIZATION_OPTIONS = [
+  'Family Medicine',
+  'Internal Medicine',
+  'Emergency Medicine',
+  'General Practice',
+  'Anaesthetics',
+  'Paediatrics',
+  'ENT',
+  'Obstetrics & Gynaecology',
+  'Psychiatry',
+  'Surgery',
+] as const;
+
+function parseSpecializations(s: string): string[] {
+  return s
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
 
 const inp: React.CSSProperties = {
   width: '100%',
@@ -41,7 +59,6 @@ const inp: React.CSSProperties = {
   boxSizing: 'border-box' as const,
 };
 
-/** Frame 1948759951 — locum step 2 fields use 4px radius (not step 1’s 8px) */
 const inpStep2: React.CSSProperties = {
   width: '100%',
   padding: '6px 8px',
@@ -72,7 +89,6 @@ const sectionTitle: React.CSSProperties = {
   color: '#0B0F1F',
 };
 
-/** Frame 1948759951 — locum step 3 upload rows */
 const uploadRowShell: React.CSSProperties = {
   boxSizing: 'border-box',
   width: '100%',
@@ -130,20 +146,41 @@ export default function LocumSetupPage() {
     lastName: '',
     cpsnsNumber: '',
     professionalSummary: '',
-    specialization: '',
+    specialization: '', // stored as comma-separated string
     address1: '',
     address2: '',
     postalCode: '',
     city: '',
-    province: '',
+    // ── FIX Issue 3: default to Nova Scotia ──────────────────────────────────
+    province: 'Nova Scotia',
+    licenseFileName: '',
+    resumeFileName: '',
+    extraFileName: '',
   });
+
+  // ── FIX Issue 4 (locum): tag state derived from form.specialization ────────
+  const [specializationTags, setSpecializationTags] = useState<string[]>([]);
+  const [addingCustomSpec, setAddingCustomSpec] = useState(false);
+  const [customSpec, setCustomSpec] = useState('');
+  const customSpecRef = useRef<HTMLInputElement>(null);
 
   const licenseRef = useRef<HTMLInputElement>(null);
   const resumeRef = useRef<HTMLInputElement>(null);
   const extraRef = useRef<HTMLInputElement>(null);
-  const [licenseFile, setLicenseFile] = useState('');
-  const [resumeFile, setResumeFile] = useState('');
-  const [extraFile, setExtraFile] = useState('');
+
+  function updateSpecializationTags(tags: string[]) {
+    setSpecializationTags(tags);
+    setForm((f) => ({ ...f, specialization: tags.join(', ') }));
+  }
+
+  function confirmCustomSpec() {
+    const t = customSpec.trim();
+    if (t && !specializationTags.includes(t)) {
+      updateSpecializationTags([...specializationTags, t]);
+    }
+    setCustomSpec('');
+    setAddingCustomSpec(false);
+  }
 
   const step1Valid = useMemo(
     () =>
@@ -151,8 +188,8 @@ export default function LocumSetupPage() {
       (form.lastName ?? '').trim().length > 0 &&
       (form.cpsnsNumber ?? '').trim().length > 0 &&
       (form.professionalSummary ?? '').trim().length > 0 &&
-      (form.specialization ?? '').trim().length > 0,
-    [form],
+      specializationTags.length > 0, // must have at least one tag
+    [form, specializationTags],
   );
 
   const step2Valid = useMemo(
@@ -165,8 +202,10 @@ export default function LocumSetupPage() {
   );
 
   const step3Valid = useMemo(
-    () => licenseFile.trim().length > 0 && resumeFile.trim().length > 0,
-    [licenseFile, resumeFile],
+    () =>
+      (form.licenseFileName ?? '').trim().length > 0 &&
+      (form.resumeFileName ?? '').trim().length > 0,
+    [form.licenseFileName, form.resumeFileName],
   );
 
   function set<K extends keyof LocumProfile>(k: K, v: LocumProfile[K]) {
@@ -178,15 +217,17 @@ export default function LocumSetupPage() {
     setErr('');
     try {
       await locumApi.saveProfile(form);
-    } catch {
-      /* backend not ready yet */
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : 'Could not save your profile. Try again.';
+      setErr(msg);
+      setBusy(false);
+      return;
     }
     completeProfile();
-    if (typeof window !== 'undefined') {
-      window.location.assign('/locum/dashboard');
-    } else {
-      router.replace('/locum/dashboard');
-    }
+    router.replace('/locum/dashboard');
     setBusy(false);
   }
 
@@ -200,7 +241,6 @@ export default function LocumSetupPage() {
         fontFamily: 'var(--font-family-body, DM Sans, sans-serif)',
       }}
     >
-      {/* Same backdrop as host setup: /home landing (non-interactive) + dim overlay */}
       <div
         style={{
           position: 'absolute',
@@ -226,8 +266,9 @@ export default function LocumSetupPage() {
         }}
       />
 
-      {/* Frame 1948760021 — locum profile card */}
+      {/* Profile card */}
       <div style={locumModalCardBase}>
+        {/* Header */}
         <div
           style={{
             position: 'relative',
@@ -313,6 +354,7 @@ export default function LocumSetupPage() {
           </div>
         </div>
 
+        {/* Body */}
         <div
           style={{
             flex: 1,
@@ -340,16 +382,16 @@ export default function LocumSetupPage() {
                 gap: 24,
               }}
             >
-          {/* Step 1 — Frame 1948759988 / Basic Information */}
-          {step === 1 && (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 24,
-                width: '100%',
-              }}
-            >
+              {/* ── Step 1: Basic Information ── */}
+              {step === 1 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 24,
+                    width: '100%',
+                  }}
+                >
                   <div style={sectionTitle}>Basic Information</div>
                   <div
                     style={{
@@ -359,6 +401,7 @@ export default function LocumSetupPage() {
                       width: '100%',
                     }}
                   >
+                    {/* Name row */}
                     <div
                       style={{
                         display: 'flex',
@@ -405,6 +448,8 @@ export default function LocumSetupPage() {
                         />
                       </div>
                     </div>
+
+                    {/* CPSNS */}
                     <div
                       style={{
                         display: 'flex',
@@ -422,6 +467,8 @@ export default function LocumSetupPage() {
                         onChange={(e) => set('cpsnsNumber', e.target.value)}
                       />
                     </div>
+
+                    {/* Professional Summary */}
                     <div
                       style={{
                         display: 'flex',
@@ -446,6 +493,8 @@ export default function LocumSetupPage() {
                         }
                       />
                     </div>
+
+                    {/* ── FIX Issue 4 (locum): multi-tag specialization ──────────────── */}
                     <div
                       style={{
                         display: 'flex',
@@ -455,27 +504,225 @@ export default function LocumSetupPage() {
                       }}
                     >
                       <label style={lbl}>Specialization</label>
-                      <input
-                        className="locum-setup-input"
-                        style={inp}
-                        placeholder="Add specialization"
-                        value={form.specialization}
-                        onChange={(e) => set('specialization', e.target.value)}
-                      />
+
+                      {/* Row: preset dropdown + Custom button */}
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                        <div style={{ position: 'relative', flex: 1 }}>
+                          <select
+                            style={{
+                              ...inp,
+                              width: '100%',
+                              paddingRight: 36,
+                              color: '#0B0F1F',
+                            }}
+                            value=""
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v && !specializationTags.includes(v)) {
+                                updateSpecializationTags([
+                                  ...specializationTags,
+                                  v,
+                                ]);
+                              }
+                              e.target.selectedIndex = 0;
+                            }}
+                          >
+                            <option value="">Pick Specialization</option>
+                            {SPECIALIZATION_OPTIONS.filter(
+                              (o) => !specializationTags.includes(o),
+                            ).map((o) => (
+                              <option key={o} value={o}>
+                                {o}
+                              </option>
+                            ))}
+                          </select>
+                          <span
+                            style={{
+                              position: 'absolute',
+                              right: 10,
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              pointerEvents: 'none',
+                              fontSize: 10,
+                              lineHeight: 1,
+                              color: '#000000',
+                            }}
+                            aria-hidden
+                          >
+                            ▼
+                          </span>
+                        </div>
+
+                        {!addingCustomSpec && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddingCustomSpec(true);
+                              setTimeout(
+                                () => customSpecRef.current?.focus(),
+                                50,
+                              );
+                            }}
+                            style={{
+                              height: 44,
+                              padding: '0 12px',
+                              border: '1px dashed #3B4FD8',
+                              borderRadius: 8,
+                              background: 'none',
+                              color: '#3B4FD8',
+                              fontSize: 13,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            + Custom
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Inline custom text input */}
+                      {addingCustomSpec && (
+                        <div
+                          style={{ display: 'flex', gap: 8, marginBottom: 8 }}
+                        >
+                          <input
+                            ref={customSpecRef}
+                            type="text"
+                            value={customSpec}
+                            onChange={(e) => setCustomSpec(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                confirmCustomSpec();
+                              }
+                              if (e.key === 'Escape') {
+                                setCustomSpec('');
+                                setAddingCustomSpec(false);
+                              }
+                            }}
+                            placeholder="Type specialization…"
+                            style={{
+                              flex: 1,
+                              height: 38,
+                              padding: '4px 8px',
+                              border: '1px solid #3B4FD8',
+                              borderRadius: 8,
+                              fontSize: 15,
+                              fontFamily: 'inherit',
+                              outline: 'none',
+                              color: '#0B0F1F',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={confirmCustomSpec}
+                            style={{
+                              padding: '0 14px',
+                              height: 38,
+                              background: '#1B31D2',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 8,
+                              fontSize: 13,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                            }}
+                          >
+                            Add
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomSpec('');
+                              setAddingCustomSpec(false);
+                            }}
+                            style={{
+                              padding: '0 10px',
+                              height: 38,
+                              background: 'none',
+                              color: '#6B7280',
+                              border: '1px solid #D0D5DD',
+                              borderRadius: 8,
+                              fontSize: 13,
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Tag pills */}
+                      {specializationTags.length > 0 && (
+                        <div
+                          style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}
+                        >
+                          {specializationTags.map((tag) => (
+                            <span
+                              key={tag}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                padding: '8px 12px',
+                                borderRadius: 40,
+                                background: 'rgba(115, 177, 251, 0.1)',
+                                color: '#1522A6',
+                                fontSize: 14,
+                                lineHeight: '100%',
+                                letterSpacing: '0.02em',
+                              }}
+                            >
+                              {tag}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateSpecializationTags(
+                                    specializationTags.filter((t) => t !== tag),
+                                  )
+                                }
+                                aria-label={`Remove ${tag}`}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  width: 16,
+                                  height: 16,
+                                  padding: 0,
+                                  border: '1.5px solid #1522A6',
+                                  borderRadius: 50,
+                                  background: 'transparent',
+                                  cursor: 'pointer',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    lineHeight: 1,
+                                    color: '#1522A6',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  ×
+                                </span>
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-          )}
+              )}
 
-          {step === 2 && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 16,
-                  width: '100%',
-                }}
-              >
+              {/* ── Step 2: Location ── */}
+              {step === 2 && (
                 <div
                   style={{
                     display: 'flex',
@@ -484,146 +731,175 @@ export default function LocumSetupPage() {
                     width: '100%',
                   }}
                 >
-                  <div style={sectionTitle}>Location</div>
                   <div
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 24,
+                      gap: 16,
                       width: '100%',
                     }}
                   >
+                    <div style={sectionTitle}>Location</div>
                     <div
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: 16,
+                        gap: 24,
                         width: '100%',
                       }}
                     >
+                      {/* Address lines */}
                       <div
                         style={{
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: 8,
-                          width: '100%',
-                        }}
-                      >
-                        <label style={lbl}>Address Line 1</label>
-                        <input
-                          className="locum-setup-input"
-                          style={inpStep2}
-                          placeholder="Location Address Line 1"
-                          value={form.address1}
-                          onChange={(e) => set('address1', e.target.value)}
-                        />
-                      </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 8,
-                          width: '100%',
-                        }}
-                      >
-                        <label style={lbl}>Address Line 2</label>
-                        <input
-                          className="locum-setup-input"
-                          style={inpStep2}
-                          placeholder="Location Address Line 2"
-                          value={form.address2}
-                          onChange={(e) => set('address2', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 16,
-                        width: '100%',
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 8,
-                          width: '100%',
-                        }}
-                      >
-                        <label style={lbl}>Postal Code</label>
-                        <input
-                          className="locum-setup-input"
-                          style={inpStep2}
-                          placeholder="Enter valid 6 digit code"
-                          value={form.postalCode}
-                          onChange={(e) => set('postalCode', e.target.value)}
-                        />
-                      </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'row',
-                          alignItems: 'flex-start',
-                          gap: 12,
+                          gap: 16,
                           width: '100%',
                         }}
                       >
                         <div
                           style={{
-                            flex: 1,
-                            maxWidth: 200,
-                            minWidth: 0,
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 8,
+                            width: '100%',
                           }}
                         >
-                          <label style={lbl}>City</label>
+                          <label style={lbl}>Address Line 1</label>
                           <input
                             className="locum-setup-input"
                             style={inpStep2}
-                            placeholder="Add city"
-                            value={form.city}
-                            onChange={(e) => set('city', e.target.value)}
+                            placeholder="Location Address Line 1"
+                            value={form.address1}
+                            onChange={(e) => set('address1', e.target.value)}
                           />
                         </div>
                         <div
                           style={{
-                            flex: 1,
-                            maxWidth: 200,
-                            minWidth: 0,
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 8,
+                            width: '100%',
                           }}
                         >
-                          <label style={lbl}>Province</label>
+                          <label style={lbl}>Address Line 2</label>
                           <input
                             className="locum-setup-input"
                             style={inpStep2}
-                            placeholder="Add province"
-                            value={form.province}
-                            onChange={(e) => set('province', e.target.value)}
+                            placeholder="Location Address Line 2"
+                            value={form.address2}
+                            onChange={(e) => set('address2', e.target.value)}
                           />
+                        </div>
+                      </div>
+
+                      {/* Postal + City + Province */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 16,
+                          width: '100%',
+                        }}
+                      >
+                        {/* ── FIX Issue 3 (locum): NS postal placeholder ── */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            width: '100%',
+                          }}
+                        >
+                          <label style={lbl}>Postal Code</label>
+                          <input
+                            className="locum-setup-input"
+                            style={inpStep2}
+                            placeholder="B0A 1A0 (Nova Scotia)"
+                            value={form.postalCode}
+                            onChange={(e) =>
+                              set('postalCode', e.target.value.toUpperCase())
+                            }
+                          />
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'row',
+                            alignItems: 'flex-start',
+                            gap: 12,
+                            width: '100%',
+                          }}
+                        >
+                          <div
+                            style={{
+                              flex: 1,
+                              maxWidth: 200,
+                              minWidth: 0,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 8,
+                            }}
+                          >
+                            <label style={lbl}>City</label>
+                            <input
+                              className="locum-setup-input"
+                              style={inpStep2}
+                              placeholder="Add city"
+                              value={form.city}
+                              onChange={(e) => set('city', e.target.value)}
+                            />
+                          </div>
+                          <div
+                            style={{
+                              flex: 1,
+                              maxWidth: 200,
+                              minWidth: 0,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 8,
+                            }}
+                          >
+                            {/* ── FIX Issue 3: Province pre-filled as Nova Scotia ── */}
+                            <label style={lbl}>Province</label>
+                            <input
+                              className="locum-setup-input"
+                              style={{
+                                ...inpStep2,
+                                background: '#F9FAFB',
+                                color: '#374151',
+                              }}
+                              value={form.province}
+                              onChange={(e) => set('province', e.target.value)}
+                              placeholder="Nova Scotia"
+                            />
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: '#9CA3AF',
+                                marginTop: -4,
+                              }}
+                            >
+                              Defaults to Nova Scotia
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-          )}
+              )}
 
-          {step === 3 && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 16,
-                  width: '100%',
-                }}
-              >
+              {/* ── Step 3: Upload Documents ── */}
+              {step === 3 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 16,
+                    width: '100%',
+                  }}
+                >
                   <div style={sectionTitle}>Upload Documents</div>
                   <div
                     style={{
@@ -633,7 +909,7 @@ export default function LocumSetupPage() {
                       width: '100%',
                     }}
                   >
-                    {/* CPSNS License — Frame 1948759990 */}
+                    {/* CPSNS License */}
                     <div
                       style={{
                         display: 'flex',
@@ -666,7 +942,7 @@ export default function LocumSetupPage() {
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          {licenseFile || 'Upload Document'}
+                          {form.licenseFileName || 'Upload Document'}
                         </span>
                         <UploadCloudIcon />
                       </div>
@@ -675,11 +951,15 @@ export default function LocumSetupPage() {
                         type="file"
                         style={{ display: 'none' }}
                         onChange={(e) =>
-                          setLicenseFile(e.target.files?.[0]?.name ?? '')
+                          set(
+                            'licenseFileName',
+                            e.target.files?.[0]?.name ?? '',
+                          )
                         }
                       />
                     </div>
-                    {/* Resume — Frame 1948759991 */}
+
+                    {/* Resume */}
                     <div
                       style={{
                         display: 'flex',
@@ -710,7 +990,7 @@ export default function LocumSetupPage() {
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          {resumeFile || 'Upload Document'}
+                          {form.resumeFileName || 'Upload Document'}
                         </span>
                         <UploadCloudIcon />
                       </div>
@@ -719,11 +999,12 @@ export default function LocumSetupPage() {
                         type="file"
                         style={{ display: 'none' }}
                         onChange={(e) =>
-                          setResumeFile(e.target.files?.[0]?.name ?? '')
+                          set('resumeFileName', e.target.files?.[0]?.name ?? '')
                         }
                       />
                     </div>
-                    {/* Additional Documents — Frame 2043683535 */}
+
+                    {/* Additional Documents */}
                     <div
                       style={{
                         display: 'flex',
@@ -756,7 +1037,7 @@ export default function LocumSetupPage() {
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          {extraFile || 'Upload Document'}
+                          {form.extraFileName || 'Upload Document'}
                         </span>
                         <UploadCloudIcon />
                       </div>
@@ -765,7 +1046,7 @@ export default function LocumSetupPage() {
                         type="file"
                         style={{ display: 'none' }}
                         onChange={(e) =>
-                          setExtraFile(e.target.files?.[0]?.name ?? '')
+                          set('extraFileName', e.target.files?.[0]?.name ?? '')
                         }
                       />
                       <p
@@ -787,11 +1068,12 @@ export default function LocumSetupPage() {
                       {err}
                     </p>
                   ) : null}
-              </div>
-          )}
+                </div>
+              )}
             </div>
           </div>
 
+          {/* Footer nav buttons */}
           <div
             style={{
               flexShrink: 0,
@@ -807,10 +1089,7 @@ export default function LocumSetupPage() {
             }}
           >
             {step === 1 && (
-              <NavButtons
-                onNext={() => setStep(2)}
-                disabled={!step1Valid}
-              />
+              <NavButtons onNext={() => setStep(2)} disabled={!step1Valid} />
             )}
             {step === 2 && (
               <NavButtons
@@ -836,7 +1115,6 @@ export default function LocumSetupPage() {
   );
 }
 
-/** upload-cloud-01 — 24×24, stroke #3A65DB (Heroicons outline) */
 function UploadCloudIcon() {
   return (
     <svg

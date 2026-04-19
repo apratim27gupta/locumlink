@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import AuthSplitLayout from '@/components/AuthSplitLayout';
 import { useAuth } from '@/providers/AuthProvider';
+import { getEmail, saveLastPath } from '@/lib/auth'; // ← added saveLastPath
 import type { Role } from '@/lib/auth';
 
 type Mode = 'create' | 'signin';
@@ -39,14 +40,28 @@ export default function AuthPage() {
   const [role, setRole] = useState<Role>(() =>
     params.get('role') === 'clinic' ? 'clinic' : 'locum',
   );
+
+  // ── FIX Issue 9: pre-fill email when returning user opens sign-in ─────────
+  // getEmail() reads ll_email from localStorage (set when they previously
+  // entered their email). We only pre-fill in sign-in mode so new users
+  // always start with an empty field.
   const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (params.get('mode') === 'signin') setMode('signin');
     if (params.get('role') === 'clinic') setRole('clinic');
   }, [params]);
+
+  // When mode switches to sign-in, populate the saved email (if any)
+  useEffect(() => {
+    if (mode === 'signin') {
+      const saved = getEmail();
+      if (saved) setEmail(saved);
+    }
+  }, [mode]);
+
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,8 +72,21 @@ export default function AuthPage() {
     setError('');
     setBusy(true);
     try {
+      // Capture where the user came from so after OTP we can send them back.
+      // `next` is set by middleware on protected-route redirects.
+      const nextParam = params.get('next');
+      if (
+        nextParam &&
+        nextParam.startsWith('/') &&
+        !nextParam.startsWith('//') &&
+        !nextParam.startsWith('/auth') &&
+        !nextParam.startsWith('/home')
+      ) {
+        saveLastPath(nextParam);
+      }
+
       await sendOtp(email, role);
-      router.push('/auth/verify');
+      router.replace(`/auth/verify?role=${encodeURIComponent(role)}`);
     } catch (err: unknown) {
       setError(
         err instanceof Error
@@ -72,7 +100,6 @@ export default function AuthPage() {
 
   const btnStyle: React.CSSProperties = {
     width: '100%',
-    // height: 22,
     opacity: 1,
     padding: '11px',
     borderRadius: 6,
@@ -87,23 +114,23 @@ export default function AuthPage() {
   return (
     <AuthSplitLayout variant="signup">
       <h2
-  style={{
-    width: 376,
-    height: 28,
-    fontSize: 28,
-    fontWeight: 700,
-    fontFamily: 'Inter, sans-serif',
-    fontStyle: 'normal',
-    lineHeight: '100%',
-    letterSpacing: '0%',
-    color: '#0A0A0A',
-    display: 'flex',
-    alignItems: 'center', // vertical alignment: middle
-    marginBottom: 4,
-  }}
->
-  {mode === 'create' ? 'Create an account' : 'Sign in'}
-</h2>
+        style={{
+          width: 376,
+          height: 28,
+          fontSize: 28,
+          fontWeight: 700,
+          fontFamily: 'Inter, sans-serif',
+          fontStyle: 'normal',
+          lineHeight: '100%',
+          letterSpacing: '0%',
+          color: '#0A0A0A',
+          display: 'flex',
+          alignItems: 'center',
+          marginBottom: 4,
+        }}
+      >
+        {mode === 'create' ? 'Create an account' : 'Sign in'}
+      </h2>
 
       {mode === 'create' && (
         <p
@@ -120,7 +147,7 @@ export default function AuthPage() {
             margin: 0,
           }}
         >
-          I'm a
+          I&apos;m a
         </p>
       )}
 
@@ -151,7 +178,9 @@ export default function AuthPage() {
             {(['clinic', 'locum'] as Role[]).map((r) => (
               <button
                 key={r}
+                type="button"
                 onClick={() => setRole(r)}
+                suppressHydrationWarning
                 style={{
                   flex: 1,
                   padding: '10px',
@@ -171,7 +200,7 @@ export default function AuthPage() {
           </div>
         )}
 
-        {/* Social logins */}
+        {/* Social logins — wired up in Issue 8 */}
         <div style={{ display: 'flex', gap: 24, width: '100%' }}>
           {[
             { src: '/google.png', alt: 'Google', title: 'Google' },
@@ -186,6 +215,7 @@ export default function AuthPage() {
               key={title}
               type="button"
               title={`Continue with ${title}`}
+              suppressHydrationWarning
               style={{
                 flex: 1,
                 padding: '9px',
@@ -247,6 +277,7 @@ export default function AuthPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="johndoe@example.com"
+              suppressHydrationWarning
               style={emailInput}
               onFocus={(e) => (e.currentTarget.style.borderColor = '#3B4FD8')}
               onBlur={(e) => (e.currentTarget.style.borderColor = '#d0d4e4')}
@@ -262,6 +293,7 @@ export default function AuthPage() {
           <button
             type="submit"
             disabled={busy}
+            suppressHydrationWarning
             style={{
               ...btnStyle,
               background: busy ? '#8892a4' : '#3B4FD8',
@@ -310,7 +342,7 @@ export default function AuthPage() {
           </>
         ) : (
           <>
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
             <button
               onClick={() => setMode('create')}
               style={{

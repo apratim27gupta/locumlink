@@ -20,7 +20,10 @@ export class PrismaService
       await this.$connect();
     } catch (err) {
       // Allow the app to start so health endpoints can report DB status.
-      console.error('[PrismaService] Database connection failed on startup', err);
+      console.error(
+        '[PrismaService] Database connection failed on startup',
+        err,
+      );
     }
   }
 

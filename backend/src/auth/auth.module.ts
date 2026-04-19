@@ -38,6 +38,7 @@ import { RolesGuard } from './guards/roles.guard.js';
   exports: [
     AuthService,
     JwtModule,
+    PassportModule,
     JwtAuthGuard, // exported so other modules can @UseGuards(JwtAuthGuard)
     RolesGuard,
   ],

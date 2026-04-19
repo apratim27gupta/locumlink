@@ -1,13 +1,20 @@
 import {
-  Controller, Get, Post, Body,
-  UseGuards, Req, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  UseGuards,
+  Req,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
-import { AuthGuard }          from '@nestjs/passport';
-import { LocumService }       from './locum.service.js';
-import { SaveLocumProfileDto } from './locum.dto.js';
+import { AuthGuard } from '@nestjs/passport';
+import { LocumService } from './locum.service.js';
+import { ApplyJobDto } from './locum.dto.js';
 
 interface JwtRequest {
-  user: { userId: string; email: string; role: string };
+  user: { id: string; email: string; role: string };
 }
 
 @Controller('locum')
@@ -15,19 +22,41 @@ interface JwtRequest {
 export class LocumController {
   constructor(private readonly locumService: LocumService) {}
 
-  /** POST /api/locum/profile */
+  // ── Profile ───────────────────────────────────────────────────────────────
+
   @Post('profile')
   @HttpCode(HttpStatus.OK)
-  saveProfile(
-    @Req()  req: JwtRequest,
-    @Body() dto: SaveLocumProfileDto,
-  ) {
-    return this.locumService.saveProfile(req.user.userId, dto);
+  saveProfile(@Req() req: JwtRequest, @Body() body: Record<string, unknown>) {
+    return this.locumService.saveProfile(req.user.id, body);
   }
 
-  /** GET /api/locum/profile */
   @Get('profile')
   getProfile(@Req() req: JwtRequest) {
-    return this.locumService.getProfile(req.user.userId);
+    return this.locumService.getProfile(req.user.id);
+  }
+
+  // ── Browse jobs ───────────────────────────────────────────────────────────
+
+  @Get('jobs')
+  browseJobs() {
+    return this.locumService.browseJobs();
+  }
+
+  // ── Apply ─────────────────────────────────────────────────────────────────
+
+  @Post('jobs/:jobId/apply')
+  applyToJob(
+    @Req() req: JwtRequest,
+    @Param('jobId') jobId: string,
+    @Body() dto: ApplyJobDto,
+  ) {
+    return this.locumService.applyToJob(req.user.id, jobId, dto.coverNote);
+  }
+
+  // ── My applications ───────────────────────────────────────────────────────
+
+  @Get('applications')
+  getMyApplications(@Req() req: JwtRequest) {
+    return this.locumService.getMyApplications(req.user.id);
   }
 }

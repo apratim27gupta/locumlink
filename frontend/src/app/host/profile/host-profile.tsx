@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { useHostProfile } from '@/hooks/useHostProfile';
 import type { HostProfile } from '@/types';
 import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
+import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
+import { isCpsnsVerified } from '@/lib/cpsnsVerify';
 
 const NAV = [
   {
@@ -79,19 +82,34 @@ function stepLabelColor(s: StepStatus) {
   return '#8892a4';
 }
 
-function sectionCard(highlighted: boolean): React.CSSProperties {
+function sectionCard(
+  highlighted: boolean,
+  opts?: { gap?: number; height?: number; borderRadius?: number },
+): React.CSSProperties {
   return {
     background: '#fff',
-    border: `1px solid ${highlighted ? '#3B4FD8' : '#e2e5ee'}`,
-    borderRadius: 8,
-    padding: '20px',
-    marginBottom: 16,
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    padding: '32px 24px',
+    gap: opts?.gap ?? 24,
+    width: 1180,
+    height: opts?.height ?? 700,
+    border: `1px solid ${highlighted ? '#3B4FD8' : '#D9D9D9'}`,
+    borderRadius: opts?.borderRadius ?? 10,
+    marginBottom: 0,
   };
 }
 
-export default function HostProfilePage() {
+export default function HostProfilePage(props: {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  useNextPageClientProps(props);
   // ── API hook ──────────────────────────────────────────────────────────────
   const { profile, loading, saveProfile, saving } = useHostProfile();
+  const verified = isCpsnsVerified(profile?.cpsnsNumber);
 
   // ── Local form state ──────────────────────────────────────────────────────
   // Step 1 — Basic Info
@@ -184,6 +202,22 @@ export default function HostProfilePage() {
     accommodationProvided: accommodation,
   });
   const allDone = progressPct === 100;
+  const completionImageSrc = !allDone
+    ? '/profile-incomplete.png'
+    : verified
+      ? '/profile-verified.png'
+      : '/profile-underverification.png';
+
+  const completionTitle = !allDone
+    ? 'Finish setting up your profile to start finding practitioners'
+    : verified
+      ? 'Your profile is complete and verified'
+      : 'Your profile is complete — CPSNS under verification';
+  const completionSubtitle = !allDone
+    ? `${progressPct}% completed`
+    : verified
+      ? '100% completed · CPSNS verified'
+      : '100% completed · Awaiting manual CPSNS verification';
   const stepComplete = [
     !!(
       clinicName &&
@@ -251,7 +285,12 @@ export default function HostProfilePage() {
   // ── Loading skeleton ──────────────────────────────────────────────────────
   if (loading) {
     return (
-      <DashLayout navItems={NAV} activeHref="/host/profile">
+      <DashLayout
+        navItems={NAV}
+        activeHref="/host/profile"
+        topbarFirstName={profile?.contactFirstName}
+        topbarLastName={profile?.contactLastName}
+      >
         <div
           style={{
             padding: '40px 36px',
@@ -268,51 +307,161 @@ export default function HostProfilePage() {
 
   // ── Page ──────────────────────────────────────────────────────────────────
   return (
-    <DashLayout navItems={NAV} activeHref="/host/profile">
+    <DashLayout
+      navItems={NAV}
+      activeHref="/host/profile"
+      topbarFirstName={profile?.contactFirstName}
+      topbarLastName={profile?.contactLastName}
+    >
       <div
         style={{
           padding: '28px 36px 60px',
-          maxWidth: 860,
+          maxWidth: 1180,
           fontFamily: 'Inter, sans-serif',
           boxSizing: 'border-box',
+          position: 'relative',
         }}
       >
         {/* Header */}
-        <h1
+        <div
           style={{
-            fontSize: 22,
-            fontWeight: 700,
-            color: '#0f1523',
-            margin: '0 0 3px',
+            width: 850,
+            height: 56,
+            position: 'relative',
+            marginBottom: 16,
           }}
         >
-          {clinicName || 'Your Profile'}
-        </h1>
-        <p style={{ fontSize: 12, color: '#8892a4', margin: '0 0 16px' }}>
-          Define And Manage Organizational, Hierarchy, Departments, And
-          Relationships With AI-Powered Insights
-        </p>
-
-        {/* Progress bar */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, color: '#8892a4', marginBottom: 4 }}>
-            {progressPct}% completed
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: -8,
+              height: 43,
+              display: 'flex',
+              alignItems: 'center',
+              fontFamily: 'Inter, sans-serif',
+              fontStyle: 'normal',
+              fontWeight: 700,
+              fontSize: 36,
+              lineHeight: '120%',
+              textTransform: 'capitalize',
+              color: '#0B0F1F',
+            }}
+          >
+            Welcome
           </div>
-          <div style={{ height: 5, background: '#e2e5ee', borderRadius: 4 }}>
-            <div
-              style={{
-                height: '100%',
-                borderRadius: 4,
-                width: `${progressPct}%`,
-                background: allDone ? '#16a34a' : '#3B4FD8',
-                transition: 'width 0.4s ease',
-              }}
-            />
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 37,
+              height: 24,
+              display: 'flex',
+              alignItems: 'center',
+              fontFamily: 'Inter, sans-serif',
+              fontStyle: 'normal',
+              fontWeight: 400,
+              fontSize: 16,
+              lineHeight: '150%',
+              textTransform: 'capitalize',
+              color: '#6B7280',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              width: '100%',
+            }}
+          >
+            Define and manage organizational, hierarchy, departments, and
+            relationships with AI-powered insights
           </div>
         </div>
 
-        {/* Verification banner */}
-        {allDone && (
+        {/* Completion card */}
+        <div
+          style={{
+            width: '100%',
+            height: 104,
+            background: 'rgba(209, 213, 219, 0.3)',
+            borderRadius: 10,
+            marginBottom: 16,
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              left: 24,
+              right: 24,
+              top: 26,
+              height: 52,
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: 24,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
+              <div style={{ width: 52, height: 52, position: 'relative', flexShrink: 0 }}>
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Image
+                    src={completionImageSrc}
+                    alt=""
+                    width={52}
+                    height={52}
+                    style={{ display: 'block', width: 52, height: 52, objectFit: 'cover' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontStyle: 'normal',
+                    fontWeight: 500,
+                    fontSize: 22,
+                    lineHeight: '124%',
+                    color: 'rgba(21, 20, 20, 0.7)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {completionTitle}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div
+                    style={{
+                      fontFamily: 'Inter, sans-serif',
+                      fontStyle: 'normal',
+                      fontWeight: 400,
+                      fontSize: 18,
+                      lineHeight: '100%',
+                      color: '#606061',
+                    }}
+                  >
+                    {completionSubtitle}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right side intentionally left empty (Figma shows spacing) */}
+            <div style={{ width: 1, height: 1 }} />
+          </div>
+        </div>
+
+        {/* CPSNS: manual verification — only show pending banner until verified */}
+        {allDone && !verified && (
           <div
             style={{
               display: 'flex',
@@ -328,10 +477,35 @@ export default function HostProfilePage() {
             <span style={{ fontSize: 20 }}>🛡️</span>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#92400E' }}>
-                Your profile is under verification
+                CPSNS under verification
               </div>
               <div style={{ fontSize: 12, color: '#B45309' }}>
-                You have successfully completed your profile
+                An administrator will verify your CPSNS number. You can post jobs
+                once verified.
+              </div>
+            </div>
+          </div>
+        )}
+        {allDone && verified && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              background: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              borderRadius: 8,
+              padding: '12px 16px',
+              marginBottom: 20,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>✓</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#065F46' }}>
+                CPSNS verified
+              </div>
+              <div style={{ fontSize: 12, color: '#047857' }}>
+                Your registration has been manually verified. You can post jobs.
               </div>
             </div>
           </div>
@@ -340,73 +514,195 @@ export default function HostProfilePage() {
         {/* Stepper */}
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
+            width: 1142,
+            height: 70,
+            opacity: 1,
+            transform: 'rotate(0deg)',
+            boxSizing: 'border-box',
+            overflowX: 'hidden',
+            overflowY: 'hidden',
+            background: 'transparent',
+            position: 'relative',
             marginBottom: 24,
-            overflowX: 'auto',
           }}
         >
-          {steps.map((s, i) => {
-            const status = getStatus(s.n);
-            return (
-              <div key={s.n} style={{ display: 'flex', alignItems: 'center' }}>
+          <div
+            style={{
+              position: 'relative',
+              width: 1132,
+              height: 48,
+              left: 0,
+              top: 0,
+              display: 'flex',
+              gap: 12,
+              alignItems: 'flex-start',
+            }}
+          >
+            {steps.map((s) => {
+              const isActive = activeStep === s.n;
+              const isCompleted = activeStep > s.n;
+              const circleBg = isActive ? '#1522A6' : '#fff';
+              const circleBorder = isActive
+                ? 'none'
+                : '1px solid rgba(21, 20, 20, 0.4)';
+              const circleColor = isActive ? '#FFFFFF' : '#6B7280';
+              return (
                 <div
+                  key={s.n}
                   onClick={() => goToStep(s.n)}
                   style={{
-                    textAlign: 'center',
-                    padding: '0 8px 8px',
+                    position: 'relative',
+                    width: 274,
+                    height: 48,
                     cursor: 'pointer',
-                    borderBottom: `2px solid ${stepBorderColor(status)}`,
-                    minWidth: 110,
+                    flex: 'none',
                   }}
                 >
                   <div
                     style={{
-                      width: 24,
-                      height: 24,
+                      position: 'absolute',
+                      width: 36,
+                      height: 36,
+                      left: 0,
+                      top: 6,
                       borderRadius: '50%',
-                      background: stepCircleBg(status),
-                      color: status === 'upcoming' ? '#8892a4' : '#fff',
+                      background: circleBg,
+                      border: circleBorder,
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      top: '50%',
+                      width: 36,
+                      height: 36,
+                      transform: 'translate(calc(-50% - 119px), -50%)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      margin: '0 auto 4px',
+                      fontFamily: 'Inter, sans-serif',
+                      fontStyle: 'normal',
+                      fontWeight: 500,
+                      fontSize: 18,
+                      lineHeight: '100%',
+                      color: circleColor,
                     }}
                   >
-                    {status === 'complete' ? '✓' : s.n}
+                    {isCompleted ? '✓' : s.n}
                   </div>
+
                   <div
                     style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: stepLabelColor(status),
+                      position: 'absolute',
+                      left: 52,
+                      top: 1,
+                      width: 176,
+                      height: 46,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      gap: 4,
                     }}
                   >
-                    {s.label}
+                    <div
+                      style={{
+                        height: 20,
+                        fontFamily: 'Inter, sans-serif',
+                        fontStyle: 'normal',
+                        fontWeight: 500,
+                        fontSize: 20,
+                        lineHeight: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: '#0B0F1F',
+                      }}
+                    >
+                      {s.label}
+                    </div>
+                    <div
+                      style={{
+                        height: 22,
+                        display: 'flex',
+                        alignItems: 'center',
+                        fontFamily: 'Inter, sans-serif',
+                        fontStyle: 'normal',
+                        fontWeight: 400,
+                        fontSize: 16,
+                        lineHeight: '140%',
+                        color: '#6B7280',
+                      }}
+                    >
+                      {s.sub}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 10, color: '#8892a4' }}>{s.sub}</div>
-                </div>
-                {i < steps.length - 1 && (
-                  <span
+
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#210840"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     style={{
-                      color: '#d0d4e4',
-                      fontSize: 14,
-                      padding: '0 2px',
-                      paddingBottom: 8,
+                      position: 'absolute',
+                      left: 256,
+                      top: 15,
+                      transform: 'rotate(-90deg)',
                     }}
+                    aria-hidden="true"
                   >
-                    ›
-                  </span>
-                )}
-              </div>
-            );
-          })}
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </div>
+              );
+            })}
+
+            {/* Bottom progress bar */}
+            <div
+              style={{
+                position: 'absolute',
+                left: (activeStep - 1) * 286,
+                top: 64,
+                width: 256,
+                height: 6,
+                background: 'linear-gradient(270deg, #3A65DB 0%, #1B31D2 100%)',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                left: (activeStep - 1) * 286 + 256,
+                top: 69,
+                right: 0,
+                height: 1,
+                background: '#D1D5DB',
+              }}
+            />
+          </div>
         </div>
 
+        {/* Form container (Figma Frame 2043683741) */}
+        <div
+          style={{
+            width: 1180,
+            minHeight: 1905,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            padding: 0,
+            gap: 24,
+            boxSizing: 'border-box',
+          }}
+        >
         {/* ── Section 1: Basic Information ────────────────────────────────── */}
-        <div style={sectionCard(activeStep === 1)} onClick={() => goToStep(1)}>
+        <div
+          style={sectionCard(activeStep === 1, { gap: 24, height: 700 })}
+          onClick={() => goToStep(1)}
+        >
           <div
             style={{
               fontSize: 15,
@@ -685,7 +981,10 @@ export default function HostProfilePage() {
         </div>
 
         {/* ── Section 2: Clinic Location ──────────────────────────────────── */}
-        <div style={sectionCard(activeStep === 2)} onClick={() => goToStep(2)}>
+        <div
+          style={sectionCard(activeStep === 2, { gap: 16, height: 392 })}
+          onClick={() => goToStep(2)}
+        >
           <div
             style={{
               fontSize: 15,
@@ -757,90 +1056,166 @@ export default function HostProfilePage() {
         </div>
 
         {/* ── Section 3: Practice Details ─────────────────────────────────── */}
-        <div style={sectionCard(activeStep === 3)} onClick={() => goToStep(3)}>
-          <div
-            style={{
-              fontSize: 15,
-              fontWeight: 600,
-              color: '#0f1523',
-              marginBottom: 14,
-            }}
-          >
-            🏥 Practice Details
+        <div
+          style={sectionCard(activeStep === 3, { gap: 24, height: 396 })}
+          onClick={() => goToStep(3)}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 24 }}>
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#0B0F1F"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path d="M14 2v6h6" />
+              <path d="M8 13h8" />
+            </svg>
+            <div
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontStyle: 'normal',
+                fontWeight: 600,
+                fontSize: 24,
+                lineHeight: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                color: '#0B0F1F',
+              }}
+            >
+              Practice Details
+            </div>
           </div>
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
-              gap: 16,
-              marginBottom: 12,
+              gap: 24,
             }}
           >
             <div>
-              <label style={lbl}>Practice Type</label>
+              <label style={{ ...lbl, fontSize: 20, fontWeight: 500, lineHeight: '140%', color: 'rgba(11, 15, 31, 0.8)', marginBottom: 8 }}>
+                Practice Type
+              </label>
               <input
-                style={inp}
+                style={{ ...inp, height: 44, borderRadius: 4, border: '1px solid #D0D5DD' }}
                 value={practiceType}
                 onChange={(e) => setPracticeType(e.target.value)}
-                placeholder="e.g. Physician"
+                placeholder="Enter"
               />
             </div>
             <div>
-              <label style={lbl}>No. of Physicians</label>
+              <label style={{ ...lbl, fontSize: 20, fontWeight: 500, lineHeight: '140%', color: 'rgba(11, 15, 31, 0.8)', marginBottom: 8 }}>
+                No. of Physicians
+              </label>
               <input
-                style={inp}
+                style={{ ...inp, height: 44, borderRadius: 4, border: '1px solid #D0D5DD' }}
                 value={numPhysicians}
                 onChange={(e) => setNumPhysicians(e.target.value)}
-                placeholder="e.g. 5"
+                placeholder="Physician"
               />
             </div>
             <div>
-              <label style={lbl}>EMR System</label>
+              <label style={{ ...lbl, fontSize: 20, fontWeight: 500, lineHeight: '140%', color: 'rgba(11, 15, 31, 0.8)', marginBottom: 8 }}>
+                EMR System
+              </label>
               <input
-                style={inp}
+                style={{ ...inp, height: 44, borderRadius: 4, border: '1px solid #D0D5DD' }}
                 value={emr}
                 onChange={(e) => setEmr(e.target.value)}
-                placeholder="e.g. OSCAR"
+                placeholder="Physician"
               />
             </div>
             <div>
-              <label style={lbl}>Patient Volume</label>
+              <label style={{ ...lbl, fontSize: 20, fontWeight: 500, lineHeight: '140%', color: 'rgba(11, 15, 31, 0.8)', marginBottom: 8 }}>
+                Patient Volume
+              </label>
               <input
-                style={inp}
+                style={{ ...inp, height: 44, borderRadius: 4, border: '1px solid #D0D5DD' }}
                 value={patientVol}
                 onChange={(e) => setPatientVol(e.target.value)}
-                placeholder="e.g. 30/day"
+                placeholder="Physician"
               />
             </div>
           </div>
           <div>
-            <label style={lbl}>Clinic description</label>
+            <label style={{ ...lbl, fontSize: 20, fontWeight: 500, lineHeight: '140%', color: 'rgba(11, 15, 31, 0.8)', marginBottom: 8 }}>
+              Clinic description
+            </label>
             <textarea
               style={
-                { ...inp, height: 64, resize: 'none' } as React.CSSProperties
+                {
+                  ...inp,
+                  height: 56,
+                  resize: 'none',
+                  borderRadius: 4,
+                  border: '1px solid #D0D5DD',
+                } as React.CSSProperties
               }
               value={clinicDesc}
               onChange={(e) => setClinicDesc(e.target.value)}
-              placeholder="Describe your clinic..."
+              placeholder="Add Description"
             />
           </div>
         </div>
 
         {/* ── Section 4: Services Offered ─────────────────────────────────── */}
-        <div style={sectionCard(activeStep === 4)} onClick={() => goToStep(4)}>
-          <div
-            style={{
-              fontSize: 15,
-              fontWeight: 600,
-              color: '#0f1523',
-              marginBottom: 14,
-            }}
-          >
-            🔧 Services Offered
+        <div
+          style={sectionCard(activeStep === 4, { gap: 24, height: 300, borderRadius: 4 })}
+          onClick={() => goToStep(4)}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 24 }}>
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#0B0F1F"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l2.6-2.6a2 2 0 0 0 0-2.8l-1.2-1.2a2 2 0 0 0-2.8 0z" />
+              <path d="M10.2 7.8 2 16v6h6l8.2-8.2" />
+              <path d="M16 5 19 8" />
+            </svg>
+            <div
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontStyle: 'normal',
+                fontWeight: 600,
+                fontSize: 24,
+                lineHeight: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                color: '#0B0F1F',
+              }}
+            >
+              Services Offered
+            </div>
           </div>
-          <div style={{ marginBottom: 10 }}>
-            <label style={lbl}>Amenities</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%' }}>
+            <div
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontStyle: 'normal',
+                fontWeight: 500,
+                fontSize: 20,
+                lineHeight: '140%',
+                color: 'rgba(11, 15, 31, 0.8)',
+              }}
+            >
+              Amenities
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, maxWidth: 713 }}>
               {AMENITY_OPTIONS.map((a) => (
                 <span
                   key={a}
@@ -853,41 +1228,61 @@ export default function HostProfilePage() {
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 4,
-                    padding: '4px 12px',
-                    borderRadius: 20,
+                    justifyContent: 'center',
+                    padding: '6px 16px',
+                    height: 42,
+                    borderRadius: 8,
                     cursor: 'pointer',
-                    background: amenities.includes(a) ? '#eef0fb' : '#fff',
-                    border: `1px solid ${amenities.includes(a) ? '#3B4FD8' : '#e2e5ee'}`,
-                    color: amenities.includes(a) ? '#3B4FD8' : '#5a6478',
-                    fontSize: 12,
+                    background: '#fff',
+                    border: `1px solid ${amenities.includes(a) ? 'rgba(21, 34, 166, 0.6)' : '#D0D5DD'}`,
+                    color: amenities.includes(a) ? '#1522A6' : '#636364',
+                    fontSize: 16,
+                    fontWeight: 400,
+                    fontFamily: 'Gilroy-Medium, Inter, sans-serif',
                   }}
                 >
                   {a}
                   {amenities.includes(a) && (
-                    <span style={{ fontSize: 11 }}>×</span>
+                    <span style={{ marginLeft: 10, fontSize: 14, lineHeight: '14px' }}>×</span>
                   )}
                 </span>
               ))}
             </div>
+
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={accommodation}
+                onChange={(e) => setAccommodation(e.target.checked)}
+                style={{
+                  width: 14,
+                  height: 14,
+                  border: '1px solid rgba(21, 20, 20, 0.4)',
+                  borderRadius: 4,
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  fontStyle: 'normal',
+                  fontWeight: 400,
+                  fontSize: 20,
+                  lineHeight: '140%',
+                  color: 'rgba(11, 15, 31, 0.8)',
+                }}
+              >
+                Accommodation provided for Locum physicians
+              </span>
+            </label>
           </div>
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 7,
-              fontSize: 13,
-              color: '#374151',
-              cursor: 'pointer',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={accommodation}
-              onChange={(e) => setAccommodation(e.target.checked)}
-            />
-            Accommodation provided for Locum physicians
-          </label>
         </div>
 
         {/* Feedback */}
@@ -938,6 +1333,7 @@ export default function HostProfilePage() {
         >
           {saving ? 'Saving…' : 'Done'}
         </button>
+        </div>
       </div>
     </DashLayout>
   );

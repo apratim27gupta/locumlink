@@ -8,17 +8,21 @@ import {
   ReactNode,
 } from 'react';
 import { authApi } from '@/lib/api';
-import { getSupabase } from '@/lib/supabaseClient';
+import { formatSupabaseNetworkError, getSupabase } from '@/lib/supabaseClient';
 import {
   saveToken,
   saveRole,
   saveEmail,
   getRole,
+  getToken,
   clearAuth,
   syncCookies,
   markProfileComplete,
   isProfileComplete,
-  popLastPath,
+  syncProfileCompleteCookies,
+  clearProfileCompleteCookies,
+  popLastPath, // ← NEW: read + clear the stored last path
+  clearLastPath, // ← NEW: discard it when setup is still required
   type Role,
 } from '@/lib/auth';
 
@@ -38,31 +42,52 @@ interface AuthCtx {
 
 const Ctx = createContext<AuthCtx | null>(null);
 
-/** Key used both in localStorage (via markProfileComplete) and as a cookie
- *  so the middleware can read it server-side after a full-page navigation. */
-const PROFILE_COMPLETE_COOKIE = 'll_profile_complete';
+const NEST_BASE = (
+  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'
+).replace(/\/$/, '');
 
-/** Write a long-lived cookie readable by the middleware (no HttpOnly so JS
- *  can also set/clear it; middleware only reads, never writes). */
-function setProfileCompleteCookie(value: boolean) {
-  if (typeof document === 'undefined') return;
-  if (value) {
-    document.cookie = `${PROFILE_COMPLETE_COOKIE}=true; path=/; max-age=31536000; SameSite=Lax`;
-  } else {
-    // Expire the cookie immediately on logout
-    document.cookie = `${PROFILE_COMPLETE_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
-  }
-}
-
-/** Swap Supabase access token for Nest JWT so /api/* guards accept the session. */
-async function syncNestAccessToken(): Promise<void> {
+/** Exchanges Supabase access token for Nest JWT. Returns false if the API is down or sync-supabase fails. */
+async function syncNestAccessToken(): Promise<boolean> {
   const role = getRole() ?? 'locum';
   try {
     const out = await authApi.syncFromSupabase(role);
     saveToken(out.accessToken);
     syncCookies();
+    return true;
   } catch {
-    // Already a Nest JWT or backend missing SUPABASE_SERVICE_ROLE_KEY
+    // Session refresh / backend offline — caller may ignore (e.g. on load) or surface (e.g. after OTP).
+    return false;
+  }
+}
+
+/**
+ * Check the real API — never trust localStorage alone.
+ * Returns true if the user already has a completed profile on the server.
+ */
+async function checkProfileExistsOnServer(
+  role: Role,
+  token: string,
+): Promise<boolean> {
+  try {
+    if (role === 'clinic') {
+      const res = await fetch(`${NEST_BASE}/api/host/profile`, {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return false;
+      const d = (await res.json()) as { exists: boolean };
+      return d.exists === true;
+    } else {
+      const res = await fetch(`${NEST_BASE}/api/locum/profile`, {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return false;
+      const d = (await res.json()) as { exists: boolean };
+      return d.exists === true;
+    }
+  } catch {
+    return false;
   }
 }
 
@@ -71,15 +96,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRoleState] = useState<Role | null>(null);
   const [isLoading, setLoading] = useState(true);
 
-  /** Read localStorage synchronously so children never see a false flash
-   *  after setup (full page load). */
   const [profileComplete, setProfileComplete] = useState(() => {
     if (typeof window === 'undefined') return false;
     return isProfileComplete();
   });
 
   useEffect(() => {
-    // Re-hydrate cookies from localStorage so middleware works after page refresh
     syncCookies();
 
     const storedRole = getRole();
@@ -87,38 +109,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const complete = isProfileComplete();
     setProfileComplete(complete);
-    // ── FIX 1: Always keep the profile-complete cookie in sync with
-    //    localStorage on every page load so the middleware never loses it. ──
-    setProfileCompleteCookie(complete);
+    syncProfileCompleteCookies();
 
     let subscription: { unsubscribe: () => void } | undefined;
     try {
       const supabase = getSupabase();
-      supabase.auth.getSession().then(async ({ data: { session } }) => {
-        if (session?.access_token) {
-          saveToken(session.access_token);
-          await syncNestAccessToken();
-          setUserId(session.user.id);
-          syncCookies();
-          setProfileCompleteCookie(isProfileComplete());
-        }
-        setLoading(false);
-      });
+      supabase.auth
+        .getSession()
+        .then(async ({ data: { session } }) => {
+          try {
+            if (session?.access_token) {
+              // Ensure token is stored under the currently selected role bucket.
+              // If role isn't set yet, keep existing behavior by defaulting to locum.
+              if (!getRole()) saveRole('locum');
+              saveToken(session.access_token);
+              await syncNestAccessToken();
+              setUserId(session.user.id);
+              syncCookies();
+              syncProfileCompleteCookies();
+            }
+          } catch (e) {
+            console.error(e);
+          } finally {
+            setLoading(false);
+          }
+        })
+        .catch((e) => {
+          console.error(e);
+          setLoading(false);
+        });
 
       const {
         data: { subscription: sub },
       } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session?.access_token) {
+          if (!getRole()) saveRole('locum');
           saveToken(session.access_token);
           void (async () => {
             await syncNestAccessToken();
             setUserId(session.user.id);
             syncCookies();
-            setProfileCompleteCookie(isProfileComplete());
+            syncProfileCompleteCookies();
           })();
         } else if (!session) {
           setUserId(null);
-          setProfileCompleteCookie(false);
+          clearProfileCompleteCookies();
         }
       });
       subscription = sub;
@@ -135,50 +170,96 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveRole(chosenRole);
     setRoleState(chosenRole);
     saveEmail(email);
-    const { error } = await getSupabase().auth.signInWithOtp({ email });
-    if (error) throw error;
+    try {
+      const supabase = getSupabase();
+      const { error } = await supabase.auth.signInWithOtp({ email });
+      if (error) throw formatSupabaseNetworkError(error);
+    } catch (e) {
+      throw formatSupabaseNetworkError(e);
+    }
   }
 
-  // ── Step 2: Verify OTP ────────────────────────────────────────────────────
+  // ── Step 2: Verify OTP → check API → redirect (last path → dashboard → setup) ─
   async function verifyOtp(
     email: string,
     otp: string,
   ): Promise<{ role: Role; redirectTo: string }> {
-    const { data, error } = await getSupabase().auth.verifyOtp({
-      email,
-      token: otp,
-      type: 'email',
-    });
-    if (error) throw error;
+    let data: Awaited<
+      ReturnType<ReturnType<typeof getSupabase>['auth']['verifyOtp']>
+    >['data'];
+    try {
+      const out = await getSupabase().auth.verifyOtp({
+        email,
+        token: otp,
+        type: 'email',
+      });
+      data = out.data;
+      if (out.error) throw formatSupabaseNetworkError(out.error);
+    } catch (e) {
+      throw formatSupabaseNetworkError(e);
+    }
 
     const token = data.session?.access_token;
     if (!token) throw new Error('No access token returned from Supabase');
 
+    // 1. Save Supabase token + sync cookies before API check
     saveToken(token);
-    await syncNestAccessToken();
+    syncCookies();
+
+    // 2. Exchange for Nest JWT (required for Nest API — must match backend Supabase project)
+    const synced = await syncNestAccessToken();
+    if (!synced) {
+      throw new Error(
+        'Could not sign you in to the app API. Check that the backend is running on NEXT_PUBLIC_API_URL and that backend/.env.staging uses the same Supabase URL and anon key as frontend/.env.local. Remove any fake SUPABASE_SERVICE_ROLE_KEY placeholder.',
+      );
+    }
     setUserId(data.user?.id ?? null);
 
-    const savedRole = getRole() ?? 'locum';
+    const savedRole = (getRole() ?? 'locum') as Role;
 
-    const lastPath = popLastPath();
-    const redirectTo = lastPath ?? '/home';
+    // 3. Use the Nest JWT (updated by syncNestAccessToken) for the profile check
+    const nestToken = getToken() ?? token;
+
+    // 4. Ask the server if this user already has a profile
+    const profileExists = await checkProfileExistsOnServer(
+      savedRole,
+      nestToken,
+    );
+
+    let redirectTo: string;
+    if (profileExists) {
+      markProfileComplete();
+      syncCookies();
+      syncProfileCompleteCookies();
+      setProfileComplete(true);
+
+      // ── FIX Issue 1: restore the last page the user was on ──────────────
+      // popLastPath() reads ll_last_path from localStorage and clears it.
+      // The destination page is already authenticated so it will fetch its
+      // own data normally — we are only restoring the URL, not the data.
+      const lastPath = popLastPath();
+      redirectTo =
+        lastPath ??
+        (savedRole === 'clinic' ? '/host/dashboard' : '/locum/dashboard');
+    } else {
+      // First time — send to setup wizard, discard any stale saved path
+      clearLastPath();
+      redirectTo = savedRole === 'clinic' ? '/host/setup' : '/locum/setup';
+    }
 
     return { role: savedRole, redirectTo };
   }
 
+  // ── Complete profile (called at end of setup wizard) ─────────────────────
   function completeProfile(): void {
-    markProfileComplete();          // writes to localStorage
-    setProfileCompleteCookie(true); // ── FIX 3: also write the cookie so the
-                                    //    middleware sees it on the very next
-                                    //    request (full-page navigation to
-                                    //    /host/dashboard after setup finishes)
-    syncCookies();                  // mirror JWT + role to cookies
-    setProfileComplete(true);       // update React state
+    markProfileComplete();
+    syncCookies();
+    syncProfileCompleteCookies();
+    setProfileComplete(true);
   }
 
   function logout(): void {
     clearAuth();
-    setProfileCompleteCookie(false); // clear the cookie on logout
     void getSupabase().auth.signOut();
     setUserId(null);
     setRoleState(null);

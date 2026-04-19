@@ -3,13 +3,19 @@
 
 'use client';
 
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/providers/AuthProvider';
-import { saveLastPath } from '@/lib/auth';
-
+import {
+  computeAvatarInitials,
+  initialsFromSupabaseUser,
+} from '@/lib/avatarInitials';
+import { getRole } from '@/lib/auth';
+import { hostApi, locumApi } from '@/lib/api';
+import { getSupabase } from '@/lib/supabaseClient';
+import { useTrackLastPath } from '../hooks/useTrackLastPath';
 interface NavItem {
   label: string;
   href: string;
@@ -20,6 +26,11 @@ interface Props {
   navItems: NavItem[];
   activeHref: string;
   topbarRight?: ReactNode;
+  /** Preferred: first + last name from profile (e.g. contact or locum fields). */
+  topbarFirstName?: string | null;
+  topbarLastName?: string | null;
+  /** Fallback: pre-computed initials or a full name string to parse. */
+  topbarAvatarText?: string;
   children: ReactNode;
 }
 
@@ -56,202 +67,196 @@ export default function DashLayout({
   navItems,
   activeHref,
   topbarRight,
+  topbarFirstName,
+  topbarLastName,
+  topbarAvatarText,
   children,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const { logout } = useAuth();
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const avatarMenuRef = useRef<HTMLDivElement>(null);
+  const [authAvatarInitials, setAuthAvatarInitials] = useState<string | null>(
+    null,
+  );
+  const [apiFirstName, setApiFirstName] = useState<string | null>(null);
+  const [apiLastName, setApiLastName] = useState<string | null>(null);
 
-  // Save current path on every navigation
-  // This is what restores the user's position after re-login
+  useTrackLastPath();
+
   useEffect(() => {
-    saveLastPath(pathname);
-  }, [pathname]);
+    let cancelled = false;
+    getSupabase()
+      .auth.getUser()
+      .then(({ data: { user } }) => {
+        if (cancelled || !user) return;
+        const fromAuth = initialsFromSupabaseUser(user);
+        if (fromAuth) setAuthAvatarInitials(fromAuth);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Names from Nest when a page does not pass `topbarFirstName` / `topbarLastName` (e.g. Messages). */
+  useEffect(() => {
+    let cancelled = false;
+    const role = getRole();
+    if (!role) return;
+
+    (async () => {
+      try {
+        if (role === 'locum') {
+          const data = await locumApi.getProfile();
+          if (cancelled) return;
+          if (data.exists && data.profile) {
+            setApiFirstName(data.profile.firstName ?? null);
+            setApiLastName(data.profile.lastName ?? null);
+          }
+        } else {
+          const p = await hostApi.getProfile();
+          if (cancelled) return;
+          if (p) {
+            setApiFirstName(p.contactFirstName ?? null);
+            setApiLastName(p.contactLastName ?? null);
+          }
+        }
+      } catch {
+        /* offline / 401 — keep initials from props or Supabase */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!avatarMenuOpen) return;
+    function onMouseDown(e: MouseEvent) {
+      const el = avatarMenuRef.current;
+      if (!el) return;
+      if (e.target instanceof Node && el.contains(e.target)) return;
+      setAvatarMenuOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setAvatarMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [avatarMenuOpen]);
 
   function handleLogout() {
     logout();
     router.replace('/home');
   }
 
+  const mergedFirst =
+    topbarFirstName?.trim() || apiFirstName?.trim() || '';
+  const mergedLast = topbarLastName?.trim() || apiLastName?.trim() || '';
+
+  const fromProfile = computeAvatarInitials(
+    mergedFirst || undefined,
+    mergedLast || undefined,
+    topbarAvatarText,
+  );
+  const avatarText =
+    fromProfile !== 'N' ? fromProfile : authAvatarInitials ?? fromProfile;
+
   return (
     <div
       style={{
         display: 'flex',
+        flexDirection: 'column',
         height: '100vh',
         overflow: 'hidden',
         fontFamily: 'var(--font-family-body, DM Sans, sans-serif)',
         background: '#F1F3F7',
       }}
     >
-      {/* Sidebar */}
-      <aside
+      <header
         style={{
-          width: 212,
-          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 24px',
           background: '#fff',
-          borderRight: '1px solid #e2e5ee',
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100vh',
-          overflowY: 'auto',
+          borderBottom: '1px solid #e2e5ee',
+          flexShrink: 0,
         }}
       >
-        <div
-          style={{
-            fontSize: 10,
-            fontWeight: 600,
-            color: '#8892a4',
-            letterSpacing: '.06em',
-            textTransform: 'uppercase',
-            padding: '18px 18px 4px',
-            flexShrink: 0,
-            borderBottom: '1px solid #e2e5ee',
-          }}
-        >
-          Locum Management
-        </div>
-
-        <nav style={{ flex: 1 }}>
-          {navItems.map(({ label, href, icon }) => {
-            const active = activeHref === href;
-            return (
-              <Link key={href} href={href} style={{ textDecoration: 'none' }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '9px 18px',
-                    fontSize: 13,
-                    fontWeight: active ? 500 : 400,
-                    color: active ? '#3B4FD8' : '#5a6478',
-                    background: active ? '#eef0fb' : 'transparent',
-                    borderLeft: `3px solid ${active ? '#3B4FD8' : 'transparent'}`,
-                    transition: 'all .12s',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <span style={{ color: active ? '#3B4FD8' : '#8892a4' }}>
-                    {icon}
-                  </span>
-                  {label}
-                </div>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div
-          onClick={handleLogout}
+        <Link
+          href="/home"
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
-            padding: '12px 18px',
-            fontSize: 13,
-            color: '#8892a4',
-            cursor: 'pointer',
-            borderTop: '1px solid #e2e5ee',
-            flexShrink: 0,
-            transition: 'color .12s',
-          }}
-          onMouseOver={(e) => (e.currentTarget.style.color = '#dc2626')}
-          onMouseOut={(e) => (e.currentTarget.style.color = '#8892a4')}
-        >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-          >
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-          Sign out
-        </div>
-      </aside>
-
-      {/* Main */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          minWidth: 0,
-          height: '100vh',
-          overflow: 'hidden',
-        }}
-      >
-        <header
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '10px 24px',
-            background: '#fff',
-            borderBottom: '1px solid #e2e5ee',
-            flexShrink: 0,
+            gap: 8,
+            textDecoration: 'none',
           }}
         >
-          <Link
-            href="/home"
+          <Image
+            src="/logo.png"
+            alt=""
+            width={36}
+            height={36}
+            priority
+            style={{ objectFit: 'contain' }}
+          />
+          <span
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              textDecoration: 'none',
+              fontFamily: 'Gilroy-Black, Outfit, sans-serif',
+              fontWeight: 400,
+              fontSize: 27,
+              lineHeight: '27px',
+              textTransform: 'capitalize',
             }}
           >
-            <Image
-              src="/logo.png"
-              alt=""
-              width={36}
-              height={36}
-              priority
-              style={{ objectFit: 'contain' }}
-            />
-            <span
-              style={{
-                fontFamily: 'Gilroy-Black, Outfit, sans-serif',
-                fontWeight: 400,
-                fontSize: 27,
-                lineHeight: '27px',
-                textTransform: 'capitalize',
-              }}
+            <span style={{ color: '#0F2A7A' }}>Locum </span>
+            <span style={{ color: '#30C6C6' }}>Link</span>
+          </span>
+        </Link>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {topbarRight}
+          <button
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 4,
+              color: '#5a6478',
+            }}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
             >
-              <span style={{ color: '#0F2A7A' }}>Locum </span>
-              <span style={{ color: '#30C6C6' }}>Link</span>
-            </span>
-          </Link>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            {topbarRight}
-            <button
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 4,
-                color: '#5a6478',
-              }}
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              >
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-            </button>
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+          </button>
+          <div ref={avatarMenuRef} style={{ position: 'relative' }}>
             <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setAvatarMenuOpen((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ')
+                  setAvatarMenuOpen((v) => !v);
+              }}
+              aria-label="Account menu"
+              aria-expanded={avatarMenuOpen}
               style={{
                 width: 32,
                 height: 32,
@@ -264,24 +269,161 @@ export default function DashLayout({
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: 'pointer',
+                userSelect: 'none',
               }}
             >
-              N
+              {avatarText}
             </div>
-          </div>
-        </header>
 
-        {/* Only this scrolls */}
-        <main
+            {avatarMenuOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 40,
+                  right: 0,
+                  minWidth: 160,
+                  background: '#fff',
+                  border: '1px solid #e2e5ee',
+                  borderRadius: 10,
+                  boxShadow: '0 10px 26px rgba(15, 23, 42, 0.12)',
+                  padding: 6,
+                  zIndex: 50,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAvatarMenuOpen(false);
+                    handleLogout();
+                  }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 10px',
+                    cursor: 'pointer',
+                    color: '#dc2626',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    textAlign: 'left',
+                  }}
+                  onMouseOver={(e) =>
+                    (e.currentTarget.style.background = '#FEF2F2')
+                  }
+                  onMouseOut={(e) =>
+                    (e.currentTarget.style.background = 'transparent')
+                  }
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  >
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        {/* Sidebar */}
+        <aside
           style={{
-            flex: 1,
-            padding: '24px',
+            width: 212,
+            flexShrink: 0,
+            background: '#fff',
+            borderRight: '1px solid #e2e5ee',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
             overflowY: 'auto',
-            overflowX: 'hidden',
           }}
         >
-          {children}
-        </main>
+          <nav style={{ flex: 1 }}>
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: '#8892a4',
+                letterSpacing: '.06em',
+                textTransform: 'uppercase',
+                padding: '18px 18px 4px',
+              }}
+            >
+              Locum Management
+            </div>
+
+            {navItems.map(({ label, href, icon }) => {
+              const active = activeHref === href;
+              return (
+                <Link key={href} href={href} style={{ textDecoration: 'none' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '9px 18px',
+                      fontSize: 13,
+                      fontWeight: active ? 500 : 400,
+                      color: active ? '#3B4FD8' : '#5a6478',
+                      background: active ? '#eef0fb' : 'transparent',
+                      borderLeft: `3px solid ${active ? '#3B4FD8' : 'transparent'}`,
+                      transition: 'all .12s',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ color: active ? '#3B4FD8' : '#8892a4' }}>
+                      {icon}
+                    </span>
+                    {label}
+                  </div>
+                </Link>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* Main */}
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            minWidth: 0,
+            height: '100%',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Only this scrolls */}
+          <main
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '24px',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              background: '#fff',
+            }}
+          >
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );

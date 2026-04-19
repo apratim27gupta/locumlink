@@ -1,18 +1,30 @@
 'use client';
 
 import { useRef, useState, useEffect, KeyboardEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AuthSplitLayout from '@/components/AuthSplitLayout';
 import { useAuth } from '@/providers/AuthProvider';
-import { getEmail, getRole } from '@/lib/auth';
+import { getEmail, getRole, saveRole, type Role } from '@/lib/auth';
+import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 
 const OTP_LEN = 6;
 
 const RESEND_COOLDOWN_SEC = 30;
 
-export default function VerifyPage() {
+export default function VerifyPage(props: {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  useNextPageClientProps(props);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { verifyOtp, sendOtp } = useAuth();
+
+  // Role from `/auth/verify?role=` (set after sendOtp) — keeps sync if URL is refreshed.
+  useEffect(() => {
+    const r = searchParams.get('role');
+    if (r === 'clinic' || r === 'locum') saveRole(r as Role);
+  }, [searchParams]);
 
   const [digits, setDigits] = useState<string[]>(Array(OTP_LEN).fill(''));
   const [error, setError] = useState('');

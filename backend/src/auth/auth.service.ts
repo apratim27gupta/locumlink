@@ -21,6 +21,15 @@ import { AuthTokens } from './interfaces/auth-tokens.interface.js';
 
 const BCRYPT_ROUNDS = 12;
 
+/** Real Supabase keys are JWT-shaped; placeholders break getUser() if picked over the anon key. */
+function isPlaceholderSupabaseKey(key: string | undefined): boolean {
+  const s = key?.trim() ?? '';
+  if (!s) return true;
+  if (/^local-dev/i.test(s)) return true;
+  if (/^your-supabase-/i.test(s)) return true;
+  return s.length < 80;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -54,8 +63,8 @@ export class AuthService {
       },
     });
 
-    // PIPEDA – log account creation
-    await this.audit.log({
+    // PIPEDA – log account creation (AuditService.log is void / fire-and-forget)
+    this.audit.log({
       actorId: user.id,
       subjectId: user.id,
       action: 'CREATE',
@@ -82,7 +91,7 @@ export class AuthService {
     });
 
     // PIPEDA – log successful login
-    await this.audit.log({
+    this.audit.log({
       actorId: user.id,
       action: 'LOGIN',
       entity: 'User',
@@ -143,20 +152,38 @@ export class AuthService {
       throw new UnauthorizedException('Missing Authorization bearer token');
     }
 
-    const supabaseUrl = this.config.get<string>('SUPABASE_URL');
-    const serviceKey = this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseUrl = (
+      this.config.get<string>('SUPABASE_URL') ??
+      this.config.get<string>('NEXT_PUBLIC_SUPABASE_URL') ??
+      ''
+    ).trim();
+    const serviceKeyRaw = this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY');
+    const anonKey = (
+      this.config.get<string>('SUPABASE_ANON_KEY') ??
+      this.config.get<string>('NEXT_PUBLIC_SUPABASE_ANON_KEY') ??
+      ''
+    ).trim();
 
-    if (supabaseUrl && serviceKey) {
-      const sb = createClient(supabaseUrl, serviceKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      });
-      const { data, error } = await sb.auth.getUser(raw);
-      if (!error && data.user?.email) {
-        const user = await this.findOrCreateUserForSupabase(
-          data.user.email.toLowerCase(),
-          roleHint,
-        );
-        return this.issueTokens(user);
+    // Prefer service_role only when it looks real; anon key is sufficient for getUser(access_token).
+    const sbKey = !isPlaceholderSupabaseKey(serviceKeyRaw)
+      ? serviceKeyRaw!.trim()
+      : anonKey;
+
+    if (supabaseUrl && sbKey && !isPlaceholderSupabaseKey(sbKey)) {
+      try {
+        const sb = createClient(supabaseUrl, sbKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const { data, error } = await sb.auth.getUser(raw);
+        if (!error && data.user?.email) {
+          const user = await this.findOrCreateUserForSupabase(
+            data.user.email.toLowerCase(),
+            roleHint,
+          );
+          return this.issueTokens(user);
+        }
+      } catch {
+        // Supabase lookup failed — fall through to JWT verify below
       }
     }
 
@@ -166,7 +193,7 @@ export class AuthService {
       return this.issueTokens(user);
     } catch {
       throw new UnauthorizedException(
-        'Invalid session. Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set for OTP login.',
+        'Invalid session. For OTP login, set SUPABASE_URL and SUPABASE_ANON_KEY (or NEXT_PUBLIC_*) to the same Supabase project as the frontend; do not use a placeholder SUPABASE_SERVICE_ROLE_KEY.',
       );
     }
   }
@@ -176,7 +203,21 @@ export class AuthService {
     roleHint: Role,
   ): Promise<User> {
     const existing = await this.prisma.user.findUnique({ where: { email } });
-    if (existing) return existing;
+    if (existing) {
+      // Same email may have signed up earlier as locum vs clinic. The UI + Next
+      // `/api/host/*` routes expect `role: HOST` in the JWT; returning the old
+      // role caused 401 on host profile → clearSession → redirect to /auth.
+      if (
+        existing.role !== roleHint &&
+        existing.role !== Role.ADMIN
+      ) {
+        return this.prisma.user.update({
+          where: { id: existing.id },
+          data: { role: roleHint },
+        });
+      }
+      return existing;
+    }
 
     const passwordHash = await bcrypt.hash(randomUUID(), BCRYPT_ROUNDS);
     return this.prisma.user.create({

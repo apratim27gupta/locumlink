@@ -419,3 +419,28 @@ button:disabled {
   pointer-events: none !important;
   opacity: 0.6;
 }
+
+/* Root layout: keep html/body/#app-root out of inline styles to avoid hydration mismatches
+   (SSR vs client style serialization, browser extensions tweaking body). */
+html.app-html {
+  height: 100%;
+  overflow: hidden;
+}
+
+body.app-body {
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  color: #0b0f1f;
+  font-family: Inter, sans-serif;
+}
+
+#app-root {
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}

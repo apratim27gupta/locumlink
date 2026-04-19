@@ -1,26 +1,24 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
 import { HomeLandingView } from '@/components/HomeLandingView';
 import { HostSetupStep3 } from '@/components/HostSetupStep3';
 import { useAuth } from '@/providers/AuthProvider';
 import { hostApi } from '@/lib/api';
+import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { HostProfile } from '@/types';
 
 /** Rectangle 846074 — white card; all steps: 476 × 790 (Figma) */
 const HOST_SETUP_MODAL = {
   widthPx: 476,
-  /** All steps unified at 790px per spec */
   heightPx: 790,
   maxHeight: 'calc(100vh - 40px)',
   paddingPx: 32,
   borderRadiusPx: 10,
   contentWidthPx: 412,
-  /** Frame 1948760053 — steps 1–2 */
   headerHeightPx: 100,
-  /** Frame 1948760053 — step 3 (taller header: title @32, step @88, bar @128) */
   headerHeightStep3Px: 132,
   formToActionsGapPx: 16,
   formToActionsGapStep2Px: 28,
@@ -117,7 +115,11 @@ const hostSetupModalCardBase: React.CSSProperties = {
   fontFamily: "'Inter', var(--font-family-body, DM Sans, sans-serif)",
 };
 
-export default function HostSetupPage() {
+export default function HostSetupPage(props: {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  useNextPageClientProps(props);
   const router = useRouter();
   const { completeProfile } = useAuth();
   const [step, setStep] = useState(1);
@@ -134,12 +136,18 @@ export default function HostSetupPage() {
     address2: '',
     postalCode: '',
     city: '',
-    province: '',
+    // ── FIX Issue 3: default province to Nova Scotia ──────────────────────
+    province: 'Nova Scotia',
     amenities: [],
     accommodationProvided: false,
   });
 
   const [specialityTags, setSpecialityTags] = useState<string[]>([]);
+
+  // ── FIX Issue 4 (host): inline manual speciality text input ──────────────
+  const [addingCustomSpeciality, setAddingCustomSpeciality] = useState(false);
+  const [customSpeciality, setCustomSpeciality] = useState('');
+  const customSpecialityRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setSpecialityTags(parseSpecialities(form.speciality));
@@ -162,21 +170,35 @@ export default function HostSetupPage() {
     setForm((f) => ({ ...f, speciality: tags.join(', ') }));
   }
 
+  function confirmCustomSpeciality() {
+    const t = customSpeciality.trim();
+    if (t && !specialityTags.includes(t)) {
+      updateSpecialityTags([...specialityTags, t]);
+    }
+    setCustomSpeciality('');
+    setAddingCustomSpeciality(false);
+  }
+
   async function handleFinish() {
     setBusy(true);
     setErr('');
     try {
       await hostApi.saveProfile(form);
-    } catch {
-      /* backend not ready yet */
+      completeProfile();
+      if (typeof window !== 'undefined') {
+        window.location.assign('/host/profile');
+      } else {
+        router.replace('/host/profile');
+      }
+    } catch (e: unknown) {
+      setErr(
+        e instanceof Error
+          ? e.message
+          : 'Could not save profile. Please try again.',
+      );
+    } finally {
+      setBusy(false);
     }
-    completeProfile();
-    if (typeof window !== 'undefined') {
-      window.location.assign('/host/dashboard');
-    } else {
-      router.replace('/host/dashboard');
-    }
-    setBusy(false);
   }
 
   return (
@@ -189,7 +211,6 @@ export default function HostSetupPage() {
         fontFamily: 'var(--font-family-body, DM Sans, sans-serif)',
       }}
     >
-      {/* ── Layer 1: Main landing page (same as /home) as non-interactive backdrop ── */}
       <div
         style={{
           position: 'absolute',
@@ -206,7 +227,6 @@ export default function HostSetupPage() {
         />
       </div>
 
-      {/* ── Layer 2: Blue-tinted dimming overlay ───────────────────────── */}
       <div
         style={{
           position: 'absolute',
@@ -216,9 +236,8 @@ export default function HostSetupPage() {
         }}
       />
 
-      {/* ── Layer 3: Profile card — 476 × 790 for all steps ─────────────── */}
       <div style={hostSetupModalCardBase}>
-        {/* ── Header ── */}
+        {/* Header */}
         <div
           style={{
             position: 'relative',
@@ -289,7 +308,6 @@ export default function HostSetupPage() {
             Step {step} of 3
           </p>
 
-          {/* Progress bar — 3 segments */}
           <div
             style={{
               display: 'flex',
@@ -316,7 +334,7 @@ export default function HostSetupPage() {
           </div>
         </div>
 
-        {/* ── Body: scrollable fields + fixed footer (Next/Back always visible) ── */}
+        {/* Body */}
         <div
           style={{
             flex: 1,
@@ -409,51 +427,165 @@ export default function HostSetupPage() {
                         onChange={(e) => set('cpsnsNumber', e.target.value)}
                       />
                     </div>
+
+                    {/* ── FIX Issue 4 (host): dropdown + manual text entry + removable tags ── */}
                     <div>
                       <label style={lbl}>Speciality</label>
-                      <div style={{ position: 'relative', marginBottom: 8 }}>
-                        <select
-                          className="host-setup-input host-setup-select"
-                          style={{
-                            ...inp,
-                            width: '100%',
-                            paddingRight: 36,
-                            color: '#0B0F1F',
-                          }}
-                          value=""
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (v && !specialityTags.includes(v)) {
-                              updateSpecialityTags([...specialityTags, v]);
-                            }
-                            e.target.selectedIndex = 0;
-                          }}
-                        >
-                          <option value="">Pick Speciality</option>
-                          {SPECIALITY_OPTIONS.filter(
-                            (o) => !specialityTags.includes(o),
-                          ).map((o) => (
-                            <option key={o} value={o}>
-                              {o}
-                            </option>
-                          ))}
-                        </select>
-                        <span
-                          style={{
-                            position: 'absolute',
-                            right: 10,
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            pointerEvents: 'none',
-                            fontSize: 10,
-                            lineHeight: 1,
-                            color: '#000000',
-                          }}
-                          aria-hidden
-                        >
-                          ▼
-                        </span>
+
+                      {/* Row: preset dropdown + "Add custom" button */}
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                        <div style={{ position: 'relative', flex: 1 }}>
+                          <select
+                            className="host-setup-input host-setup-select"
+                            style={{
+                              ...inp,
+                              width: '100%',
+                              paddingRight: 36,
+                              color: '#0B0F1F',
+                            }}
+                            value=""
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v && !specialityTags.includes(v)) {
+                                updateSpecialityTags([...specialityTags, v]);
+                              }
+                              e.target.selectedIndex = 0;
+                            }}
+                          >
+                            <option value="">Pick Speciality</option>
+                            {SPECIALITY_OPTIONS.filter(
+                              (o) => !specialityTags.includes(o),
+                            ).map((o) => (
+                              <option key={o} value={o}>
+                                {o}
+                              </option>
+                            ))}
+                          </select>
+                          <span
+                            style={{
+                              position: 'absolute',
+                              right: 10,
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              pointerEvents: 'none',
+                              fontSize: 10,
+                              lineHeight: 1,
+                              color: '#000000',
+                            }}
+                            aria-hidden
+                          >
+                            ▼
+                          </span>
+                        </div>
+
+                        {/* "+ Custom" button */}
+                        {!addingCustomSpeciality && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddingCustomSpeciality(true);
+                              setTimeout(
+                                () => customSpecialityRef.current?.focus(),
+                                50,
+                              );
+                            }}
+                            style={{
+                              height: 44,
+                              padding: '0 12px',
+                              border: '1px dashed #3B4FD8',
+                              borderRadius: 8,
+                              background: 'none',
+                              color: '#3B4FD8',
+                              fontSize: 13,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            + Custom
+                          </button>
+                        )}
                       </div>
+
+                      {/* Inline custom input — appears below dropdown when active */}
+                      {addingCustomSpeciality && (
+                        <div
+                          style={{ display: 'flex', gap: 8, marginBottom: 8 }}
+                        >
+                          <input
+                            ref={customSpecialityRef}
+                            type="text"
+                            value={customSpeciality}
+                            onChange={(e) =>
+                              setCustomSpeciality(e.target.value)
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                confirmCustomSpeciality();
+                              }
+                              if (e.key === 'Escape') {
+                                setCustomSpeciality('');
+                                setAddingCustomSpeciality(false);
+                              }
+                            }}
+                            placeholder="Type speciality…"
+                            style={{
+                              flex: 1,
+                              height: 38,
+                              padding: '4px 8px',
+                              border: '1px solid #3B4FD8',
+                              borderRadius: 8,
+                              fontSize: 15,
+                              fontFamily: 'inherit',
+                              outline: 'none',
+                              color: '#0B0F1F',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={confirmCustomSpeciality}
+                            style={{
+                              padding: '0 14px',
+                              height: 38,
+                              background: '#1B31D2',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 8,
+                              fontSize: 13,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                            }}
+                          >
+                            Add
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomSpeciality('');
+                              setAddingCustomSpeciality(false);
+                            }}
+                            style={{
+                              padding: '0 10px',
+                              height: 38,
+                              background: 'none',
+                              color: '#6B7280',
+                              border: '1px solid #D0D5DD',
+                              borderRadius: 8,
+                              fontSize: 13,
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Tag pills with × remove */}
                       <div
                         style={{
                           display: 'flex',
@@ -590,6 +722,7 @@ export default function HostSetupPage() {
                         width: '100%',
                       }}
                     >
+                      {/* ── FIX Issue 3 (host): NS postal code placeholder ── */}
                       <div
                         style={{
                           display: 'flex',
@@ -601,9 +734,11 @@ export default function HostSetupPage() {
                         <label style={lbl}>Postal Code</label>
                         <input
                           style={inpStep2}
-                          placeholder="Enter valid 6 digit code"
+                          placeholder="B0A 1A0 (Nova Scotia)"
                           value={form.postalCode}
-                          onChange={(e) => set('postalCode', e.target.value)}
+                          onChange={(e) =>
+                            set('postalCode', e.target.value.toUpperCase())
+                          }
                         />
                       </div>
                       <div
@@ -641,13 +776,27 @@ export default function HostSetupPage() {
                             gap: 8,
                           }}
                         >
+                          {/* ── FIX Issue 3: Province locked to Nova Scotia (editable if needed) ── */}
                           <label style={lbl}>Province</label>
                           <input
-                            style={inpStep2}
-                            placeholder="Add Province"
+                            style={{
+                              ...inpStep2,
+                              background: '#F9FAFB',
+                              color: '#374151',
+                            }}
                             value={form.province}
                             onChange={(e) => set('province', e.target.value)}
+                            placeholder="Nova Scotia"
                           />
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: '#9CA3AF',
+                              marginTop: -4,
+                            }}
+                          >
+                            Defaults to Nova Scotia
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -655,7 +804,7 @@ export default function HostSetupPage() {
                 </div>
               )}
 
-              {/* ── Step 3: Services — AmenitiesSelector ── */}
+              {/* ── Step 3: Services ── */}
               {step === 3 && (
                 <div className="host-setup-step3-stack">
                   <HostSetupStep3
@@ -676,7 +825,7 @@ export default function HostSetupPage() {
             </div>
           </div>
 
-          {/* Fixed footer: always visible */}
+          {/* Fixed footer */}
           <div
             style={{
               flexShrink: 0,

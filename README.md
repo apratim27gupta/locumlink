@@ -1,338 +1,230 @@
-# L2
+# Locum Link
 
-NestJS skeleton project with Prisma ORM, PostgreSQL, and environment-based configuration for staging and production.
+A full-stack platform connecting locum physicians with host clinics across Canada. Hosts post shifts, locums apply and get shortlisted, and both parties communicate through an integrated messaging system.
+
+---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Framework | NestJS 11 |
-| Language | TypeScript 5.7 (strict, `nodenext` modules) |
-| ORM | Prisma 7 |
-| Database | PostgreSQL 16 (local via Docker for staging, Supabase for production) |
-| Config | `@nestjs/config` with `class-validator` validation |
-| Testing | Jest, Supertest |
-| Linting | ESLint 9, Prettier |
+| Layer        | Technology                            |
+| ------------ | ------------------------------------- |
+| Frontend     | Next.js 15, TypeScript                |
+| Backend      | NestJS, Passport JWT, class-validator |
+| Database     | PostgreSQL via Prisma ORM             |
+| Auth         | Supabase OTP + custom Nest JWT        |
+| File Storage | Google Cloud Storage (signed URLs)    |
+
+---
 
 ## Project Structure
 
 ```
 l2/
-├── backend/                    # NestJS API
-│   ├── src/
-│   │   ├── config/
-│   │   │   └── env.validation.ts
-│   │   ├── auth/               # JWT auth (register, login, me)
-│   │   ├── health/
-│   │   ├── prisma/
-│   │   ├── app.module.ts
-│   │   └── main.ts
-│   ├── test/
-│   │   └── app.e2e-spec.ts
-│   ├── nest-cli.json
-│   └── package.json
-├── frontend/                   # Next.js (App Router) — OTP login UI
-│   ├── app/
-│   ├── components/
-│   └── lib/
-├── database/
-│   ├── prisma/
-│   │   ├── schema.prisma
-│   │   └── migrations/
-│   └── docker-compose.yml      # Local PostgreSQL
-├── prisma.config.ts            # Prisma CLI (paths → database/prisma)
-├── .env                        # Shared: backend + loaded by frontend via next.config
-├── .env.staging
-├── .env.production
-└── package.json                # npm workspaces + root scripts
+├── backend/                  # NestJS API — port 3000
+│   └── src/
+│       ├── auth/             # JWT strategy, Supabase OTP sync
+│       ├── host/             # Host profile, jobs, applications
+│       ├── locum/            # Locum profile, browse, apply
+│       ├── message/          # Messaging system
+│       ├── notifications/    # Bell notifications
+│       ├── gcs/              # Google Cloud Storage service
+│       └── upload/           # File upload endpoint
+├── frontend/                 # Next.js app — port 3001
+│   └── src/
+│       ├── app/              # App router pages
+│       ├── components/       # Shared UI components
+│       ├── lib/              # api.ts, auth.ts, db.ts
+│       └── providers/        # AuthProvider
+└── database/
+    └── prisma/
+        ├── schema.prisma
+        └── migrations/
 ```
+
+---
 
 ## Prerequisites
 
-- **Node.js** >= 18
-- **npm** >= 9
-- **Docker** and **Docker Compose** (for local Postgres)
+- Node.js 20+
+- PostgreSQL (Docker recommended)
+- Supabase project
+- Google Cloud project with a Storage bucket
 
-## Getting Started
+---
 
-### 1. Install dependencies
+## Environment Setup
 
-```bash
-npm install
-```
+### Backend — `backend/.env`
 
-### 2. Start local PostgreSQL
-
-```bash
-npm run db:up
-```
-
-This runs a Postgres 16 container on host port **5433** (mapped to 5432 in the container) with:
-
-| Setting | Value |
-|---|---|
-| User | `postgres` |
-| Password | `postgres` |
-| Database | `l2_db` |
-
-Verify the container is running:
-
-```bash
-docker ps
-```
-
-You should see `l2_postgres` in the list.
-
-### 3. Generate the Prisma client
-
-```bash
-npm run prisma:generate
-```
-
-This reads `database/prisma/schema.prisma` and generates the Prisma client into `node_modules/@prisma/client`.
-
-### 4. Run database migrations
-
-```bash
-npm run prisma:migrate
-```
-
-Since the schema has no models yet, this will initialize the migration history. When you add models later, re-run this command to create and apply migrations.
-
-### 5. Start the application
-
-**Development mode (staging, with hot-reload):**
-
-```bash
-npm run start:dev
-```
-
-**Built staging mode:**
-
-```bash
-npm run build
-npm run start:staging
-```
-
-**Production mode:**
-
-```bash
-npm run build
-npm run start:prod
-```
-
-The app starts on the port defined in the env file (default **3000**) and logs:
-
-```
-Application running on port 3000 [staging]
-```
-
-### 6. Test the health endpoint
-
-```bash
-curl http://localhost:3000/api/health
-```
-
-Response:
-
-```json
-{
-  "status": "ok",
-  "environment": "staging",
-  "database": "ok",
-  "timestamp": "2026-03-30T12:00:00.000Z"
-}
-```
-
-If Postgres is not running, `database` will return `"unreachable"` but the endpoint still responds with `200`.
-
-## Environment Configuration
-
-The app uses `@nestjs/config` to load environment variables. The loading order is:
-
-1. `.env.{NODE_ENV}` (e.g. `.env.staging` or `.env.production`)
-2. `.env` (fallback)
-
-If `NODE_ENV` is not set, it defaults to `staging`.
-
-### Required Variables
-
-| Variable | Type | Description |
-|---|---|---|
-| `NODE_ENV` | `staging` \| `production` | Current environment |
-| `PORT` | number | HTTP port to listen on |
-| `DATABASE_URL` | string | PostgreSQL connection string |
-
-The app **will not start** if any of these are missing or invalid. Validation is handled by `backend/src/config/env.validation.ts` using `class-validator`.
-
-### Staging (.env.staging)
-
-```
+```env
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5433/l2_db
+JWT_SECRET=your-32-char-secret
 NODE_ENV=staging
 PORT=3000
-DATABASE_URL="postgresql://postgres:postgres@localhost:5433/l2_db"
+NEXT_PUBLIC_API_URL=http://localhost:3000
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+GCS_PROJECT_ID=your-gcp-project-id
+GCS_BUCKET_NAME=your-bucket-name
+GCS_KEY_FILE=/absolute/path/to/service-account-key.json
 ```
 
-Points at the local Docker Postgres.
+### Frontend — `frontend/.env.local`
 
-### Production (.env.production)
-
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+JWT_SECRET=your-32-char-secret
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5433/l2_db
 ```
-NODE_ENV=production
-PORT=3000
-DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres"
-```
 
-Replace the placeholder with your Supabase project's connection string. You can find it in the Supabase dashboard under **Settings > Database > Connection string > URI**.
+> `JWT_SECRET` and `DATABASE_URL` must be identical in both files.
 
-## npm Scripts Reference
+---
 
-| Script | Description |
-|---|---|
-| `npm run start:dev` | Development mode with watch (staging) |
-| `npm run start:staging` | Run compiled app with `NODE_ENV=staging` |
-| `npm run start:prod` | Run compiled app with `NODE_ENV=production` |
-| `npm run start:debug` | Debug mode with watch (staging) |
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm run lint` | Run ESLint with auto-fix |
-| `npm run format` | Run Prettier |
-| `npm test` | Run unit tests |
-| `npm run test:watch` | Run unit tests in watch mode |
-| `npm run test:cov` | Run tests with coverage report |
-| `npm run test:e2e` | Run end-to-end tests |
-| `npm run prisma:generate` | Regenerate the Prisma client |
-| `npm run prisma:migrate` | Create and apply Prisma migrations |
-| `npm run prisma:studio` | Open Prisma Studio (database GUI) |
-| `npm run db:up` | Start local Postgres (`database/docker-compose.yml`) |
-| `npm run db:down` | Stop local Postgres container |
-| `npm run dev:frontend` | Next.js dev server (port **3001**) |
-
-## Docker Compose
-
-`database/docker-compose.yml` provides a single Postgres 16 service for local development.
+## Local Development
 
 ```bash
-# Start
-npm run db:up
+# 1. Start database
+docker compose up -d
 
-# Stop (keeps data)
-npm run db:down
+# 2. Run migrations and generate Prisma client
+npx prisma migrate deploy
+npx prisma generate
 
-# Stop and destroy data
-docker compose down -v
+# 3. Start backend (new terminal)
+cd backend
+npm install
+npm run start:dev
+
+# 4. Start frontend (new terminal)
+cd frontend
+npm install
+npm run dev
 ```
 
-Data is persisted in a named volume (`pgdata`). Use `docker compose down -v` to wipe it.
+Frontend runs at `http://localhost:3001`, backend at `http://localhost:3000`.
 
-## Prisma
+---
 
-### Schema
+## Google Cloud Storage Setup
 
-Models are defined in `database/prisma/schema.prisma`.
+1. Create a GCS bucket in your Google Cloud project
+2. Create a service account with roles:
+   - **Storage Object Admin**
+   - **Service Account Token Creator**
+3. Download the JSON key file — never commit it
+4. Set `GCS_KEY_FILE` in `backend/.env` to the absolute path of the key file
 
-Example of adding a model:
+Files are stored as GCS object paths in the database. Signed URLs (1-hour TTL) are generated on every read request — never store the signed URL itself.
 
-```prisma
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+---
+
+## Authentication Flow
+
+```
+User enters email
+      ↓
+Supabase sends OTP
+      ↓
+User verifies OTP → Supabase session created
+      ↓
+Frontend calls POST /api/auth/sync-supabase → receives Nest JWT
+      ↓
+JWT stored in localStorage + ll_access cookie (365-day expiry)
+      ↓
+Middleware reads ll_access cookie to protect /host/* and /locum/* routes
+      ↓
+All API requests use Bearer JWT verified by backend
+      ↓
+On re-login, user is restored to their last visited page
 ```
 
-After adding or changing models:
+---
+
+## Key Features
+
+- **Host** — post job shifts, review applicants, shortlist and message locums
+- **Locum** — browse active jobs, apply, track application status
+- **Messaging** — full messaging with edit, delete, and file attachments via GCS
+- **Notifications** — bell icon polls every 7 seconds for unread messages, new applications (host), and shortlist events (locum)
+- **File uploads** — PDF and image upload via GCS with signed URL delivery
+- **Path restoration** — users return to their last visited page after re-login
+- **Role separation** — hosts and locums have fully separate dashboards and navigation
+
+---
+
+## API Reference
+
+| Method | Route                                  | Description                            |
+| ------ | -------------------------------------- | -------------------------------------- |
+| POST   | /api/auth/sync-supabase                | Exchange Supabase token for Nest JWT   |
+| GET    | /api/host/profile                      | Get host profile                       |
+| POST   | /api/host/profile                      | Save host profile                      |
+| GET    | /api/host/jobs                         | List host jobs                         |
+| POST   | /api/host/jobs                         | Create job posting                     |
+| PATCH  | /api/host/jobs/:id                     | Update job posting                     |
+| DELETE | /api/host/jobs/:id                     | Delete job posting                     |
+| POST   | /api/host/jobs/:id/reopen              | Reopen a filled job                    |
+| GET    | /api/host/jobs/:id/applications        | List applicants for a job              |
+| PATCH  | /api/host/jobs/:id/applications/:appId | Shortlist / reject / confirm applicant |
+| GET    | /api/host/stats                        | Dashboard statistics                   |
+| GET    | /api/locum/profile                     | Get locum profile                      |
+| POST   | /api/locum/profile                     | Save locum profile                     |
+| GET    | /api/locum/jobs                        | Browse active jobs                     |
+| POST   | /api/locum/jobs/:id/apply              | Apply to a job                         |
+| GET    | /api/locum/applications                | My applications                        |
+| GET    | /api/messages/conversations            | All conversations                      |
+| GET    | /api/messages/thread/:partnerId        | Message thread with a user             |
+| POST   | /api/messages                          | Send a message                         |
+| PATCH  | /api/messages/:id                      | Edit a message                         |
+| DELETE | /api/messages/:id                      | Delete a message                       |
+| GET    | /api/notifications                     | Bell notifications                     |
+| POST   | /api/upload                            | Upload file to GCS                     |
+
+---
+
+## Database
 
 ```bash
-npm run prisma:generate   # regenerate the client
-npm run prisma:migrate    # create and apply migration
+# Create a new migration after schema changes
+npx prisma migrate dev --name describe_your_change
+
+# Apply migrations
+npx prisma migrate deploy
+
+# Regenerate Prisma client
+npx prisma generate
 ```
 
-### Using PrismaService
+---
 
-`PrismaModule` is registered globally. Inject `PrismaService` into any service without importing the module again:
+## Scripts
 
-```typescript
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service.js';
-
-@Injectable()
-export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
-
-  findAll() {
-    return this.prisma.user.findMany();
-  }
-}
-```
-
-### Prisma Studio
-
-Browse and edit your database with a GUI:
+From `backend/`:
 
 ```bash
-npm run prisma:studio
+npm run start:dev    # development with file watching
+npm run build        # production build
+npm run start:prod   # production start
 ```
 
-Opens at `http://localhost:5555`.
-
-## Adding a New Module
-
-Follow the NestJS module pattern:
+From `frontend/`:
 
 ```bash
-# Using the NestJS CLI generator
-npx nest g module users
-npx nest g controller users
-npx nest g service users
+npm run dev          # development with Turbopack
+npm run build        # production build
+npm run start        # production start
 ```
 
-Or create the files manually under `src/users/` and import `UsersModule` in `app.module.ts`.
+---
 
-## API
+## Security
 
-All Nest routes are prefixed with `/api` (see `backend/src/main.ts`).
-
-### Health
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/health` | Returns `status`, `environment`, `database` (`ok` or `unreachable`), `timestamp` |
-
-### Auth (`AuthController`)
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/api/auth/register` | — | Register; returns JWT tokens + user |
-| POST | `/api/auth/login` | — | Login; returns JWT tokens + user |
-| GET | `/api/auth/me` | Bearer JWT | Current user (password hash stripped) |
-
-### Frontend (external APIs)
-
-The Next app in `frontend/` uses the **Supabase JS client** only (`@/lib/supabaseClient`): `signInWithOtp`, OTP verify, and session handling. It does not call the Nest API unless you add that integration later.
-
-| Where | API |
-|---|---|
-| `frontend/components/Auth/RequestOtp.jsx` | `supabase.auth.signInWithOtp` |
-| `frontend/components/Auth/VerifyOtp.jsx` | `supabase.auth.verifyOtp` (and related session APIs) |
-
-## Production Deployment (Supabase)
-
-1. Create a Supabase project at [supabase.com](https://supabase.com)
-2. Copy the connection string from **Settings > Database > Connection string > URI**
-3. Set the values in `.env.production` (or as environment variables on your hosting platform):
-   ```
-   NODE_ENV=production
-   PORT=3000
-   DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@db.YOUR_REF.supabase.co:5432/postgres"
-   ```
-4. Run migrations against the production database:
-   ```bash
-   DATABASE_URL="your_production_url" npm run prisma:migrate
-   ```
-5. Build and start:
-   ```bash
-   npm run build
-   npm run start:prod
-   ```
+- Never commit `.env` files or GCS key JSON files — both are excluded by `.gitignore`
+- Signed URLs expire after 1 hour — never cache or store them
+- JWT secret must be at least 32 characters and identical across frontend and backend
+- Cookies use `SameSite=Lax` with 365-day expiry to prevent middleware redirect loops
+- The `ll_access` cookie is re-synced from localStorage on every tab focus and visibility change

@@ -43,4 +43,12 @@ export interface LocumProfile {
   postalCode?: string;
   city?: string;
   province?: string;
+  /** Stored file names from GET /profile (display). */
+  licenseFile?: string;
+  resumeFile?: string;
+  extraFile?: string;
+  /** Sent on POST /profile (same as backend DTO). */
+  licenseFileName?: string;
+  resumeFileName?: string;
+  extraFileName?: string;
 }

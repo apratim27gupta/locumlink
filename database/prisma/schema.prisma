@@ -5,8 +5,10 @@ generator client {
   provider = "prisma-client-js"
 }
 
+
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ─────────────────────────────────────────────
@@ -148,6 +150,19 @@ model LocumProfile {
   ruralExperienced    Boolean            @default(false)
   verificationStatus  VerificationStatus @default(UNVERIFIED)
   verifiedAt          DateTime?
+  firstName           String?            @map("first_name")
+  lastName            String?            @map("last_name")
+
+  // Setup / profile UI (free-text; `specialty` enum kept for filters)
+  address1            String?
+  address2            String?
+  postalCode          String?            @map("postal_code")
+  city                String?
+  province            String?
+  specializationText  String?            @map("specialization_text") @db.Text
+  licenseFileName     String?            @map("license_file_name")
+  resumeFileName      String?            @map("resume_file_name")
+  extraFileName       String?            @map("extra_file_name")
 
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
@@ -232,6 +247,18 @@ model JobPosting {
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
   expiresAt             DateTime?
+
+  keyResponsibilities   String[]  @default([]) @map("key_responsibilities")
+  startDate             DateTime? @map("start_date") @db.Date
+  endDate               DateTime? @map("end_date") @db.Date
+  startTime             String?   @map("start_time") @db.VarChar(10)
+  endTime               String?   @map("end_time") @db.VarChar(10)
+  payPerDay             Decimal?  @map("pay_per_day") @db.Decimal(10, 2)
+  minYearsExperience    Int?      @map("min_years_experience")
+  maxApplicants         Int       @default(20) @map("max_applicants")
+  travelRequired        Boolean   @default(false) @map("travel_required")
+  scheduleFlexible      Boolean   @default(false) @map("schedule_flexible")
+  requiredCredentials   String[]  @default([]) @map("required_credentials")
 
   // Relations
   shifts                Shift[]
@@ -320,6 +347,9 @@ model Message {
   body          String     @db.Text
   readAt        DateTime?
   sentAt        DateTime   @default(now())
+  
+  editedAt   DateTime?  @map("edited_at")   // ← ADD
+  deletedAt  DateTime?  @map("deleted_at")  // ← ADD (soft delete)
 
   @@map("messages")
 }

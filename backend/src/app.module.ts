@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { HealthModule } from './health/health.module.js';
 import { HostModule } from './host/host.module.js';
 import { LocumModule } from './locum/locum.module.js';
+import { MessageModule } from './message/message.module.js'; // ← NEW
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard.js';
 import { validate } from './config/env.validation.js';
 
@@ -24,11 +25,10 @@ import { validate } from './config/env.validation.js';
     HealthModule,
     HostModule,
     LocumModule,
+    MessageModule, // ← NEW
   ],
   providers: [
     {
-      // Applies JwtAuthGuard to EVERY route in the entire app.
-      // Routes with @Public() are excluded automatically.
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },

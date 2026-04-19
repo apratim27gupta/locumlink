@@ -1,11 +1,3 @@
-/**
- * GET  /api/host/profile  → returns the logged-in host's profile (or 404)
- * POST /api/host/profile  → creates or updates (upsert) the host's profile
- *
- * Auth: JWT in `ll_access` cookie (same JWT_SECRET as Nest). Role must be HOST.
- * DB: Prisma — see `database/prisma/schema.prisma` model HostProfile.
- */
-
 import { NextResponse } from 'next/server';
 import { getAuthenticatedHostUserId } from '@/lib/auth-server';
 import { getDb } from '@/lib/db';
@@ -14,7 +6,6 @@ import type { HostProfile } from '@/types';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-/** Row shape returned by Prisma for `host_profiles` (extended profile fields). */
 interface HostProfileRow {
   practiceName: string;
   postalCode: string;
@@ -64,12 +55,12 @@ function rowToApi(row: HostProfileRow): HostProfile {
   };
 }
 
-async function getUserId(): Promise<string | null> {
-  return getAuthenticatedHostUserId();
+async function getUserId(req: Request): Promise<string | null> {
+  return getAuthenticatedHostUserId(req);
 }
 
-export async function GET() {
-  const userId = await getUserId();
+export async function GET(req: Request) {
+  const userId = await getUserId(req);
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -86,7 +77,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const userId = await getUserId();
+  const userId = await getUserId(req);
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -148,6 +139,74 @@ export async function POST(req: Request) {
     where: { userId },
     update: data,
     create: { userId, ...data },
+  });
+
+  return NextResponse.json(rowToApi(profile as unknown as HostProfileRow));
+}
+
+export async function PUT(req: Request) {
+  const userId = await getUserId(req);
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  let body: Partial<HostProfile>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const a1 = body.address1 ?? '';
+  const a2 = body.address2 ?? '';
+
+  const data = {
+    ...(body.clinicName !== undefined && { practiceName: body.clinicName }),
+    ...(body.address1 !== undefined && {
+      address: combinedAddress(a1, a2),
+      address1: a1 || null,
+    }),
+    ...(body.address2 !== undefined && { address2: a2 || null }),
+    ...(body.city !== undefined && { city: body.city }),
+    ...(body.postalCode !== undefined && { postalCode: body.postalCode }),
+    ...(body.province !== undefined && { province: body.province }),
+    ...(body.amenities !== undefined && { servicesOffered: body.amenities }),
+    ...(body.clinicDesc !== undefined && {
+      highlights: body.clinicDesc?.trim() || null,
+    }),
+    ...(body.contactFirstName !== undefined && {
+      contactFirstName: body.contactFirstName?.trim() || null,
+    }),
+    ...(body.contactLastName !== undefined && {
+      contactLastName: body.contactLastName?.trim() || null,
+    }),
+    ...(body.cpsnsNumber !== undefined && {
+      cpsnsNumber: body.cpsnsNumber?.trim() || null,
+    }),
+    ...(body.speciality !== undefined && {
+      speciality: body.speciality?.trim() || null,
+    }),
+    ...(body.licenseFile !== undefined && {
+      licenseFile: body.licenseFile ?? null,
+    }),
+    ...(body.accommodationProvided !== undefined && {
+      accommodationProvided: body.accommodationProvided,
+    }),
+    ...(body.practiceType !== undefined && {
+      practiceType: body.practiceType?.trim() || null,
+    }),
+    ...(body.numPhysicians !== undefined && {
+      numPhysicians: body.numPhysicians?.trim() || null,
+    }),
+    ...(body.emr !== undefined && { emr: body.emr?.trim() || null }),
+    ...(body.patientVol !== undefined && {
+      patientVol: body.patientVol?.trim() || null,
+    }),
+  };
+
+  const profile = await getDb().hostProfile.update({
+    where: { userId },
+    data,
   });
 
   return NextResponse.json(rowToApi(profile as unknown as HostProfileRow));

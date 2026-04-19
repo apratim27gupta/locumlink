@@ -1,9 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { locumApi } from '@/lib/api';
+import { buildLocumSavePayload } from '@/lib/locumProfilePayload';
+import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { LocumProfile } from '@/types';
+import { isCpsnsVerified } from '@/lib/cpsnsVerify';
 
 const NAV = [
   { label: 'Browse Opportunities', href: '/locum/browse',    icon: <NavIcon name="browse"    /> },
@@ -21,10 +25,17 @@ const SPECIALITY_OPTIONS = [
 type VerificationStatus = 'pending' | 'under-review' | 'verified';
 
 const inp: React.CSSProperties = {
-  width: '100%', padding: '8px 10px',
-  border: '1px solid #D0D5DD', borderRadius: 6,
-  fontSize: 13, color: '#0f1523', background: '#fff',
-  outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+  width: '100%',
+  padding: '8px 10px',
+  minHeight: 37,
+  border: '1px solid #D0D5DD',
+  borderRadius: 6,
+  fontSize: 13,
+  color: '#0f1523',
+  background: '#fff',
+  outline: 'none',
+  fontFamily: 'inherit',
+  boxSizing: 'border-box',
 };
 const lbl: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 500,
@@ -57,22 +68,25 @@ function stepTextColor(s: StepStatus) {
 function VerificationBanner({ status }: { status: VerificationStatus }) {
   const config = {
     pending: {
-      img: '/profile-pending.png',
+      img: '/profile-incomplete.png',
       title: 'Profile submitted — pending review',
       sub: 'We will notify you once your profile has been reviewed.',
       bg: '#FFFBEB', border: '#FDE68A', titleColor: '#92400E', subColor: '#B45309',
     },
     'under-review': {
-      img: '/profile-under-review.png',
-      title: 'Your profile is under review',
-      sub: 'Our team is currently reviewing your documents.',
+      img: '/profile-underverification.png',
+      title: 'CPSNS not verified yet',
+      sub: 'Your profile is complete, but your CPSNS number must match our verified list before you can apply to jobs.',
       bg: '#EFF6FF', border: '#BFDBFE', titleColor: '#1E40AF', subColor: '#3B82F6',
     },
     verified: {
       img: '/profile-verified.png',
-      title: 'Profile verified ✓',
+      title: 'Profile verified',
       sub: 'You are verified and can now apply to locum opportunities.',
-      bg: '#F0FDF4', border: '#BBF7D0', titleColor: '#166534', subColor: '#16a34a',
+      bg: '#F3F4F6',
+      border: '#E5E7EB',
+      titleColor: '#0f1523',
+      subColor: '#6B7280',
     },
   }[status];
 
@@ -91,7 +105,11 @@ function VerificationBanner({ status }: { status: VerificationStatus }) {
   );
 }
 
-export default function LocumProfilePage() {
+export default function LocumProfilePage(props: {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  useNextPageClientProps(props);
   const [activeStep, setActiveStep] = useState(1);
   const [visited, setVisited] = useState<Set<number>>(new Set([1]));
   const [saving, setSaving] = useState(false);
@@ -113,9 +131,6 @@ export default function LocumProfilePage() {
   const [licenseFile, setLicenseFile] = useState('');
   const [resumeFile,  setResumeFile]  = useState('');
   const [extraFile,   setExtraFile]   = useState('');
-
-  // Verification status — in real app this comes from backend
-  const [verificationStatus] = useState<VerificationStatus>('pending');
 
   const licenseRef = useRef<HTMLInputElement>(null);
   const resumeRef  = useRef<HTMLInputElement>(null);
@@ -146,6 +161,9 @@ export default function LocumProfilePage() {
         setPostalCode(p.postalCode ?? '');
         setCity(p.city       ?? '');
         setProvince(p.province ?? '');
+        setLicenseFile(p.licenseFile ?? '');
+        setResumeFile(p.resumeFile ?? '');
+        setExtraFile(p.extraFile ?? '');
       })
       .catch(() => setLoadError('Could not load profile data.'));
   }, []);
@@ -158,6 +176,12 @@ export default function LocumProfilePage() {
 
   const completedCount = stepDone.filter(Boolean).length;
   const progressPct    = Math.round((completedCount / 3) * 100);
+  const allStepsDone = step1Done && step2Done && step3Done;
+  const profileVerificationStatus: VerificationStatus = allStepsDone
+    ? isCpsnsVerified(cpsns)
+      ? 'verified'
+      : 'under-review'
+    : 'pending';
 
   function getStatus(n: number): StepStatus {
     const idx = n - 1;
@@ -177,13 +201,23 @@ export default function LocumProfilePage() {
     setSaving(true);
     setSaved(false);
     try {
-      await locumApi.saveProfile({
-        firstName, lastName, cpsnsNumber: cpsns,
-        professionalSummary: summary,
-        specialization: specialityTags.join(', '),
-        address1: addr1, address2: addr2,
-        postalCode, city, province,
-      });
+      await locumApi.saveProfile(
+        buildLocumSavePayload(
+          {
+            firstName,
+            lastName,
+            cpsnsNumber: cpsns,
+            professionalSummary: summary,
+            specialization: specialityTags.join(', '),
+            address1: addr1,
+            address2: addr2,
+            postalCode,
+            city,
+            province,
+          },
+          { licenseFile, resumeFile, extraFile },
+        ),
+      );
       setSaved(true);
     } catch {
       setLoadError('Failed to save. Please try again.');
@@ -194,8 +228,8 @@ export default function LocumProfilePage() {
 
   const steps = [
     { n: 1, label: 'Basic Information', sub: 'Your personal identity' },
-    { n: 2, label: 'Location',          sub: 'Location & branding' },
-    { n: 3, label: 'Relevant Documents', sub: 'Location & branding' },
+    { n: 2, label: 'Location', sub: 'Location & branding' },
+    { n: 3, label: 'Relevant Documents', sub: 'Licence & documents' },
   ];
 
   const sectionBorder = (n: number) => {
@@ -204,65 +238,199 @@ export default function LocumProfilePage() {
   };
 
   return (
-    <DashLayout navItems={NAV} activeHref="/locum/profile">
+    <DashLayout
+      navItems={NAV}
+      activeHref="/locum/profile"
+      topbarFirstName={firstName}
+      topbarLastName={lastName}
+    >
       {/* ── Page header ── */}
       <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f1523', marginBottom: 3 }}>
-        Welcome {firstName ? `Dr ${firstName} ${lastName}` : ''}
+        Welcome
       </h1>
       <p style={{ fontSize: 12, color: '#8892a4', marginBottom: 16 }}>
         Define And Manage Organizational, Hierarchy, Departments, And Relationships With AI-Powered Insights
       </p>
 
-      {/* ── Verification / progress banner ── */}
-      <VerificationBanner status={verificationStatus} />
+      {/* ── Verification banner (CPSNS allow-list) once profile steps are complete ── */}
+      {allStepsDone ? (
+        <VerificationBanner status={profileVerificationStatus} />
+      ) : null}
 
-      {/* ── Progress bar ── */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#8892a4', marginBottom: 4 }}>
+      {/* ── Step overview (Figma) — above % complete ── */}
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '100%',
+          marginBottom: 20,
+          fontFamily: 'Inter, var(--font-family-body, DM Sans), sans-serif',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+            minHeight: 48,
+            marginBottom: 10,
+          }}
+        >
+          {steps.flatMap((s, i) => {
+            const status = getStatus(s.n);
+            const isDone = status === 'complete';
+            const isActive = status === 'active';
+            const showFilled = isDone || isActive;
+            const stepBlock = (
+              <div
+                key={s.n}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  flex: '1 1 220px',
+                  minWidth: 200,
+                  cursor: 'pointer',
+                }}
+                onClick={() => goToStep(s.n)}
+              >
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: isDone
+                      ? '#16a34a'
+                      : isActive
+                        ? '#1522A6'
+                        : 'transparent',
+                    border: showFilled
+                      ? 'none'
+                      : '1px solid rgba(21, 20, 20, 0.4)',
+                    boxSizing: 'border-box',
+                    color: showFilled ? '#fff' : '#6B7280',
+                    fontSize: 18,
+                    fontWeight: 500,
+                    lineHeight: 1,
+                  }}
+                >
+                  {isDone ? '✓' : s.n}
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    gap: 4,
+                    minWidth: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 500,
+                      lineHeight: 1,
+                      color: '#0B0F1F',
+                    }}
+                  >
+                    {s.label}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 400,
+                      lineHeight: 1.4,
+                      color: '#6B7280',
+                    }}
+                  >
+                    {s.sub}
+                  </div>
+                </div>
+              </div>
+            );
+            if (i < steps.length - 1) {
+              return [
+                stepBlock,
+                <span
+                  key={`sep-${s.n}`}
+                  style={{
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: '#210840',
+                    opacity: 0.55,
+                  }}
+                  aria-hidden
+                >
+                  <svg
+                    width={18}
+                    height={18}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    style={{ transform: 'rotate(-90deg)' }}
+                  >
+                    <path
+                      d="M6 9l6 6 6-6"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>,
+              ];
+            }
+            return [stepBlock];
+          })}
+        </div>
+
+        {/* Single progress: label + gradient track (6px) + divider */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: 11,
+            color: '#8892a4',
+            marginBottom: 4,
+          }}
+        >
           <span>{progressPct}% completed</span>
         </div>
-        <div style={{ height: 5, background: '#e2e5ee', borderRadius: 4 }}>
-          <div style={{
-            height: '100%', borderRadius: 4,
-            width: `${progressPct}%`,
-            background: progressPct === 100 ? '#16a34a' : '#3B4FD8',
-            transition: 'width 0.4s ease',
-          }} />
+        <div style={{ width: '100%' }}>
+          <div
+            style={{
+              height: 6,
+              borderRadius: 3,
+              background: '#E5E7EB',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${progressPct}%`,
+                borderRadius: 3,
+                background:
+                  progressPct === 100
+                    ? '#16a34a'
+                    : 'linear-gradient(270deg, #3A65DB 0%, #1B31D2 100%)',
+                transition: 'width 0.4s ease',
+              }}
+            />
+          </div>
+          <div
+            style={{
+              marginTop: 8,
+              borderTop: '1px solid #D1D5DB',
+              width: '100%',
+            }}
+          />
         </div>
-      </div>
-
-      {/* ── Stepper ── */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24, overflowX: 'auto' }}>
-        {steps.map((s, i) => {
-          const status = getStatus(s.n);
-          return (
-            <div key={s.n} style={{ display: 'flex', alignItems: 'center' }}>
-              <div
-                onClick={() => goToStep(s.n)}
-                style={{
-                  textAlign: 'center', padding: '0 10px 8px',
-                  borderBottom: `2px solid ${stepBorderColor(status)}`,
-                  minWidth: 130, cursor: 'pointer',
-                }}
-              >
-                <div style={{
-                  width: 24, height: 24, borderRadius: '50%',
-                  background: stepCircleBg(status),
-                  color: status === 'upcoming' ? '#8892a4' : '#fff',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 12, fontWeight: 600, margin: '0 auto 4px',
-                }}>
-                  {status === 'complete' ? '✓' : s.n}
-                </div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: stepTextColor(status) }}>{s.label}</div>
-                <div style={{ fontSize: 10, color: '#8892a4' }}>{s.sub}</div>
-              </div>
-              {i < steps.length - 1 && (
-                <span style={{ color: '#d0d4e4', fontSize: 14, padding: '0 2px', paddingBottom: 8 }}>›</span>
-              )}
-            </div>
-          );
-        })}
       </div>
 
       {loadError && (
@@ -279,8 +447,35 @@ export default function LocumProfilePage() {
           borderRadius: 8, padding: 20, marginBottom: 16, cursor: 'pointer',
         }}
       >
-        <div style={{ fontSize: 15, fontWeight: 600, color: '#0f1523', marginBottom: 14 }}>
-          ⚙️ Basic Information
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              overflow: 'hidden',
+              flexShrink: 0,
+              opacity: 1,
+            }}
+          >
+            <Image
+              src="/basic-information.png"
+              alt=""
+              width={24}
+              height={24}
+              style={{ objectFit: 'cover' }}
+            />
+          </div>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#0f1523' }}>
+            Basic Information
+          </span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
           <div>
@@ -302,51 +497,107 @@ export default function LocumProfilePage() {
             />
           </div>
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={lbl}>CPSNS Number</label>
-          <input
-            style={{ ...inp, width: '60%' }} value={cpsns}
-            onChange={(e) => setCpsns(e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-            placeholder="Enter CPSNS number"
-          />
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={lbl}>Professional Summary</label>
-          <textarea
-            style={{ ...inp, height: 68, resize: 'none' } as React.CSSProperties}
-            value={summary}
-            onChange={(e) => setSummary(e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-            placeholder="About you"
-          />
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          <label style={lbl}>Speciality</label>
-          <div style={{ position: 'relative', marginBottom: 8 }}>
-            <select
-              style={{ ...inp, paddingRight: 32, appearance: 'none' }}
-              value=""
+        {/* Same width as First name column (half row) + matching control height */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 16,
+            marginBottom: 12,
+          }}
+        >
+          <div>
+            <label style={lbl}>CPSNS Number</label>
+            <input
+              style={inp}
+              value={cpsns}
+              onChange={(e) => setCpsns(e.target.value)}
               onClick={(e) => e.stopPropagation()}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v && !specialityTags.includes(v)) {
-                  setSpecialityTags((t) => [...t, v]);
-                }
-                e.target.selectedIndex = 0;
-              }}
-            >
-              <option value="">Pick Speciality</option>
-              {SPECIALITY_OPTIONS.filter((o) => !specialityTags.includes(o)).map((o) => (
-                <option key={o} value={o}>{o}</option>
-              ))}
-            </select>
-            <span style={{
-              position: 'absolute', right: 10, top: '50%',
-              transform: 'translateY(-50%)', pointerEvents: 'none',
-              fontSize: 10, color: '#000',
-            }}>▼</span>
+              placeholder="Enter CPSNS number"
+            />
           </div>
+          <div aria-hidden />
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 16,
+            marginBottom: 12,
+          }}
+        >
+          <div>
+            <label style={lbl}>Professional Summary</label>
+            <textarea
+              style={
+                {
+                  ...inp,
+                  minHeight: 37,
+                  height: 68,
+                  resize: 'none',
+                  lineHeight: 1.45,
+                } as React.CSSProperties
+              }
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="About you"
+            />
+          </div>
+          <div aria-hidden />
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 16,
+            marginBottom: 10,
+          }}
+        >
+          <div>
+            <label style={lbl}>Speciality</label>
+            <div style={{ position: 'relative', marginBottom: 8 }}>
+              <select
+                style={{
+                  ...inp,
+                  minHeight: 37,
+                  height: 37,
+                  paddingRight: 32,
+                  appearance: 'none',
+                }}
+                value=""
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v && !specialityTags.includes(v)) {
+                    setSpecialityTags((t) => [...t, v]);
+                  }
+                  e.target.selectedIndex = 0;
+                }}
+              >
+                <option value="">Pick Speciality</option>
+                {SPECIALITY_OPTIONS.filter((o) => !specialityTags.includes(o)).map((o) => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+              <span
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  pointerEvents: 'none',
+                  fontSize: 10,
+                  color: '#000',
+                }}
+              >
+                ▼
+              </span>
+            </div>
+          </div>
+          <div aria-hidden />
+        </div>
+        <div style={{ marginBottom: 0 }}>
           {/* Tags */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {specialityTags.map((tag) => (
@@ -377,8 +628,35 @@ export default function LocumProfilePage() {
           borderRadius: 8, padding: 20, marginBottom: 16, cursor: 'pointer',
         }}
       >
-        <div style={{ fontSize: 15, fontWeight: 600, color: '#0f1523', marginBottom: 14 }}>
-          📍 Location
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              overflow: 'hidden',
+              flexShrink: 0,
+              opacity: 1,
+            }}
+          >
+            <Image
+              src="/location.png"
+              alt=""
+              width={24}
+              height={24}
+              style={{ objectFit: 'contain' }}
+            />
+          </div>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#0f1523' }}>
+            Location
+          </span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
           <div>
@@ -416,8 +694,35 @@ export default function LocumProfilePage() {
           borderRadius: 8, padding: 20, marginBottom: 16, cursor: 'pointer',
         }}
       >
-        <div style={{ fontSize: 15, fontWeight: 600, color: '#0f1523', marginBottom: 14 }}>
-          📎 Relevant Documents
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              overflow: 'hidden',
+              flexShrink: 0,
+              opacity: 1,
+            }}
+          >
+            <Image
+              src="/relevant-docs.png"
+              alt=""
+              width={24}
+              height={24}
+              style={{ objectFit: 'contain' }}
+            />
+          </div>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#0f1523' }}>
+            Relevant Documents
+          </span>
         </div>
 
         {/* Docs row */}
@@ -433,7 +738,13 @@ export default function LocumProfilePage() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ fontSize: 16 }}>📎</span>
+              <Image
+                src="/document-link.png"
+                alt=""
+                width={24}
+                height={24}
+                style={{ flexShrink: 0, opacity: 1, objectFit: 'contain' }}
+              />
               <span style={{ fontSize: 13, color: licenseFile ? '#3B4FD8' : '#8892a4' }}>
                 {licenseFile || 'CPSNS License'}
               </span>
@@ -452,7 +763,13 @@ export default function LocumProfilePage() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ fontSize: 16 }}>📎</span>
+              <Image
+                src="/document-link.png"
+                alt=""
+                width={24}
+                height={24}
+                style={{ flexShrink: 0, opacity: 1, objectFit: 'contain' }}
+              />
               <span style={{ fontSize: 13, color: resumeFile ? '#3B4FD8' : '#8892a4' }}>
                 {resumeFile || 'Resume'}
               </span>
@@ -474,7 +791,13 @@ export default function LocumProfilePage() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <span style={{ fontSize: 16 }}>📎</span>
+            <Image
+              src="/document-link.png"
+              alt=""
+              width={24}
+              height={24}
+              style={{ flexShrink: 0, opacity: 1, objectFit: 'contain' }}
+            />
             <span style={{ fontSize: 13, color: extraFile ? '#3B4FD8' : '#8892a4' }}>
               {extraFile || 'Add'}
             </span>

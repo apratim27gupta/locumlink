@@ -57,6 +57,8 @@ CREATE TABLE "locum_profiles" (
     "ruralExperienced" BOOLEAN NOT NULL DEFAULT false,
     "verificationStatus" "VerificationStatus" NOT NULL DEFAULT 'UNVERIFIED',
     "verifiedAt" TIMESTAMP(3),
+    "first_name" TEXT,
+    "last_name" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -101,6 +103,17 @@ CREATE TABLE "job_postings" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "expiresAt" TIMESTAMP(3),
+    "key_responsibilities" TEXT[] NOT NULL DEFAULT '{}',
+    "start_date" DATE,
+    "end_date" DATE,
+    "start_time" VARCHAR(10),
+    "end_time" VARCHAR(10),
+    "pay_per_day" DECIMAL(10,2),
+    "min_years_experience" INTEGER,
+    "max_applicants" INTEGER NOT NULL DEFAULT 20,
+    "travel_required" BOOLEAN NOT NULL DEFAULT false,
+    "schedule_flexible" BOOLEAN NOT NULL DEFAULT false,
+    "required_credentials" TEXT[] NOT NULL DEFAULT '{}',
 
     CONSTRAINT "job_postings_pkey" PRIMARY KEY ("id")
 );

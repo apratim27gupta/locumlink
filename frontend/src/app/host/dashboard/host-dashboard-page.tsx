@@ -1,12 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { getToken } from '@/lib/auth';
 import { useAuth } from '@/providers/AuthProvider';
-import { useHostProfile } from '@/hooks/useHostProfile';
 import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
+import { computeAvatarInitials } from '@/lib/avatarInitials';
+import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
+import { isCpsnsVerified } from '@/lib/cpsnsVerify';
+import {
+  ApiHttpError,
+  hostApi,
+  type Job,
+  type ApplicationRecord,
+  type DashboardStats,
+  type CreateJobPayload,
+  type LocumDocumentSnippet,
+} from '@/lib/api';
+import type { HostProfile } from '@/types';
 import {
   BellIcon,
   BookIcon,
@@ -19,6 +32,8 @@ import {
   UserEditIcon,
 } from './host-dashboard-icons';
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const NAV_ITEMS = [
   { id: 'postings', label: 'My Postings', href: '/host/dashboard' },
   { id: 'profile', label: 'Profile', href: '/host/profile' },
@@ -29,6 +44,7 @@ const TABS = [
   { id: 'active', label: 'Active Posts' },
   { id: 'ongoing', label: 'Ongoing Jobs' },
   { id: 'recent', label: 'Recent Jobs' },
+  { id: 'draft', label: 'Draft Jobs' },
 ];
 const NAVBAR_HEIGHT = 72;
 const CREDENTIAL_OPTIONS = [
@@ -39,6 +55,8 @@ const CREDENTIAL_OPTIONS = [
   'DEA License',
   'PALS Certified',
 ];
+
+// ─── Tiny shared styles ───────────────────────────────────────────────────────
 
 const fieldInp: React.CSSProperties = {
   width: '100%',
@@ -52,6 +70,51 @@ const fieldInp: React.CSSProperties = {
   fontFamily: 'inherit',
   boxSizing: 'border-box',
 };
+const lbl: React.CSSProperties = {
+  display: 'block',
+  fontSize: 13,
+  fontWeight: 500,
+  color: '#374151',
+  marginBottom: 6,
+};
+
+// ─── Helper functions ─────────────────────────────────────────────────────────
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+  });
+}
+
+/** Parses MM-DD-YYYY to ISO yyyy-mm-dd; returns '' if invalid or empty. */
+function parseMmDdYyyyToIso(input: string): string {
+  const t = input.trim();
+  if (!t) return '';
+  const m = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (!m) return '';
+  const mm = Number(m[1]);
+  const dd = Number(m[2]);
+  const yyyy = Number(m[3]);
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || yyyy < 1900 || yyyy > 2100)
+    return '';
+  const iso = `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  const d = new Date(`${iso}T12:00:00`);
+  return d.getFullYear() === yyyy && d.getMonth() + 1 === mm && d.getDate() === dd
+    ? iso
+    : '';
+}
+
+function getLocumDisplayName(app: ApplicationRecord): string {
+  const { firstName, lastName, user } = app.locumProfile;
+  if (firstName || lastName)
+    return `Dr ${firstName ?? ''} ${lastName ?? ''}`.trim();
+  return user.email.split('@')[0];
+}
+
+// ─── SVG icons (local) ────────────────────────────────────────────────────────
 
 function DetailsIcon() {
   return (
@@ -102,6 +165,27 @@ function RequirementsIcon() {
         strokeWidth="1.4"
         strokeLinejoin="round"
         fill="none"
+      />
+    </svg>
+  );
+}
+function CalendarIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <rect
+        x="1"
+        y="3"
+        width="12"
+        height="10"
+        rx="1.5"
+        stroke="#6B7280"
+        strokeWidth="1.2"
+      />
+      <path
+        d="M4.5 1.5v2M9.5 1.5v2M1 6h12"
+        stroke="#6B7280"
+        strokeWidth="1.2"
+        strokeLinecap="round"
       />
     </svg>
   );
@@ -174,7 +258,6 @@ function GrayBadge() {
     </div>
   );
 }
-
 function CollapsedStep({
   icon,
   label,
@@ -276,13 +359,949 @@ function UpcomingStep({
   );
 }
 
-function JobPostingOverlay({ onClose }: { onClose: () => void }) {
+// ─── Comparison badge (stats) ─────────────────────────────────────────────────
+
+function CompBadge({
+  change,
+  direction,
+  period,
+}: {
+  change: number;
+  direction: 'up' | 'down';
+  period: string;
+}) {
+  const up = direction === 'up';
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        flexWrap: 'wrap',
+      }}
+    >
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 2,
+          background: up ? '#ECFDF5' : '#F9FAFB',
+          color: up ? '#059669' : '#9CA3AF',
+          padding: '2px 7px',
+          borderRadius: 4,
+          fontSize: 12,
+          fontWeight: 600,
+        }}
+      >
+        {up ? '↗' : '↘'}
+        {change}%
+      </span>
+      <span style={{ fontSize: 11, color: '#9CA3AF' }}>
+        Compared to the previous {period}
+      </span>
+    </div>
+  );
+}
+
+// ─── Re-open modal ────────────────────────────────────────────────────────────
+
+function ReOpenModal({
+  job,
+  onConfirm,
+  onCancel,
+}: {
+  job: Job;
+  onConfirm: (extra: number) => void;
+  onCancel: () => void;
+}) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [extra, setExtra] = useState('10');
+  const [dontShow, setDontShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function handleConfirm() {
+    if (step === 1) {
+      setStep(2);
+      return;
+    }
+    setBusy(true);
+    await onConfirm(Number(extra) || 10);
+    setBusy(false);
+  }
+
+  return (
+    <>
+      <div
+        onClick={onCancel}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(28,50,130,0.4)',
+          zIndex: 300,
+        }}
+      />
+      <div
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%,-50%)',
+          background: '#fff',
+          borderRadius: 12,
+          padding: '28px 32px',
+          width: 420,
+          zIndex: 301,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+          fontFamily: 'Inter, sans-serif',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 16,
+          }}
+        >
+          <span style={{ fontSize: 18, fontWeight: 700, color: '#0B0F1F' }}>
+            {step === 1 ? 'Re-open the position' : 'How many more applicants?'}
+          </span>
+          <button
+            onClick={onCancel}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 22,
+              color: '#6B7280',
+              lineHeight: 1,
+              padding: 0,
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {step === 1 ? (
+          <>
+            <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 20 }}>
+              This would un-confirm the current Locum, and republish the Job
+              post.
+            </p>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 13,
+                color: '#374151',
+                cursor: 'pointer',
+                marginBottom: 24,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={dontShow}
+                onChange={(e) => setDontShow(e.target.checked)}
+                style={{ width: 14, height: 14, accentColor: '#1C32D2' }}
+              />
+              Don&apos;t show again
+            </label>
+          </>
+        ) : (
+          <div style={{ marginBottom: 24 }}>
+            <label style={lbl}>Additional applicants to accept</label>
+            <input
+              type="number"
+              min={1}
+              style={{ ...fieldInp, maxWidth: 160 }}
+              value={extra}
+              onChange={(e) => setExtra(e.target.value)}
+            />
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              padding: '9px 24px',
+              border: '1px solid #D0D5DD',
+              borderRadius: 8,
+              background: '#fff',
+              color: '#374151',
+              fontWeight: 500,
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={busy}
+            style={{
+              padding: '9px 24px',
+              border: 'none',
+              borderRadius: 8,
+              background: 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
+              color: '#fff',
+              fontWeight: 600,
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
+          >
+            {busy ? 'Reopening…' : step === 1 ? 'Okay' : 'Reopen'}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Applicant side panel ─────────────────────────────────────────────────────
+
+function ApplicantSidePanel({
+  app,
+  jobId,
+  onClose,
+  onShortlisted,
+}: {
+  app: ApplicationRecord;
+  jobId: string;
+  onClose: () => void;
+  onShortlisted: (appId: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const isShortlisted =
+    app.status === 'SHORTLISTED' || app.status === 'CONFIRMED';
+  const displayName = getLocumDisplayName(app);
+  const lp = app.locumProfile;
+
+  async function handleShortlist() {
+    setBusy(true);
+    try {
+      await hostApi.updateApplication(jobId, app.id, 'SHORTLISTED');
+      onShortlisted(app.id);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const docLabel: Record<string, string> = {
+    CPSNS_LICENSE: 'CPSNS License',
+    CMPA_CERTIFICATE: 'CMPA Certificate',
+    DEA_CERTIFICATE: 'DEA Certificate',
+    CV: 'Resume / CV',
+    PHOTO_ID: 'Photo ID',
+    OTHER: 'Document',
+  };
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.2)',
+          zIndex: 200,
+        }}
+      />
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          width: 420,
+          height: '100vh',
+          background: '#fff',
+          zIndex: 201,
+          display: 'flex',
+          flexDirection: 'column',
+          fontFamily: 'Inter, sans-serif',
+          boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
+          overflowY: 'auto',
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '22px 24px 16px',
+            borderBottom: '1px solid #F3F4F6',
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: 20, fontWeight: 700, color: '#0B0F1F' }}>
+            Professional Info
+          </span>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 22,
+              color: '#6B7280',
+              lineHeight: 1,
+              padding: 0,
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Body */}
+        <div
+          style={{
+            padding: '20px 24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 20,
+          }}
+        >
+          {/* Name + location */}
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                marginBottom: 4,
+              }}
+            >
+              <ShieldIcon />
+              <span style={{ fontWeight: 700, fontSize: 16, color: '#309BB7' }}>
+                {displayName}
+              </span>
+            </div>
+            <div style={{ fontSize: 13, color: '#6B7280' }}>
+              {lp.user.email}
+            </div>
+            {lp.cpsnsId && (
+              <div style={{ fontSize: 13, color: '#6B7280' }}>
+                CPSNS: {lp.cpsnsId}
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={handleShortlist}
+              disabled={busy || isShortlisted}
+              style={{
+                flex: 1,
+                padding: '10px 0',
+                borderRadius: 8,
+                border: 'none',
+                background: isShortlisted
+                  ? '#E5E7EB'
+                  : 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
+                color: isShortlisted ? '#6B7280' : '#fff',
+                fontWeight: 600,
+                fontSize: 14,
+                cursor: isShortlisted ? 'default' : 'pointer',
+              }}
+            >
+              {isShortlisted
+                ? '✓ Shortlisted'
+                : busy
+                  ? 'Shortlisting…'
+                  : 'Shortlist'}
+            </button>
+            <Link
+              href={isShortlisted ? `/host/messages` : '#'}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                padding: '10px 0',
+                borderRadius: 8,
+                border: `1px solid ${isShortlisted ? '#1C32D2' : '#E5E7EB'}`,
+                background: '#fff',
+                color: isShortlisted ? '#1C32D2' : '#9CA3AF',
+                fontWeight: 500,
+                fontSize: 14,
+                textDecoration: 'none',
+                pointerEvents: isShortlisted ? 'auto' : 'none',
+              }}
+            >
+              💬 Message
+            </Link>
+          </div>
+
+          {/* About */}
+          {lp.summary && (
+            <div>
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: '#0B0F1F',
+                  marginBottom: 8,
+                }}
+              >
+                About
+              </div>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: '#6B7280',
+                  lineHeight: 1.6,
+                  margin: 0,
+                }}
+              >
+                {lp.summary}
+              </p>
+            </div>
+          )}
+
+          {/* Specialization */}
+          <div>
+            <div
+              style={{
+                fontWeight: 700,
+                fontSize: 15,
+                color: '#0B0F1F',
+                marginBottom: 10,
+              }}
+            >
+              Specialization
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <span
+                style={{
+                  padding: '5px 14px',
+                  background: 'rgba(115,177,251,0.12)',
+                  borderRadius: 20,
+                  fontSize: 13,
+                  color: '#1C32D2',
+                }}
+              >
+                {lp.specialty.replace(/_/g, ' ')}
+              </span>
+              {lp.yearsOfExperience != null && (
+                <span
+                  style={{
+                    padding: '5px 14px',
+                    background: '#F3F4F6',
+                    borderRadius: 20,
+                    fontSize: 13,
+                    color: '#374151',
+                  }}
+                >
+                  {lp.yearsOfExperience} yrs exp
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Docs */}
+          {lp.documents.length > 0 && (
+            <div>
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: 15,
+                  color: '#0B0F1F',
+                  marginBottom: 10,
+                }}
+              >
+                Docs
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {lp.documents.map((doc: LocumDocumentSnippet) => (
+                  <a
+                    key={doc.id}
+                    href={doc.storageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '12px 14px',
+                      border: '1px solid #E5E7EB',
+                      borderRadius: 8,
+                      textDecoration: 'none',
+                      color: '#0B0F1F',
+                    }}
+                  >
+                    <CalendarIcon />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>
+                        {docLabel[doc.documentType] ?? doc.documentType}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#9CA3AF' }}>
+                        {doc.fileName}
+                      </div>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path
+                        d="M5 3l4 4-4 4"
+                        stroke="#9CA3AF"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Inline applicants table ──────────────────────────────────────────────────
+
+function InlineApplicantsTable({
+  jobId,
+  jobTitle,
+  applications,
+  loading,
+  onApplicantClick,
+  onViewAll,
+}: {
+  jobId: string;
+  jobTitle: string;
+  applications: ApplicationRecord[];
+  loading: boolean;
+  onApplicantClick: (app: ApplicationRecord) => void;
+  onViewAll: () => void;
+}) {
+  const preview = applications.slice(0, 7);
+
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        border: '1px solid #E5E7EB',
+        borderRadius: 10,
+        background: '#fff',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Sub-header */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px 16px',
+          borderBottom: '1px solid #F3F4F6',
+        }}
+      >
+        <span style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>
+          {jobTitle}
+        </span>
+        <button
+          onClick={onViewAll}
+          style={{
+            all: 'unset',
+            cursor: 'pointer',
+            fontSize: 13,
+            color: '#1C32D2',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          View all{' '}
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path
+              d="M5 3l4 4-4 4"
+              stroke="#1C32D2"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
+
+      {/* Table heading */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '32px 1fr 90px 1fr 130px 80px',
+          gap: '0 8px',
+          padding: '10px 16px',
+          borderBottom: '1px solid #F3F4F6',
+        }}
+      >
+        {['', 'NAME', 'YRS EXP', 'CREDENTIALS', 'STATUS', ''].map((h, i) => (
+          <span
+            key={i}
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: '#9CA3AF',
+              letterSpacing: '0.06em',
+            }}
+          >
+            {h}
+          </span>
+        ))}
+      </div>
+
+      {loading && (
+        <div
+          style={{
+            padding: '24px',
+            textAlign: 'center',
+            fontSize: 13,
+            color: '#9CA3AF',
+          }}
+        >
+          Loading applicants…
+        </div>
+      )}
+
+      {!loading && preview.length === 0 && (
+        <div
+          style={{
+            padding: '24px',
+            textAlign: 'center',
+            fontSize: 13,
+            color: '#9CA3AF',
+          }}
+        >
+          No applicants yet
+        </div>
+      )}
+
+      {!loading &&
+        preview.map((app, idx) => {
+          const isShortlisted =
+            app.status === 'SHORTLISTED' || app.status === 'CONFIRMED';
+          const specs = [app.locumProfile.specialty.replace(/_/g, ' ')];
+          return (
+            <div
+              key={app.id}
+              onClick={() => onApplicantClick(app)}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '32px 1fr 90px 1fr 130px 80px',
+                gap: '0 8px',
+                padding: '10px 16px',
+                borderBottom:
+                  idx < preview.length - 1 ? '1px solid #F9FAFB' : 'none',
+                cursor: 'pointer',
+                alignItems: 'center',
+              }}
+            >
+              <span style={{ fontSize: 12, color: '#9CA3AF' }}>{idx + 1}</span>
+              <span style={{ fontSize: 14, color: '#0B0F1F', fontWeight: 500 }}>
+                {getLocumDisplayName(app)}
+              </span>
+              <span
+                style={{ fontSize: 13, color: '#6B7280', textAlign: 'center' }}
+              >
+                {app.locumProfile.yearsOfExperience ?? '—'}
+              </span>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 4,
+                  flexWrap: 'nowrap',
+                  overflow: 'hidden',
+                }}
+              >
+                {specs.slice(0, 1).map((s) => (
+                  <span
+                    key={s}
+                    style={{
+                      padding: '3px 8px',
+                      background: '#F3F4F6',
+                      borderRadius: 6,
+                      fontSize: 11,
+                      color: '#374151',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: isShortlisted ? '#22C55E' : '#D1D5DB',
+                    flexShrink: 0,
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 13,
+                    color: isShortlisted ? '#166534' : '#6B7280',
+                  }}
+                >
+                  {isShortlisted ? 'Shortlisted' : 'Pending'}
+                </span>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+                style={{
+                  all: 'unset',
+                  cursor: isShortlisted ? 'pointer' : 'default',
+                  opacity: isShortlisted ? 1 : 0.35,
+                  fontSize: 12,
+                  color: '#1C32D2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                💬 Message
+              </button>
+            </div>
+          );
+        })}
+    </div>
+  );
+}
+
+// ─── Job card ─────────────────────────────────────────────────────────────────
+
+function JobCard({
+  job,
+  expandedJobId,
+  applications,
+  loadingAppsFor,
+  onToggleApplicants,
+  onApplicantClick,
+  onViewAll,
+  onReOpen,
+  onEdit,
+}: {
+  job: Job;
+  expandedJobId: string | null;
+  applications: Record<string, ApplicationRecord[]>;
+  loadingAppsFor: string | null;
+  onToggleApplicants: (jobId: string) => void;
+  onApplicantClick: (app: ApplicationRecord, jobId: string) => void;
+  onViewAll: (jobId: string) => void;
+  onReOpen: (job: Job) => void;
+  onEdit: (job: Job) => void;
+}) {
+  const isExpanded = expandedJobId === job.id;
+  const isFilled = job.status === 'FILLED';
+  const isDraft = job.status === 'DRAFT';
+  const appCount = job.applicationsCount;
+  const startFmt = fmtDate(job.startDate);
+  const endFmt = fmtDate(job.endDate);
+  const pay = job.payPerDay
+    ? `$${Number(job.payPerDay).toLocaleString()}/day`
+    : null;
+
+  return (
+    <div
+      style={{
+        border: '1px solid #E5E7EB',
+        borderRadius: 10,
+        background: '#fff',
+        padding: '18px 20px',
+        boxSizing: 'border-box',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: 12,
+        }}
+      >
+        {/* Left */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontWeight: 700,
+              fontSize: 17,
+              color: '#0B0F1F',
+              marginBottom: 6,
+              lineHeight: 1.3,
+            }}
+          >
+            {job.title}
+          </div>
+          {job.description && (
+            <div
+              style={{
+                fontSize: 13,
+                color: '#6B7280',
+                marginBottom: 12,
+                lineHeight: 1.5,
+              }}
+            >
+              {job.description.length > 130
+                ? job.description.slice(0, 130) + '…'
+                : job.description}
+            </div>
+          )}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            {(startFmt || endFmt) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <CalendarIcon />
+                <span style={{ fontSize: 13, color: '#374151' }}>
+                  {startFmt}
+                  {startFmt && endFmt && ' – '}
+                  {endFmt}
+                </span>
+              </div>
+            )}
+            {pay && (
+              <span style={{ fontWeight: 700, fontSize: 15, color: '#0B0F1F' }}>
+                {pay}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Right */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            alignItems: 'flex-end',
+            flexShrink: 0,
+          }}
+        >
+          {isFilled ? (
+            <>
+              <span
+                style={{
+                  padding: '4px 14px',
+                  background: '#F3F4F6',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: 6,
+                  fontSize: 13,
+                  color: '#6B7280',
+                  fontWeight: 600,
+                }}
+              >
+                Filled
+              </span>
+              <button
+                onClick={() => onReOpen(job)}
+                style={{
+                  all: 'unset',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  color: '#1C32D2',
+                  fontWeight: 600,
+                  padding: '4px 14px',
+                  border: '1px solid #1C32D2',
+                  borderRadius: 6,
+                }}
+              >
+                Re-open
+              </button>
+            </>
+          ) : isDraft ? (
+            <span
+              style={{
+                padding: '6px 16px',
+                background: '#FEF3C7',
+                border: '1px solid #FCD34D',
+                borderRadius: 6,
+                color: '#92400E',
+                fontWeight: 600,
+                fontSize: 13,
+              }}
+            >
+              Draft
+            </span>
+          ) : (
+            <button
+              onClick={() => onToggleApplicants(job.id)}
+              style={{
+                padding: '6px 16px',
+                background: isExpanded
+                  ? '#EEF0FB'
+                  : 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
+                border: 'none',
+                borderRadius: 6,
+                color: isExpanded ? '#1C32D2' : '#fff',
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              {appCount} Applicant{appCount !== 1 ? 's' : ''}
+            </button>
+          )}
+          <button
+            onClick={() => onEdit(job)}
+            style={{
+              all: 'unset',
+              cursor: 'pointer',
+              fontSize: 13,
+              color: '#6B7280',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            ✏️ edit
+          </button>
+        </div>
+      </div>
+
+      {/* Inline applicants */}
+      {isExpanded && !isDraft && (
+        <InlineApplicantsTable
+          jobId={job.id}
+          jobTitle={job.title}
+          applications={applications[job.id] ?? []}
+          loading={loadingAppsFor === job.id}
+          onApplicantClick={(app) => onApplicantClick(app, job.id)}
+          onViewAll={() => onViewAll(job.id)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Job Posting Overlay (3-step form, wired to API) ─────────────────────────
+
+function JobPostingOverlay({
+  onClose,
+  onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
   const [step, setStep] = useState(1);
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [keyResponsibilities, setKeyResponsibilities] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDateInput, setStartDateInput] = useState('');
+  const [endDateInput, setEndDateInput] = useState('');
   const [startTime, setStartTime] = useState('05:00');
   const [endTime, setEndTime] = useState('14:00');
   const [flexible, setFlexible] = useState(false);
@@ -292,6 +1311,8 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
     'CPSNS Full License',
   ]);
   const [travelReq, setTravelReq] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   function toggle(c: string) {
     setCredentials((p) =>
@@ -299,13 +1320,68 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
     );
   }
 
-  const lbl: React.CSSProperties = {
-    display: 'block',
-    fontSize: 13,
-    fontWeight: 500,
-    color: '#374151',
-    marginBottom: 6,
-  };
+  async function handleDone() {
+    if (!jobTitle.trim()) {
+      setSubmitError('Please enter a job title.');
+      return;
+    }
+    const startIso = parseMmDdYyyyToIso(startDateInput);
+    const endIso = parseMmDdYyyyToIso(endDateInput);
+    if (startDateInput.trim() && !startIso) {
+      setSubmitError('Start date must be a valid date in MM-DD-YYYY format.');
+      return;
+    }
+    if (endDateInput.trim() && !endIso) {
+      setSubmitError('End date must be a valid date in MM-DD-YYYY format.');
+      return;
+    }
+    const rateNum = ratePerDay.trim() ? Number(ratePerDay) : NaN;
+    if (!Number.isFinite(rateNum) || rateNum <= 0) {
+      setSubmitError('Enter a valid rate per day (CAD).');
+      return;
+    }
+    const yearsNum = yearsExp.trim() ? Number(yearsExp) : NaN;
+    if (yearsExp.trim() && !Number.isFinite(yearsNum)) {
+      setSubmitError('Years of experience must be a number.');
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const payload: CreateJobPayload = {
+        title: jobTitle.trim(),
+        description: jobDescription.trim() || undefined,
+        keyResponsibilities: keyResponsibilities
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        startDate: startIso || undefined,
+        endDate: endIso || undefined,
+        startTime: startTime || undefined,
+        endTime: endTime || undefined,
+        payPerDay: rateNum,
+        minYearsExperience:
+          yearsExp.trim() && Number.isFinite(yearsNum) ? yearsNum : undefined,
+        requiredCredentials: credentials,
+        travelRequired: travelReq,
+        scheduleFlexible: flexible,
+      };
+      await hostApi.createJob(payload);
+      onSuccess();
+    } catch (e: unknown) {
+      if (e instanceof ApiHttpError && e.status === 401) {
+        setSubmitError('Session expired or not signed in. Open Auth and sign in again, then try posting.');
+      } else {
+        setSubmitError(
+          e instanceof Error
+            ? e.message
+            : 'Failed to create job. Please try again.',
+        );
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <>
@@ -374,7 +1450,7 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
             gap: 12,
           }}
         >
-          {/* ── STEP 1: Details ── */}
+          {/* STEP 1 */}
           {step === 1 ? (
             <div
               style={{
@@ -426,7 +1502,7 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
                 }}
               >
                 <div>
-                  <label style={lbl}>Job Title</label>
+                  <label style={lbl}>Job Title *</label>
                   <input
                     style={fieldInp}
                     value={jobTitle}
@@ -450,7 +1526,7 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
                   />
                 </div>
                 <div>
-                  <label style={lbl}>Key Responsibilities</label>
+                  <label style={lbl}>Key Responsibilities (one per line)</label>
                   <textarea
                     style={
                       {
@@ -475,7 +1551,7 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
             />
           )}
 
-          {/* ── STEP 2: Schedule ── */}
+          {/* STEP 2 */}
           {step === 2 ? (
             <div
               style={{
@@ -536,20 +1612,29 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
                   <div>
                     <label style={lbl}>Start Date</label>
                     <input
-                      type="date"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="MM-DD-YYYY"
+                      pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}"
+                      title="MM-DD-YYYY"
                       style={fieldInp}
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      //mm-dd-yyyy pattern needs to be follow 
+                      value={startDateInput}
+                      onChange={(e) => setStartDateInput(e.target.value)}
                     />
                   </div>
                   <div>
                     <label style={lbl}>End Date</label>
                     <input
-                      type="date"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="MM-DD-YYYY"
+                      pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}"
+                      title="MM-DD-YYYY"
                       style={fieldInp}
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
+                      value={endDateInput}
+                      onChange={(e) => setEndDateInput(e.target.value)}
                     />
                   </div>
                 </div>
@@ -598,7 +1683,7 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
                   Schedule is flexible
                 </label>
                 <div>
-                  <label style={lbl}>Rate per Day (CAD)*</label>
+                  <label style={lbl}>Rate per Day (CAD) *</label>
                   <input
                     style={fieldInp}
                     type="number"
@@ -624,7 +1709,7 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
             />
           )}
 
-          {/* ── STEP 3: Requirements ── */}
+          {/* STEP 3 */}
           {step === 3 ? (
             <div
               style={{
@@ -730,21 +1815,6 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
                         </span>
                       );
                     })}
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        padding: '5px 12px',
-                        borderRadius: 20,
-                        cursor: 'pointer',
-                        fontSize: 13,
-                        color: '#6B7280',
-                        border: '1px dashed #D0D5DD',
-                        background: '#fff',
-                      }}
-                    >
-                      Add more
-                    </span>
                   </div>
                 </div>
                 <label
@@ -765,6 +1835,11 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
                   />
                   Locum is required to travel to Clinic
                 </label>
+                {submitError && (
+                  <p style={{ fontSize: 13, color: '#DC2626', margin: 0 }}>
+                    {submitError}
+                  </p>
+                )}
               </div>
             </div>
           ) : (
@@ -788,7 +1863,7 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
         >
           {step < 3 ? (
             <button
-              onClick={() => setStep((s) => s + 1)}
+              onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3)}
               style={{
                 padding: '10px 28px',
                 background: '#fff',
@@ -804,19 +1879,20 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
             </button>
           ) : (
             <button
-              onClick={onClose}
+              onClick={handleDone}
+              disabled={submitting}
               style={{
                 padding: '10px 28px',
-                background: '#1C32D2',
+                background: submitting ? '#9CA3AF' : '#1C32D2',
                 border: 'none',
                 borderRadius: 8,
                 fontSize: 15,
                 fontWeight: 500,
                 color: '#fff',
-                cursor: 'pointer',
+                cursor: submitting ? 'default' : 'pointer',
               }}
             >
-              Done
+              {submitting ? 'Publishing…' : 'Done'}
             </button>
           )}
         </div>
@@ -825,39 +1901,248 @@ function JobPostingOverlay({ onClose }: { onClose: () => void }) {
   );
 }
 
-export default function HostDashboard() {
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
+
+export default function HostDashboard(props: {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  useNextPageClientProps(props);
   const router = useRouter();
-  const { profileComplete } = useAuth() as { profileComplete?: boolean };
+  const { profileComplete, isLoading: authLoading, userId } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [activeNav, setActiveNav] = useState('postings');
-  const [activeTab, setActiveTab] = useState('active');
+  const [activeTab, setActiveTab] = useState<
+    'active' | 'ongoing' | 'recent' | 'draft'
+  >('active');
   const [showJobOverlay, setShowJobOverlay] = useState(false);
+
+  // Data
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loadingData, setLoadingData] = useState(false);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
+
+  // Applicants
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [jobApplications, setJobApplications] = useState<
+    Record<string, ApplicationRecord[]>
+  >({});
+  const [loadingAppsFor, setLoadingAppsFor] = useState<string | null>(null);
+  const [selectedApp, setSelectedApp] = useState<ApplicationRecord | null>(
+    null,
+  );
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+
+  // Re-open
+  const [reopenTarget, setReopenTarget] = useState<Job | null>(null);
+
+  /** Profile from GET /api/host/profile (DB); loaded with jobs/stats on each dashboard entry. */
+  const [profile, setProfile] = useState<HostProfile | null>(null);
+  const [initialDashboardLoad, setInitialDashboardLoad] = useState(true);
+  const hostFirst = profile?.contactFirstName ?? '';
+  const hostLast = profile?.contactLastName ?? '';
+  /** Was fallback `'H'` (meaningless “Host”); use contact initials, else clinic name, else `N`. */
+  const hostInitial = computeAvatarInitials(
+    profile?.contactFirstName,
+    profile?.contactLastName,
+    profile?.clinicName,
+  );
+  const verified = isCpsnsVerified(profile?.cpsnsNumber);
+  const doctorLabel =
+    hostFirst || hostLast ? `Dr ${hostFirst} ${hostLast}`.trim() : 'Doctor';
+  const clinicName = profile?.clinicName || 'Welcome';
+  const profilePct = hostProfileCompletionPct(profile);
+  const profileAllStepsDone = profilePct === 100;
+  const dashboardProfileTitle = !profileAllStepsDone
+    ? 'Set up your profile to start posting'
+    : verified
+      ? 'Profile complete and verified'
+      : 'Profile complete — CPSNS under verification';
+  const dashboardProfileSubtitle = !profileAllStepsDone
+    ? `${profilePct}% Completed`
+    : verified
+      ? '100% · CPSNS verified'
+      : '100% · Awaiting manual CPSNS verification';
+
+  /** Load host profile (Next route → DB) + jobs + stats (Nest → DB) in one pass. */
+  const loadDashboardFromApi = useCallback(async () => {
+    setLoadingData(true);
+    setDataLoadError(null);
+    try {
+      const dashOpts = { skipAuthRedirectOn401: true } as const;
+      const errs: string[] = [];
+      const [profileResult, jobsResult, statsResult] = await Promise.allSettled([
+        hostApi.getProfile(dashOpts),
+        hostApi.getJobs(dashOpts),
+        hostApi.getDashboardStats(dashOpts),
+      ]);
+      if (profileResult.status === 'fulfilled') {
+        setProfile(profileResult.value);
+      } else {
+        setProfile(null);
+        const pr = profileResult.reason;
+        if (pr instanceof ApiHttpError && pr.status === 401) {
+          errs.push(
+            'Could not verify your session for this page. If the API was starting, try Refresh. Otherwise sign in again.',
+          );
+        } else {
+          errs.push(
+            pr instanceof Error ? pr.message : 'Could not load profile.',
+          );
+        }
+      }
+      if (jobsResult.status === 'fulfilled') {
+        setJobs(jobsResult.value.jobs);
+      } else {
+        const r = jobsResult.reason;
+        if (r instanceof ApiHttpError && r.status === 401) {
+          errs.push('Could not load jobs (unauthorized or API unavailable).');
+        } else {
+          errs.push(r instanceof Error ? r.message : 'Could not load jobs.');
+        }
+      }
+      if (statsResult.status === 'fulfilled') {
+        setStats(statsResult.value);
+      } else {
+        const r = statsResult.reason;
+        if (r instanceof ApiHttpError && r.status === 401) {
+          errs.push(
+            'Could not load dashboard stats (unauthorized or API unavailable).',
+          );
+        } else {
+          errs.push(r instanceof Error ? r.message : 'Could not load stats.');
+        }
+      }
+      if (errs.length) setDataLoadError([...new Set(errs)].join(' '));
+    } finally {
+      setLoadingData(false);
+      setInitialDashboardLoad(false);
+    }
+  }, []);
 
   useEffect(() => {
     setMounted(true);
   }, []);
   useEffect(() => {
-    if (mounted && profileComplete === false) router.replace('/host/setup');
-  }, [mounted, profileComplete, router]);
+    if (!mounted || authLoading) return;
+    if (profileComplete === false) router.replace('/host/setup');
+  }, [mounted, profileComplete, authLoading, router]);
+  // After redirect (or refresh), wait for Nest JWT, then fetch profile + jobs + stats from APIs.
+  useEffect(() => {
+    if (!mounted || authLoading) return;
+    if (!getToken()) {
+      setProfile(null);
+      setInitialDashboardLoad(false);
+      router.replace('/auth');
+      return;
+    }
+    void loadDashboardFromApi();
+  }, [mounted, authLoading, userId, loadDashboardFromApi, router]);
 
-  const { profile, loading: profileLoading } = useHostProfile();
-  const hostFirst = profile?.contactFirstName ?? '';
-  const hostLast = profile?.contactLastName ?? '';
-  const hostInitial = hostFirst ? hostFirst[0].toUpperCase() : 'H';
-  const doctorLabel =
-    hostFirst || hostLast ? `Dr ${hostFirst} ${hostLast}`.trim() : 'Dr Host';
-  const clinicName = profile?.clinicName || 'Welcome';
-  const description =
-    'Define and manage organizational, hierarchy, departments, and relationships with AI-Powered insights';
-  const profilePct = hostProfileCompletionPct(profile);
-  const stats = [
-    { label: 'Total Jobs Posted', value: 0 },
-    { label: 'Active Jobs', value: 0 },
-    { label: 'Completed Jobs', value: 0 },
-    { label: 'Applications', value: 0 },
+
+  // Filtered job lists
+  const today = new Date();
+  const activePosts = jobs.filter((j) => j.status === 'ACTIVE');
+  const draftJobs = jobs.filter((j) => j.status === 'DRAFT');
+  const ongoingJobs = jobs.filter(
+    (j) =>
+      j.status !== 'DRAFT' &&
+      j.startDate &&
+      j.endDate &&
+      new Date(j.startDate) <= today &&
+      new Date(j.endDate) >= today,
+  );
+  const recentJobs = jobs.filter(
+    (j) =>
+      j.status !== 'DRAFT' &&
+      (j.status === 'FILLED' ||
+        j.status === 'CANCELLED' ||
+        j.status === 'EXPIRED' ||
+        (j.endDate && new Date(j.endDate) < today)),
+  );
+
+  const tabJobs =
+    activeTab === 'active'
+      ? activePosts
+      : activeTab === 'ongoing'
+        ? ongoingJobs
+        : activeTab === 'recent'
+          ? recentJobs
+          : draftJobs;
+
+  // Stats display
+  const statsDisplay = [
+    {
+      label: 'Total Jobs Posted',
+      value: stats?.totalJobsPosted ?? 0,
+      comp: stats?.comparisons.totalJobsPosted,
+    },
+    {
+      label: 'Active Jobs',
+      value: stats?.activeJobs ?? 0,
+      comp: stats?.comparisons.activeJobs,
+    },
+    {
+      label: 'Completed Jobs',
+      value: stats?.completedJobs ?? 0,
+      comp: stats?.comparisons.completedJobs,
+    },
+    {
+      label: 'Applications',
+      value: stats?.applications ?? 0,
+      comp: stats?.comparisons.applications,
+    },
   ];
 
-  if (!mounted || profileComplete === false || profileLoading) {
+  // Handlers
+  async function handleToggleApplicants(jobId: string) {
+    if (expandedJobId === jobId) {
+      setExpandedJobId(null);
+      return;
+    }
+    setExpandedJobId(jobId);
+    if (!jobApplications[jobId]) {
+      setLoadingAppsFor(jobId);
+      try {
+        const result = await hostApi.getApplications(jobId);
+        setJobApplications((prev) => ({
+          ...prev,
+          [jobId]: result.applications,
+        }));
+      } finally {
+        setLoadingAppsFor(null);
+      }
+    }
+  }
+
+  function handleApplicantClick(app: ApplicationRecord, jobId: string) {
+    setSelectedApp(app);
+    setSelectedJobId(jobId);
+  }
+
+  function handleShortlisted(appId: string) {
+    if (!selectedJobId) return;
+    setJobApplications((prev) => ({
+      ...prev,
+      [selectedJobId]: (prev[selectedJobId] ?? []).map((a) =>
+        a.id === appId ? { ...a, status: 'SHORTLISTED' as const } : a,
+      ),
+    }));
+    if (selectedApp?.id === appId)
+      setSelectedApp((prev: ApplicationRecord | null) =>
+        prev ? { ...prev, status: 'SHORTLISTED' as const } : null,
+      );
+  }
+
+  async function handleReopen(extra: number) {
+    if (!reopenTarget) return;
+    await hostApi.reopenJob(reopenTarget.id, extra);
+    setReopenTarget(null);
+    loadDashboardFromApi();
+  }
+
+  if (!mounted || profileComplete === false || authLoading || initialDashboardLoad) {
     return (
       <div
         style={{
@@ -1001,7 +2286,7 @@ export default function HostDashboard() {
                 5,
               width: 6,
               height: 33,
-              background: 'linear-gradient(270deg, #3A65DB 0%, #1B31D2 100%)',
+              background: 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
               borderRadius: '0px 8px 8px 0px',
               transition: 'top 0.2s ease',
             }}
@@ -1141,7 +2426,7 @@ export default function HostDashboard() {
                     borderRadius: 50,
                   }}
                 >
-                  <ShieldIcon />
+                  {verified && <ShieldIcon />}
                   <span
                     style={{
                       fontFamily: 'Inter, sans-serif',
@@ -1179,9 +2464,29 @@ export default function HostDashboard() {
                     textTransform: 'capitalize',
                   }}
                 >
-                  {description}
+                  Define and manage organizational, hierarchy, departments, and
+                  relationships with AI-Powered insights
                 </p>
               </div>
+
+              {dataLoadError && (
+                <div
+                  role="alert"
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 8,
+                    background: '#FEF2F2',
+                    border: '1px solid #FECACA',
+                    fontFamily: 'Inter, sans-serif',
+                    fontSize: 13,
+                    color: '#991B1B',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {dataLoadError}
+                </div>
+              )}
+
               {/* Stats */}
               <div
                 style={{
@@ -1193,7 +2498,7 @@ export default function HostDashboard() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                  {stats.map((stat, i) => (
+                  {statsDisplay.map((stat, i) => (
                     <div
                       key={stat.label}
                       style={{
@@ -1206,7 +2511,7 @@ export default function HostDashboard() {
                         style={{
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: 24,
+                          gap: 12,
                           flex: 1,
                         }}
                       >
@@ -1230,10 +2535,17 @@ export default function HostDashboard() {
                             color: '#000',
                           }}
                         >
-                          {stat.value}
+                          {loadingData ? '–' : stat.value}
                         </span>
+                        {stat.comp && !loadingData && (
+                          <CompBadge
+                            change={stat.comp.change}
+                            direction={stat.comp.direction}
+                            period={stat.comp.period}
+                          />
+                        )}
                       </div>
-                      {i < stats.length - 1 && (
+                      {i < statsDisplay.length - 1 && (
                         <div
                           style={{
                             width: 1,
@@ -1318,7 +2630,7 @@ export default function HostDashboard() {
                       color: '#151414',
                     }}
                   >
-                    Set up your profile to start posting
+                    {dashboardProfileTitle}
                   </span>
                   <span
                     style={{
@@ -1329,7 +2641,7 @@ export default function HostDashboard() {
                       color: '#606061',
                     }}
                   >
-                    {profilePct}% Completed
+                    {dashboardProfileSubtitle}
                   </span>
                 </div>
               </div>
@@ -1367,7 +2679,7 @@ export default function HostDashboard() {
               </button>
             </div>
 
-            {/* Tabs */}
+            {/* Tabs + Post New Job */}
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div
                 style={{
@@ -1383,7 +2695,7 @@ export default function HostDashboard() {
                     return (
                       <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
+                        onClick={() => setActiveTab(tab.id as typeof activeTab)}
                         style={{
                           all: 'unset',
                           cursor: 'pointer',
@@ -1417,7 +2729,15 @@ export default function HostDashboard() {
                   })}
                 </div>
                 <button
-                  onClick={() => setShowJobOverlay(true)}
+                  onClick={() => {
+                    if (!verified) {
+                      window.alert(
+                        'Not verified yet. An admin must verify your CPSNS number before you can post a job.',
+                      );
+                      return;
+                    }
+                    setShowJobOverlay(true);
+                  }}
                   style={{
                     all: 'unset',
                     cursor: 'pointer',
@@ -1451,38 +2771,87 @@ export default function HostDashboard() {
                 </button>
               </div>
               <div style={{ width: 428, height: 1, background: '#A7A8AA' }} />
+
+              {/* Tab content */}
               <div
                 style={{
+                  marginTop: 16,
                   display: 'flex',
                   flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  paddingTop: 80,
                   gap: 12,
                 }}
               >
-                <EmptyIllustration />
-                <span
-                  style={{
-                    fontFamily: 'Inter, sans-serif',
-                    fontWeight: 600,
-                    fontSize: 18,
-                    color: '#0B0F1F',
-                    marginTop: 8,
-                  }}
-                >
-                  No posts yet
-                </span>
-                <span
-                  style={{
-                    fontFamily: 'Inter, sans-serif',
-                    fontWeight: 400,
-                    fontSize: 14,
-                    color: '#6B7280',
-                  }}
-                >
-                  You have not posted any jobs yet
-                </span>
+                {loadingData && (
+                  <div
+                    style={{
+                      padding: '40px',
+                      textAlign: 'center',
+                      fontSize: 13,
+                      color: '#9CA3AF',
+                    }}
+                  >
+                    Loading…
+                  </div>
+                )}
+
+                {!loadingData && tabJobs.length === 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingTop: 80,
+                      gap: 12,
+                    }}
+                  >
+                    <EmptyIllustration />
+                    <span
+                      style={{
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 600,
+                        fontSize: 18,
+                        color: '#0B0F1F',
+                        marginTop: 8,
+                      }}
+                    >
+                      {activeTab === 'draft' ? 'No drafts yet' : 'No posts yet'}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 400,
+                        fontSize: 14,
+                        color: '#6B7280',
+                      }}
+                    >
+                      {activeTab === 'active' &&
+                        'You have not posted any active jobs yet'}
+                      {activeTab === 'ongoing' &&
+                        'No jobs are currently ongoing'}
+                      {activeTab === 'recent' && 'No recent or completed jobs'}
+                      {activeTab === 'draft' && 'No draft jobs saved'}
+                    </span>
+                  </div>
+                )}
+
+                {!loadingData &&
+                  tabJobs.map((job) => (
+                    <JobCard
+                      key={job.id}
+                      job={job}
+                      expandedJobId={expandedJobId}
+                      applications={jobApplications}
+                      loadingAppsFor={loadingAppsFor}
+                      onToggleApplicants={handleToggleApplicants}
+                      onApplicantClick={handleApplicantClick}
+                      onViewAll={(jobId) =>
+                        router.push(`/host/applicants/${jobId}`)
+                      }
+                      onReOpen={(j) => setReopenTarget(j)}
+                      onEdit={(j) => router.push(`/host/jobs/${j.id}/edit`)}
+                    />
+                  ))}
               </div>
             </div>
           </div>
@@ -1491,7 +2860,35 @@ export default function HostDashboard() {
 
       {/* JOB POSTING OVERLAY */}
       {showJobOverlay && (
-        <JobPostingOverlay onClose={() => setShowJobOverlay(false)} />
+        <JobPostingOverlay
+          onClose={() => setShowJobOverlay(false)}
+          onSuccess={() => {
+            setShowJobOverlay(false);
+            loadDashboardFromApi();
+          }}
+        />
+      )}
+
+      {/* APPLICANT SIDE PANEL */}
+      {selectedApp && selectedJobId && (
+        <ApplicantSidePanel
+          app={selectedApp}
+          jobId={selectedJobId}
+          onClose={() => {
+            setSelectedApp(null);
+            setSelectedJobId(null);
+          }}
+          onShortlisted={handleShortlisted}
+        />
+      )}
+
+      {/* REOPEN MODAL */}
+      {reopenTarget && (
+        <ReOpenModal
+          job={reopenTarget}
+          onConfirm={handleReopen}
+          onCancel={() => setReopenTarget(null)}
+        />
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 /** Frame 2043683669 — preset amenities */
 export const AMENITY_OPTIONS_STEP3 = [
@@ -19,8 +19,15 @@ export interface AmenitiesSelectorProps {
   onChange?: (items: string[]) => void;
 }
 
-export function AmenitiesSelector({ selected, onChange }: AmenitiesSelectorProps) {
+export function AmenitiesSelector({
+  selected,
+  onChange,
+}: AmenitiesSelectorProps) {
   const [open, setOpen] = useState(false);
+  // ── FIX Issue 7: inline text input replaces window.prompt() ───────────────
+  const [addingCustom, setAddingCustom] = useState(false);
+  const [customValue, setCustomValue] = useState('');
+  const customInputRef = useRef<HTMLInputElement>(null);
 
   const toggle = (item: string) => {
     const next = selected.includes(item)
@@ -33,16 +40,35 @@ export function AmenitiesSelector({ selected, onChange }: AmenitiesSelectorProps
     onChange?.(selected.filter((s) => s !== item));
   };
 
-  const addCustomAmenity = () => {
-    const v = typeof window !== 'undefined' ? window.prompt('Add amenity') : null;
-    if (!v?.trim()) return;
-    const t = v.trim();
-    if (selected.includes(t)) return;
-    onChange?.([...selected, t]);
-  };
+  function confirmCustom() {
+    const t = customValue.trim();
+    if (t && !selected.includes(t)) {
+      onChange?.([...selected, t]);
+    }
+    setCustomValue('');
+    setAddingCustom(false);
+  }
+
+  function handleCustomKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      confirmCustom();
+    }
+    if (e.key === 'Escape') {
+      setCustomValue('');
+      setAddingCustom(false);
+    }
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        width: '100%',
+      }}
+    >
       {/* Label */}
       <div
         style={{
@@ -92,7 +118,9 @@ export function AmenitiesSelector({ selected, onChange }: AmenitiesSelectorProps
             }}
           >
             {selected.length === 0 ? (
-              <span style={{ fontSize: 16, color: '#9CA3AF', lineHeight: '140%' }}>
+              <span
+                style={{ fontSize: 16, color: '#9CA3AF', lineHeight: '140%' }}
+              >
                 Add Amenities
               </span>
             ) : (
@@ -116,7 +144,10 @@ export function AmenitiesSelector({ selected, onChange }: AmenitiesSelectorProps
                   {item}
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); remove(item); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      remove(item);
+                    }}
                     aria-label={`Remove ${item}`}
                     style={{
                       display: 'flex',
@@ -184,33 +215,115 @@ export function AmenitiesSelector({ selected, onChange }: AmenitiesSelectorProps
                     flexShrink: 0,
                   }}
                 />
-                <span style={{ fontSize: 15, fontWeight: 400, color: '#0B0F1F', lineHeight: '140%' }}>
+                <span
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 400,
+                    color: '#0B0F1F',
+                    lineHeight: '140%',
+                  }}
+                >
                   {name}
                 </span>
               </label>
             ))}
 
-            {/* + Add more */}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); addCustomAmenity(); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '10px 14px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#1B31D2',
-                fontSize: 14,
-                fontWeight: 500,
-                fontFamily: 'inherit',
-                lineHeight: '140%',
-              }}
-            >
-              + Add more
-            </button>
+            {/* ── FIX Issue 7: inline "add more" row — no popup ──────────────── */}
+            {addingCustom ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 14px',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  ref={customInputRef}
+                  autoFocus
+                  type="text"
+                  value={customValue}
+                  onChange={(e) => setCustomValue(e.target.value)}
+                  onKeyDown={handleCustomKeyDown}
+                  placeholder="Type amenity name…"
+                  style={{
+                    flex: 1,
+                    height: 34,
+                    padding: '4px 8px',
+                    border: '1px solid #3B4FD8',
+                    borderRadius: 6,
+                    fontSize: 14,
+                    fontFamily: 'inherit',
+                    outline: 'none',
+                    color: '#0B0F1F',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={confirmCustom}
+                  style={{
+                    padding: '4px 12px',
+                    background: '#1B31D2',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomValue('');
+                    setAddingCustom(false);
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    background: 'none',
+                    color: '#6B7280',
+                    border: 'none',
+                    borderRadius: 6,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAddingCustom(true);
+                  // Focus the input after render
+                  setTimeout(() => customInputRef.current?.focus(), 50);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '10px 14px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#1B31D2',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  fontFamily: 'inherit',
+                  lineHeight: '140%',
+                }}
+              >
+                + Add more
+              </button>
+            )}
           </div>
         )}
       </div>

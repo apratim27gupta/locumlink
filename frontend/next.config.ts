@@ -8,6 +8,18 @@ import type { NextConfig } from 'next';
  */
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  /** Browsers request /favicon.ico by default; we reuse the app logo. */
+  async rewrites() {
+    return [{ source: '/favicon.ico', destination: '/logo.png' }];
+  },
+  /** Dev: large route chunks can exceed the default chunk load wait and throw ChunkLoadError. */
+  webpack: (config, { dev, isServer }) => {
+    if (dev && !isServer) {
+      config.output = config.output ?? {};
+      config.output.chunkLoadTimeout = 300_000;
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

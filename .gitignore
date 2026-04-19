@@ -1,25 +1,23 @@
-node_modules
-dist
-backend/dist
-frontend/.next
-out
-/generated/prisma
-
-# Environment files
+node_modules/
 .env
+.env.local
 .env.staging
 .env.production
-frontend/.env.local
-
-# IDE
-.idea
-.vscode
-*.swp
-*.swo
-
-# OS
+*.env
+*-key.json
+*serviceaccount*.json
+frontend/.next/
+frontend/out/
+backend/dist/
+dist/generated/
+*.log
 .DS_Store
 Thumbs.db
-
-# Test
-coverage
+.vscode/
+.idea/
+coverage/
+.turbo/
+frontend/tsconfig.tsbuildinfo
+dist/
+generated/
+frontend/tsconfig.tsbuildinfo
