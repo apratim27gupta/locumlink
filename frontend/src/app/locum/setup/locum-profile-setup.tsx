@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { HomeLandingView } from '@/components/HomeLandingView';
 import { useAuth } from '@/providers/AuthProvider';
-import { locumApi } from '@/lib/api';
+import { locumApi, uploadFile } from '@/lib/api';
 import type { LocumProfile } from '@/types';
 
 const LOCUM_SETUP_MODAL = {
@@ -163,6 +163,8 @@ export default function LocumSetupPage() {
   const [addingCustomSpec, setAddingCustomSpec] = useState(false);
   const [customSpec, setCustomSpec] = useState('');
   const customSpecRef = useRef<HTMLInputElement>(null);
+
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const licenseRef = useRef<HTMLInputElement>(null);
   const resumeRef = useRef<HTMLInputElement>(null);
@@ -942,7 +944,11 @@ export default function LocumSetupPage() {
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          {form.licenseFileName || 'Upload Document'}
+                          {uploading === 'license'
+                            ? 'Uploading…'
+                            : form.licenseFileName
+                              ? form.licenseFileName.split('/').pop()
+                              : 'Upload Document'}
                         </span>
                         <UploadCloudIcon />
                       </div>
@@ -950,12 +956,23 @@ export default function LocumSetupPage() {
                         ref={licenseRef}
                         type="file"
                         style={{ display: 'none' }}
-                        onChange={(e) =>
-                          set(
-                            'licenseFileName',
-                            e.target.files?.[0]?.name ?? '',
-                          )
-                        }
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploading('license');
+                          try {
+                            const result = await uploadFile(
+                              file,
+                              'locum/license',
+                            );
+                            set('licenseFileName', result.path);
+                          } catch {
+                            alert('Upload failed. Try again.');
+                          } finally {
+                            setUploading(null);
+                            e.target.value = '';
+                          }
+                        }}
                       />
                     </div>
 
@@ -990,7 +1007,11 @@ export default function LocumSetupPage() {
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          {form.resumeFileName || 'Upload Document'}
+                          {uploading === 'resume'
+                            ? 'Uploading…'
+                            : form.resumeFileName
+                              ? form.resumeFileName.split('/').pop()
+                              : 'Upload Document'}
                         </span>
                         <UploadCloudIcon />
                       </div>
@@ -998,9 +1019,23 @@ export default function LocumSetupPage() {
                         ref={resumeRef}
                         type="file"
                         style={{ display: 'none' }}
-                        onChange={(e) =>
-                          set('resumeFileName', e.target.files?.[0]?.name ?? '')
-                        }
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploading('resume');
+                          try {
+                            const result = await uploadFile(
+                              file,
+                              'locum/resume',
+                            );
+                            set('resumeFileName', result.path);
+                          } catch {
+                            alert('Upload failed. Try again.');
+                          } finally {
+                            setUploading(null);
+                            e.target.value = '';
+                          }
+                        }}
                       />
                     </div>
 
@@ -1037,7 +1072,11 @@ export default function LocumSetupPage() {
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          {form.extraFileName || 'Upload Document'}
+                          {uploading === 'extra'
+                            ? 'Uploading…'
+                            : form.extraFileName
+                              ? form.extraFileName.split('/').pop()
+                              : 'Upload Document'}
                         </span>
                         <UploadCloudIcon />
                       </div>
@@ -1045,9 +1084,23 @@ export default function LocumSetupPage() {
                         ref={extraRef}
                         type="file"
                         style={{ display: 'none' }}
-                        onChange={(e) =>
-                          set('extraFileName', e.target.files?.[0]?.name ?? '')
-                        }
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploading('extra');
+                          try {
+                            const result = await uploadFile(
+                              file,
+                              'locum/extra',
+                            );
+                            set('extraFileName', result.path);
+                          } catch {
+                            alert('Upload failed. Try again.');
+                          } finally {
+                            setUploading(null);
+                            e.target.value = '';
+                          }
+                        }}
                       />
                       <p
                         style={{

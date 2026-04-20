@@ -4,6 +4,7 @@ import './globals.css';
 import { Providers } from './providers';
 import { AuthSync } from '@/components/AuthSync';
 import { PathTracker } from '@/components/PathTracker';
+import GuidedTour from '@/components/GuidedTour';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -41,6 +42,7 @@ export default function RootLayout({
         <div id="app-root">
           <AuthSync />
           <PathTracker />
+          <GuidedTour />
           <Providers>{children}</Providers>
         </div>
       </body>

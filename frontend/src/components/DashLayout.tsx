@@ -1,10 +1,7 @@
-// PATH:   frontend/src/components/DashLayout.tsx
-// ACTION: REPLACE your existing file completely
-
 'use client';
 
-import { ReactNode, useEffect, useRef, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { ReactNode, useEffect, useRef, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/providers/AuthProvider';
@@ -12,10 +9,16 @@ import {
   computeAvatarInitials,
   initialsFromSupabaseUser,
 } from '@/lib/avatarInitials';
-import { getRole } from '@/lib/auth';
-import { hostApi, locumApi } from '@/lib/api';
+import { getRole, getToken } from '@/lib/auth';
+import {
+  hostApi,
+  locumApi,
+  notificationsApi,
+  type NotificationItem,
+} from '@/lib/api';
 import { getSupabase } from '@/lib/supabaseClient';
 import { useTrackLastPath } from '../hooks/useTrackLastPath';
+
 interface NavItem {
   label: string;
   href: string;
@@ -26,10 +29,8 @@ interface Props {
   navItems: NavItem[];
   activeHref: string;
   topbarRight?: ReactNode;
-  /** Preferred: first + last name from profile (e.g. contact or locum fields). */
   topbarFirstName?: string | null;
   topbarLastName?: string | null;
-  /** Fallback: pre-computed initials or a full name string to parse. */
   topbarAvatarText?: string;
   children: ReactNode;
 }
@@ -63,6 +64,27 @@ function NavIcon({ name }: { name: string }) {
   );
 }
 
+// ── Notification type icon ────────────────────────────────────────────────────
+
+function NotifIcon({ type }: { type: NotificationItem['type'] }) {
+  if (type === 'message') return <span style={{ fontSize: 16 }}>💬</span>;
+  if (type === 'application') return <span style={{ fontSize: 16 }}>📋</span>;
+  return <span style={{ fontSize: 16 }}>🎉</span>;
+}
+
+function fmtNotifTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = Math.floor((now.getTime() - d.getTime()) / 60_000); // minutes
+  if (diff < 1) return 'Just now';
+  if (diff < 60) return `${diff}m ago`;
+  const hrs = Math.floor(diff / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function DashLayout({
   navItems,
   activeHref,
@@ -73,26 +95,35 @@ export default function DashLayout({
   children,
 }: Props) {
   const router = useRouter();
-  const pathname = usePathname();
   const { logout } = useAuth();
+
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
+
   const [authAvatarInitials, setAuthAvatarInitials] = useState<string | null>(
     null,
   );
   const [apiFirstName, setApiFirstName] = useState<string | null>(null);
   const [apiLastName, setApiLastName] = useState<string | null>(null);
 
+  // ── Notifications state ───────────────────────────────────────────────────
+  const [bellOpen, setBellOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notifTotal, setNotifTotal] = useState(0);
+  const bellRef = useRef<HTMLDivElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useTrackLastPath();
 
+  // ── Avatar initials ───────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     getSupabase()
       .auth.getUser()
       .then(({ data: { user } }) => {
         if (cancelled || !user) return;
-        const fromAuth = initialsFromSupabaseUser(user);
-        if (fromAuth) setAuthAvatarInitials(fromAuth);
+        const from = initialsFromSupabaseUser(user);
+        if (from) setAuthAvatarInitials(from);
       })
       .catch(() => {});
     return () => {
@@ -100,12 +131,10 @@ export default function DashLayout({
     };
   }, []);
 
-  /** Names from Nest when a page does not pass `topbarFirstName` / `topbarLastName` (e.g. Messages). */
   useEffect(() => {
     let cancelled = false;
     const role = getRole();
     if (!role) return;
-
     (async () => {
       try {
         if (role === 'locum') {
@@ -124,21 +153,19 @@ export default function DashLayout({
           }
         }
       } catch {
-        /* offline / 401 — keep initials from props or Supabase */
+        /* offline */
       }
     })();
-
     return () => {
       cancelled = true;
     };
   }, []);
 
+  // ── Close avatar menu on outside click ───────────────────────────────────
   useEffect(() => {
     if (!avatarMenuOpen) return;
     function onMouseDown(e: MouseEvent) {
-      const el = avatarMenuRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
+      if (avatarMenuRef.current?.contains(e.target as Node)) return;
       setAvatarMenuOpen(false);
     }
     function onKeyDown(e: KeyboardEvent) {
@@ -152,22 +179,60 @@ export default function DashLayout({
     };
   }, [avatarMenuOpen]);
 
+  // ── Close bell on outside click ───────────────────────────────────────────
+  useEffect(() => {
+    if (!bellOpen) return;
+    function onMouseDown(e: MouseEvent) {
+      if (bellRef.current?.contains(e.target as Node)) return;
+      setBellOpen(false);
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [bellOpen]);
+
+  // ── Fetch notifications ───────────────────────────────────────────────────
+  const fetchNotifications = useCallback(async () => {
+    if (!getToken()) return;
+    try {
+      const data = await notificationsApi.get();
+      setNotifications(data.notifications);
+      setNotifTotal(data.total);
+    } catch {
+      /* silently fail */
+    }
+  }, []);
+
+  // Poll every 7 seconds
+  useEffect(() => {
+    void fetchNotifications();
+    pollRef.current = setInterval(() => {
+      void fetchNotifications();
+    }, 7_000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [fetchNotifications]);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
   function handleLogout() {
     logout();
     router.replace('/home');
   }
 
-  const mergedFirst =
-    topbarFirstName?.trim() || apiFirstName?.trim() || '';
-  const mergedLast = topbarLastName?.trim() || apiLastName?.trim() || '';
+  function handleNotifClick(notif: NotificationItem) {
+    setBellOpen(false);
+    router.push(notif.href);
+  }
 
+  const mergedFirst = topbarFirstName?.trim() || apiFirstName?.trim() || '';
+  const mergedLast = topbarLastName?.trim() || apiLastName?.trim() || '';
   const fromProfile = computeAvatarInitials(
     mergedFirst || undefined,
     mergedLast || undefined,
     topbarAvatarText,
   );
   const avatarText =
-    fromProfile !== 'N' ? fromProfile : authAvatarInitials ?? fromProfile;
+    fromProfile !== 'N' ? fromProfile : (authAvatarInitials ?? fromProfile);
 
   return (
     <div
@@ -180,6 +245,7 @@ export default function DashLayout({
         background: '#F1F3F7',
       }}
     >
+      {/* ── Header ── */}
       <header
         style={{
           display: 'flex',
@@ -224,28 +290,242 @@ export default function DashLayout({
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           {topbarRight}
-          <button
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 4,
-              color: '#5a6478',
-            }}
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
+
+          {/* ── Bell button ── */}
+          <div ref={bellRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setBellOpen((v) => !v)}
+              id="header-notifications"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 4,
+                color: '#5a6478',
+                position: 'relative',
+              }}
+              title="Notifications"
             >
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-          </button>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              >
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {/* Red badge */}
+              {notifTotal > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    background: '#DC2626',
+                    color: '#fff',
+                    borderRadius: '50%',
+                    width: 16,
+                    height: 16,
+                    fontSize: 9,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    lineHeight: 1,
+                    border: '1.5px solid #fff',
+                  }}
+                >
+                  {notifTotal > 9 ? '9+' : notifTotal}
+                </span>
+              )}
+            </button>
+
+            {/* ── Dropdown ── */}
+            {bellOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 36,
+                  right: 0,
+                  width: 340,
+                  maxHeight: 440,
+                  background: '#fff',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: 12,
+                  boxShadow: '0 12px 40px rgba(0,0,0,0.14)',
+                  zIndex: 100,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                {/* Header */}
+                <div
+                  style={{
+                    padding: '14px 16px 10px',
+                    borderBottom: '1px solid #F3F4F6',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span
+                    style={{ fontSize: 14, fontWeight: 700, color: '#0f1523' }}
+                  >
+                    Notifications
+                  </span>
+                  {notifTotal > 0 && (
+                    <span style={{ fontSize: 11, color: '#6B7280' }}>
+                      {notifTotal} unread
+                    </span>
+                  )}
+                </div>
+
+                {/* List */}
+                <div style={{ overflowY: 'auto', flex: 1 }}>
+                  {notifications.length === 0 ? (
+                    <div style={{ padding: '36px 20px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 28, marginBottom: 8 }}>🔔</div>
+                      <div style={{ fontSize: 13, color: '#9CA3AF' }}>
+                        No new notifications
+                      </div>
+                    </div>
+                  ) : (
+                    notifications.map((notif) => (
+                      <div
+                        key={notif.id}
+                        onClick={() => handleNotifClick(notif)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 10,
+                          padding: '12px 16px',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid #F9FAFB',
+                          background: '#fff',
+                          transition: 'background 0.1s',
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background = '#F5F6FF')
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background = '#fff')
+                        }
+                      >
+                        {/* Icon */}
+                        <div
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: '50%',
+                            flexShrink: 0,
+                            background:
+                              notif.type === 'message'
+                                ? '#EEF0FB'
+                                : notif.type === 'application'
+                                  ? '#F0FDF4'
+                                  : '#FFF7ED',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <NotifIcon type={notif.type} />
+                        </div>
+
+                        {/* Content */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: '#0f1523',
+                              marginBottom: 2,
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {notif.title}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: '#6B7280',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {notif.body}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: '#9CA3AF',
+                              marginTop: 4,
+                            }}
+                          >
+                            {fmtNotifTime(notif.createdAt)}
+                          </div>
+                        </div>
+
+                        {/* Unread dot */}
+                        <div
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: '#3B4FD8',
+                            flexShrink: 0,
+                            marginTop: 4,
+                          }}
+                        />
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Footer */}
+                {notifications.length > 0 && (
+                  <div
+                    style={{
+                      padding: '10px 16px',
+                      borderTop: '1px solid #F3F4F6',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <button
+                      onClick={() => {
+                        setBellOpen(false);
+                        const role = getRole();
+                        router.push(
+                          role === 'clinic'
+                            ? '/host/messages'
+                            : '/locum/messages',
+                        );
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: 12,
+                        color: '#3B4FD8',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      View all messages →
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Avatar menu ── */}
           <div ref={avatarMenuRef} style={{ position: 'relative' }}>
             <div
               role="button"
@@ -339,8 +619,8 @@ export default function DashLayout({
         </div>
       </header>
 
+      {/* ── Body ── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        {/* Sidebar */}
         <aside
           style={{
             width: 212,
@@ -366,12 +646,32 @@ export default function DashLayout({
             >
               Locum Management
             </div>
-
             {navItems.map(({ label, href, icon }) => {
               const active = activeHref === href;
+              const isBrowseOpportunities =
+                href === '/locum/browse' || label === 'Browse Opportunities';
+              const isMyApplications =
+                href === '/locum/dashboard' || label === 'My Applications';
+              const isProfile = href === '/locum/profile' || label === 'Profile';
+              const isMessages =
+                href === '/locum/messages' || label === 'Messages';
+              const isResources =
+                href === '/locum/resources' || label === 'Resources';
+              const navId = isBrowseOpportunities
+                ? 'nav-browse-opportunities'
+                : isMyApplications
+                  ? 'nav-my-applications'
+                  : isProfile
+                    ? 'nav-profile'
+                    : isMessages
+                      ? 'nav-messages'
+                      : isResources
+                        ? 'nav-resources'
+                        : undefined;
               return (
                 <Link key={href} href={href} style={{ textDecoration: 'none' }}>
                   <div
+                    id={navId}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -387,7 +687,69 @@ export default function DashLayout({
                     }}
                   >
                     <span style={{ color: active ? '#3B4FD8' : '#8892a4' }}>
-                      {icon}
+                      {isBrowseOpportunities ? (
+                        <Image
+                          src="/browse-opportunities.png"
+                          alt=""
+                          width={20}
+                          height={20}
+                          style={{
+                            objectFit: 'contain',
+                            display: 'block',
+                            opacity: active ? 1 : 0.9,
+                          }}
+                        />
+                      ) : isMyApplications ? (
+                        <Image
+                          src="/my-applications.png"
+                          alt=""
+                          width={20}
+                          height={20}
+                          style={{
+                            objectFit: 'contain',
+                            display: 'block',
+                            opacity: active ? 1 : 0.9,
+                          }}
+                        />
+                      ) : isProfile ? (
+                        <Image
+                          src="/basic-information.png"
+                          alt=""
+                          width={20}
+                          height={20}
+                          style={{
+                            objectFit: 'contain',
+                            display: 'block',
+                            opacity: active ? 1 : 0.9,
+                          }}
+                        />
+                      ) : isMessages ? (
+                        <Image
+                          src="/messages.png"
+                          alt=""
+                          width={20}
+                          height={20}
+                          style={{
+                            objectFit: 'contain',
+                            display: 'block',
+                            opacity: active ? 1 : 0.9,
+                          }}
+                        />
+                      ) : isResources ? (
+                        <Image
+                          src="/resources.png"
+                          alt=""
+                          width={20}
+                          height={20}
+                          style={{
+                            objectFit: 'contain',
+                            display: 'block',
+                            opacity: active ? 1 : 0.9,
+                          }}
+                        />
+                      ) : (
+                        icon
+                      )}
                     </span>
                     {label}
                   </div>
@@ -397,7 +759,6 @@ export default function DashLayout({
           </nav>
         </aside>
 
-        {/* Main */}
         <div
           style={{
             flex: 1,
@@ -408,7 +769,6 @@ export default function DashLayout({
             overflow: 'hidden',
           }}
         >
-          {/* Only this scrolls */}
           <main
             style={{
               flex: 1,

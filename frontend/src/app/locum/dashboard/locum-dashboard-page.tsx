@@ -284,7 +284,9 @@ export default function LocumDashboard(props: {
             </svg>
             <img
               src={
-                cpsnsVerified ? '/profile-verified.png' : '/profile-incomplete.png'
+                cpsnsVerified
+                  ? '/profile-verified.png'
+                  : '/profile-incomplete.png'
               }
               alt=""
               style={{
@@ -395,7 +397,15 @@ export default function LocumDashboard(props: {
 
       {!loading && tabApps.length === 0 && (
         <div style={{ textAlign: 'center', padding: '50px 20px' }}>
-          <div style={{ fontSize: 44, marginBottom: 12 }}>📋</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+            <Image
+              src="/no-applications.png"
+              alt=""
+              width={160}
+              height={160}
+              style={{ objectFit: 'contain' }}
+            />
+          </div>
           <div
             style={{
               fontSize: 14,
@@ -414,6 +424,7 @@ export default function LocumDashboard(props: {
           {tab === 'recent' && (
             <button
               onClick={() => router.push('/locum/browse')}
+              id="empty-state-browse-opportunities"
               style={{
                 padding: '10px 22px',
                 background: '#3B4FD8',
@@ -501,6 +512,19 @@ export default function LocumDashboard(props: {
                   {jp.hostProfile.province}
                 </span>
               </div>
+              {jp.description?.trim() ? (
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: '#5a6478',
+                    marginTop: -4,
+                    marginBottom: 10,
+                    whiteSpace: 'pre-line',
+                  }}
+                >
+                  {jp.description}
+                </div>
+              ) : null}
               <div
                 style={{
                   display: 'flex',

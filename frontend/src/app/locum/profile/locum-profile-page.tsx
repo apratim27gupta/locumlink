@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
-import { locumApi } from '@/lib/api';
+import { locumApi, uploadFile } from '@/lib/api';
 import { buildLocumSavePayload } from '@/lib/locumProfilePayload';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { LocumProfile } from '@/types';
@@ -131,6 +131,10 @@ export default function LocumProfilePage(props: {
   const [licenseFile, setLicenseFile] = useState('');
   const [resumeFile,  setResumeFile]  = useState('');
   const [extraFile,   setExtraFile]   = useState('');
+  const [licenseViewUrl, setLicenseViewUrl] = useState<string | null>(null);
+  const [resumeViewUrl, setResumeViewUrl] = useState<string | null>(null);
+  const [extraViewUrl, setExtraViewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const licenseRef = useRef<HTMLInputElement>(null);
   const resumeRef  = useRef<HTMLInputElement>(null);
@@ -161,9 +165,15 @@ export default function LocumProfilePage(props: {
         setPostalCode(p.postalCode ?? '');
         setCity(p.city       ?? '');
         setProvince(p.province ?? '');
-        setLicenseFile(p.licenseFile ?? '');
-        setResumeFile(p.resumeFile ?? '');
-        setExtraFile(p.extraFile ?? '');
+        const lf = p.licenseFile ?? p.licenseFileName ?? '';
+        const rf = p.resumeFile ?? p.resumeFileName ?? '';
+        const xf = p.extraFile ?? p.extraFileName ?? '';
+        setLicenseFile(lf);
+        setResumeFile(rf);
+        setExtraFile(xf);
+        setLicenseViewUrl(/^https?:\/\//.test(lf) ? lf : null);
+        setResumeViewUrl(/^https?:\/\//.test(rf) ? rf : null);
+        setExtraViewUrl(/^https?:\/\//.test(xf) ? xf : null);
       })
       .catch(() => setLoadError('Could not load profile data.'));
   }, []);
@@ -737,7 +747,7 @@ export default function LocumProfilePage(props: {
               borderRadius: 6, padding: '9px 12px', cursor: 'pointer',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
               <Image
                 src="/document-link.png"
                 alt=""
@@ -746,12 +756,46 @@ export default function LocumProfilePage(props: {
                 style={{ flexShrink: 0, opacity: 1, objectFit: 'contain' }}
               />
               <span style={{ fontSize: 13, color: licenseFile ? '#3B4FD8' : '#8892a4' }}>
-                {licenseFile || 'CPSNS License'}
+                {uploading === 'license'
+                  ? 'Uploading…'
+                  : licenseFile
+                    ? licenseFile.split('/').pop()
+                    : 'CPSNS License'}
               </span>
+              {licenseViewUrl ? (
+                <a
+                  href={licenseViewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ fontSize: 11, color: '#3B4FD8', flexShrink: 0 }}
+                >
+                  View
+                </a>
+              ) : null}
             </div>
             <span style={{ color: '#8892a4', fontSize: 14 }}>›</span>
           </div>
-          <input ref={licenseRef} type="file" style={{ display: 'none' }} onChange={(e) => setLicenseFile(e.target.files?.[0]?.name ?? '')} />
+          <input
+            ref={licenseRef}
+            type="file"
+            style={{ display: 'none' }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setUploading('license');
+              try {
+                const result = await uploadFile(file, 'locum/license');
+                setLicenseFile(result.path);
+                setLicenseViewUrl(result.signedUrl);
+              } catch {
+                alert('Upload failed. Try again.');
+              } finally {
+                setUploading(null);
+                e.target.value = '';
+              }
+            }}
+          />
 
           {/* Resume */}
           <div
@@ -762,7 +806,7 @@ export default function LocumProfilePage(props: {
               borderRadius: 6, padding: '9px 12px', cursor: 'pointer',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
               <Image
                 src="/document-link.png"
                 alt=""
@@ -771,12 +815,46 @@ export default function LocumProfilePage(props: {
                 style={{ flexShrink: 0, opacity: 1, objectFit: 'contain' }}
               />
               <span style={{ fontSize: 13, color: resumeFile ? '#3B4FD8' : '#8892a4' }}>
-                {resumeFile || 'Resume'}
+                {uploading === 'resume'
+                  ? 'Uploading…'
+                  : resumeFile
+                    ? resumeFile.split('/').pop()
+                    : 'Resume'}
               </span>
+              {resumeViewUrl ? (
+                <a
+                  href={resumeViewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ fontSize: 11, color: '#3B4FD8', flexShrink: 0 }}
+                >
+                  View
+                </a>
+              ) : null}
             </div>
             <span style={{ color: '#8892a4', fontSize: 14 }}>›</span>
           </div>
-          <input ref={resumeRef} type="file" style={{ display: 'none' }} onChange={(e) => setResumeFile(e.target.files?.[0]?.name ?? '')} />
+          <input
+            ref={resumeRef}
+            type="file"
+            style={{ display: 'none' }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setUploading('resume');
+              try {
+                const result = await uploadFile(file, 'locum/resume');
+                setResumeFile(result.path);
+                setResumeViewUrl(result.signedUrl);
+              } catch {
+                alert('Upload failed. Try again.');
+              } finally {
+                setUploading(null);
+                e.target.value = '';
+              }
+            }}
+          />
         </div>
 
         {/* Additional Docs */}
@@ -790,7 +868,7 @@ export default function LocumProfilePage(props: {
             borderRadius: 6, padding: '9px 12px', cursor: 'pointer', width: '48%',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
             <Image
               src="/document-link.png"
               alt=""
@@ -799,12 +877,46 @@ export default function LocumProfilePage(props: {
               style={{ flexShrink: 0, opacity: 1, objectFit: 'contain' }}
             />
             <span style={{ fontSize: 13, color: extraFile ? '#3B4FD8' : '#8892a4' }}>
-              {extraFile || 'Add'}
+              {uploading === 'extra'
+                ? 'Uploading…'
+                : extraFile
+                  ? extraFile.split('/').pop()
+                  : 'Add'}
             </span>
+            {extraViewUrl ? (
+              <a
+                href={extraViewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{ fontSize: 11, color: '#3B4FD8', flexShrink: 0 }}
+              >
+                View
+              </a>
+            ) : null}
           </div>
           <span style={{ color: '#8892a4', fontSize: 14 }}>›</span>
         </div>
-        <input ref={extraRef} type="file" style={{ display: 'none' }} onChange={(e) => setExtraFile(e.target.files?.[0]?.name ?? '')} />
+        <input
+          ref={extraRef}
+          type="file"
+          style={{ display: 'none' }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            setUploading('extra');
+            try {
+              const result = await uploadFile(file, 'locum/extra');
+              setExtraFile(result.path);
+              setExtraViewUrl(result.signedUrl);
+            } catch {
+              alert('Upload failed. Try again.');
+            } finally {
+              setUploading(null);
+              e.target.value = '';
+            }
+          }}
+        />
       </div>
 
       {/* ── Save feedback ── */}

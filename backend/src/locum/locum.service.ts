@@ -271,7 +271,14 @@ export class LocumService {
       orderBy: { appliedAt: 'desc' },
       include: {
         jobPosting: {
-          include: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            startDate: true,
+            endDate: true,
+            startTime: true,
+            endTime: true,
             hostProfile: {
               select: {
                 userId: true,

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
+import { uploadFile } from '@/lib/api';
 import { useHostProfile } from '@/hooks/useHostProfile';
 import type { HostProfile } from '@/types';
 import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
@@ -120,6 +121,7 @@ export default function HostProfilePage(props: {
   const [hostLast, setHostLast] = useState('');
   const [cpsns, setCpsns] = useState('');
   const [licenseFile, setLicenseFile] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [specialties, setSpecialties] = useState<string[]>([]);
   const [specialtyInput, setSpecialtyInput] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -872,7 +874,9 @@ export default function HostProfilePage(props: {
                 }}
               >
                 <span style={{ fontSize: 13, color: '#0f1523' }}>
-                  {licenseFile}
+                  {uploading
+                    ? 'Uploading…'
+                    : (licenseFile?.split('/').pop() ?? licenseFile)}
                 </span>
                 <button
                   onClick={(e) => {
@@ -896,24 +900,39 @@ export default function HostProfilePage(props: {
                   ref={fileRef}
                   type="file"
                   style={{ display: 'none' }}
-                  onChange={(e) =>
-                    setLicenseFile(e.target.files?.[0]?.name ?? null)
-                  }
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setUploading(true);
+                    try {
+                      const result = await uploadFile(file, 'host/license');
+                      setLicenseFile(result.path);
+                    } catch {
+                      alert('Upload failed. Try again.');
+                    } finally {
+                      setUploading(false);
+                      e.target.value = '';
+                    }
+                  }}
                 />
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     fileRef.current?.click();
                   }}
+                  disabled={uploading}
                   style={{
                     ...inp,
-                    cursor: 'pointer',
+                    cursor: uploading ? 'default' : 'pointer',
                     color: '#3B4FD8',
                     border: '1.5px dashed #3B4FD8',
                     textAlign: 'left',
+                    opacity: uploading ? 0.7 : 1,
                   }}
                 >
-                  Upload Document ⬆
+                  {uploading
+                    ? 'Uploading…'
+                    : 'Upload CPSNS Certificate'}
                 </button>
               </>
             )}

@@ -45,6 +45,40 @@ function nestHeaders(json: boolean): HeadersInit {
   return h;
 }
 
+export type UploadResult = {
+  path: string;
+  signedUrl: string;
+  fileName: string;
+  size: number;
+  mimeType: string;
+};
+
+export async function uploadFile(
+  file: File,
+  folder?: string,
+): Promise<UploadResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (folder) formData.append('folder', folder);
+
+  const token = getToken();
+
+  // ✅ FIX: use relative URL so it goes through Next.js proxy (avoids CORS)
+  // Previously was: fetch(`${NEST_BASE}/api/upload`, ...) which hit NestJS directly
+  const res = await fetch(`${NEST_BASE}/api/upload`, {
+    // const res = await fetch(`/api/upload`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw nestHttpError(text, res.status, 'Uploading file');
+  }
+  return res.json() as Promise<UploadResult>;
+}
+
 const DASHBOARD_LOAD_LABELS = new Set([
   'Loading jobs',
   'Loading dashboard stats',
@@ -155,6 +189,7 @@ export type MyApplication = {
   jobPosting: {
     id: string;
     title: string;
+    description: string;
     startDate: string | null;
     endDate: string | null;
     startTime: string | null;
@@ -200,9 +235,6 @@ export const locumApi = {
     return res.json();
   },
 
-  // ── FIX: was throw new Error() — now routes through nestHttpError
-  // so a 401 (expired token) properly redirects to /auth instead of
-  // silently failing or showing a broken browse page.
   browseJobs: async (): Promise<{ jobs: BrowseJob[] }> => {
     const res = await fetch(`${NEST_BASE}/api/locum/jobs`, {
       cache: 'no-store',
@@ -215,7 +247,6 @@ export const locumApi = {
     return res.json() as Promise<{ jobs: BrowseJob[] }>;
   },
 
-  // ── FIX: now uses nestHttpError so 401 redirects properly
   applyToJob: async (jobId: string, coverNote?: string): Promise<unknown> => {
     const res = await fetch(
       `${NEST_BASE}/api/locum/jobs/${encodeURIComponent(jobId)}/apply`,
@@ -232,8 +263,6 @@ export const locumApi = {
     return res.json();
   },
 
-  // ── FIX: was throw new Error() — now routes through nestHttpError
-  // so 401 redirects to /auth instead of showing a broken applications page.
   getMyApplications: async (): Promise<{ applications: MyApplication[] }> => {
     const res = await fetch(`${NEST_BASE}/api/locum/applications`, {
       cache: 'no-store',
@@ -541,7 +570,6 @@ export const messageApi = {
     }>;
   },
 
-  // ── FIX: now uses nestHttpError so 401 redirects properly
   sendMessage: async (
     recipientId: string,
     body: string,
@@ -563,7 +591,6 @@ export const messageApi = {
     return res.json() as Promise<{ message: ThreadMessage }>;
   },
 
-  // ── FIX: now uses nestHttpError
   editMessage: async (
     messageId: string,
     body: string,
@@ -583,7 +610,6 @@ export const messageApi = {
     return res.json() as Promise<{ message: ThreadMessage }>;
   },
 
-  // ── FIX: now uses nestHttpError
   deleteMessage: async (
     messageId: string,
   ): Promise<{ message: ThreadMessage }> => {
@@ -599,5 +625,37 @@ export const messageApi = {
       throw nestHttpError(text, res.status, 'Deleting message');
     }
     return res.json() as Promise<{ message: ThreadMessage }>;
+  },
+};
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export type NotificationItem = {
+  id: string;
+  type: 'message' | 'application' | 'shortlisted';
+  title: string;
+  body: string;
+  href: string;
+  createdAt: string;
+};
+
+export type NotificationsResponse = {
+  total: number;
+  notifications: NotificationItem[];
+};
+
+export const notificationsApi = {
+  get: async (): Promise<NotificationsResponse> => {
+    const res = await fetch(`${NEST_BASE}/api/notifications`, {
+      cache: 'no-store',
+      headers: nestHeaders(false),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw nestHttpError(text, res.status, 'Loading notifications', {
+        skipAuthRedirect: true,
+      });
+    }
+    return res.json() as Promise<NotificationsResponse>;
   },
 };
