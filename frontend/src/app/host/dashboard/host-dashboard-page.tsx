@@ -1974,8 +1974,8 @@ export default function HostDashboard(props: {
       const errs: string[] = [];
       const [profileResult, jobsResult, statsResult] = await Promise.allSettled([
         hostApi.getProfile(),
-        hostApi.getJobs(dashOpts),
-        hostApi.getDashboardStats(dashOpts),
+        hostApi.getJobs(),
+        hostApi.getDashboardStats(),
       ]);
       if (profileResult.status === 'fulfilled') {
         setProfile(profileResult.value);
