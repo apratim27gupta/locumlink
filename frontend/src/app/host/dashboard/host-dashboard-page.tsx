@@ -1973,7 +1973,7 @@ export default function HostDashboard(props: {
       const dashOpts = { skipAuthRedirectOn401: true } as const;
       const errs: string[] = [];
       const [profileResult, jobsResult, statsResult] = await Promise.allSettled([
-        hostApi.getProfile(dashOpts),
+        hostApi.getProfile(),
         hostApi.getJobs(dashOpts),
         hostApi.getDashboardStats(dashOpts),
       ]);
