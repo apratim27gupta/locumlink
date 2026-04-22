@@ -5,29 +5,34 @@ import { PrismaClientKnownExceptionFilter } from './prisma/prisma-client-excepti
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+  const config = app.get(ConfigService);
 
   app.useGlobalFilters(new PrismaClientKnownExceptionFilter());
 
-app.enableCors({
-  origin: [
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
-    'http://localhost:3002',
-    'http://127.0.0.1:3002',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'https://locumlink-frontend-nd48.vercel.app',  
-  ],
-  credentials: true,
-});
+  const nodeEnv = config.get<string>('NODE_ENV', 'development');
+
+  let corsOrigin: boolean | string[];
+  if (nodeEnv === 'production') {
+    const raw = config.get<string>('ALLOWED_ORIGINS', '');
+    corsOrigin = raw
+      ? raw.split(',').map((s) => s.trim()).filter(Boolean)
+      : true;
+  } else {
+    corsOrigin = true;
+  }
+
+  app.enableCors({
+    origin: corsOrigin,
+    credentials: true,
+  });
+
   app.setGlobalPrefix('api');
 
-  const config = app.get(ConfigService);
-  const port = config.get<number>('PORT', 3000);
+  const port = parseInt(process.env.PORT ?? '3000', 10);
 
   await app.listen(port);
   console.log(
-    `Application running on port ${port} [${config.get('NODE_ENV')}]`,
+    `Application running on port ${port} [${nodeEnv}]`,
   );
 }
 
