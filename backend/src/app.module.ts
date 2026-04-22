@@ -18,7 +18,10 @@ import { validate } from './config/env.validation.js';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [`.env.${process.env.NODE_ENV ?? 'staging'}`, '.env'],
+      envFilePath:
+        process.env.NODE_ENV === 'production'
+          ? []
+          : [`.env.${process.env.NODE_ENV ?? 'development'}`, '.env'],
       validate,
     }),
     GcsModule,

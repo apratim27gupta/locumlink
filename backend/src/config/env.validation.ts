@@ -89,6 +89,23 @@ class EnvironmentVariables {
   @IsOptional()
   GCS_PROJECT_ID: string;
 
+  /**
+   * Optional. If set, should be a JSON string of a Google service account key.
+   * This is the easiest way to configure GCS on hosts like Railway where
+   * mounting a key file is inconvenient.
+   */
+  @IsString()
+  @IsOptional()
+  GCS_CREDENTIALS_JSON?: string;
+
+  /**
+   * Optional. Absolute path to a service account JSON file (local/dev friendly).
+   * If both GCS_CREDENTIALS_JSON and GCS_KEY_FILE are set, JSON takes precedence.
+   */
+  @IsString()
+  @IsOptional()
+  GCS_KEY_FILE?: string;
+
   // ── Email (Zeptomail per PRD §11) ────────────────────────────────────
   @IsString()
   @IsOptional()

@@ -10,11 +10,35 @@ export class GcsService {
   private readonly bucket: string;
 
   constructor(private readonly config: ConfigService) {
-    const keyFile   = this.config.get<string>('GCS_KEY_FILE');
     const projectId = this.config.get<string>('GCS_PROJECT_ID');
+    const keyFile = this.config.get<string>('GCS_KEY_FILE');
+    const credentialsJson = this.config.get<string>('GCS_CREDENTIALS_JSON');
 
-    this.storage = new Storage({ projectId, keyFilename: keyFile });
-    this.bucket  = this.config.getOrThrow<string>('GCS_BUCKET_NAME');
+    let credentials:
+      | { client_email?: string; private_key?: string; [k: string]: unknown }
+      | undefined;
+
+    if (credentialsJson) {
+      try {
+        credentials = JSON.parse(credentialsJson) as {
+          client_email?: string;
+          private_key?: string;
+          [k: string]: unknown;
+        };
+      } catch (err) {
+        this.logger.warn(
+          `GCS_CREDENTIALS_JSON is set but not valid JSON: ${String(err)}`,
+        );
+      }
+    }
+
+    this.storage = new Storage({
+      ...(projectId ? { projectId } : {}),
+      ...(credentials ? { credentials } : {}),
+      ...(!credentials && keyFile ? { keyFilename: keyFile } : {}),
+    });
+
+    this.bucket = this.config.getOrThrow<string>('GCS_BUCKET_NAME');
   }
 
   async upload(
