@@ -6,6 +6,19 @@ const NEST_BASE = (
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'
 ).replace(/\/$/, '');
 
+function networkFetchError(label: string, err: unknown): Error {
+  const isProd = process.env.NODE_ENV === 'production';
+  const baseHint =
+    isProd && (!process.env.NEXT_PUBLIC_API_URL || /localhost/.test(NEST_BASE))
+      ? ` (check Vercel env NEXT_PUBLIC_API_URL; current base is "${NEST_BASE}")`
+      : ` (base: "${NEST_BASE}")`;
+  const msg =
+    err instanceof Error && err.message
+      ? err.message
+      : 'Failed to fetch (network error)';
+  return new Error(`${label} failed: ${msg}${baseHint}`);
+}
+
 export class ApiHttpError extends Error {
   readonly status: number;
   constructor(message: string, status: number) {
@@ -393,11 +406,16 @@ export const hostApi = {
   },
 
   createJob: async (body: CreateJobPayload): Promise<unknown> => {
-    const res = await fetch(`${NEST_BASE}/api/host/jobs`, {
-      method: 'POST',
-      headers: nestHeaders(true),
-      body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${NEST_BASE}/api/host/jobs`, {
+        method: 'POST',
+        headers: nestHeaders(true),
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      throw networkFetchError('Creating job', err);
+    }
     if (!res.ok) {
       const text = await res.text();
       throw nestHttpError(text, res.status, 'Creating job');
@@ -406,10 +424,15 @@ export const hostApi = {
   },
 
   getJobs: async (): Promise<{ jobs: Job[] }> => {
-    const res = await fetch(`${NEST_BASE}/api/host/jobs`, {
-      cache: 'no-store',
-      headers: nestHeaders(false),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${NEST_BASE}/api/host/jobs`, {
+        cache: 'no-store',
+        headers: nestHeaders(false),
+      });
+    } catch (err) {
+      throw networkFetchError('Loading jobs', err);
+    }
     if (!res.ok) {
       const text = await res.text();
       throw nestHttpError(text, res.status, 'Loading jobs');
@@ -418,10 +441,18 @@ export const hostApi = {
   },
 
   getJob: async (jobId: string): Promise<{ job: Job }> => {
-    const res = await fetch(`${NEST_BASE}/api/host/jobs/${encodeURIComponent(jobId)}`, {
-      cache: 'no-store',
-      headers: nestHeaders(false),
-    });
+    let res: Response;
+    try {
+      res = await fetch(
+        `${NEST_BASE}/api/host/jobs/${encodeURIComponent(jobId)}`,
+        {
+          cache: 'no-store',
+          headers: nestHeaders(false),
+        },
+      );
+    } catch (err) {
+      throw networkFetchError('Loading job', err);
+    }
     if (!res.ok) {
       const text = await res.text();
       throw nestHttpError(text, res.status, 'Loading job');
@@ -430,11 +461,19 @@ export const hostApi = {
   },
 
   updateJob: async (jobId: string, body: Partial<CreateJobPayload>): Promise<unknown> => {
-    const res = await fetch(`${NEST_BASE}/api/host/jobs/${encodeURIComponent(jobId)}`, {
-      method: 'PATCH',
-      headers: nestHeaders(true),
-      body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch(
+        `${NEST_BASE}/api/host/jobs/${encodeURIComponent(jobId)}`,
+        {
+          method: 'PATCH',
+          headers: nestHeaders(true),
+          body: JSON.stringify(body),
+        },
+      );
+    } catch (err) {
+      throw networkFetchError('Updating job', err);
+    }
     if (!res.ok) {
       const text = await res.text();
       throw nestHttpError(text, res.status, 'Updating job');
@@ -443,10 +482,15 @@ export const hostApi = {
   },
 
   getDashboardStats: async (): Promise<DashboardStats> => {
-    const res = await fetch(`${NEST_BASE}/api/host/stats`, {
-      cache: 'no-store',
-      headers: nestHeaders(false),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${NEST_BASE}/api/host/stats`, {
+        cache: 'no-store',
+        headers: nestHeaders(false),
+      });
+    } catch (err) {
+      throw networkFetchError('Loading dashboard stats', err);
+    }
     if (!res.ok) {
       const text = await res.text();
       throw nestHttpError(text, res.status, 'Loading dashboard stats');
@@ -457,10 +501,15 @@ export const hostApi = {
   getApplications: async (
     jobId: string,
   ): Promise<{ applications: ApplicationRecord[] }> => {
-    const res = await fetch(
-      `${NEST_BASE}/api/host/jobs/${encodeURIComponent(jobId)}/applications`,
-      { cache: 'no-store', headers: nestHeaders(false) },
-    );
+    let res: Response;
+    try {
+      res = await fetch(
+        `${NEST_BASE}/api/host/jobs/${encodeURIComponent(jobId)}/applications`,
+        { cache: 'no-store', headers: nestHeaders(false) },
+      );
+    } catch (err) {
+      throw networkFetchError('Loading applications', err);
+    }
     if (!res.ok) {
       const text = await res.text();
       throw nestHttpError(text, res.status, 'Loading applications');
