@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { GcsModule } from './gcs/gcs.module.js';
 import { UploadModule } from './upload/upload.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
@@ -17,9 +19,19 @@ import { validate } from './config/env.validation.js';
     imports: [
         ConfigModule.forRoot({
             isGlobal: true,
-            envFilePath: process.env.NODE_ENV === 'production'
-                ? []
-                : [`.env.${process.env.NODE_ENV ?? 'development'}`, '.env'],
+            envFilePath: (() => {
+                if (process.env.NODE_ENV === 'production')
+                    return [];
+                const env = process.env.NODE_ENV ?? 'development';
+                const candidates = [
+                    resolve(process.cwd(), 'backend', `.env.${env}`),
+                    resolve(process.cwd(), 'backend', '.env'),
+                    resolve(process.cwd(), `.env.${env}`),
+                    resolve(process.cwd(), '.env'),
+                ];
+                const first = candidates.find((p) => existsSync(p));
+                return first ? [first] : [];
+            })(),
             validate,
         }),
         GcsModule,

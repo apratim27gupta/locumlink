@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
-import { hostApi, type ApplicationRecord } from '@/lib/api';
+import { hostApi, messageApi, type ApplicationRecord } from '@/lib/api';
 import { getToken } from '@/lib/auth';
 import { useAuth } from '@/providers/AuthProvider';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
@@ -32,11 +32,286 @@ const STATUS_COLOR: Record<string, string> = {
     REJECTED: '#EF4444',
     WITHDRAWN: '#9CA3AF',
 };
+const VISIBLE_TAGS = 2;
 function displayName(a: ApplicationRecord): string {
     const f = a.locumProfile.firstName?.trim() || '';
     const l = a.locumProfile.lastName?.trim() || '';
     const base = `${f} ${l}`.trim();
     return base || a.locumProfile.user.email || 'Applicant';
+}
+
+function statusToUi(status: ApplicationRecord['status']): 'shortlisted' | 'pending' {
+    return status === 'SHORTLISTED' || status === 'CONFIRMED' ? 'shortlisted' : 'pending';
+}
+
+function StatusBadge({ status }: { status: ApplicationRecord['status'] }) {
+    const shortlisted = statusToUi(status) === 'shortlisted';
+    return (<span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 7,
+            padding: '5px 10px',
+            border: '1px solid #D1D5DB',
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 500,
+            color: '#6B7280',
+            whiteSpace: 'nowrap',
+        }}>
+      <span style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            flexShrink: 0,
+            background: shortlisted ? '#22C55E' : 'transparent',
+            border: shortlisted ? 'none' : '1px solid #6B7280',
+        }}/>
+      {shortlisted ? 'Shortlisted' : 'Pending'}
+    </span>);
+}
+
+function MessageIcon({ active }: { active: boolean }) {
+    return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke={active ? '#1C32D2' : 'rgba(107,114,128,0.5)'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>);
+}
+
+function ShieldIcon() {
+    return (<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M10 12.5l1.5 1.5 2.75-3M12 2.5l-8 3v5.1c0 4.65 3.42 9 8 10.1 4.58-1.1 8-5.45 8-10.1V5.5l-8-3Z" stroke="#0B0F1F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>);
+}
+
+function CloseIcon() {
+    return (<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+      <path d="M1 1l10 10M11 1L1 11" stroke="#210840" strokeWidth="2" strokeLinecap="round"/>
+    </svg>);
+}
+
+function ChevronRight() {
+    return (<svg width="7" height="14" viewBox="0 0 7 14" fill="none" aria-hidden>
+      <path d="M1 1l5 6-5 6" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>);
+}
+
+function CalendarIcon() {
+    return (<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3" y="5" width="18" height="16" rx="2" stroke="#1522A6" strokeWidth="1.5"/>
+      <path d="M8 3v3M16 3v3M3 10h18" stroke="#1522A6" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>);
+}
+
+function DocRow({ label, subtitle, url, }: {
+    label: string;
+    subtitle: string;
+    url?: string | null;
+}) {
+    const hasUrl = !!url && url !== '#';
+    const outerStyle: React.CSSProperties = {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        width: '100%',
+        background: 'linear-gradient(0deg,rgba(255,255,255,0.6),rgba(255,255,255,0.6)),linear-gradient(90deg,#DFE1FD 0%,#EDEBFB 100%)',
+        borderRadius: 8,
+        textDecoration: 'none',
+    };
+    const inner = (<div style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            padding: '14px 16px',
+            gap: 12,
+            border: '1px solid rgba(107,114,128,0.3)',
+            borderRadius: 10,
+            boxSizing: 'border-box',
+        }}>
+          <div style={{
+            width: 40,
+            height: 40,
+            background: 'rgba(115,177,251,0.12)',
+            borderRadius: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+        }}>
+            <CalendarIcon />
+          </div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+            <span style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 16,
+                lineHeight: '140%',
+                color: '#0B0F1F',
+                textTransform: 'capitalize',
+            }}>
+              {label}
+            </span>
+            <span style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 500,
+                fontSize: 13,
+                lineHeight: '150%',
+                color: 'rgba(107,114,128,0.8)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+            }}>
+              {subtitle}
+            </span>
+          </div>
+          <ChevronRight />
+        </div>);
+    if (hasUrl) {
+        return (<a href={url} target="_blank" rel="noopener noreferrer" style={outerStyle}>
+          {inner}
+        </a>);
+    }
+    return (<button type="button" onClick={() => window.alert('No document uploaded')} style={{
+            all: 'unset',
+            cursor: 'pointer',
+            width: '100%',
+        }}>
+        <div style={outerStyle}>
+          {inner}
+        </div>
+      </button>);
+}
+
+function SpecTag({ label }: { label: string }) {
+    return (<span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            padding: '6px 12px',
+            background: 'rgba(58,101,219,0.07)',
+            borderRadius: 8,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 500,
+            fontSize: 14,
+            lineHeight: '150%',
+            color: 'rgba(58,101,219,0.8)',
+            textTransform: 'capitalize',
+            whiteSpace: 'nowrap',
+        }}>
+      {label}
+    </span>);
+}
+
+function buildSpecialityTags(profile: ApplicationRecord['locumProfile']): string[] {
+    const specialty = profile.specialty ? profile.specialty.replace(/_/g, ' ') : '';
+    const specText = String((profile as any).specializationText ?? '');
+    const extras = specText
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const all = [specialty, ...extras]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .filter((s) => s.toLowerCase() !== 'other');
+    const seen = new Set<string>();
+    return all.filter((s) => {
+        const k = s.toLowerCase();
+        if (seen.has(k))
+            return false;
+        seen.add(k);
+        return true;
+    });
+}
+
+function MessageBtn({ active, onClick }: { active: boolean; onClick?: () => void }) {
+    return (<button type="button" disabled={!active} onClick={onClick} style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 10px',
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 6,
+            cursor: active ? 'pointer' : 'default',
+            opacity: active ? 1 : 0.7,
+            fontFamily: 'inherit',
+        }}>
+      <MessageIcon active={active} />
+      <span style={{
+            fontSize: 14,
+            fontWeight: 500,
+            ...(active
+                ? {
+                    background: 'linear-gradient(270deg, #3A65DB 0%, #1B31D2 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                }
+                : { color: 'rgba(107,114,128,0.5)' }),
+        }}>
+        Message
+      </span>
+    </button>);
+}
+
+function SpecialityTags({ specialities }: { specialities: string[] }) {
+    if (!specialities.length) {
+        return (<span style={{ fontSize: 13, color: '#9CA3AF' }}>—</span>);
+    }
+    const visible = specialities.slice(0, VISIBLE_TAGS);
+    const rest = Math.max(0, specialities.length - VISIBLE_TAGS);
+    return (<div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
+      {visible.map((s) => (<span key={s} style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            padding: '4px 10px',
+            background: 'rgba(209,213,219,0.3)',
+            borderRadius: 40,
+            fontSize: 13,
+            fontWeight: 500,
+            color: '#0B0F1F',
+            whiteSpace: 'nowrap',
+        }}>
+        {s}
+      </span>))}
+      {rest > 0 && (<span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minWidth: 34,
+            padding: '4px 10px',
+            background: 'rgba(209,213,219,0.3)',
+            borderRadius: 40,
+            fontSize: 13,
+            fontWeight: 500,
+            color: '#6B7280',
+            whiteSpace: 'nowrap',
+        }}>
+        +{rest}
+      </span>)}
+    </div>);
+}
+
+function docLabel(documentType: string): string {
+    const map: Record<string, string> = {
+        CPSNS_LICENSE: 'CPSNS License',
+        CMPA_CERTIFICATE: 'CMPA Certificate',
+        DEA_CERTIFICATE: 'DEA Certificate',
+        CV: 'Resume / CV',
+        PHOTO_ID: 'Photo ID',
+        OTHER: 'Document',
+    };
+    return map[documentType] ?? documentType.replace(/_/g, ' ');
+}
+
+function splitDocs(docs: any[]): { primary: any[]; additional: any[] } {
+    const primaryTypes = new Set(['CPSNS_LICENSE', 'CV', 'CMPA_CERTIFICATE', 'DEA_CERTIFICATE']);
+    const primary: any[] = [];
+    const additional: any[] = [];
+    for (const d of Array.isArray(docs) ? docs : []) {
+        const t = String(d?.documentType ?? '');
+        if (primaryTypes.has(t))
+            primary.push(d);
+        else
+            additional.push(d);
+    }
+    return { primary, additional };
 }
 export default function HostApplicantsPage(props: {
     params: Promise<{
@@ -52,6 +327,13 @@ export default function HostApplicantsPage(props: {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [actioning, setActioning] = useState<Set<string>>(new Set());
+    const [selected, setSelected] = useState<ApplicationRecord | null>(null);
+    const [aboutExpanded, setAboutExpanded] = useState(false);
+    const [composeOpen, setComposeOpen] = useState(false);
+    const [composeText, setComposeText] = useState('');
+    const [composeSending, setComposeSending] = useState(false);
+    const [composeError, setComposeError] = useState<string | null>(null);
+    const [composeSent, setComposeSent] = useState(false);
     useEffect(() => {
         let cancelled = false;
         void props.params.then((p) => {
@@ -94,6 +376,14 @@ export default function HostApplicantsPage(props: {
             cancelled = true;
         };
     }, [jobId, authLoading, userId]);
+    useEffect(() => {
+        setAboutExpanded(false);
+        setComposeOpen(false);
+        setComposeText('');
+        setComposeSending(false);
+        setComposeError(null);
+        setComposeSent(false);
+    }, [selected?.id]);
     const byStatus = useMemo(() => {
         const groups: Record<string, ApplicationRecord[]> = {};
         for (const a of apps) {
@@ -150,166 +440,569 @@ export default function HostApplicantsPage(props: {
             alignItems: 'center',
             gap: 12,
             marginBottom: 20,
+            position: 'relative',
         }}>
-        <button type="button" onClick={() => router.back()} style={{
-            border: '1px solid #D0D5DD',
-            background: '#fff',
-            borderRadius: 8,
-            padding: '8px 12px',
-            fontSize: 13,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-        }}>
-          ← Back
-        </button>
         <h1 style={{ fontSize: 18, margin: 0, fontWeight: 700, color: '#0f1523' }}>
           Applicants
         </h1>
-        {jobId && (<span style={{ fontSize: 12, color: '#6B7280' }}>Job: {jobId}</span>)}
+        <button type="button" aria-label="Close" onClick={() => router.back()} style={{
+            marginLeft: 'auto',
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            border: '1px solid #E5E7EB',
+            background: '#fff',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 22,
+            lineHeight: 1,
+            color: '#6B7280',
+            fontFamily: 'inherit',
+        }}>
+          ×
+        </button>
       </div>
 
       {error && (<div style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>
           {error}
         </div>)}
 
-      {loading ? (<div style={{ fontSize: 13, color: '#8892a4' }}>Loading…</div>) : apps.length === 0 ? (<div style={{ fontSize: 13, color: '#8892a4' }}>No applicants yet.</div>) : (<div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {Object.entries(byStatus).map(([status, list]) => (<div key={status} style={{
-                    border: '1px solid #e2e5ee',
-                    borderRadius: 10,
-                    overflow: 'hidden',
-                    background: '#fff',
-                }}>
-              
-              <div style={{
-                    padding: '10px 14px',
-                    borderBottom: '1px solid #f1f5f9',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                }}>
-                <span style={{
-                    display: 'inline-block',
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: STATUS_COLOR[status] ?? '#9CA3AF',
-                    flexShrink: 0,
-                }}/>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#0f1523' }}>
-                  {status}
-                </span>
-                <span style={{ fontSize: 12, color: '#9CA3AF' }}>
-                  · {list.length}
-                </span>
-              </div>
+      {loading ? (<div style={{ fontSize: 13, color: '#8892a4' }}>Loading…</div>) : apps.length === 0 ? (<div style={{ fontSize: 13, color: '#8892a4' }}>No applicants yet.</div>) : (<div style={{
+            fontFamily: 'Inter, sans-serif',
+            background: '#fff',
+            border: '1px solid #D9D9D9',
+            borderRadius: 10,
+            width: '100%',
+            overflow: 'hidden',
+        }}>
+          
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '16px 18px',
+            borderBottom: '1px solid #EFEFEF',
+        }}>
+            <h2 style={{
+            margin: 0,
+            fontWeight: 500,
+            fontSize: 16,
+            lineHeight: '150%',
+            color: '#6B7280',
+            textTransform: 'capitalize',
+        }}>
+              Candidates
+            </h2>
+            <div style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 600 }}>
+              Total · {apps.length}
+            </div>
+          </div>
 
-              
-              {list.map((a) => {
-                    const busy = actioning.has(a.id);
-                    const canShortlist = a.status === 'APPLIED';
-                    const canMessage = a.status === 'SHORTLISTED' || a.status === 'CONFIRMED';
-                    return (<div key={a.id} style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '12px 14px',
-                            borderTop: '1px solid #f8fafc',
-                            gap: 12,
-                        }}>
-                    
-                    <div style={{ minWidth: 0, flex: 1 }}>
+          
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(260px, 1.4fr) minmax(90px, 0.6fr) minmax(220px, 2fr) minmax(130px, 0.9fr) minmax(110px, 0.7fr)',
+            padding: '12px 18px',
+            alignItems: 'center',
+            gap: 18,
+            boxSizing: 'border-box',
+        }}>
+            {['NAME', 'YEARS OF EXP', 'SPECIALITY', 'STATUS', ''].map((h) => (<div key={h} style={{
+                fontFamily: 'Hanken Grotesk, Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 13,
+                textTransform: 'uppercase',
+                color: '#6B7280',
+                letterSpacing: '0.04em',
+                whiteSpace: 'nowrap',
+            }}>
+              {h}
+            </div>))}
+          </div>
+
+          
+          <div>
+            {apps.map((a, idx) => {
+                const uiStatus = statusToUi(a.status);
+                const canMessage = uiStatus === 'shortlisted';
+                const yoe = a.locumProfile.yearsOfExperience;
+                const tags = buildSpecialityTags(a.locumProfile);
+                return (<div key={a.id} onClick={() => setSelected(a)} role="button" tabIndex={0} onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ')
+                            setSelected(a);
+                    }} style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(260px, 1.4fr) minmax(90px, 0.6fr) minmax(220px, 2fr) minmax(130px, 0.9fr) minmax(110px, 0.7fr)',
+                        padding: '0 18px',
+                        height: 51,
+                        alignItems: 'center',
+                        gap: 18,
+                        borderTop: idx === 0 ? '1px solid #DEDEDE' : '1px solid #DEDEDE',
+                        boxSizing: 'border-box',
+                        cursor: 'pointer',
+                    }}>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    <div style={{
+                        fontSize: 14,
+                        fontWeight: 500,
+                        color: '#9CA3AF',
+                        minWidth: 20,
+                        textAlign: 'right',
+                        flexShrink: 0,
+                    }}>
+                      {idx + 1}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
                       <div style={{
-                            fontSize: 13,
-                            fontWeight: 600,
-                            color: '#0f1523',
-                        }}>
+                        fontSize: 15,
+                        fontWeight: 500,
+                        color: '#0B0F1F',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                    }}>
                         {displayName(a)}
                       </div>
-                      <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
-                        {a.locumProfile.specialty?.replace(/_/g, ' ') ?? ''}
-                        {a.locumProfile.yearsOfExperience != null
-                            ? ` · ${a.locumProfile.yearsOfExperience} yrs exp`
-                            : ''}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>
+                      <div style={{
+                        fontSize: 12,
+                        color: '#9CA3AF',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                    }}>
                         {a.locumProfile.user.email}
                       </div>
                     </div>
+                  </div>
 
-                    
-                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                      
-                      {canShortlist && (<button type="button" disabled={busy} onClick={() => void handleShortlistAndMessage(a)} style={{
-                                border: 'none',
-                                background: busy
-                                    ? '#D1D5DB'
-                                    : 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
-                                color: '#fff',
-                                borderRadius: 8,
-                                padding: '8px 14px',
-                                fontSize: 12,
-                                fontWeight: 600,
-                                cursor: busy ? 'default' : 'pointer',
-                                fontFamily: 'inherit',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6,
-                            }}>
-                          {busy ? 'Shortlisting…' : '✓ Shortlist & Message'}
-                        </button>)}
+                  
+                  <div style={{
+                        fontSize: 15,
+                        fontWeight: 500,
+                        color: '#0B0F1F',
+                        textAlign: 'center',
+                    }}>
+                    {yoe ?? '—'}
+                  </div>
 
-                      
-                      {canShortlist && (<button type="button" disabled={busy} onClick={() => void handleReject(a)} style={{
-                                border: '1px solid #FCA5A5',
-                                background: '#FEF2F2',
-                                color: '#DC2626',
-                                borderRadius: 8,
-                                padding: '8px 12px',
-                                fontSize: 12,
-                                fontWeight: 500,
-                                cursor: busy ? 'default' : 'pointer',
-                                fontFamily: 'inherit',
-                            }}>
-                          Reject
-                        </button>)}
+                  
+                  <SpecialityTags specialities={tags} />
 
-                      
-                      {canMessage && (<button type="button" onClick={() => {
+                  
+                  <StatusBadge status={a.status} />
+
+                  
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <MessageBtn active={canMessage} onClick={canMessage
+                            ? () => {
                                 const href = `/host/messages?partnerId=${a.locumProfile.userId}`;
                                 beforeClientNavigation(href);
                                 router.push(href);
-                            }} style={{
-                                border: 'none',
-                                background: 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
-                                color: '#fff',
-                                borderRadius: 8,
-                                padding: '8px 14px',
-                                fontSize: 12,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                fontFamily: 'inherit',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6,
-                            }}>
-                          💬 Message
-                        </button>)}
-
-                      
-                      {(a.status === 'REJECTED' ||
-                            a.status === 'WITHDRAWN') && (<span style={{
-                                fontSize: 12,
-                                color: '#9CA3AF',
-                                padding: '8px 12px',
-                                border: '1px solid #E5E7EB',
-                                borderRadius: 8,
-                            }}>
-                          {a.status === 'REJECTED' ? 'Rejected' : 'Withdrawn'}
-                        </span>)}
+                            }
+                            : undefined}/>
                     </div>
-                  </div>);
-                })}
-            </div>))}
+                  </div>
+                </div>);
+            })}
+          </div>
         </div>)}
+
+      
+      {selected && (<>
+          <div onClick={() => setSelected(null)} style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(28, 50, 130, 0.45)',
+                zIndex: 220,
+            }}/>
+          <div style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                width: 420,
+                height: '100vh',
+                background: '#eef0fa',
+                zIndex: 221,
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
+                fontFamily: 'Inter, sans-serif',
+            }}>
+            
+            <div style={{
+                padding: '20px 18px 14px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-end',
+            }}>
+              <span style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 600,
+                fontSize: 20,
+                lineHeight: '140%',
+                color: '#0B0F1F',
+                textTransform: 'capitalize',
+              }}>
+                Professional Info
+              </span>
+              <button type="button" onClick={() => setSelected(null)} aria-label="Close" style={{
+                all: 'unset',
+                cursor: 'pointer',
+                width: 36,
+                height: 36,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <CloseIcon />
+              </button>
+            </div>
+
+            
+            <div style={{ padding: '0 18px 14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ShieldIcon />
+                  <span style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 600,
+                    fontSize: 18,
+                    lineHeight: '140%',
+                    color: '#0B0F1F',
+                    textTransform: 'capitalize',
+                  }}>
+                    {displayName(selected)}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 500,
+                    fontSize: 14,
+                    lineHeight: '140%',
+                    color: '#6B7280',
+                    textTransform: 'capitalize',
+                  }}>
+                    {(() => {
+                        const city = (selected.locumProfile as any).city as string | null | undefined;
+                        const prov = (selected.locumProfile as any).province as string | null | undefined;
+                        const loc = [city, prov].filter(Boolean).join(', ');
+                        return loc || 'Location pending';
+                    })()}
+                  </span>
+                  <span style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 500,
+                    fontSize: 14,
+                    lineHeight: '140%',
+                    color: '#6B7280',
+                  }}>
+                    CPSNS Number: {selected.locumProfile.cpsnsId}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <button type="button" disabled={!jobId || selected.status !== 'APPLIED'} onClick={async () => {
+                        if (!jobId)
+                            return;
+                        const app = selected;
+                        setActioning((prev) => new Set(prev).add(app.id));
+                        try {
+                            await hostApi.updateApplication(jobId, app.id, 'SHORTLISTED');
+                            setApps((prev) => prev.map((x) => x.id === app.id ? { ...x, status: 'SHORTLISTED' } : x));
+                            setSelected((prev) => prev ? { ...prev, status: 'SHORTLISTED' } : prev);
+                        }
+                        finally {
+                            setActioning((prev) => {
+                                const next = new Set(prev);
+                                next.delete(app.id);
+                                return next;
+                            });
+                        }
+                    }} style={{
+                        all: 'unset',
+                        cursor: jobId && selected.status === 'APPLIED' ? 'pointer' : 'default',
+                        boxSizing: 'border-box',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '10px 12px',
+                        height: 44,
+                        background: jobId && selected.status === 'APPLIED'
+                            ? 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)'
+                            : '#E5E7EB',
+                        borderRadius: 8,
+                    }}>
+                    <span style={{
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 500,
+                        fontSize: 14,
+                        lineHeight: '150%',
+                        color: jobId && selected.status === 'APPLIED' ? '#fff' : '#6B7280',
+                        textTransform: 'capitalize',
+                    }}>
+                      {selected.status === 'APPLIED' ? 'Shortlist' : 'Shortlisted'}
+                    </span>
+                  </button>
+
+                  <button type="button" onClick={statusToUi(selected.status) === 'shortlisted'
+                        ? () => {
+                            setComposeOpen(true);
+                            setComposeError(null);
+                            setComposeSent(false);
+                        }
+                        : undefined} style={{
+                        all: 'unset',
+                        cursor: statusToUi(selected.status) === 'shortlisted' ? 'pointer' : 'default',
+                        boxSizing: 'border-box',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '10px 12px',
+                        height: 44,
+                        border: `1px solid ${statusToUi(selected.status) === 'shortlisted' ? '#1C32D2' : 'rgba(107,114,128,0.5)'}`,
+                        borderRadius: 8,
+                    }}>
+                    <span style={{
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 500,
+                        fontSize: 14,
+                        lineHeight: '150%',
+                        color: statusToUi(selected.status) === 'shortlisted' ? '#1C32D2' : 'rgba(107,114,128,0.5)',
+                        textTransform: 'capitalize',
+                    }}>
+                      Message
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {composeOpen && statusToUi(selected.status) === 'shortlisted' && (<div style={{
+                    marginTop: 12,
+                    border: '1px solid #E5E7EB',
+                    borderRadius: 10,
+                    background: '#fff',
+                    padding: 12,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#0B0F1F' }}>Quick message</span>
+                    <button type="button" onClick={() => setComposeOpen(false)} style={{
+                            all: 'unset',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: '#6B7280',
+                        }}>
+                      Close
+                    </button>
+                  </div>
+
+                  {composeError && (<div style={{ fontSize: 12, color: '#DC2626' }}>{composeError}</div>)}
+                  {composeSent && !composeError && (<div style={{ fontSize: 12, color: '#059669', fontWeight: 600 }}>Sent</div>)}
+
+                  <textarea value={composeText} onChange={(e) => setComposeText(e.target.value)} placeholder="Type a message…" rows={3} style={{
+                        width: '100%',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: 8,
+                        padding: '10px 12px',
+                        fontSize: 13,
+                        fontFamily: 'inherit',
+                        color: '#374151',
+                        resize: 'none',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        background: '#FAFAFA',
+                    }}/>
+
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                    <button type="button" onClick={() => {
+                            const href = `/host/messages?partnerId=${selected.locumProfile.userId}`;
+                            beforeClientNavigation(href);
+                            router.push(href);
+                        }} style={{
+                            padding: '9px 12px',
+                            borderRadius: 8,
+                            border: '1px solid #D0D5DD',
+                            background: '#fff',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                            color: '#374151',
+                        }}>
+                      Open Messages
+                    </button>
+
+                    <button type="button" disabled={composeSending || !composeText.trim()} onClick={() => {
+                            if (composeSending)
+                                return;
+                            const body = composeText.trim();
+                            if (!body)
+                                return;
+                            setComposeSending(true);
+                            setComposeError(null);
+                            setComposeSent(false);
+                            void (async () => {
+                                try {
+                                    await messageApi.sendMessage(selected.locumProfile.userId, body, jobId ?? undefined);
+                                    setComposeText('');
+                                    setComposeSent(true);
+                                }
+                                catch (e) {
+                                    setComposeError(e instanceof Error ? e.message : 'Could not send message.');
+                                }
+                                finally {
+                                    setComposeSending(false);
+                                }
+                            })();
+                        }} style={{
+                            padding: '9px 18px',
+                            borderRadius: 8,
+                            border: 'none',
+                            background: composeSending || !composeText.trim()
+                                ? '#D1D5DB'
+                                : 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
+                            fontSize: 13,
+                            fontWeight: 700,
+                            cursor: composeSending || !composeText.trim() ? 'default' : 'pointer',
+                            fontFamily: 'inherit',
+                            color: '#fff',
+                        }}>
+                      {composeSending ? 'Sending…' : 'Send'}
+                    </button>
+                  </div>
+                </div>)}
+            </div>
+
+            <div style={{ padding: '0 18px 18px', overflowY: 'auto', flex: 1 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <span style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 600,
+                    fontSize: 16,
+                    lineHeight: '140%',
+                    color: '#000',
+                    textTransform: 'capitalize',
+                  }}>
+                    About
+                  </span>
+                  <div>
+                    <p style={{
+                        margin: 0,
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 500,
+                        fontSize: 14,
+                        lineHeight: '150%',
+                        color: '#6B7280',
+                        ...(aboutExpanded
+                            ? {}
+                            : {
+                                display: '-webkit-box',
+                                WebkitBoxOrient: 'vertical' as const,
+                                WebkitLineClamp: 3,
+                                overflow: 'hidden',
+                            }),
+                    }}>
+                      {selected.locumProfile.summary || '—'}
+                    </p>
+                    {!!selected.locumProfile.summary &&
+                        selected.locumProfile.summary.trim().length > 0 && (<button type="button" onClick={() => setAboutExpanded((v) => !v)} style={{
+                            all: 'unset',
+                            cursor: 'pointer',
+                            display: 'inline-block',
+                            marginTop: 6,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: '#1C32D2',
+                        }}>
+                        {aboutExpanded ? 'Show less' : 'Show more'}
+                      </button>)}
+                  </div>
+                </div>
+
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <span style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 600,
+                    fontSize: 16,
+                    lineHeight: '140%',
+                    color: '#000',
+                    textTransform: 'capitalize',
+                  }}>
+                    Specialization
+                  </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                    {(() => {
+                        const specText = (selected.locumProfile as any).specializationText as string | null | undefined;
+                        void specText;
+                        return buildSpecialityTags(selected.locumProfile);
+                    })().map((s) => (<SpecTag key={s} label={s} />))}
+                  </div>
+                </div>
+
+                
+                {(() => {
+                    const docsRaw = Array.isArray((selected.locumProfile as any).documents)
+                        ? ((selected.locumProfile as any).documents as any[])
+                        : [];
+                    const { primary, additional } = splitDocs(docsRaw);
+                    const hasAny = primary.length > 0 || additional.length > 0;
+                    const primaryPlaceholders = [
+                        { key: 'CPSNS_LICENSE', label: 'CPSNS License' },
+                        { key: 'CV', label: 'Resume / CV' },
+                    ] as const;
+                    return (<div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          <span style={{
+                            fontFamily: 'Inter, sans-serif',
+                            fontWeight: 600,
+                            fontSize: 16,
+                            lineHeight: '140%',
+                            color: '#000',
+                            textTransform: 'capitalize',
+                        }}>
+                            Docs
+                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {primary.length > 0
+                                ? primary.map((d: any) => (<DocRow key={d.id} label={docLabel(String(d.documentType))} subtitle={String(d.fileName ?? '')} url={String(d.storageUrl ?? '#')} />))
+                                : primaryPlaceholders.map((p) => (<DocRow key={p.key} label={p.label} subtitle="No document uploaded" url={null} />))}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <span style={{
+                                fontFamily: 'Inter, sans-serif',
+                                fontWeight: 600,
+                                fontSize: 16,
+                                lineHeight: '140%',
+                                color: '#000',
+                                textTransform: 'capitalize',
+                            }}>
+                              Additional Docs
+                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {additional.length > 0
+                                    ? additional.map((d: any) => (<DocRow key={d.id} label={docLabel(String(d.documentType))} subtitle={String(d.fileName ?? '')} url={String(d.storageUrl ?? '#')} />))
+                                    : (<DocRow label="Additional Documents" subtitle="No document uploaded" url={null} />)}
+                            </div>
+                          </div>
+                      </div>);
+                })()}
+              </div>
+            </div>
+          </div>
+        </>)}
     </DashLayout>);
 }

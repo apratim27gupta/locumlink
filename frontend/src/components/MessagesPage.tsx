@@ -324,6 +324,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const [loadingConvs, setLoadingConvs] = useState(true);
     const [loadingThread, setLoadingThread] = useState(false);
     const [sending, setSending] = useState(false);
+    const [sendError, setSendError] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editBody, setEditBody] = useState('');
     const [savingEdit, setSavingEdit] = useState(false);
@@ -478,6 +479,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         if (!body && pendingFiles.length === 0)
             return;
         setSending(true);
+        setSendError(null);
         setMessageText('');
         try {
             const attachments = pendingFiles.length > 0
@@ -497,8 +499,9 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             setPendingFiles([]);
             void loadConversations();
         }
-        catch {
+        catch (e: unknown) {
             setMessageText(body);
+            setSendError(e instanceof Error ? e.message : 'Could not send message. Please try again.');
         }
         finally {
             setSending(false);
@@ -1448,6 +1451,17 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                 padding: '12px 16px',
                 flexShrink: 0,
             }}>
+              {sendError && (<div role="alert" style={{
+                    marginBottom: 10,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    background: '#FEF2F2',
+                    border: '1px solid #FECACA',
+                    fontSize: 12,
+                    color: '#991B1B',
+                }}>
+                  {sendError}
+                </div>)}
               {pendingFiles.length > 0 && (<div style={{
                     display: 'flex',
                     flexWrap: 'wrap',

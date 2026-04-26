@@ -9,7 +9,7 @@ import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
 import { computeAvatarInitials } from '@/lib/avatarInitials';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { isCpsnsVerified } from '@/lib/cpsnsVerify';
-import { ApiHttpError, hostApi, type Job, type ApplicationRecord, type DashboardStats, type CreateJobPayload, type LocumDocumentSnippet, } from '@/lib/api';
+import { ApiHttpError, authApi, hostApi, uploadFile, type Job, type ApplicationRecord, type DashboardStats, type CreateJobPayload, type LocumDocumentSnippet, } from '@/lib/api';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import type { HostProfile } from '@/types';
 import { BellIcon, BookIcon, EmptyIllustration, FileIcon, MessageIcon, PlusIcon, ProfileIcon, ShieldIcon, TrashIcon, UserEditIcon, } from './host-dashboard-icons';
@@ -521,7 +521,10 @@ function ApplicantSidePanel({ app, jobId, onClose, onShortlisted, onConfirmed, }
             textDecoration: 'none',
             pointerEvents: isShortlisted ? 'auto' : 'none',
         }}>
-              💬 Message
+              <span style={{ display: 'inline-flex', width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
+                <MessageIcon active={true} />
+              </span>
+              Message
             </Link>
             </div>
 
@@ -692,7 +695,7 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onAppli
             padding: '10px 16px',
             borderBottom: '1px solid #F3F4F6',
         }}>
-        {['', 'NAME', 'YRS EXP', 'CREDENTIALS', 'STATUS', ''].map((h, i) => (<span key={i} style={{
+        {['', 'NAME', 'YRS EXP', 'SPECIALIZATION', 'STATUS', ''].map((h, i) => (<span key={i} style={{
                 fontSize: 11,
                 fontWeight: 600,
                 color: '#9CA3AF',
@@ -793,7 +796,10 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onAppli
                         alignItems: 'center',
                         gap: 4,
                     }}>
-                💬 Message
+                <span style={{ display: 'inline-flex', width: 16, height: 16, alignItems: 'center', justifyContent: 'center' }}>
+                  <MessageIcon active={true} />
+                </span>
+                Message
               </button>
             </div>);
             })}
@@ -1538,7 +1544,7 @@ export default function HostDashboard(props: {
 }) {
     useNextPageClientProps(props);
     const router = useRouter();
-    const { profileComplete, isLoading: authLoading, userId } = useAuth();
+    const { profileComplete, isLoading: authLoading, userId, logout } = useAuth();
     const [mounted, setMounted] = useState(false);
     const [activeNav, setActiveNav] = useState('postings');
     const [activeTab, setActiveTab] = useState<'active' | 'ongoing' | 'recent' | 'draft'>('active');
@@ -1555,6 +1561,11 @@ export default function HostDashboard(props: {
     const [reopenTarget, setReopenTarget] = useState<Job | null>(null);
     const [profile, setProfile] = useState<HostProfile | null>(null);
     const [initialDashboardLoad, setInitialDashboardLoad] = useState(true);
+    const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+    const avatarMenuRef = useRef<HTMLDivElement>(null);
+    const avatarFileInputRef = useRef<HTMLInputElement>(null);
+    const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
+    const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null);
     const hostFirst = profile?.contactFirstName ?? '';
     const hostLast = profile?.contactLastName ?? '';
     const hostInitial = computeAvatarInitials(profile?.contactFirstName, profile?.contactLastName, profile?.clinicName);
@@ -1633,6 +1644,44 @@ export default function HostDashboard(props: {
         setMounted(true);
     }, []);
     useEffect(() => {
+        if (!mounted)
+            return;
+        if (!getToken())
+            return;
+        let cancelled = false;
+        void (async () => {
+            try {
+                const me = await authApi.getMe();
+                if (!cancelled)
+                    setAvatarPhotoUrl(me.avatarUrl);
+            }
+            catch {
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [mounted, userId]);
+    useEffect(() => {
+        if (!avatarMenuOpen)
+            return;
+        function onMouseDown(e: MouseEvent) {
+            if (avatarMenuRef.current?.contains(e.target as Node))
+                return;
+            setAvatarMenuOpen(false);
+        }
+        function onKeyDown(e: KeyboardEvent) {
+            if (e.key === 'Escape')
+                setAvatarMenuOpen(false);
+        }
+        document.addEventListener('mousedown', onMouseDown);
+        window.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', onMouseDown);
+            window.removeEventListener('keydown', onKeyDown);
+        };
+    }, [avatarMenuOpen]);
+    useEffect(() => {
         if (!mounted || authLoading)
             return;
         if (profileComplete === false) {
@@ -1652,6 +1701,11 @@ export default function HostDashboard(props: {
         }
         void loadDashboardFromApi();
     }, [mounted, authLoading, userId, loadDashboardFromApi, router]);
+    function handleLogout() {
+        logout();
+        beforeClientNavigation('/home');
+        router.replace('/home');
+    }
     const today = new Date();
     const activePosts = jobs.filter((j) => verified && j.status === 'ACTIVE');
     const draftJobs = jobs.filter((j) => j.status === 'DRAFT' || (!verified && j.status === 'ACTIVE'));
@@ -1803,23 +1857,130 @@ export default function HostDashboard(props: {
           <div style={{ width: 28, height: 28 }}>
             <BellIcon />
           </div>
-          <div style={{
-            width: 28,
-            height: 28,
-            borderRadius: '50%',
-            background: 'rgba(58,101,219,0.07)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-        }}>
-            <span style={{
-            fontFamily: 'Hanken Grotesk, Inter, sans-serif',
-            fontWeight: 700,
-            fontSize: 16,
-            color: '#0F2AAE',
-        }}>
-              {hostInitial}
-            </span>
+          <div ref={avatarMenuRef} style={{ position: 'relative' }}>
+            <input ref={avatarFileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: 'none' }} onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file)
+                    return;
+                if (!getToken())
+                    return;
+                const maxBytes = 5 * 1024 * 1024;
+                if (file.size > maxBytes) {
+                    window.alert('Image must be 5 MB or smaller.');
+                    return;
+                }
+                setAvatarUploadBusy(true);
+                void (async () => {
+                    try {
+                        const { path, signedUrl } = await uploadFile(file, 'avatars');
+                        await authApi.updateAvatar(path);
+                        setAvatarPhotoUrl(signedUrl);
+                        setAvatarMenuOpen(false);
+                    }
+                    catch (err) {
+                        window.alert(err instanceof Error
+                            ? err.message
+                            : 'Could not upload photo.');
+                    }
+                    finally {
+                        setAvatarUploadBusy(false);
+                    }
+                })();
+            }}/>
+            <div role="button" tabIndex={0} onClick={() => setAvatarMenuOpen((v) => !v)} onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ')
+                    setAvatarMenuOpen((v) => !v);
+            }} aria-label="Account menu" aria-expanded={avatarMenuOpen} style={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                background: avatarPhotoUrl ? 'transparent' : 'rgba(58,101,219,0.07)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                userSelect: 'none',
+                overflow: 'hidden',
+                border: avatarPhotoUrl ? '1px solid rgba(0,0,0,0.06)' : 'none',
+            }}>
+              {avatarPhotoUrl ? (<img src={avatarPhotoUrl} alt="" width={28} height={28} style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block',
+                }}/>) : (<span style={{
+                    fontFamily: 'Hanken Grotesk, Inter, sans-serif',
+                    fontWeight: 700,
+                    fontSize: 16,
+                    color: '#0F2AAE',
+                }}>
+                  {hostInitial}
+                </span>)}
+            </div>
+
+            {avatarMenuOpen && (<div role="menu" style={{
+                position: 'absolute',
+                top: 36,
+                right: 0,
+                minWidth: 210,
+                background: '#fff',
+                border: '1px solid #E5E7EB',
+                borderRadius: 10,
+                boxShadow: '0 10px 26px rgba(15, 23, 42, 0.12)',
+                padding: 6,
+                zIndex: 120,
+                overflow: 'hidden',
+            }}>
+                <button type="button" role="menuitem" disabled={avatarUploadBusy || !getToken()} onClick={() => avatarFileInputRef.current?.click()} style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 10px',
+                    cursor: avatarUploadBusy || !getToken() ? 'default' : 'pointer',
+                    color: '#0f1523',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    textAlign: 'left',
+                    opacity: avatarUploadBusy || !getToken() ? 0.55 : 1,
+                    fontFamily: 'inherit',
+                }} onMouseOver={(e) => {
+                    if (!avatarUploadBusy && getToken())
+                        e.currentTarget.style.background = '#F3F4F6';
+                }} onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  {avatarUploadBusy
+                        ? 'Uploading…'
+                        : avatarPhotoUrl
+                            ? 'Change profile picture'
+                            : 'Set profile picture'}
+                </button>
+                <button type="button" role="menuitem" onClick={() => {
+                    setAvatarMenuOpen(false);
+                    handleLogout();
+                }} style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 10px',
+                    cursor: 'pointer',
+                    color: '#dc2626',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    textAlign: 'left',
+                    borderTop: '1px solid #F3F4F6',
+                    fontFamily: 'inherit',
+                }} onMouseOver={(e) => (e.currentTarget.style.background = '#FEF2F2')} onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  Logout
+                </button>
+              </div>)}
           </div>
         </div>
       </nav>

@@ -2,12 +2,16 @@ import type { HostProfile, LocumProfile } from '@/types';
 import type { Role } from '@/lib/auth';
 import { getToken, clearSession, syncCookies } from '@/lib/auth';
 import { startLoader, stopLoader } from '@/lib/topLoader';
-const NEST_BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+const NEST_BASE = (typeof window === 'undefined'
+    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+    : '');
 function networkFetchError(label: string, err: unknown): Error {
     const isProd = process.env.NODE_ENV === 'production';
-    const baseHint = isProd && (!process.env.NEXT_PUBLIC_API_URL || /localhost/.test(NEST_BASE))
-        ? ` (check Vercel env NEXT_PUBLIC_API_URL; current base is "${NEST_BASE}")`
-        : ` (base: "${NEST_BASE}")`;
+    const baseHint = NEST_BASE
+        ? (isProd && (!process.env.NEXT_PUBLIC_API_URL || /localhost/.test(NEST_BASE))
+            ? ` (check Vercel env NEXT_PUBLIC_API_URL; current base is "${NEST_BASE}")`
+            : ` (base: "${NEST_BASE}")`)
+        : ' (base: same-origin)';
     const msg = err instanceof Error && err.message
         ? err.message
         : 'Failed to fetch (network error)';

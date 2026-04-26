@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, } from '@nestjs/common';
-import { Specialty, type LocumProfile as LocumProfileRow, } from '@prisma/client';
+import { DocumentType, Specialty, type LocumProfile as LocumProfileRow, } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { isCpsnsVerified, normalizeCpsns, } from '../cpsns/cpsns-verified.js';
 import type { SaveLocumProfileDto } from './locum.dto.js';
@@ -173,6 +173,38 @@ export class LocumService {
                 extraFileName: dto.extraFileName?.trim() ?? null,
             },
         });
+        const docInputs = [
+            {
+                type: DocumentType.CPSNS_LICENSE,
+                storageUrl: dto.licenseFileName?.trim() || '',
+            },
+            {
+                type: DocumentType.CV,
+                storageUrl: dto.resumeFileName?.trim() || '',
+            },
+            {
+                type: DocumentType.OTHER,
+                storageUrl: dto.extraFileName?.trim() || '',
+            },
+        ] as const;
+        await Promise.all(docInputs.map(async (d) => {
+            await this.prisma.document.deleteMany({
+                where: { locumProfileId: profile.id, documentType: d.type },
+            });
+            if (!d.storageUrl)
+                return;
+            const fileName = d.storageUrl.split('/').pop() || d.storageUrl;
+            await this.prisma.document.create({
+                data: {
+                    locumProfileId: profile.id,
+                    documentType: d.type,
+                    storageUrl: d.storageUrl,
+                    fileName,
+                    mimeType: 'application/octet-stream',
+                    sizeBytes: 0,
+                },
+            });
+        }));
         return { success: true, profile: this.mapProfileToApi(profile) };
     }
     async getProfile(userId: string) {

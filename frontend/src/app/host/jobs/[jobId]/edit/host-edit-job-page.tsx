@@ -2,30 +2,12 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
-import DashLayout, { NavIcon } from '@/components/DashLayout';
+import HostDashboard from '@/app/host/dashboard/host-dashboard-page';
 import { hostApi } from '@/lib/api';
 import { useHostProfile } from '@/hooks/useHostProfile';
 import { isCpsnsVerified } from '@/lib/cpsnsVerify';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
-const NAV = [
-    {
-        label: 'My Postings',
-        href: '/host/dashboard',
-        icon: <NavIcon name="postings"/>,
-    },
-    { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile"/> },
-    {
-        label: 'Messages',
-        href: '/host/messages',
-        icon: <NavIcon name="messages"/>,
-    },
-    {
-        label: 'Resources',
-        href: '/host/resources',
-        icon: <NavIcon name="resources"/>,
-    },
-];
 const inp: React.CSSProperties = {
     width: '100%',
     padding: '10px 12px',
@@ -295,9 +277,30 @@ export default function HostEditJobPage(props: {
         }
     }
     if (!jobId) {
-        return (<DashLayout navItems={NAV} activeHref="/host/dashboard" topbarFirstName={profile?.contactFirstName} topbarLastName={profile?.contactLastName}>
-        <p style={{ color: '#dc2626' }}>Invalid job link.</p>
-      </DashLayout>);
+        return (<>
+      <HostDashboard />
+      <div style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 250,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+            }}>
+        <div style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1px solid #FECACA',
+                    background: '#FEF2F2',
+                    color: '#991B1B',
+                    fontSize: 13,
+                    fontFamily: 'Inter, sans-serif',
+                }}>
+          Invalid job link.
+        </div>
+      </div>
+    </>);
     }
     const editOverlay = (<>
       
@@ -307,7 +310,7 @@ export default function HostEditJobPage(props: {
         }} style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(28,50,130,0.45)',
+            background: 'rgba(28, 50, 130, 0.45)',
             zIndex: 200,
         }}/>
       <div style={{
@@ -634,9 +637,7 @@ export default function HostEditJobPage(props: {
       </div>
     </>);
     return (<>
-      <DashLayout navItems={NAV} activeHref="/host/dashboard" topbarFirstName={profile?.contactFirstName} topbarLastName={profile?.contactLastName}>
-        {null}
-      </DashLayout>
+      <HostDashboard />
       {overlayMounted ? createPortal(editOverlay, document.body) : null}
     </>);
 }

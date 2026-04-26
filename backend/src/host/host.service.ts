@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, } from '@nestjs/common';
 import { PostingStatus } from '@prisma/client';
+import { GcsService } from '../gcs/gcs.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SaveHostProfileDto, CreateJobDto, UpdateJobDto } from './host.dto.js';
 import { normalizeCpsns } from '../cpsns/cpsns-verified.js';
 @Injectable()
 export class HostService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(private readonly prisma: PrismaService, private readonly gcs: GcsService) { }
     private toHostProfileData(userId: string, dto: SaveHostProfileDto) {
         const rawCpsns = dto.cpsnsNumber?.trim() ?? '';
         const cpsnsDigits = rawCpsns ? normalizeCpsns(rawCpsns) : '';
@@ -319,8 +320,11 @@ export class HostService {
                         userId: true,
                         cpsnsId: true,
                         specialty: true,
+                        specializationText: true,
                         summary: true,
                         yearsOfExperience: true,
+                        city: true,
+                        province: true,
                         documents: {
                             select: {
                                 id: true,
@@ -334,7 +338,21 @@ export class HostService {
                 },
             },
         });
-        return { applications };
+        const withSignedDocs = await Promise.all(applications.map(async (a) => {
+            const docs = Array.isArray(a.locumProfile?.documents) ? a.locumProfile.documents : [];
+            const signed = await Promise.all(docs.map(async (d) => ({
+                ...d,
+                storageUrl: await this.gcs.signedUrl(d.storageUrl),
+            })));
+            return {
+                ...a,
+                locumProfile: {
+                    ...a.locumProfile,
+                    documents: signed,
+                },
+            };
+        }));
+        return { applications: withSignedDocs };
     }
     async updateApplication(userId: string, jobId: string, appId: string, status: 'SHORTLISTED' | 'REJECTED' | 'CONFIRMED') {
         const hostProfileId = await this.getHostProfileId(userId);
