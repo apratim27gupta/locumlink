@@ -9,6 +9,21 @@ const PUBLIC_PREFIXES = [
 ];
 export function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
+    // Separate admin entrypoint:
+    // - /admin/login is public
+    // - all other /admin routes require the admin cookie (NOT the normal ll_access cookie)
+    if (pathname === '/admin/login' || pathname.startsWith('/admin/login/')) {
+        return NextResponse.next();
+    }
+    if (pathname.startsWith('/admin')) {
+        const adminToken = req.cookies.get('ll_admin')?.value;
+        if (!adminToken) {
+            const url = new URL('/admin/login', req.url);
+            url.searchParams.set('next', pathname);
+            return NextResponse.redirect(url);
+        }
+        return NextResponse.next();
+    }
     if (PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
         pathname.startsWith('/_next') ||
         pathname.startsWith('/api') ||
@@ -41,5 +56,5 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
 }
 export const config = {
-    matcher: ['/host/:path*', '/locum/:path*', '/dashboard/:path*'],
+    matcher: ['/host/:path*', '/locum/:path*', '/dashboard/:path*', '/admin/:path*'],
 };

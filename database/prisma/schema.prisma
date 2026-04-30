@@ -381,3 +381,15 @@ model Otp {
   @@index([email])
   @@map("otps")
 }
+
+// Separate table for Admin authentication/authorization.
+// Do NOT mix admin accounts with the main User table.
+model Admin {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+
+  @@map("admins")
+}

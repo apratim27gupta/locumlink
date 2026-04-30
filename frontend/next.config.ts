@@ -2,7 +2,7 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
     reactStrictMode: true,
     async rewrites() {
-        return [{ source: '/favicon.ico', destination: '/logo.png' }];
+        return [{ source: '/favicon.ico', destination: '/logo1.png' }];
     },
     webpack: (config, { dev, isServer }) => {
         if (dev && !isServer) {

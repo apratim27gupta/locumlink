@@ -2,10 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module.js';
 import { PrismaClientKnownExceptionFilter } from './prisma/prisma-client-exception.filter.js';
+import cookieParser from 'cookie-parser';
 async function bootstrap(): Promise<void> {
     const app = await NestFactory.create(AppModule);
     const config = app.get(ConfigService);
     app.useGlobalFilters(new PrismaClientKnownExceptionFilter());
+    app.use(cookieParser());
     const nodeEnv = config.get<string>('NODE_ENV', 'development');
     let corsOrigin: boolean | string[];
     if (nodeEnv === 'production') {

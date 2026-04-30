@@ -3,6 +3,7 @@ import { ReactNode, useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
+import Logo from '@/components/Logo';
 import { useAuth } from '@/providers/AuthProvider';
 import { computeAvatarInitials, initialsFromSupabaseUser, } from '@/lib/avatarInitials';
 import { getRole, getToken } from '@/lib/auth';
@@ -228,28 +229,14 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '10px 24px',
+            height: 76,
+            padding: '0 24px',
             background: '#fff',
             borderBottom: '1px solid #e2e5ee',
             flexShrink: 0,
         }}>
-        <Link href="/home" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            textDecoration: 'none',
-        }}>
-          <Image src="/logo.png" alt="" width={36} height={36} priority style={{ objectFit: 'contain' }}/>
-          <span style={{
-            fontFamily: 'Gilroy-Black, Outfit, sans-serif',
-            fontWeight: 400,
-            fontSize: 27,
-            lineHeight: '27px',
-            textTransform: 'capitalize',
-        }}>
-            <span style={{ color: '#0F2A7A' }}>Locum </span>
-            <span style={{ color: '#30C6C6' }}>Link</span>
-          </span>
+        <Link href="/home" style={{ textDecoration: 'none' }}>
+          <Logo size="md" />
         </Link>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -620,7 +607,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     width: '100%',
                     maxWidth: 212,
                     height: 44,
-                    padding: '12px 12px 12px 8px',
+                    padding: '10px 12px 10px 8px',
                     background: active
                         ? 'rgba(130,173,237,0.2)'
                         : 'transparent',
@@ -661,7 +648,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     fontFamily: 'Gilroy-Medium, Inter, sans-serif',
                     fontWeight: 400,
                     fontSize: 16,
-                    lineHeight: '100%',
+                    lineHeight: '20px',
                     textTransform: 'capitalize',
                     whiteSpace: 'nowrap',
                     ...(active

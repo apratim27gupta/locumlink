@@ -145,6 +145,9 @@ export default function HostProfilePage(props: {
     useNextPageClientProps(props);
     const { profile, loading, saveProfile, saving } = useHostProfile();
     const verified = isCpsnsVerified(profile?.cpsnsNumber);
+    const welcomeDoctorLabel = profile?.contactFirstName || profile?.contactLastName
+        ? `Dr ${(profile?.contactFirstName ?? '').trim()} ${(profile?.contactLastName ?? '').trim()}`.trim()
+        : '';
     const [clinicName, setClinicName] = useState('');
     const [contactFirst, setContactFirst] = useState('');
     const [contactLast, setContactLast] = useState('');
@@ -269,10 +272,12 @@ export default function HostProfilePage(props: {
             clearTimeout(hostCityBlurTimer.current);
         }
     }, []);
+    const derivedContactFirst = (contactFirst || hostFirst).trim();
+    const derivedContactLast = (contactLast || hostLast).trim();
     const progressPct = hostProfileCompletionPct({
         clinicName,
-        contactFirstName: contactFirst,
-        contactLastName: contactLast,
+        contactFirstName: derivedContactFirst,
+        contactLastName: derivedContactLast,
         cpsnsNumber: cpsns,
         speciality: specialties.join(', '),
         address1: addr1,
@@ -295,7 +300,7 @@ export default function HostProfilePage(props: {
             ? 'verified'
             : 'underReview';
     const completionTitle = !allDone
-        ? 'Finish setting up your profile to start finding practitioners'
+        ? 'Complete your profile to find Locums'
         : verified
             ? 'Your profile is complete and verified'
             : 'Your profile is complete — CPSNS under verification';
@@ -306,8 +311,8 @@ export default function HostProfilePage(props: {
             : '100% completed · Awaiting manual CPSNS verification';
     const stepComplete = [
         !!(clinicName &&
-            contactFirst &&
-            contactLast &&
+            derivedContactFirst &&
+            derivedContactLast &&
             isCpsnsNineDigitsFormat(cpsns) &&
             specialties.length),
         !!(addr1 && postal && city && province),
@@ -347,8 +352,8 @@ export default function HostProfilePage(props: {
         setSaveError('');
         const data: HostProfile = {
             clinicName,
-            contactFirstName: contactFirst,
-            contactLastName: contactLast,
+            contactFirstName: derivedContactFirst,
+            contactLastName: derivedContactLast,
             cpsnsNumber: cpsns,
             speciality: specialties.join(', '),
             licenseFile,
@@ -416,7 +421,7 @@ export default function HostProfilePage(props: {
             textTransform: 'capitalize',
             color: '#0B0F1F',
         }}>
-            Welcome
+            Welcome{welcomeDoctorLabel ? ` ${welcomeDoctorLabel}` : ''}
           </div>
           <div style={{
             position: 'absolute',
@@ -734,53 +739,6 @@ export default function HostProfilePage(props: {
             outline: 'none',
             fontFamily: 'Inter, sans-serif',
         }} value={clinicName} onChange={(e) => setClinicName(e.target.value)} placeholder="Enter clinic name"/>
-              </div>
-
-              <div style={{
-            flex: '1 1 0%',
-            minWidth: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-        }}>
-                <label style={{
-            fontSize: 20,
-            fontWeight: 500,
-            lineHeight: '140%',
-            color: 'rgba(11, 15, 31, 0.8)',
-        }}>
-                  Contact Person
-                </label>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <input style={{
-            flex: 1,
-            minWidth: 0,
-            height: 44,
-            padding: '6px 8px',
-            border: '1px solid #D0D5DD',
-            borderRadius: 4,
-            fontSize: 16,
-            fontWeight: 400,
-            color: '#0B0F1F',
-            background: '#fff',
-            outline: 'none',
-            fontFamily: 'Inter, sans-serif',
-        }} value={contactFirst} onChange={(e) => setContactFirst(e.target.value)} placeholder="First name"/>
-                  <input style={{
-            flex: 1,
-            minWidth: 0,
-            height: 44,
-            padding: '6px 8px',
-            border: '1px solid #D0D5DD',
-            borderRadius: 4,
-            fontSize: 16,
-            fontWeight: 400,
-            color: '#0B0F1F',
-            background: '#fff',
-            outline: 'none',
-            fontFamily: 'Inter, sans-serif',
-        }} value={contactLast} onChange={(e) => setContactLast(e.target.value)} placeholder="Last name"/>
-                </div>
               </div>
             </div>
           </div>
@@ -1493,10 +1451,11 @@ export default function HostProfilePage(props: {
         }}>
                   Practice Type
                 </label>
-                <select style={{
+                <div style={{ position: 'relative' }}>
+                  <select style={{
             width: '100%',
             height: 44,
-            padding: '6px 8px',
+            padding: '6px 36px 6px 8px',
             border: '1px solid rgba(21, 20, 20, 0.2)',
             borderRadius: 4,
             fontFamily: 'Inter, sans-serif',
@@ -1521,7 +1480,19 @@ export default function HostProfilePage(props: {
                   <option value="Nurse Practitioner (NP) Clinic">
                     Nurse Practitioner (NP) Clinic
                   </option>
+                  <option value="More">More</option>
                 </select>
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{
+            position: 'absolute',
+            right: 10,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            pointerEvents: 'none',
+            color: '#6B7280',
+        }} aria-hidden="true">
+                    <path d="M4.5 6.75L9 11.25l4.5-4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={{
@@ -1544,7 +1515,7 @@ export default function HostProfilePage(props: {
             color: '#0B0F1F',
             background: '#fff',
             outline: 'none',
-        }} value={numPhysicians} onChange={(e) => setNumPhysicians(e.target.value)} placeholder="Physician"/>
+        }} value={numPhysicians} onChange={(e) => setNumPhysicians(e.target.value)} placeholder="..."/>
               </div>
             </div>
 
@@ -1571,7 +1542,7 @@ export default function HostProfilePage(props: {
             color: '#0B0F1F',
             background: '#fff',
             outline: 'none',
-        }} value={emr} onChange={(e) => setEmr(e.target.value)} placeholder="Physician"/>
+        }} value={emr} onChange={(e) => setEmr(e.target.value)} placeholder="..."/>
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={{
@@ -1594,7 +1565,7 @@ export default function HostProfilePage(props: {
             color: '#0B0F1F',
             background: '#fff',
             outline: 'none',
-        }} value={patientVol} onChange={(e) => setPatientVol(e.target.value)} placeholder="Physician"/>
+        }} value={patientVol} onChange={(e) => setPatientVol(e.target.value)} placeholder="..."/>
               </div>
             </div>
 
@@ -1623,7 +1594,7 @@ export default function HostProfilePage(props: {
             outline: 'none',
             resize: 'vertical',
             lineHeight: '140%',
-        }} value={clinicDesc} onChange={(e) => setClinicDesc(e.target.value)} placeholder="Physician"/>
+        }} value={clinicDesc} onChange={(e) => setClinicDesc(e.target.value)} placeholder="..."/>
               </div>
             </div>
           </div>
@@ -1754,7 +1725,7 @@ export default function HostProfilePage(props: {
             lineHeight: '140%',
             color: 'rgba(11, 15, 31, 0.8)',
         }}>
-                Accommodation provided for Locum physicians
+                Accommodation provided for Locum
               </span>
             </label>
           </div>

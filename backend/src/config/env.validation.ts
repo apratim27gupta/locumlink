@@ -67,6 +67,31 @@ class EnvironmentVariables {
     @IsString()
     @IsOptional()
     ALLOWED_ORIGINS: string = 'http://localhost:3001';
+
+    // Admin OAuth (Google) + separate Admin JWT
+    @IsString()
+    @IsOptional()
+    ADMIN_JWT_SECRET?: string;
+
+    @IsString()
+    @IsOptional()
+    ADMIN_JWT_EXPIRES_IN: string = '7d';
+
+    @IsString()
+    @IsOptional()
+    GOOGLE_ADMIN_CLIENT_ID?: string;
+
+    @IsString()
+    @IsOptional()
+    GOOGLE_ADMIN_CLIENT_SECRET?: string;
+
+    @IsUrl({ require_tld: false })
+    @IsOptional()
+    GOOGLE_ADMIN_CALLBACK_URL?: string;
+
+    @IsUrl({ require_tld: false })
+    @IsOptional()
+    ADMIN_FRONTEND_REDIRECT_URL: string = 'http://localhost:3001/admin/dashboard';
 }
 export function validate(config: Record<string, unknown>) {
     const validatedConfig = plainToInstance(EnvironmentVariables, config, {
