@@ -33,7 +33,8 @@
     "prisma:studio": "prisma studio --schema=database/prisma/schema.prisma",
     "db:up": "docker compose up -d",
     "db:prepare": "npm run db:up && npx prisma migrate deploy --schema=database/prisma/schema.prisma",
-    "db:down": "docker compose down"
+    "db:down": "docker compose down",
+    "db:seed:admin": "node database/seed-admin.mjs"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",

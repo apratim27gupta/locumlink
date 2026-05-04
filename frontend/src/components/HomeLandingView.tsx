@@ -1,6 +1,7 @@
 'use client';
 import Image from 'next/image';
 import Link from 'next/link';
+import Logo from '@/components/Logo';
 export type HomeLandingViewProps = {
     interactive?: boolean;
     hasSignedUp?: boolean;
@@ -35,19 +36,7 @@ export function HomeLandingView({ interactive = true, hasSignedUp = false, rootS
             borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
             zIndex: 10,
         }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Image src="/logo.png" alt="Locum Link" width={36} height={36} priority style={{ objectFit: 'contain' }}/>
-          <span style={{
-            fontFamily: 'Gilroy-Black, Outfit, sans-serif',
-            fontWeight: 900,
-            fontSize: 27,
-            lineHeight: '27px',
-            letterSpacing: 0,
-        }}>
-            <span style={{ color: '#0F2A7A' }}>Locum </span>
-            <span style={{ color: '#38C6C6' }}>Link</span>
-          </span>
-        </div>
+        <Logo size="md" />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
           {interactive ? (<>

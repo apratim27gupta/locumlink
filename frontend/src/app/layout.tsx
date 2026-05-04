@@ -21,8 +21,8 @@ export const metadata: Metadata = {
     title: 'Locum Link - Connect. Cover. Care.',
     description: 'Find a Locum within 2 days, without agencies or endless calls.',
     icons: {
-        icon: '/logo.png',
-        apple: '/logo.png',
+        icon: '/logo1.png',
+        apple: '/logo1.png',
     },
 };
 export default function RootLayout({ children, }: {

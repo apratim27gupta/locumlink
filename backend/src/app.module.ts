@@ -15,6 +15,8 @@ import { LocumModule } from './locum/locum.module.js';
 import { MessageModule } from './message/message.module.js';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard.js';
 import { validate } from './config/env.validation.js';
+import { AdminAuthModule } from './admin-auth/admin-auth.module.js';
+import { AdminModule } from './admin/admin.module.js';
 @Module({
     imports: [
         ConfigModule.forRoot({
@@ -45,6 +47,8 @@ import { validate } from './config/env.validation.js';
         NotificationsModule,
         UploadModule,
         GcsModule,
+        AdminAuthModule,
+        AdminModule,
     ],
     providers: [
         {

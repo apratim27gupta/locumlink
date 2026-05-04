@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Logo from '@/components/Logo';
 import { getToken } from '@/lib/auth';
 import { useAuth } from '@/providers/AuthProvider';
 import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
@@ -25,7 +26,7 @@ const TABS = [
     { id: 'recent', label: 'Recent Jobs' },
     { id: 'draft', label: 'Draft Jobs' },
 ];
-const NAVBAR_HEIGHT = 72;
+const NAVBAR_HEIGHT = 76;
 const CREDENTIAL_OPTIONS = [
     'CPSNS Full License',
     'CFPC Eligible',
@@ -1831,27 +1832,12 @@ export default function HostDashboard(props: {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '0 28px',
+            padding: '0 24px',
             background: '#FFFFFF',
             borderBottom: '2px solid rgba(0,0,0,0.1)',
         }}>
-        <Link href="/home" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            textDecoration: 'none',
-        }}>
-          <Image src="/logo.png" alt="" width={40} height={40} priority style={{ objectFit: 'contain' }}/>
-          <span style={{
-            fontFamily: 'Gilroy-Black, Outfit, sans-serif',
-            fontWeight: 400,
-            fontSize: 28,
-            lineHeight: '28px',
-            textTransform: 'capitalize',
-        }}>
-            <span style={{ color: '#0F2A7A' }}>Locum </span>
-            <span style={{ color: '#30C6C6' }}>Link</span>
-          </span>
+        <Link href="/home" style={{ textDecoration: 'none' }}>
+          <Logo size="md" />
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 28, height: 28 }}>
@@ -2040,10 +2026,8 @@ export default function HostDashboard(props: {
                     gap: 8,
                     width: '100%',
                     maxWidth: 212,
-                    height: isActive ? 44 : 20,
-                    padding: isActive
-                        ? '12px 12px 12px 8px'
-                        : '0px 12px 0px 8px',
+                    height: 44,
+                    padding: '10px 12px 10px 8px',
                     background: isActive
                         ? 'rgba(130,173,237,0.2)'
                         : 'transparent',
@@ -2066,7 +2050,7 @@ export default function HostDashboard(props: {
                     fontFamily: 'Gilroy-Medium, Inter, sans-serif',
                     fontWeight: 400,
                     fontSize: 16,
-                    lineHeight: '100%',
+                    lineHeight: '20px',
                     textTransform: 'capitalize',
                     whiteSpace: 'nowrap',
                     ...(isActive
