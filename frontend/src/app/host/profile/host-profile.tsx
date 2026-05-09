@@ -719,130 +719,8 @@ export default function HostProfilePage(props: {
           </div>
 
           
-          <div style={{ width: '100%' }}>
-            <p style={subsectionHeading}>
-              Clinic Information
-            </p>
 
-            <div style={{ display: 'flex', flexDirection: 'row', gap: 40 }}>
-              <div style={{
-            width: 524,
-            maxWidth: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-        }}>
-                <label style={lbl}>
-                  Clinic name
-                </label>
-                <input style={fieldInput} value={clinicName} onChange={(e) => setClinicName(e.target.value)} placeholder="Enter clinic name"/>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ width: '100%', height: 1, background: '#EBEBEB' }}/>
-
-          
-          <div style={{
-            width: '100%',
-            display: 'flex',
-            gap: 40,
-            alignItems: 'stretch',
-            flex: '1 1 auto',
-            minHeight: 560,
-        }}>
-            <div style={{
-            flex: '1 1 0%',
-            minWidth: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 20,
-        }}>
-              <p style={subsectionHeading}>
-                Host Doctors
-              </p>
-
-              <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '12px 12px',
-            background: 'rgba(115, 177, 251, 0.12)',
-            borderRadius: 2,
-            gap: 12,
-        }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{
-            width: 46,
-            height: 46,
-            background: avatarPhotoUrl ? 'transparent' : '#EEF6FF',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            overflow: 'hidden',
-        }}>
-                    {avatarPhotoUrl ? (<img src={avatarPhotoUrl} alt="" width={46} height={46} style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: 'block',
-            }}/>) : (<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-                        <circle cx="12" cy="8" r="4" stroke="#0f1523" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M4 20c0-3.866 3.582-7 8-7s8 3.134 8 7" stroke="#0f1523" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>)}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span style={{
-            fontFamily: 'Inter, sans-serif',
-            fontSize: 15,
-            fontWeight: 600,
-            color: '#0f1523',
-            lineHeight: 1,
-        }}>
-                      {hostFirst || hostLast
-            ? `${hostFirst} ${hostLast}`.trim()
-            : 'Host Doctor 1'}
-                    </span>
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 400, color: '#6B7280' }}>
-                      Just Now
-                    </span>
-                  </div>
-                </div>
-
-                <button type="button" onClick={(e) => e.stopPropagation()} style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '8px 16px',
-            height: 44,
-            border: '1px solid #3A65DB',
-            borderRadius: 3,
-            background: 'transparent',
-            fontFamily: 'Inter, sans-serif',
-            fontSize: 14,
-            fontWeight: 500,
-            color: '#3A65DB',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-        }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-                    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Add Host
-                </button>
-              </div>
-            </div>
-
-            <div style={{
-            flex: '1 1 0%',
-            minWidth: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 20,
-        }}>
+          <div style={{ width: '100%', maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 20 }}>
               
               <div style={{
             width: '100%',
@@ -1116,7 +994,6 @@ export default function HostProfilePage(props: {
                     </span>))}
                 </div>
               </div>
-            </div>
           </div>
         </div>
 
@@ -1130,11 +1007,11 @@ export default function HostProfilePage(props: {
           
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: '#0f1523' }} aria-hidden>
-              <path d="M12 2C8.134 2 5 5.134 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <circle cx="12" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+              <path d="M9 21V12h6v9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             <span style={cardHeaderTitle}>
-              Clinic Location
+              Clinic Information
             </span>
           </div>
 
@@ -1145,7 +1022,11 @@ export default function HostProfilePage(props: {
             gap: 20,
             width: '100%',
         }}>
-            
+            <div style={{ width: 524, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={lbl}>Clinic name</label>
+              <input style={fieldInput} value={clinicName} onChange={(e) => setClinicName(e.target.value)} placeholder="Enter clinic name"/>
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'row', gap: 80, width: '100%' }}>
               <div style={{ width: 524, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={lbl}>
