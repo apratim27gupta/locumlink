@@ -331,6 +331,17 @@ export default function HostProfilePage(props: {
         document.addEventListener('mousedown', onDocMouseDown);
         return () => document.removeEventListener('mousedown', onDocMouseDown);
     }, []);
+    useEffect(() => {
+        const onDocMouseDown = (e: MouseEvent) => {
+            const t = e.target as Node;
+            const specialtyBtn = document.getElementById('specialty-dropdown-btn');
+            const specialtyMenu = document.getElementById('specialty-dropdown-menu');
+            if (specialtyBtn?.contains(t) || specialtyMenu?.contains(t)) return;
+            setSpecialtyDropdownOpen(false);
+        };
+        document.addEventListener('mousedown', onDocMouseDown);
+        return () => document.removeEventListener('mousedown', onDocMouseDown);
+    }, []);
     useEffect(() => () => {
         if (hostCityBlurTimer.current != null) {
             clearTimeout(hostCityBlurTimer.current);
@@ -704,7 +715,7 @@ export default function HostProfilePage(props: {
             stepSectionRefs.current[0] = el;
         }} style={{
             ...sectionCard(activeStep === 1, { gap: 24 }),
-            minHeight: 820,
+            minHeight: 680,
             scrollMarginTop: 20,
         }} onClick={() => goToStep(1)}>
           
@@ -751,7 +762,7 @@ export default function HostProfilePage(props: {
                 <label style={lbl}>
                   CPSNS Number *
                 </label>
-                <input style={fieldInput} inputMode="numeric" autoComplete="off" maxLength={9} value={cpsns} onChange={(e) => setCpsns(sanitizeCpsnsInput(e.target.value))} placeholder="9-digit number"/>
+                <input style={fieldInput} inputMode="numeric" autoComplete="off" maxLength={9} value={cpsns} onChange={(e) => setCpsns(sanitizeCpsnsInput(e.target.value))} placeholder="CPSNS Number"/>
               </div>
 
               
@@ -842,7 +853,7 @@ export default function HostProfilePage(props: {
                         <path d="M9 14h6" stroke="#3B4FD8" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                       <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#9CA3AF' }}>
-                        {uploading ? 'Uploading…' : 'Upload CPSNS Certificate'}
+                        {uploading ? 'Uploading…' : 'Upload CPSNS License'}
                       </span>
                     </button>
                   </>)}
@@ -855,7 +866,7 @@ export default function HostProfilePage(props: {
                 </label>
 
                 <div style={{ position: 'relative' }}>
-                  <button type="button" onClick={(e) => {
+                  <button id="specialty-dropdown-btn" type="button" onClick={(e) => {
             e.stopPropagation();
             setSpecialtyDropdownOpen((v) => !v);
         }} style={{
@@ -890,7 +901,7 @@ export default function HostProfilePage(props: {
                     </svg>
                   </button>
 
-                  {specialtyDropdownOpen && (<div onClick={(e) => e.stopPropagation()} style={{
+                  {specialtyDropdownOpen && (<div id="specialty-dropdown-menu" onClick={(e) => e.stopPropagation()} style={{
                 position: 'absolute',
                 left: 0,
                 right: 0,
@@ -1001,7 +1012,7 @@ export default function HostProfilePage(props: {
         <div id="host-profile-step-2" ref={(el) => {
             stepSectionRefs.current[1] = el;
         }} style={{
-            ...sectionCard(activeStep === 2, { gap: 16, height: 392 }),
+            ...sectionCard(activeStep === 2, { gap: 16, height: 500 }),
             scrollMarginTop: 20,
         }} onClick={() => goToStep(2)}>
           
