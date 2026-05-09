@@ -16,6 +16,7 @@ interface AuthCtx {
     completeProfile: () => void;
     logout: () => void;
     signInWithOAuth: (provider: 'google' | 'azure', role: Role) => Promise<void>;
+    completeOAuthSignIn: () => Promise<{ role: Role; redirectTo: string }>;
 }
 const Ctx = createContext<AuthCtx | null>(null);
 const NEST_BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
@@ -227,6 +228,30 @@ export function AuthProvider({ children }: {
         });
         if (error) throw new Error(error.message);
     }
+    async function completeOAuthSignIn(): Promise<{ role: Role; redirectTo: string }> {
+        const supabase = getSupabase();
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw new Error(error.message);
+        if (!session?.access_token) throw new Error('No session found after OAuth redirect.');
+        saveToken(session.access_token);
+        syncCookies();
+        const synced = await syncNestAccessToken();
+        if (!synced) throw new Error('Could not sync session with app API.');
+        setUserId(session.user.id);
+        const savedRole = (getRole() ?? 'locum') as Role;
+        const nestToken = getToken() ?? session.access_token;
+        const profileExists = await checkProfileExistsOnServer(savedRole, nestToken);
+        let redirectTo: string;
+        if (profileExists) {
+            markProfileComplete(); syncCookies(); syncProfileCompleteCookies(); setProfileComplete(true);
+            const lastPath = popLastPath();
+            redirectTo = lastPath ?? (savedRole === 'clinic' ? '/host/dashboard' : '/locum/dashboard');
+        } else {
+            clearLastPath();
+            redirectTo = savedRole === 'clinic' ? '/host/setup' : '/locum/setup';
+        }
+        return { role: savedRole, redirectTo };
+    }
     function completeProfile(): void {
         markProfileComplete();
         syncCookies();
@@ -250,6 +275,7 @@ export function AuthProvider({ children }: {
             completeProfile,
             logout,
             signInWithOAuth,
+            completeOAuthSignIn,
         }}>
       {children}
     </Ctx.Provider>);
