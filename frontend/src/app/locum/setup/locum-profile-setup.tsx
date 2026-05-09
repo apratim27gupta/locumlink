@@ -20,7 +20,7 @@ const LOCUM_SETUP_MODAL = {
     headerHeightStep3Px: 100,
     formToActionsGapStep1Px: 28,
     formToActionsGapStep2Px: 28,
-    formToActionsGapStep3Px: 167,
+    formToActionsGapStep3Px: 20,
     bodyTopGapPx: 24,
     boxShadow: '0 20px 60px rgba(0, 0, 0, 0.28)',
 } as const;
@@ -281,8 +281,7 @@ export default function LocumSetupPage() {
             });
         });
     }
-    const step1Valid = useMemo(() => (form.firstName ?? '').trim().length > 0 &&
-        (form.cpsnsNumber ?? '').trim().length > 0, [form.firstName, form.cpsnsNumber]);
+    const step1Valid = useMemo(() => (form.firstName ?? '').trim().length > 0, [form.firstName]);
     const step2Valid = true;
     const step3Valid = true;
     function set<K extends keyof LocumProfile>(k: K, v: LocumProfile[K]) {
@@ -328,9 +327,28 @@ export default function LocumSetupPage() {
         if (cityBlurTimer.current != null)
             clearTimeout(cityBlurTimer.current);
     }, []);
+    // Auto-save form to localStorage
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem('locum_setup_form');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                setForm((f) => ({ ...f, ...parsed }));
+                if (parsed.specialization) {
+                    setSpecializationTags(parsed.specialization.split(',').map((s: string) => s.trim()).filter(Boolean));
+                }
+            }
+        } catch {}
+    }, []);
+    useEffect(() => {
+        try {
+            localStorage.setItem('locum_setup_form', JSON.stringify(form));
+        } catch {}
+    }, [form]);
     async function handleFinish() {
         setBusy(true);
         setErr('');
+        try { localStorage.removeItem('locum_setup_form'); } catch {}
         try {
             await locumApi.saveProfile(form);
         }
@@ -385,8 +403,8 @@ export default function LocumSetupPage() {
             marginBottom: LOCUM_SETUP_MODAL.bodyTopGapPx,
         }}>
           <button type="button" onClick={() => {
-            beforeClientNavigation('/home');
-            router.push('/home');
+            beforeClientNavigation('/auth');
+            router.push('/auth');
         }} aria-label="Close" style={{
             position: 'absolute',
             right: 0,
@@ -525,7 +543,7 @@ export default function LocumSetupPage() {
                         CPSNS Number
                         <ReqStar />
                       </label>
-                      <input id="locum-setup-cpsns" className="locum-setup-input" style={inp} inputMode="numeric" autoComplete="off" maxLength={9} placeholder="License number" value={form.cpsnsNumber} onChange={(e) => set('cpsnsNumber', sanitizeCpsnsInput(e.target.value))} aria-required/>
+                      <input id="locum-setup-cpsns" className="locum-setup-input" style={inp} inputMode="numeric" autoComplete="off" placeholder="License number" value={form.cpsnsNumber} onChange={(e) => set('cpsnsNumber', sanitizeCpsnsInput(e.target.value))} aria-required/>
                     </div>
 
                     
@@ -986,7 +1004,7 @@ export default function LocumSetupPage() {
                 width: '100%',
             }}>
                       <label style={{ ...lbl, marginBottom: 0 }}>
-                        CPSNS License (Optional)
+                        CPSNS License
                       </label>
                       <div role="button" tabIndex={0} onClick={() => licenseRef.current?.click()} onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ')
@@ -1036,7 +1054,7 @@ export default function LocumSetupPage() {
                 width: '100%',
             }}>
                       <label style={{ ...lbl, marginBottom: 0 }}>
-                        Resume (Optional)
+                        Resume
                       </label>
                       <div role="button" tabIndex={0} onClick={() => resumeRef.current?.click()} onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ')
@@ -1086,7 +1104,7 @@ export default function LocumSetupPage() {
                 width: '100%',
             }}>
                       <label style={{ ...lbl, marginBottom: 0 }}>
-                        Additional Documents (Optional)
+                        Additional Documents
                       </label>
                       <div role="button" tabIndex={0} onClick={() => extraRef.current?.click()} onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ')
@@ -1134,6 +1152,15 @@ export default function LocumSetupPage() {
                 color: '#636364',
             }}>
                         -Cover letter, reference letters, etc
+                      </p>
+                      <p style={{
+                margin: 0,
+                fontSize: 12,
+                lineHeight: '140%',
+                fontWeight: 400,
+                color: '#9CA3AF',
+            }}>
+                        Accepted formats: pdf, doc, docx
                       </p>
                     </div>
                   </div>
