@@ -238,6 +238,12 @@ export default function HostProfilePage(props: {
     const hostCityInputRef = useRef<HTMLInputElement>(null);
     const hostCityDropRef = useRef<HTMLDivElement>(null);
     const hostCityBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    function toTitleCase(str: string) {
+    return str.replace(
+        /\w\S*/g,
+        txt => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase()
+    );
+}
     const searchHostCities = useCallback((q: string) => {
         if (!q || q.trim().length < 2) {
             setHostCityResults([]);
@@ -249,12 +255,18 @@ export default function HostProfilePage(props: {
         setHostCityActiveIdx(-1);
         setHostCityDropOpen(true);
     }, []);
-    function handleHostCitySelect(city: CanadianCityRow) {
-        setCity(formatCanadianCityDisplay(city.name));
-        setProvince(CANADIAN_PROVINCE_NAMES[city.province] ?? city.province);
-        setHostCityResults([]);
-        setHostCityDropOpen(false);
-    }
+function handleHostCitySelect(city: CanadianCityRow) {
+    setCity(formatCanadianCityDisplay(city.name));
+
+    setProvince(
+        toTitleCase(
+            CANADIAN_PROVINCE_NAMES[city.province] ?? city.province
+        )
+    );
+
+    setHostCityResults([]);
+    setHostCityDropOpen(false);
+}
     function handleHostCityKeyDown(e: KeyboardEvent<HTMLInputElement>) {
         if (!hostCityDropOpen)
             return;
@@ -294,8 +306,13 @@ export default function HostProfilePage(props: {
         setAddr1(profile.address1 ?? '');
         setAddr2(profile.address2 ?? '');
         setPostal(profile.postalCode ?? '');
-        setCity(formatCanadianCityDisplay(profile.city ?? ''));
-        setProvince(profile.province ?? '');
+        setCity(formatCanadianCityDisplay(city.name));
+        // setProvince(profile.province ?? '');
+setProvince(
+    toTitleCase(
+        CANADIAN_PROVINCE_NAMES[city.province] ?? city.province
+    )
+);
         setPracticeType(profile.practiceType ?? '');
         setNumPhysicians(profile.numPhysicians ?? '');
         setEmr(profile.emr ?? '');
