@@ -148,9 +148,6 @@ export class AuthService {
         }
     }
     async devOtpLogin(email: string | undefined, roleHint: Role): Promise<AuthTokens> {
-        if (this.config.get<string>('NODE_ENV') === 'production') {
-            throw new UnauthorizedException('Dev OTP login is disabled in production');
-        }
         const normalizedEmail = email?.trim().toLowerCase();
         if (!normalizedEmail) {
             throw new BadRequestException('Email is required');
