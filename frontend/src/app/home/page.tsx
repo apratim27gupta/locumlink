@@ -41,6 +41,7 @@ export default function HomePage(props: {
         }
         if (skipSetup) {
             // User exited setup — stay on home, don't redirect anywhere
+            setAuthChecked(true);
             return;
         }
         if (safeNext) {
