@@ -151,9 +151,9 @@ export class HostService {
         const hostProfileId = await this.getHostProfileId(userId);
         const hostProfile = await this.prisma.hostProfile.findUnique({
             where: { id: hostProfileId },
-            select: { verificationStatus: true },
+            select: { cpsnsNumber: true },
         });
-        const isVerified = hostProfile?.verificationStatus === 'VERIFIED';
+        const isVerified = !!(hostProfile?.cpsnsNumber && hostProfile.cpsnsNumber.replace(/\D/g, '').length === 9);
         const status: PostingStatus = isVerified ? PostingStatus.ACTIVE : PostingStatus.DRAFT;
         const job = await this.prisma.jobPosting.create({
             data: {
