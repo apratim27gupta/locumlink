@@ -304,15 +304,6 @@ function ReOpenModal({ job, onConfirm, onCancel, }: {
     }, [job.id, job.startDate, job.endDate]);
     async function handlePrimary() {
         if (step === 1) {
-            setStep(2);
-            return;
-        }
-        if (step === 2) {
-            const slot = Number(extra);
-            if (!Number.isFinite(slot) || slot < 1 || !Number.isInteger(slot)) {
-                window.alert('Enter a whole number of at least 1 for additional applicants.');
-                return;
-            }
             setStep(3);
             return;
         }
@@ -613,29 +604,18 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
                   {isShortlisted ? 'Shortlisted' : 'Pending'}
                 </span>
               </div>
-              <button type="button" onClick={(e) => {
-                        e.stopPropagation();
-                        const qs = new URLSearchParams({
-                            partnerId: app.locumProfile.userId,
-                            jobPostingId: jobId,
-                        });
-                        const href = `/host/messages?${qs.toString()}`;
-                        beforeClientNavigation(href);
-                        router.push(href);
-                    }} style={{
-                        all: 'unset',
-                        cursor: 'pointer',
-                        fontSize: 'var(--font-small)',
-                        color: '#1C32D2',
-                        display: 'flex',
+              <span style={{
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        gap: 4,
+                        padding: '4px 10px',
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        background: (app as any).locumResponse === 'ACCEPTED' ? '#D1FAE5' : (app as any).locumResponse === 'REJECTED' ? '#FEE2E2' : '#F3F4F6',
+                        color: (app as any).locumResponse === 'ACCEPTED' ? '#065F46' : (app as any).locumResponse === 'REJECTED' ? '#991B1B' : '#6B7280',
                     }}>
-                <span style={{ display: 'inline-flex', width: 16, height: 16, alignItems: 'center', justifyContent: 'center' }}>
-                  <MessageIcon active={true} />
-                </span>
-                Message
-              </button>
+                {(app as any).locumResponse === 'ACCEPTED' ? 'Accepted' : (app as any).locumResponse === 'REJECTED' ? 'Rejected' : '—'}
+              </span>
             </div>);
             })}
     </div>);
@@ -650,16 +630,7 @@ function JobActionsKebabIcon() {
 function canHostShowReopenJob(job: Job): boolean {
     if (job.status === 'DRAFT')
         return false;
-    const max = typeof job.maxApplicants === 'number' && Number.isFinite(job.maxApplicants)
-        ? job.maxApplicants
-        : 20;
-    const atCap = job.status === 'ACTIVE' && job.applicationsCount >= max;
-    const pastEnd = isJobPastEndDate(job);
-    return (job.status === 'ONGOING' ||
-        job.status === 'EXPIRED' ||
-        job.status === 'CANCELLED' ||
-        atCap ||
-        pastEnd);
+    return true;
 }
 const JOB_ACTIONS_MENU_W = 196;
 const JOB_ACTIONS_MENU_EST_H = 168;
@@ -927,17 +898,7 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
               </div>, document.body)}
           </div>
 
-          {isFilled ? (<span style={{
-                padding: '4px 14px',
-                background: '#F3F4F6',
-                border: '1px solid #E5E7EB',
-                borderRadius: 6,
-                fontSize: 'var(--font-small)',
-                color: '#6B7280',
-                fontWeight: 'var(--font-weight-bold)',
-            }}>
-              Filled
-            </span>) : isDraft ? (<span style={{
+          {isDraft ? (<span style={{
                 padding: '6px 16px',
                 background: '#FEF3C7',
                 border: '1px solid #FCD34D',
@@ -1630,7 +1591,7 @@ export default function HostDashboard(props: {
     }
     const today = new Date();
     const draftJobs = jobs.filter((j) => j.status === 'DRAFT');
-    const activePosts = jobs.filter((j) => j.status === 'ACTIVE');
+    const activePosts = jobs.filter((j) => j.status === 'ACTIVE' || j.status === 'ONGOING');
     const ongoingJobs = jobs.filter((j) => j.status === 'ONGOING');
     const recentJobs = jobs.filter((j) => j.status === 'COMPLETED' || j.status === 'CANCELLED' || j.status === 'EXPIRED');
     const tabJobs = activeTab === 'active'
@@ -1656,18 +1617,16 @@ export default function HostDashboard(props: {
             return;
         }
         setExpandedJobId(jobId);
-        if (!jobApplications[jobId]) {
-            setLoadingAppsFor(jobId);
-            try {
-                const result = await hostApi.getApplications(jobId);
-                setJobApplications((prev) => ({
-                    ...prev,
-                    [jobId]: result.applications,
-                }));
-            }
-            finally {
-                setLoadingAppsFor(null);
-            }
+        setLoadingAppsFor(jobId);
+        try {
+            const result = await hostApi.getApplications(jobId);
+            setJobApplications((prev) => ({
+                ...prev,
+                [jobId]: result.applications,
+            }));
+        }
+        finally {
+            setLoadingAppsFor(null);
         }
     }
     async function handleReopen(payload: {

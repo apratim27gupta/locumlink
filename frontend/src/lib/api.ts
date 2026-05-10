@@ -268,6 +268,7 @@ export type BrowseJob = {
 export type MyApplication = {
     id: string;
     status: 'APPLIED' | 'SHORTLISTED' | 'CONFIRMED' | 'REJECTED' | 'WITHDRAWN';
+    locumResponse: 'ACCEPTED' | 'REJECTED' | null;
     appliedAt: string;
     coverNote?: string | null;
     locumAcceptedAt?: string | null;
@@ -401,6 +402,7 @@ export type LocumDocumentSnippet = {
 export type ApplicationRecord = {
     id: string;
     status: 'APPLIED' | 'SHORTLISTED' | 'CONFIRMED' | 'REJECTED' | 'WITHDRAWN';
+    locumResponse: 'ACCEPTED' | 'REJECTED' | null;
     locumProfile: {
         id: string;
         userId: string;

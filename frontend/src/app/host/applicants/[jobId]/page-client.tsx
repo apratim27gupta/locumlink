@@ -769,7 +769,7 @@ export default function HostApplicantsPage(props: {
             gap: 18,
             boxSizing: 'border-box',
         }}>
-            {['NAME', 'YEARS OF EXP', 'SPECIALIZATION', 'STATUS', ''].map((h) => (<div key={h} style={{
+            {['NAME', 'YEARS OF EXP', 'SPECIALIZATION', 'STATUS', 'LOCUM RESPONSE'].map((h) => (<div key={h} style={{
                 fontFamily: 'Hanken Grotesk, Inter, sans-serif',
                 fontWeight: 600,
                 fontSize: 13,
@@ -856,15 +856,18 @@ export default function HostApplicantsPage(props: {
 
                   
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <MessageBtn active={canMessage} onClick={canMessage
-                            ? () => {
-                                const href = hostMessagesHref(a.locumProfile.userId, jobId);
-                                beforeClientNavigation(href);
-                                router.push(href);
-                            }
-                            : undefined}/>
-                    </div>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '4px 10px',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background: a.locumResponse === 'ACCEPTED' ? '#D1FAE5' : a.locumResponse === 'REJECTED' ? '#FEE2E2' : '#F3F4F6',
+                      color: a.locumResponse === 'ACCEPTED' ? '#065F46' : a.locumResponse === 'REJECTED' ? '#991B1B' : '#6B7280',
+                    }}>
+                      {a.locumResponse === 'ACCEPTED' ? 'Accepted' : a.locumResponse === 'REJECTED' ? 'Rejected' : '—'}
+                    </span>
                   </div>
                 </div>);
             })}

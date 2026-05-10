@@ -366,7 +366,11 @@ export class HostService {
         const applications = await this.prisma.application.findMany({
             where: { jobPostingId: jobId },
             orderBy: { appliedAt: 'desc' },
-            include: {
+            select: {
+                id: true,
+                status: true,
+                locumResponse: true,
+                appliedAt: true,
                 locumProfile: {
                     select: {
                         id: true,
@@ -401,7 +405,7 @@ export class HostService {
             })));
             return {
                 ...a,
-                locumResponse: (a as any).locumResponse ?? null,
+                locumResponse: a.locumResponse ?? null,
                 locumProfile: {
                     ...a.locumProfile,
                     documents: signed,
