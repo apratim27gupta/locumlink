@@ -73,6 +73,12 @@ enum ApplicationStatus {
   WITHDRAWN
 }
 
+enum LocumResponse {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 enum DocumentType {
   CPSNS_LICENSE
   CMPA_CERTIFICATE
@@ -263,6 +269,7 @@ model Application {
   locumProfile    LocumProfile      @relation(fields: [locumProfileId], references: [id])
 
   status          ApplicationStatus @default(APPLIED)
+  locumResponse   LocumResponse?
   coverNote       String?           @db.Text
   appliedAt       DateTime          @default(now())
   statusChangedAt DateTime          @updatedAt

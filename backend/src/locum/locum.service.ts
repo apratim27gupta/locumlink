@@ -333,7 +333,7 @@ export class LocumService {
                 throw new BadRequestException('You have already accepted this placement.');
             await this.prisma.application.update({
                 where: { id: applicationId },
-                data: { locumAcceptedAt: new Date() },
+                data: { locumAcceptedAt: new Date(), locumResponse: 'ACCEPTED' },
             });
             return { success: true };
         }
@@ -342,7 +342,7 @@ export class LocumService {
         await this.prisma.$transaction(async (tx) => {
             await tx.application.update({
                 where: { id: applicationId },
-                data: { status: 'WITHDRAWN' },
+                data: { status: 'WITHDRAWN', locumResponse: 'REJECTED' },
             });
             if (app.jobPosting.status === 'ONGOING') {
                 await tx.jobPosting.update({

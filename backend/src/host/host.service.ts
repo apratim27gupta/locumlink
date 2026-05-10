@@ -401,6 +401,7 @@ export class HostService {
             })));
             return {
                 ...a,
+                locumResponse: (a as any).locumResponse ?? null,
                 locumProfile: {
                     ...a.locumProfile,
                     documents: signed,
