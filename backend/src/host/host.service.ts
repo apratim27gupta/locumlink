@@ -376,7 +376,6 @@ export class HostService {
                         cpsnsId: true,
                         specialty: true,
                         specializationText: true,
-                        speciality: true,
                         summary: true,
                         yearsOfExperience: true,
                         city: true,
