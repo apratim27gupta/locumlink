@@ -237,6 +237,7 @@ model JobPosting {
   travelRequired        Boolean   @default(false) @map("travel_required")
   scheduleFlexible      Boolean   @default(false) @map("schedule_flexible")
   requiredCredentials   String[]  @default([]) @map("required_credentials")
+  isDeleted             Boolean   @default(false) @map("is_deleted")
 
   shifts                Shift[]
   applications          Application[]

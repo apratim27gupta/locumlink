@@ -184,7 +184,7 @@ export class HostService {
     async getJobs(userId: string) {
         const hostProfileId = await this.getHostProfileId(userId);
         const jobs = await this.prisma.jobPosting.findMany({
-            where: { hostProfileId },
+            where: { hostProfileId, isDeleted: false },
             orderBy: { createdAt: 'desc' },
             include: {
                 _count: { select: { applications: true } },
@@ -283,7 +283,7 @@ export class HostService {
             throw new NotFoundException('Job not found');
         if (job.hostProfileId !== hostProfileId)
             throw new ForbiddenException();
-        await this.prisma.jobPosting.delete({ where: { id: jobId } });
+        await this.prisma.jobPosting.update({ where: { id: jobId }, data: { isDeleted: true } });
         return { success: true };
     }
     async reopenJob(userId: string, jobId: string, dto: {

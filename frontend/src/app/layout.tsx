@@ -7,6 +7,7 @@ import { PathTracker } from '@/components/PathTracker';
 import GuidedTourGate from '@/components/GuidedTourGate';
 import TopLoadingBar from '@/components/ui/TopLoadingBar';
 import RouteTransitionLoader from '@/components/ui/RouteTransitionLoader';
+import PageLoader from '@/components/ui/PageLoader';
 import { Suspense } from 'react';
 const inter = Inter({
     subsets: ['latin'],
@@ -33,6 +34,7 @@ export default function RootLayout({ children, }: {
       <body className="app-body" suppressHydrationWarning>
         <div id="app-root">
           <TopLoadingBar />
+          <PageLoader />
           <Suspense fallback={null}><RouteTransitionLoader /></Suspense>
           <AuthSync />
           <PathTracker />
