@@ -513,7 +513,7 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
             padding: '10px 16px',
             borderBottom: '1px solid #F3F4F6',
         }}>
-        {['', 'NAME', 'YRS EXP', 'SPECIALIZATION', 'STATUS', ''].map((h, i) => (<span key={i} style={{
+        {['', 'NAME', 'YRS EXP', 'SPECIALIZATION', 'STATUS', 'LOCUM RESPONSE'].map((h, i) => (<span key={i} style={{
                 fontSize: 'var(--font-small)',
                 fontWeight: 'var(--font-weight-bold)',
                 color: '#9CA3AF',
