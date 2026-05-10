@@ -242,19 +242,16 @@ function SpecTag({ label }: { label: string }) {
 }
 
 function buildSpecialityTags(profile: ApplicationRecord['locumProfile']): string[] {
-    // Use free-text speciality field first (most accurate)
-    const freeText = String((profile as any).speciality ?? '');
     const specText = String((profile as any).specializationText ?? '');
     const specialty = profile.specialty && profile.specialty !== 'OTHER'
         ? profile.specialty.replace(/_/g, ' ')
         : '';
-    const fromFreeText = freeText.split(',').map((s) => s.trim()).filter(Boolean);
     const fromSpecText = specText.split(',').map((s) => s.trim()).filter(Boolean);
-    const all = fromFreeText.length > 0
-        ? fromFreeText
-        : [...(specialty ? [specialty] : []), ...fromSpecText]
-            .filter(Boolean)
-            .filter((s) => s.toLowerCase() !== 'other');
+    const all = fromSpecText.length > 0
+        ? fromSpecText
+        : specialty
+            ? [specialty]
+            : [];
     const seen = new Set<string>();
     return all.filter((s) => {
         const k = s.toLowerCase();
