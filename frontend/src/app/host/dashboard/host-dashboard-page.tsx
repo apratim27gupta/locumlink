@@ -544,7 +544,14 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
       {!loading &&
             preview.map((app, idx) => {
                 const isShortlisted = app.status === 'SHORTLISTED' || app.status === 'CONFIRMED';
-                const specs = [app.locumProfile.specialty.replace(/_/g, ' ')];
+                const rawSpec = app.locumProfile.specialty ?? '';
+                const specText = String((app.locumProfile as any).specializationText ?? '');
+                const fromSpecText = specText.split(',').map((s: string) => s.trim()).filter(Boolean);
+                const specs = rawSpec && rawSpec !== 'OTHER'
+                    ? [rawSpec.replace(/_/g, ' ')]
+                    : fromSpecText.length > 0
+                        ? fromSpecText
+                        : ['—'];
                 return (<div key={app.id} onClick={() => {
                         const href = `/host/applicants/${jobId}`;
                         beforeClientNavigation(href);
