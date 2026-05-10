@@ -1074,7 +1074,7 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
             whiteSpace: 'nowrap',
             boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
         }}>
-          ⚠️ CPSNS not verified — this job will be saved as a Draft until verified by admin.
+          ⚠️  CPSNS is not  verified — this job will be saved as a Draft.
         </div>)}
       <div onClick={onClose} style={{
             position: 'fixed',
@@ -1276,7 +1276,7 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
                   <input style={fieldInp} type="number" value={ratePerDay} onChange={(e) => setRatePerDay(e.target.value)} placeholder="e.g. 2000"/>
                 </div>
               </div>
-            </div>) : step > 2 ? (<CollapsedStep icon={<ScheduleIcon />} label="Schedule" sub="Set dates, times, and pay" onClick={() => setStep(2)}/>) : (<UpcomingStep icon={<ScheduleIcon />} label="Schedule" sub="Set dates, times, and pay"/>)}
+            </div>) : step > 2 ? (<CollapsedStep icon={<ScheduleIcon />} label="Schedule" sub="Set dates, times, and pay" onClick={() => setStep(2)}/>) : (<CollapsedStep icon={<ScheduleIcon />} label="Schedule" sub="Set dates, times, and pay" onClick={() => setStep(2)}/>)}
 
           
           {step === 3 ? (<div style={{
@@ -1412,7 +1412,7 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
                     {submitError}
                   </p>)}
               </div>
-            </div>) : (<UpcomingStep icon={<RequirementsIcon />} label="Requirements" sub="List mandatory licenses and experience"/>)}
+            </div>) : (<CollapsedStep icon={<RequirementsIcon />} label="Requirements" sub="List mandatory licenses and experience" onClick={() => setStep(3)}/>)}
         </div>
 
         
