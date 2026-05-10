@@ -59,7 +59,8 @@ enum ShiftType {
 enum PostingStatus {
   DRAFT
   ACTIVE
-  FILLED
+  ONGOING
+  COMPLETED
   CANCELLED
   EXPIRED
 }

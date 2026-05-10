@@ -344,7 +344,7 @@ export class LocumService {
                 where: { id: applicationId },
                 data: { status: 'WITHDRAWN' },
             });
-            if (app.jobPosting.status === 'FILLED') {
+            if (app.jobPosting.status === 'ONGOING') {
                 await tx.jobPosting.update({
                     where: { id: app.jobPostingId },
                     data: { status: 'ACTIVE' },

@@ -374,7 +374,7 @@ export const locumApi = {
         return res.json() as Promise<{ success: boolean }>;
     },
 };
-export type PostingStatus = 'DRAFT' | 'ACTIVE' | 'FILLED' | 'CANCELLED' | 'EXPIRED';
+export type PostingStatus = 'DRAFT' | 'ACTIVE' | 'ONGOING' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
 export type Job = {
     id: string;
     title: string;

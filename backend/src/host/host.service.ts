@@ -83,7 +83,7 @@ export class HostService {
             this.prisma.jobPosting.count({
                 where: {
                     hostProfileId,
-                    status: { in: ['FILLED', 'CANCELLED', 'EXPIRED'] },
+                    status: { in: ['ONGOING', 'COMPLETED', 'CANCELLED', 'EXPIRED'] },
                 },
             }),
             this.prisma.application.count({
@@ -102,7 +102,7 @@ export class HostService {
             this.prisma.jobPosting.count({
                 where: {
                     hostProfileId,
-                    status: { in: ['FILLED', 'CANCELLED', 'EXPIRED'] },
+                    status: { in: ['ONGOING', 'COMPLETED', 'CANCELLED', 'EXPIRED'] },
                     createdAt: { lt: lastQtr },
                 },
             }),
@@ -149,11 +149,12 @@ export class HostService {
     }
     async createJob(userId: string, dto: CreateJobDto) {
         const hostProfileId = await this.getHostProfileId(userId);
-        const allowedCreateStatuses: PostingStatus[] = ['ACTIVE', 'DRAFT'];
-        const requestedStatus = dto.status as PostingStatus | undefined;
-        const status: PostingStatus = requestedStatus && allowedCreateStatuses.includes(requestedStatus)
-            ? requestedStatus
-            : PostingStatus.ACTIVE;
+        const hostProfile = await this.prisma.hostProfile.findUnique({
+            where: { id: hostProfileId },
+            select: { verificationStatus: true },
+        });
+        const isVerified = hostProfile?.verificationStatus === 'VERIFIED';
+        const status: PostingStatus = isVerified ? PostingStatus.ACTIVE : PostingStatus.DRAFT;
         const job = await this.prisma.jobPosting.create({
             data: {
                 hostProfileId,
@@ -190,6 +191,29 @@ export class HostService {
                 shifts: true,
             },
         });
+        const now = new Date();
+        // Auto-transition ONGOING -> COMPLETED when end date has passed
+        const toComplete = jobs.filter(
+            (j) => j.status === 'ONGOING' && j.endDate && new Date(j.endDate) < now
+        );
+        if (toComplete.length > 0) {
+            await this.prisma.jobPosting.updateMany({
+                where: { id: { in: toComplete.map((j) => j.id) } },
+                data: { status: 'COMPLETED' },
+            });
+            toComplete.forEach((j) => { j.status = 'COMPLETED' as any; });
+        }
+        // Also auto-transition ACTIVE -> EXPIRED when end date has passed
+        const toExpire = jobs.filter(
+            (j) => j.status === 'ACTIVE' && j.endDate && new Date(j.endDate) < now
+        );
+        if (toExpire.length > 0) {
+            await this.prisma.jobPosting.updateMany({
+                where: { id: { in: toExpire.map((j) => j.id) } },
+                data: { status: 'EXPIRED' },
+            });
+            toExpire.forEach((j) => { j.status = 'EXPIRED' as any; });
+        }
         return {
             jobs: jobs.map((j) => ({
                 ...j,
@@ -280,7 +304,8 @@ export class HostService {
         const atApplicantCap = job.status === 'ACTIVE' && appCount >= job.maxApplicants;
         const endMs = job.endDate ? new Date(job.endDate).getTime() : NaN;
         const pastEndDate = Number.isFinite(endMs) && new Date(endMs) < new Date();
-        const eligible = job.status === 'FILLED' ||
+        const eligible = job.status === 'ONGOING' ||
+            job.status === 'COMPLETED' ||
             job.status === 'EXPIRED' ||
             job.status === 'CANCELLED' ||
             atApplicantCap ||
@@ -309,7 +334,7 @@ export class HostService {
             (dto.endDate != null && dto.endDate.trim() !== '')) {
             throw new BadRequestException('Both start date and end date are required.');
         }
-        if (job.status === 'FILLED') {
+        if (job.status === 'ONGOING') {
             await this.prisma.application.updateMany({
                 where: { jobPostingId: jobId, status: 'CONFIRMED' },
                 data: { status: 'SHORTLISTED' },
@@ -400,7 +425,7 @@ export class HostService {
         if (status === 'CONFIRMED') {
             await this.prisma.jobPosting.update({
                 where: { id: jobId },
-                data: { status: 'FILLED' },
+                data: { status: 'ONGOING' },
             });
         }
         return { success: true, application: updated };

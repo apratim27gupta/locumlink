@@ -125,9 +125,9 @@ export class UpdateJobDto {
     @IsOptional()
     location?: string;
     @IsString()
-    @IsIn(['DRAFT', 'ACTIVE', 'FILLED', 'CANCELLED', 'EXPIRED'])
+    @IsIn(['DRAFT', 'ACTIVE', 'ONGOING', 'COMPLETED', 'CANCELLED', 'EXPIRED'])
     @IsOptional()
-    status?: 'DRAFT' | 'ACTIVE' | 'FILLED' | 'CANCELLED' | 'EXPIRED';
+    status?: 'DRAFT' | 'ACTIVE' | 'ONGOING' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
     @IsArray()
     @IsString({ each: true })
     @IsOptional()

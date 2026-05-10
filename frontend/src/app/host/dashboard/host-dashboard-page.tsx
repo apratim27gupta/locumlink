@@ -24,7 +24,7 @@ const NAV_ITEMS = [
 const TABS = [
     { id: 'active', label: 'Active Posts' },
     { id: 'ongoing', label: 'Ongoing Jobs' },
-    { id: 'recent', label: 'Recent Jobs' },
+    { id: 'recent', label: 'Completed Jobs' },
     { id: 'draft', label: 'Draft Jobs' },
 ];
 const NAVBAR_HEIGHT = 76;
@@ -648,7 +648,7 @@ function canHostShowReopenJob(job: Job): boolean {
         : 20;
     const atCap = job.status === 'ACTIVE' && job.applicationsCount >= max;
     const pastEnd = isJobPastEndDate(job);
-    return (job.status === 'FILLED' ||
+    return (job.status === 'ONGOING' ||
         job.status === 'EXPIRED' ||
         job.status === 'CANCELLED' ||
         atCap ||
@@ -721,7 +721,7 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
         return () => document.removeEventListener('mousedown', onDocMouseDown);
     }, [menuOpen]);
     const isExpanded = expandedJobId === job.id;
-    const isFilled = job.status === 'FILLED';
+    const isFilled = job.status === 'ONGOING';
     const isDraft = job.status === 'DRAFT';
     const appCount = job.applicationsCount;
     const startFmt = fmtDate(job.startDate);
@@ -1582,17 +1582,10 @@ export default function HostDashboard(props: {
         router.replace('/home');
     }
     const today = new Date();
-    const draftJobs = jobs.filter((j) => j.status === 'DRAFT' || (!verified && j.status === 'ACTIVE'));
-    const activePosts = jobs.filter((j) => !(j.status === 'DRAFT' || (!verified && j.status === 'ACTIVE')));
-    const ongoingJobs = jobs.filter((j) => j.status !== 'DRAFT' &&
-        j.startDate &&
-        new Date(j.startDate) <= today &&
-        (j.endDate ? new Date(j.endDate) >= today : true));
-    const recentJobs = jobs.filter((j) => j.status !== 'DRAFT' &&
-        (j.status === 'FILLED' ||
-            j.status === 'CANCELLED' ||
-            j.status === 'EXPIRED' ||
-            (j.endDate && new Date(j.endDate) < today)));
+    const draftJobs = jobs.filter((j) => j.status === 'DRAFT');
+    const activePosts = jobs.filter((j) => j.status === 'ACTIVE');
+    const ongoingJobs = jobs.filter((j) => j.status === 'ONGOING');
+    const recentJobs = jobs.filter((j) => j.status === 'COMPLETED' || j.status === 'CANCELLED' || j.status === 'EXPIRED');
     const tabJobs = activeTab === 'active'
         ? activePosts
         : activeTab === 'ongoing'
@@ -2228,7 +2221,7 @@ export default function HostDashboard(props: {
                 'You have not posted any jobs yet'}
                       {activeTab === 'ongoing' &&
                 'No jobs are currently ongoing'}
-                      {activeTab === 'recent' && 'No recent or completed jobs'}
+                      {activeTab === 'recent' && 'No completed jobs'}
                       {activeTab === 'draft' && 'No draft jobs saved'}
                     </span>
                   </div>)}
