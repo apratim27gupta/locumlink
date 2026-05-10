@@ -999,19 +999,39 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
             setSubmitError('Please enter a job title.');
             return;
         }
+        if (!startDateInput.trim()) {
+            setSubmitError('Start date is required.');
+            return;
+        }
+        if (!endDateInput.trim()) {
+            setSubmitError('End date is required.');
+            return;
+        }
         const startIso = parseMmDdYyyyToIso(startDateInput);
         const endIso = parseMmDdYyyyToIso(endDateInput);
-        if (startDateInput.trim() && !startIso) {
+        if (!startIso) {
             setSubmitError('Start date must be a valid date in MM-DD-YYYY format.');
             return;
         }
-        if (endDateInput.trim() && !endIso) {
+        if (!endIso) {
             setSubmitError('End date must be a valid date in MM-DD-YYYY format.');
+            return;
+        }
+        if (new Date(endIso) < new Date(startIso)) {
+            setSubmitError('End date must be on or after start date.');
+            return;
+        }
+        if (!startTime) {
+            setSubmitError('Start time is required.');
+            return;
+        }
+        if (!endTime) {
+            setSubmitError('End time is required.');
             return;
         }
         const rateNum = ratePerDay.trim() ? Number(ratePerDay) : NaN;
         if (!Number.isFinite(rateNum) || rateNum <= 0) {
-            setSubmitError('Enter a valid rate per day (CAD).');
+            setSubmitError('Rate per day is required.');
             return;
         }
         const yearsNum = yearsExp.trim() ? Number(yearsExp) : NaN;
