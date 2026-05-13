@@ -25,6 +25,7 @@ export interface LocumProfile {
     yearsOfExperience?: number | null;
     professionalSummary?: string;
     specialization?: string;
+    phone?: string;
     address1?: string;
     address2?: string;
     postalCode?: string;

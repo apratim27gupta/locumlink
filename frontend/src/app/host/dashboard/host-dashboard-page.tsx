@@ -1,41 +1,127 @@
 'use client';
-import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
+import { useEffect, useState, useCallback, useRef, useLayoutEffect, type MouseEvent as ReactMouseEvent, } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import Logo from '@/components/Logo';
+import { useRouter, usePathname } from 'next/navigation';
+import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { getToken } from '@/lib/auth';
 import { useAuth } from '@/providers/AuthProvider';
 import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
-import { computeAvatarInitials } from '@/lib/avatarInitials';
-import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { isCpsnsVerified } from '@/lib/cpsnsVerify';
-import { ApiHttpError, authApi, hostApi, uploadFile, type Job, type ApplicationRecord, type CreateJobPayload, } from '@/lib/api';
+import { ApiHttpError, hostApi, type Job, type ApplicationRecord, type CreateJobPayload, } from '@/lib/api';
 import { beforeClientNavigation } from '@/lib/topLoader';
+import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { HostProfile } from '@/types';
-import { BellIcon, BookIcon, EmptyIllustration, FileIcon, MessageIcon, PlusIcon, ProfileIcon, ReopenJobIcon, ShieldIcon, TrashIcon, UserEditIcon, } from './host-dashboard-icons';
-const NAV_ITEMS = [
-    { id: 'postings', label: 'My Postings', href: '/host/dashboard' },
-    { id: 'profile', label: 'Profile', href: '/host/profile' },
-    { id: 'messages', label: 'Messages', href: '/host/messages' },
-    { id: 'resources', label: 'Resources', href: '/host/resources' },
+import { sortByLabel, sortStringsLocale } from '@/lib/sortLocale';
+import { EmptyIllustration, PlusIcon, ReopenJobIcon, ShieldIcon, TrashIcon, UserEditIcon, } from './host-dashboard-icons';
+const HOST_DASH_NAV = [
+    { label: 'My Postings', href: '/host/dashboard', icon: <NavIcon name="postings"/> },
+    { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile"/> },
+    { label: 'Messages', href: '/host/messages', icon: <NavIcon name="messages"/> },
+    { label: 'Resources', href: '/host/resources', icon: <NavIcon name="resources"/> },
 ];
 const TABS = [
     { id: 'active', label: 'Active Posts' },
-    { id: 'ongoing', label: 'Ongoing Jobs' },
-    { id: 'recent', label: 'Completed Jobs' },
-    { id: 'draft', label: 'Draft Jobs' },
+    { id: 'ongoing', label: 'Ongoing Shifts' },
+    { id: 'recent', label: 'Completed Shifts' },
+    { id: 'draft', label: 'Draft Shifts' },
+    { id: 'deleted', label: 'Deleted Shifts' },
 ];
-const NAVBAR_HEIGHT = 76;
-const CREDENTIAL_OPTIONS = [
+const CREDENTIAL_OPTIONS = sortStringsLocale([
     'CPSNS Full License',
     'CFPC Eligible',
     'CMPA coverage',
     'BLS (ACLS preferred)',
     'DEA License',
     'PALS Certified',
+]);
+const JOB_TITLE_PRESET_OPTIONS = sortStringsLocale([
+    'Family Physician – Walk-in Clinic',
+    'Family Physician – Collaborative Practice',
+    'Family Physician – Longitudinal Practice',
+    'Family Physician – Long-Term Care (LTC)',
+    'Family Physician – Virtual Care',
+    'Family Physician – Mixed Practice',
+]);
+type JobDescriptionPresetItem = {
+    label: string;
+    body: string;
+};
+const JOB_DESCRIPTION_PRESET_ITEMS: readonly JobDescriptionPresetItem[] = sortByLabel([
+    {
+        label: 'Walk-in Clinic Coverage',
+        body: 'This role provides walk-in clinic coverage. The locum supports episodic visits, acute concerns, and same-day access in a high-volume primary care environment.',
+    },
+    {
+        label: 'Collaborative Practice',
+        body: 'Collaborative family practice — working with colleagues and allied health on shared panels, team-based care, and coordinated patient management.',
+    },
+    {
+        label: 'Longitudinal Practice',
+        body: 'Longitudinal family practice with continuity of care for a defined patient panel, including preventive care, chronic disease management, and follow-up.',
+    },
+    {
+        label: 'Long-Term Care (LTC)',
+        body: 'Long-term care coverage for residents, including chronic disease management, medication oversight, and participation in interdisciplinary rounds.',
+    },
+    {
+        label: 'Mixed Practice',
+        body: 'Mixed practice combining in-clinic visits, varied clinical responsibilities, and flexible workflows across service types as agreed with the host site.',
+    },
+    {
+        label: 'Virtual Care',
+        body: 'Virtual / telemedicine family practice — secure remote visits, follow-up, and documentation aligned with the clinic’s digital care standards.',
+    },
+    { label: 'Custom', body: '' },
+]);
+type ResponsibilitySectionDef = {
+    readonly key: string;
+    readonly title: string;
+    readonly options: readonly {
+        readonly id: string;
+        readonly label: string;
+        readonly isCustom?: boolean;
+    }[];
+};
+const RESPONSIBILITY_SECTIONS: readonly ResponsibilitySectionDef[] = [
+    {
+        key: 'core',
+        title: 'Core',
+        options: sortByLabel([
+            { id: 'scheduled', label: 'Scheduled patients' },
+            { id: 'walkin', label: 'Walk-in / same-day visits' },
+            { id: 'phone_virtual', label: 'Phone / virtual consults' },
+            { id: 'labs', label: 'Review labs/imaging' },
+            { id: 'rx', label: 'Prescription renewals' },
+            { id: 'chronic', label: 'Chronic disease management' },
+            { id: 'preventive', label: 'Preventive care' },
+            { id: 'custom', label: 'Custom', isCustom: true },
+        ]),
+    },
+    {
+        key: 'additional',
+        title: 'Additional',
+        options: sortByLabel([
+            { id: 'ltc_rounds', label: 'Long-term care rounds' },
+            { id: 'admission', label: 'Admission/discharge coordination' },
+            { id: 'custom', label: 'Custom', isCustom: true },
+        ]),
+    },
+    {
+        key: 'optional',
+        title: 'Optional',
+        options: sortByLabel([
+            { id: 'supervise', label: 'Supervise learners' },
+            { id: 'custom', label: 'Custom', isCustom: true },
+        ]),
+    },
 ];
+function emptyResponsibilitySelection(): Record<string, Set<string>> {
+    return Object.fromEntries(RESPONSIBILITY_SECTIONS.map((s) => [s.key, new Set<string>()]));
+}
+function emptyResponsibilityCustom(): Record<string, string> {
+    return Object.fromEntries(RESPONSIBILITY_SECTIONS.map((s) => [s.key, '']));
+}
 const fieldInp: React.CSSProperties = {
     width: '100%',
     padding: '9px 12px',
@@ -698,9 +784,10 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
         document.addEventListener('mousedown', onDocMouseDown);
         return () => document.removeEventListener('mousedown', onDocMouseDown);
     }, [menuOpen]);
+    const isSoftDeleted = job.isDeleted === true;
     const isExpanded = expandedJobId === job.id;
-    const isFilled = job.status === 'ONGOING';
-    const isDraft = job.status === 'DRAFT';
+    const isFilled = !isSoftDeleted && job.status === 'ONGOING';
+    const isDraft = !isSoftDeleted && job.status === 'DRAFT';
     const appCount = job.applicationsCount;
     const startFmt = fmtDate(job.startDate);
     const endFmt = fmtDate(job.endDate);
@@ -720,7 +807,8 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
         cursor: 'pointer',
         display: 'block',
     };
-    const showExpiredActiveCard = job.status === 'ACTIVE' && isJobPastEndDate(job);
+    const showExpiredActiveCard = !isSoftDeleted && job.status === 'ACTIVE' && isJobPastEndDate(job);
+    const dimJobUi = showExpiredActiveCard || isSoftDeleted;
     async function handleDeleteJob() {
         if (!window.confirm('Delete this job posting? This cannot be undone.')) {
             setMenuOpen(false);
@@ -740,12 +828,20 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
         }
     }
     return (<div style={{
-            border: showExpiredActiveCard ? '1px solid #D1D5DB' : '1px solid #E5E7EB',
+            border: isSoftDeleted
+                ? '1px dashed #D1D5DB'
+                : showExpiredActiveCard
+                    ? '1px solid #D1D5DB'
+                    : '1px solid #E5E7EB',
             borderRadius: 10,
-            background: showExpiredActiveCard ? '#F3F4F6' : '#fff',
+            background: isSoftDeleted
+                ? '#F9FAFB'
+                : showExpiredActiveCard
+                    ? '#F3F4F6'
+                    : '#fff',
             padding: '18px 20px',
             boxSizing: 'border-box',
-            opacity: showExpiredActiveCard ? 0.92 : 1,
+            opacity: showExpiredActiveCard || isSoftDeleted ? 0.92 : 1,
         }}>
       <div style={{
             display: 'flex',
@@ -765,7 +861,7 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
             <div style={{
             fontWeight: 'var(--font-weight-bold)',
             fontSize: 'var(--font-heading)',
-            color: showExpiredActiveCard ? '#6B7280' : '#0B0F1F',
+            color: dimJobUi ? '#6B7280' : '#0B0F1F',
             lineHeight: 1.3,
         }}>
             {job.title}
@@ -787,7 +883,7 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
           </div>
           {job.description && (<div style={{
                 fontSize: 'var(--font-body)',
-                color: showExpiredActiveCard ? '#9CA3AF' : '#6B7280',
+                color: dimJobUi ? '#9CA3AF' : '#6B7280',
                 marginBottom: 12,
                 lineHeight: 1.5,
             }}>
@@ -803,13 +899,13 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
         }}>
             {(startFmt || endFmt) && (<div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <CalendarIcon />
-                <span style={{ fontSize: 'var(--font-body)', color: showExpiredActiveCard ? '#78716C' : '#374151' }}>
+                <span style={{ fontSize: 'var(--font-body)', color: dimJobUi ? '#78716C' : '#374151' }}>
                   {startFmt}
                   {startFmt && endFmt && ' – '}
                   {endFmt}
                 </span>
               </div>)}
-            {pay && (<span style={{ fontWeight: 'var(--font-weight-bold)', fontSize: 'var(--font-heading)', color: showExpiredActiveCard ? '#78716C' : '#0B0F1F' }}>
+            {pay && (<span style={{ fontWeight: 'var(--font-weight-bold)', fontSize: 'var(--font-heading)', color: dimJobUi ? '#78716C' : '#0B0F1F' }}>
                 {pay}
               </span>)}
           </div>
@@ -821,112 +917,126 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
             flexDirection: 'column',
             alignItems: 'flex-end',
             flexShrink: 0,
-            gap: !isDraft && !isFilled ? 18 : 10,
+            gap: isSoftDeleted ? 10 : !isDraft && !isFilled ? 18 : 10,
             minWidth: 120,
         }}>
-          <div ref={menuWrapRef} style={{ position: 'relative' }}>
-            <button ref={kebabBtnRef} type="button" aria-label="Job actions" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)} style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 36,
-            height: 32,
-            padding: 0,
-            border: '1px solid #E5E7EB',
-            borderRadius: 8,
-            background: '#fff',
-            color: '#6B7280',
-            cursor: 'pointer',
-            boxSizing: 'border-box',
-        }}>
-              <JobActionsKebabIcon />
-            </button>
-            {menuOpen && menuFixedPos != null && typeof document !== 'undefined' && createPortal(<div ref={portalMenuRef} role="menu" style={{
-                position: 'fixed',
-                top: menuFixedPos.top,
-                left: menuFixedPos.left,
-                minWidth: JOB_ACTIONS_MENU_W,
-                background: '#fff',
-                border: '1px solid #E5E7EB',
-                borderRadius: 10,
-                boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
-                zIndex: 10000,
-                overflow: 'hidden',
+          {isSoftDeleted ? (<span style={{
+                padding: '6px 14px',
+                background: '#F3F4F6',
+                border: '1px solid #D1D5DB',
+                borderRadius: 6,
+                color: '#4B5563',
+                fontWeight: 'var(--font-weight-bold)',
+                fontSize: 'var(--font-small)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
             }}>
-                <button type="button" role="menuitem" style={menuItemBase} onClick={() => {
-                onEdit(job);
-                setMenuOpen(false);
-            }} onMouseDown={(e) => e.preventDefault()}>
-                  <span style={{
-                display: 'inline-flex',
+              Deleted
+            </span>) : (<>
+              <div ref={menuWrapRef} style={{ position: 'relative' }}>
+                <button ref={kebabBtnRef} type="button" aria-label="Job actions" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)} style={{
+                display: 'flex',
                 alignItems: 'center',
-                gap: 8,
+                justifyContent: 'center',
+                width: 36,
+                height: 32,
+                padding: 0,
+                border: '1px solid #E5E7EB',
+                borderRadius: 8,
+                background: '#fff',
+                color: '#6B7280',
+                cursor: 'pointer',
+                boxSizing: 'border-box',
             }}>
-                    <UserEditIcon stroke="#374151"/>
-                    Edit job
-                  </span>
+                  <JobActionsKebabIcon />
                 </button>
-                {canHostShowReopenJob(job) && (<button type="button" role="menuitem" style={menuItemBase} onClick={() => {
-                    onReOpen(job);
+                {menuOpen && menuFixedPos != null && typeof document !== 'undefined' && createPortal(<div ref={portalMenuRef} role="menu" style={{
+                    position: 'fixed',
+                    top: menuFixedPos.top,
+                    left: menuFixedPos.left,
+                    minWidth: JOB_ACTIONS_MENU_W,
+                    background: '#fff',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: 10,
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
+                    zIndex: 10000,
+                    overflow: 'hidden',
+                }}>
+                    <button type="button" role="menuitem" style={menuItemBase} onClick={() => {
+                    onEdit(job);
                     setMenuOpen(false);
                 }} onMouseDown={(e) => e.preventDefault()}>
-                    <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-            }}>
-                      <ReopenJobIcon stroke="#374151"/>
-                      Re-open job
-                    </span>
-                  </button>)}
-                <button type="button" role="menuitem" disabled={deleting} style={{
-                ...menuItemBase,
-                color: '#B91C1C',
-                borderTop: '1px solid #F3F4F6',
-                cursor: deleting ? 'default' : 'pointer',
-                opacity: deleting ? 0.6 : 1,
-            }} onClick={() => void handleDeleteJob()} onMouseDown={(e) => e.preventDefault()}>
-                  <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-            }}>
-                    <TrashIcon stroke="#B91C1C"/>
-                    {deleting ? 'Deleting…' : 'Delete job'}
-                  </span>
-                </button>
-              </div>, document.body)}
-          </div>
+                      <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                }}>
+                        <UserEditIcon stroke="#374151"/>
+                        Edit job
+                      </span>
+                    </button>
+                    {canHostShowReopenJob(job) && (<button type="button" role="menuitem" style={menuItemBase} onClick={() => {
+                        onReOpen(job);
+                        setMenuOpen(false);
+                    }} onMouseDown={(e) => e.preventDefault()}>
+                        <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                }}>
+                          <ReopenJobIcon stroke="#374151"/>
+                          Re-open job
+                        </span>
+                      </button>)}
+                    <button type="button" role="menuitem" disabled={deleting} style={{
+                    ...menuItemBase,
+                    color: '#B91C1C',
+                    borderTop: '1px solid #F3F4F6',
+                    cursor: deleting ? 'default' : 'pointer',
+                    opacity: deleting ? 0.6 : 1,
+                }} onClick={() => void handleDeleteJob()} onMouseDown={(e) => e.preventDefault()}>
+                      <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                }}>
+                        <TrashIcon stroke="#B91C1C"/>
+                        {deleting ? 'Deleting…' : 'Delete job'}
+                      </span>
+                    </button>
+                  </div>, document.body)}
+              </div>
 
-          {isDraft ? (<span style={{
-                padding: '6px 16px',
-                background: '#FEF3C7',
-                border: '1px solid #FCD34D',
-                borderRadius: 6,
-                color: '#92400E',
-                fontWeight: 'var(--font-weight-bold)',
-                fontSize: 'var(--font-small)',
-            }}>
-              Draft
-            </span>) : (<button type="button" onClick={() => onToggleApplicants(job.id)} style={{
-                padding: '6px 16px',
-                background: isExpanded
-                    ? '#EEF0FB'
-                    : 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
-                border: 'none',
-                borderRadius: 6,
-                color: isExpanded ? '#1C32D2' : '#fff',
-                fontWeight: 'var(--font-weight-bold)',
-                fontSize: 'var(--font-small)',
-                cursor: 'pointer',
-            }}>
-              {appCount} Applicant{appCount !== 1 ? 's' : ''}
-            </button>)}
+              {isDraft ? (<span style={{
+                    padding: '6px 16px',
+                    background: '#FEF3C7',
+                    border: '1px solid #FCD34D',
+                    borderRadius: 6,
+                    color: '#92400E',
+                    fontWeight: 'var(--font-weight-bold)',
+                    fontSize: 'var(--font-small)',
+                }}>
+                  Draft
+                </span>) : (<button type="button" onClick={() => onToggleApplicants(job.id)} style={{
+                    padding: '6px 16px',
+                    background: isExpanded
+                        ? '#EEF0FB'
+                        : 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
+                    border: 'none',
+                    borderRadius: 6,
+                    color: isExpanded ? '#1C32D2' : '#fff',
+                    fontWeight: 'var(--font-weight-bold)',
+                    fontSize: 'var(--font-small)',
+                    cursor: 'pointer',
+                }}>
+                  {appCount} Applicant{appCount !== 1 ? 's' : ''}
+                </button>)}
+            </>)}
         </div>
       </div>
 
       
-      {isExpanded && !isDraft && (<InlineApplicantsTable jobId={job.id} jobTitle={job.title} applications={applications[job.id] ?? []} loading={loadingAppsFor === job.id} onViewAll={() => onViewAll(job.id)}/>)}
+      {isExpanded && !isDraft && !isSoftDeleted && (<InlineApplicantsTable jobId={job.id} jobTitle={job.title} applications={applications[job.id] ?? []} loading={loadingAppsFor === job.id} onViewAll={() => onViewAll(job.id)}/>)}
     </div>);
 }
 function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
@@ -934,15 +1044,18 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
     onSuccess: () => void;
     verified?: boolean;
 }) {
+    const JOB_POST_PANEL_MIN = 320;
+    const JOB_POST_PANEL_MAX_CAP = 1200;
+    const [postPanelWidth, setPostPanelWidth] = useState(480);
     const [step, setStep] = useState(1);
     const [jobTitle, setJobTitle] = useState('');
     const [jobDescription, setJobDescription] = useState('');
-    const [keyResponsibilities, setKeyResponsibilities] = useState('');
+    const [respBySection, setRespBySection] = useState<Record<string, Set<string>>>(() => emptyResponsibilitySelection());
+    const [respCustomBySection, setRespCustomBySection] = useState<Record<string, string>>(() => emptyResponsibilityCustom());
     const [startDateInput, setStartDateInput] = useState('');
     const [endDateInput, setEndDateInput] = useState('');
     const [startTime, setStartTime] = useState('05:00');
     const [endTime, setEndTime] = useState('14:00');
-    const [flexible, setFlexible] = useState(false);
     const [ratePerDay, setRatePerDay] = useState('');
     const [yearsExp, setYearsExp] = useState('');
     const [credentials, setCredentials] = useState<string[]>([
@@ -952,6 +1065,96 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
     const [travelReq, setTravelReq] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
+    const jobTitleWrapRef = useRef<HTMLDivElement>(null);
+    const jobTitleMenuRef = useRef<HTMLDivElement>(null);
+    const [jobTitleListOpen, setJobTitleListOpen] = useState(false);
+    const [jobTitleMenuBox, setJobTitleMenuBox] = useState<{
+        left: number;
+        top: number;
+        width: number;
+    } | null>(null);
+    const syncJobTitleMenuBox = useCallback(() => {
+        const el = jobTitleWrapRef.current;
+        if (!el)
+            return;
+        const r = el.getBoundingClientRect();
+        setJobTitleMenuBox({ left: r.left, top: r.bottom + 4, width: r.width });
+    }, []);
+    useLayoutEffect(() => {
+        if (!jobTitleListOpen) {
+            setJobTitleMenuBox(null);
+            return;
+        }
+        syncJobTitleMenuBox();
+    }, [jobTitleListOpen, postPanelWidth, syncJobTitleMenuBox]);
+    useEffect(() => {
+        if (!jobTitleListOpen)
+            return;
+        function onDocMouseDown(e: MouseEvent) {
+            const t = e.target as Node;
+            if (jobTitleWrapRef.current?.contains(t))
+                return;
+            if (jobTitleMenuRef.current?.contains(t))
+                return;
+            setJobTitleListOpen(false);
+        }
+        function onReposition() {
+            syncJobTitleMenuBox();
+        }
+        document.addEventListener('mousedown', onDocMouseDown);
+        window.addEventListener('resize', onReposition);
+        window.addEventListener('scroll', onReposition, true);
+        return () => {
+            document.removeEventListener('mousedown', onDocMouseDown);
+            window.removeEventListener('resize', onReposition);
+            window.removeEventListener('scroll', onReposition, true);
+        };
+    }, [jobTitleListOpen, syncJobTitleMenuBox]);
+    const jobDescWrapRef = useRef<HTMLDivElement>(null);
+    const jobDescMenuRef = useRef<HTMLDivElement>(null);
+    const [jobDescListOpen, setJobDescListOpen] = useState(false);
+    const [jobDescMenuBox, setJobDescMenuBox] = useState<{
+        left: number;
+        top: number;
+        width: number;
+    } | null>(null);
+    const syncJobDescMenuBox = useCallback(() => {
+        const el = jobDescWrapRef.current;
+        if (!el)
+            return;
+        const r = el.getBoundingClientRect();
+        setJobDescMenuBox({ left: r.left, top: r.bottom + 4, width: r.width });
+    }, []);
+    useLayoutEffect(() => {
+        if (!jobDescListOpen) {
+            setJobDescMenuBox(null);
+            return;
+        }
+        syncJobDescMenuBox();
+    }, [jobDescListOpen, postPanelWidth, syncJobDescMenuBox]);
+    useEffect(() => {
+        if (!jobDescListOpen)
+            return;
+        function onDocMouseDown(e: MouseEvent) {
+            const t = e.target as Node;
+            if (jobDescWrapRef.current?.contains(t))
+                return;
+            if (jobDescMenuRef.current?.contains(t))
+                return;
+            setJobDescListOpen(false);
+        }
+        function onReposition() {
+            syncJobDescMenuBox();
+        }
+        document.addEventListener('mousedown', onDocMouseDown);
+        window.addEventListener('resize', onReposition);
+        window.addEventListener('scroll', onReposition, true);
+        return () => {
+            document.removeEventListener('mousedown', onDocMouseDown);
+            window.removeEventListener('resize', onReposition);
+            window.removeEventListener('scroll', onReposition, true);
+        };
+    }, [jobDescListOpen, syncJobDescMenuBox]);
     function toggle(c: string) {
         setCredentials((p) => p.includes(c) ? p.filter((x) => x !== c) : [...p, c]);
     }
@@ -961,6 +1164,38 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
             return;
         setCredentials((prev) => (prev.includes(v) ? prev : [...prev, v]));
         setCustomCredential('');
+    }
+    function toggleResponsibility(sectionKey: string, optionId: string) {
+        setRespBySection((prev) => {
+            const cur = new Set(prev[sectionKey] ?? []);
+            if (cur.has(optionId))
+                cur.delete(optionId);
+            else
+                cur.add(optionId);
+            return { ...prev, [sectionKey]: cur };
+        });
+    }
+    function buildKeyResponsibilitiesPayload(): string[] {
+        const lines: string[] = [];
+        for (const section of RESPONSIBILITY_SECTIONS) {
+            const selected = respBySection[section.key] ?? new Set<string>();
+            const customLines = (respCustomBySection[section.key] ?? '')
+                .split('\n')
+                .map((s) => s.trim())
+                .filter(Boolean);
+            for (const opt of section.options) {
+                if (!selected.has(opt.id))
+                    continue;
+                if (opt.isCustom) {
+                    for (const line of customLines)
+                        lines.push(`${section.title}: ${line}`);
+                }
+                else {
+                    lines.push(`${section.title}: ${opt.label}`);
+                }
+            }
+        }
+        return lines;
     }
     async function handleDone() {
         if (!jobTitle.trim()) {
@@ -1013,10 +1248,7 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
             const payload: CreateJobPayload = {
                 title: jobTitle.trim(),
                 description: jobDescription.trim() || undefined,
-                keyResponsibilities: keyResponsibilities
-                    .split('\n')
-                    .map((s) => s.trim())
-                    .filter(Boolean),
+                keyResponsibilities: buildKeyResponsibilitiesPayload(),
                 startDate: startIso || undefined,
                 endDate: endIso || undefined,
                 startTime: startTime || undefined,
@@ -1025,7 +1257,7 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
                 minYearsExperience: yearsExp.trim() && Number.isFinite(yearsNum) ? yearsNum : undefined,
                 requiredCredentials: credentials,
                 travelRequired: travelReq,
-                scheduleFlexible: flexible,
+                scheduleFlexible: false,
             };
             await hostApi.createJob(payload);
             onSuccess();
@@ -1043,6 +1275,27 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
         finally {
             setSubmitting(false);
         }
+    }
+    function onPostPanelResizeMouseDown(e: ReactMouseEvent<HTMLDivElement>) {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startW = postPanelWidth;
+        const onMove = (ev: MouseEvent) => {
+            const maxW = Math.min(JOB_POST_PANEL_MAX_CAP, window.innerWidth - 24);
+            const dx = startX - ev.clientX;
+            setPostPanelWidth(Math.min(Math.max(startW + dx, JOB_POST_PANEL_MIN), maxW));
+        };
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
     }
     return (<>
       {!verified && (<div style={{
@@ -1074,7 +1327,7 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
             position: 'fixed',
             top: 0,
             right: 0,
-            width: 480,
+            width: postPanelWidth,
             height: '100vh',
             background: '#fff',
             zIndex: 201,
@@ -1083,6 +1336,16 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
             fontFamily: 'Inter, sans-serif',
             boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
         }}>
+        <div title="Drag to resize" onMouseDown={onPostPanelResizeMouseDown} style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 8,
+            zIndex: 5,
+            cursor: 'ew-resize',
+            background: 'transparent',
+        }}/>
         
         <div style={{
             display: 'flex',
@@ -1157,25 +1420,184 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
                 flexDirection: 'column',
                 gap: 14,
             }}>
-                <div>
+                <div ref={jobTitleWrapRef} style={{ position: 'relative' }}>
                   <label style={lbl}>Job Title *</label>
-                  <input style={fieldInp} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="Job Title"/>
+                  <div style={{ position: 'relative' }}>
+                    <input style={{
+                ...fieldInp,
+                paddingRight: 40,
+            }} value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="Choose a suggested title or type a custom one"/>
+                    <button type="button" aria-expanded={jobTitleListOpen} aria-label="Open suggested job titles" onClick={() => setJobTitleListOpen((v) => !v)} style={{
+                position: 'absolute',
+                right: 2,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                width: 36,
+                height: 34,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+                color: '#0B0F1F',
+            }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                  {jobTitleListOpen && jobTitleMenuBox ? createPortal(<div ref={jobTitleMenuRef} style={{
+                position: 'fixed',
+                left: jobTitleMenuBox.left,
+                top: jobTitleMenuBox.top,
+                width: jobTitleMenuBox.width,
+                background: '#fff',
+                border: '1px solid #D0D5DD',
+                borderRadius: 8,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                zIndex: 100020,
+                maxHeight: 260,
+                overflowY: 'auto',
+            }}>
+                    {JOB_TITLE_PRESET_OPTIONS.map((t) => (<button key={t} type="button" onClick={() => {
+                setJobTitle(t);
+                setJobTitleListOpen(false);
+            }} style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '10px 12px',
+                border: 'none',
+                background: '#fff',
+                cursor: 'pointer',
+                fontSize: 14,
+                color: '#0B0F1F',
+                fontFamily: 'inherit',
+                boxSizing: 'border-box',
+            }} onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#F5F6FF';
+            }} onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#fff';
+            }}>
+                        {t}
+                      </button>))}
+                  </div>, document.body) : null}
                 </div>
-                <div>
+                <div ref={jobDescWrapRef} style={{ position: 'relative' }}>
                   <label style={lbl}>Job Description</label>
-                  <textarea style={{
+                  <div style={{ position: 'relative' }}>
+                    <textarea style={{
                 ...fieldInp,
                 height: 90,
                 resize: 'none',
+                paddingRight: 40,
             } as React.CSSProperties} value={jobDescription} onChange={(e) => setJobDescription(e.target.value)} placeholder="Describe the role…"/>
+                    <button type="button" aria-expanded={jobDescListOpen} aria-label="Open description templates" onClick={() => setJobDescListOpen((v) => !v)} style={{
+                position: 'absolute',
+                right: 2,
+                top: 10,
+                width: 36,
+                height: 34,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+                color: '#0B0F1F',
+            }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                  {jobDescListOpen && jobDescMenuBox ? createPortal(<div ref={jobDescMenuRef} style={{
+                position: 'fixed',
+                left: jobDescMenuBox.left,
+                top: jobDescMenuBox.top,
+                width: jobDescMenuBox.width,
+                background: '#fff',
+                border: '1px solid #D0D5DD',
+                borderRadius: 8,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                zIndex: 100020,
+                maxHeight: 280,
+                overflowY: 'auto',
+            }}>
+                    {JOB_DESCRIPTION_PRESET_ITEMS.map((item) => (<button key={item.label} type="button" onClick={() => {
+                setJobDescription(item.body);
+                setJobDescListOpen(false);
+            }} style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '10px 12px',
+                border: 'none',
+                background: '#fff',
+                cursor: 'pointer',
+                fontSize: 14,
+                color: '#0B0F1F',
+                fontFamily: 'inherit',
+                boxSizing: 'border-box',
+            }} onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#F5F6FF';
+            }} onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#fff';
+            }}>
+                        {item.label}
+                      </button>))}
+                  </div>, document.body) : null}
                 </div>
                 <div>
-                  <label style={lbl}>Key Responsibilities (one per line)</label>
-                  <textarea style={{
-                ...fieldInp,
-                height: 80,
-                resize: 'none',
-            } as React.CSSProperties} value={keyResponsibilities} onChange={(e) => setKeyResponsibilities(e.target.value)} placeholder="List key responsibilities…"/>
+                  <label style={lbl}>Key Responsibilities</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {RESPONSIBILITY_SECTIONS.map((section) => {
+                        const selected = respBySection[section.key] ?? new Set<string>();
+                        const showCustom = section.options.some((o) => o.isCustom && selected.has(o.id));
+                        return (<div key={section.key}>
+                          <div style={{
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: '#111827',
+                                marginBottom: 8,
+                            }}>
+                            {section.title}:
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {section.options.map((opt) => (<label key={opt.id} style={{
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    gap: 10,
+                                    fontSize: 13,
+                                    color: '#374151',
+                                    cursor: 'pointer',
+                                    lineHeight: 1.35,
+                                }}>
+                              <input type="checkbox" checked={selected.has(opt.id)} onChange={() => toggleResponsibility(section.key, opt.id)} style={{
+                                        width: 16,
+                                        height: 16,
+                                        marginTop: 2,
+                                        flexShrink: 0,
+                                        accentColor: '#1C32D2',
+                                    }}/>
+                              <span>{opt.label}</span>
+                            </label>))}
+                          </div>
+                          {showCustom ? (<textarea style={{
+                                ...fieldInp,
+                                marginTop: 8,
+                                minHeight: 56,
+                                resize: 'vertical',
+                            } as React.CSSProperties} value={respCustomBySection[section.key] ?? ''} onChange={(e) => setRespCustomBySection((p) => ({
+                                ...p,
+                                [section.key]: e.target.value,
+                            }))} placeholder="Custom responsibilities for this category (one per line)"/>) : null}
+                        </div>);
+                    })}
+                  </div>
                 </div>
               </div>
             </div>) : (<CollapsedStep icon={<DetailsIcon />} label="Details" sub="Define the role and culture." onClick={() => setStep(1)}/>)}
@@ -1248,17 +1670,6 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
                     <input type="time" style={fieldInp} value={endTime} onChange={(e) => setEndTime(e.target.value)}/>
                   </div>
                 </div>
-                <label style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 14,
-                color: '#374151',
-                cursor: 'pointer',
-            }}>
-                  <input type="checkbox" checked={flexible} onChange={(e) => setFlexible(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#1C32D2' }}/>
-                  Schedule is flexible
-                </label>
                 <div>
                   <label style={lbl}>Rate per Day (CAD) *</label>
                   <input style={fieldInp} type="number" value={ratePerDay} onChange={(e) => setRatePerDay(e.target.value)} placeholder="e.g. 2000"/>
@@ -1330,9 +1741,7 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
                     seen.add(k);
                     return true;
                 });
-                const selected = unique.filter((c) => credentials.includes(c));
-                const rest = unique.filter((c) => !credentials.includes(c));
-                return [...selected, ...rest];
+                return sortStringsLocale(unique);
             })().map((c) => {
                 const on = credentials.includes(c);
                 return (<span key={c} onClick={() => toggle(c)} style={{
@@ -1444,12 +1853,14 @@ export default function HostDashboard(props: {
 }) {
     useNextPageClientProps(props);
     const router = useRouter();
-    const { profileComplete, isLoading: authLoading, userId, logout } = useAuth();
+    const pathname = usePathname();
+    const { profileComplete, isLoading: authLoading, userId } = useAuth();
     const [mounted, setMounted] = useState(false);
-    const [activeNav, setActiveNav] = useState('postings');
-    const [activeTab, setActiveTab] = useState<'active' | 'ongoing' | 'recent' | 'draft'>('active');
+    const [activeTab, setActiveTab] = useState<'active' | 'ongoing' | 'recent' | 'draft' | 'deleted'>('active');
     const [showJobOverlay, setShowJobOverlay] = useState(false);
+    const [showJobPostedConfirmation, setShowJobPostedConfirmation] = useState(false);
     const [jobs, setJobs] = useState<Job[]>([]);
+    const [deletedJobs, setDeletedJobs] = useState<Job[]>([]);
     const [loadingData, setLoadingData] = useState(false);
     const [dataLoadError, setDataLoadError] = useState<string | null>(null);
     const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
@@ -1458,14 +1869,8 @@ export default function HostDashboard(props: {
     const [reopenTarget, setReopenTarget] = useState<Job | null>(null);
     const [profile, setProfile] = useState<HostProfile | null>(null);
     const [initialDashboardLoad, setInitialDashboardLoad] = useState(true);
-    const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-    const avatarMenuRef = useRef<HTMLDivElement>(null);
-    const avatarFileInputRef = useRef<HTMLInputElement>(null);
-    const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
-    const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null);
     const hostFirst = profile?.contactFirstName ?? '';
     const hostLast = profile?.contactLastName ?? '';
-    const hostInitial = computeAvatarInitials(profile?.contactFirstName, profile?.contactLastName, profile?.clinicName);
     const verified = isCpsnsVerified(profile?.cpsnsNumber);
     const doctorLabel = hostFirst || hostLast ? `Dr ${hostFirst} ${hostLast}`.trim() : 'Doctor';
     const clinicName = profile?.clinicName || 'Welcome';
@@ -1486,9 +1891,10 @@ export default function HostDashboard(props: {
         setDataLoadError(null);
         try {
             const errs: string[] = [];
-            const [profileResult, jobsResult] = await Promise.allSettled([
+            const [profileResult, jobsResult, deletedJobsResult] = await Promise.allSettled([
                 hostApi.getProfile(),
                 hostApi.getJobs(),
+                hostApi.getJobs({ deleted: true }),
             ]);
             if (profileResult.status === 'fulfilled') {
                 setProfile(profileResult.value);
@@ -1514,6 +1920,13 @@ export default function HostDashboard(props: {
                 else {
                     errs.push(r instanceof Error ? r.message : 'Could not load jobs.');
                 }
+                setJobs([]);
+            }
+            if (deletedJobsResult.status === 'fulfilled') {
+                setDeletedJobs(deletedJobsResult.value.jobs);
+            }
+            else {
+                setDeletedJobs([]);
             }
             if (errs.length)
                 setDataLoadError([...new Set(errs)].join(' '));
@@ -1526,44 +1939,6 @@ export default function HostDashboard(props: {
     useEffect(() => {
         setMounted(true);
     }, []);
-    useEffect(() => {
-        if (!mounted)
-            return;
-        if (!getToken())
-            return;
-        let cancelled = false;
-        void (async () => {
-            try {
-                const me = await authApi.getMe();
-                if (!cancelled)
-                    setAvatarPhotoUrl(me.avatarUrl);
-            }
-            catch {
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [mounted, userId]);
-    useEffect(() => {
-        if (!avatarMenuOpen)
-            return;
-        function onMouseDown(e: MouseEvent) {
-            if (avatarMenuRef.current?.contains(e.target as Node))
-                return;
-            setAvatarMenuOpen(false);
-        }
-        function onKeyDown(e: KeyboardEvent) {
-            if (e.key === 'Escape')
-                setAvatarMenuOpen(false);
-        }
-        document.addEventListener('mousedown', onMouseDown);
-        window.addEventListener('keydown', onKeyDown);
-        return () => {
-            document.removeEventListener('mousedown', onMouseDown);
-            window.removeEventListener('keydown', onKeyDown);
-        };
-    }, [avatarMenuOpen]);
     useEffect(() => {
         if (!mounted || authLoading)
             return;
@@ -1584,30 +1959,33 @@ export default function HostDashboard(props: {
         }
         void loadDashboardFromApi();
     }, [mounted, authLoading, userId, loadDashboardFromApi, router]);
-    function handleLogout() {
-        logout();
-        beforeClientNavigation('/home');
-        router.replace('/home');
-    }
+    useEffect(() => {
+        if (!showJobPostedConfirmation)
+            return;
+        const t = window.setTimeout(() => setShowJobPostedConfirmation(false), 12000);
+        return () => window.clearTimeout(t);
+    }, [showJobPostedConfirmation]);
     const today = new Date();
     const draftJobs = jobs.filter((j) => j.status === 'DRAFT');
     const activePosts = jobs.filter((j) => j.status === 'ACTIVE' || j.status === 'ONGOING');
     const ongoingJobs = jobs.filter((j) => j.status === 'ONGOING');
     const recentJobs = jobs.filter((j) => j.status === 'COMPLETED' || j.status === 'CANCELLED' || j.status === 'EXPIRED');
-    const tabJobs = activeTab === 'active'
-        ? activePosts
-        : activeTab === 'ongoing'
-            ? ongoingJobs
-            : activeTab === 'recent'
-                ? recentJobs
-                : draftJobs;
+    const tabJobs = activeTab === 'deleted'
+        ? deletedJobs
+        : activeTab === 'active'
+            ? activePosts
+            : activeTab === 'ongoing'
+                ? ongoingJobs
+                : activeTab === 'recent'
+                    ? recentJobs
+                    : draftJobs;
     const statsDisplay = [
         {
-            label: 'Total Jobs Posted',
+            label: 'Total Locum Shifts Posted',
             value: activePosts.length,
         },
         {
-            label: 'Total Completed Jobs',
+            label: 'Total Locum Shifts Completed',
             value: recentJobs.length,
         },
     ];
@@ -1654,278 +2032,70 @@ export default function HostDashboard(props: {
         Loading dashboard…
       </div>);
     }
-    return (<div style={{
-            height: '100vh',
-            maxHeight: '100vh',
-            overflow: 'hidden',
-            fontFamily: 'Inter, sans-serif',
-            background: '#fff',
-        }}>
-      
-      <nav style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: NAVBAR_HEIGHT,
-            zIndex: 100,
-            boxSizing: 'border-box',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '0 24px',
-            background: '#FFFFFF',
-            borderBottom: '2px solid rgba(0,0,0,0.1)',
-        }}>
-        <Link href="/home" style={{ textDecoration: 'none' }}>
-          <Logo size="md" />
-        </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 28, height: 28 }}>
-            <BellIcon />
-          </div>
-          <div ref={avatarMenuRef} style={{ position: 'relative' }}>
-            <input ref={avatarFileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: 'none' }} onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = '';
-                if (!file)
-                    return;
-                if (!getToken())
-                    return;
-                const maxBytes = 5 * 1024 * 1024;
-                if (file.size > maxBytes) {
-                    window.alert('Image must be 5 MB or smaller.');
-                    return;
-                }
-                setAvatarUploadBusy(true);
-                void (async () => {
-                    try {
-                        const { path, signedUrl } = await uploadFile(file, 'avatars');
-                        await authApi.updateAvatar(path);
-                        setAvatarPhotoUrl(signedUrl);
-                        setAvatarMenuOpen(false);
-                    }
-                    catch (err) {
-                        window.alert(err instanceof Error
-                            ? err.message
-                            : 'Could not upload photo.');
-                    }
-                    finally {
-                        setAvatarUploadBusy(false);
-                    }
-                })();
-            }}/>
-            <div role="button" tabIndex={0} onClick={() => setAvatarMenuOpen((v) => !v)} onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ')
-                    setAvatarMenuOpen((v) => !v);
-            }} aria-label="Account menu" aria-expanded={avatarMenuOpen} style={{
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                background: avatarPhotoUrl ? 'transparent' : 'rgba(58,101,219,0.07)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                userSelect: 'none',
-                overflow: 'hidden',
-                border: avatarPhotoUrl ? '1px solid rgba(0,0,0,0.06)' : 'none',
-            }}>
-              {avatarPhotoUrl ? (<img src={avatarPhotoUrl} alt="" width={28} height={28} style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    display: 'block',
-                }}/>) : (<span style={{
-                    fontFamily: 'Hanken Grotesk, Inter, sans-serif',
-                    fontWeight: 'var(--font-weight-bold)',
-                    fontSize: 'var(--font-heading)',
-                    color: '#0F2AAE',
-                }}>
-                  {hostInitial}
-                </span>)}
-            </div>
-
-            {avatarMenuOpen && (<div role="menu" style={{
-                position: 'absolute',
-                top: 36,
-                right: 0,
-                minWidth: 210,
-                background: '#fff',
-                border: '1px solid #E5E7EB',
-                borderRadius: 10,
-                boxShadow: '0 10px 26px rgba(15, 23, 42, 0.12)',
-                padding: 6,
-                zIndex: 120,
-                overflow: 'hidden',
-            }}>
-                <button type="button" role="menuitem" disabled={avatarUploadBusy || !getToken()} onClick={() => avatarFileInputRef.current?.click()} style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    background: 'transparent',
-                    border: 'none',
-                    borderRadius: 8,
-                    padding: '10px 10px',
-                    cursor: avatarUploadBusy || !getToken() ? 'default' : 'pointer',
-                    color: '#0f1523',
-                    fontSize: 'var(--font-body)',
-                    fontWeight: 'var(--font-weight-bold)',
-                    textAlign: 'left',
-                    opacity: avatarUploadBusy || !getToken() ? 0.55 : 1,
-                    fontFamily: 'inherit',
-                }} onMouseOver={(e) => {
-                    if (!avatarUploadBusy && getToken())
-                        e.currentTarget.style.background = '#F3F4F6';
-                }} onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}>
-                  {avatarUploadBusy
-                        ? 'Uploading…'
-                        : avatarPhotoUrl
-                            ? 'Change profile picture'
-                            : 'Set profile picture'}
-                </button>
-                <button type="button" role="menuitem" onClick={() => {
-                    setAvatarMenuOpen(false);
-                    handleLogout();
-                }} style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    background: 'transparent',
-                    border: 'none',
-                    borderRadius: 8,
-                    padding: '10px 10px',
-                    cursor: 'pointer',
-                    color: '#dc2626',
-                    fontSize: 'var(--font-body)',
-                    fontWeight: 'var(--font-weight-bold)',
-                    textAlign: 'left',
-                    borderTop: '1px solid #F3F4F6',
-                    fontFamily: 'inherit',
-                }} onMouseOver={(e) => (e.currentTarget.style.background = '#FEF2F2')} onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}>
-                  Logout
-                </button>
-              </div>)}
-          </div>
-        </div>
-      </nav>
-
-      
-      <div style={{
-            display: 'flex',
-            height: `calc(100vh - ${NAVBAR_HEIGHT}px)`,
-            marginTop: NAVBAR_HEIGHT,
-            overflow: 'hidden',
-        }}>
-        
-        <aside style={{
-            position: 'relative',
-            flexShrink: 0,
-            width: 232,
-            height: '100%',
-            overflowY: 'auto',
-            boxSizing: 'border-box',
-            background: '#F4F6FB',
-            boxShadow: 'inset 0px 4px 22px rgba(0,0,0,0.02)',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '8px 10px 28px',
-            gap: 14,
-        }}>
-          <div style={{
-            position: 'absolute',
-            left: 0,
-            top: 8 + NAV_ITEMS.findIndex((n) => n.id === activeNav) * (44 + 14),
-            width: 6,
-            height: 44,
-            background: 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
-            borderRadius: '0px 8px 8px 0px',
-            transition: 'top 0.2s ease',
-        }}/>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-            width: '100%',
-        }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {NAV_ITEMS.map((item) => {
-            const isActive = activeNav === item.id;
-            return (<button key={item.id} onClick={() => {
-                    setActiveNav(item.id);
-                    beforeClientNavigation(item.href);
-                    router.push(item.href);
-                }} style={{
-                    all: 'unset',
-                    cursor: 'pointer',
-                    boxSizing: 'border-box',
-                    display: 'flex',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 8,
-                    width: '100%',
-                    maxWidth: 212,
-                    height: 44,
-                    padding: '10px 12px 10px 8px',
-                    background: isActive
-                        ? 'rgba(130,173,237,0.2)'
-                        : 'transparent',
-                    borderRadius: isActive ? 4 : 16,
-                }}>
-                    <span style={{
-                    width: 20,
-                    height: 20,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                }}>
-                      {item.id === 'postings' && <FileIcon active={isActive}/>}
-                      {item.id === 'profile' && (<ProfileIcon active={isActive}/>)}
-                      {item.id === 'messages' && (<MessageIcon active={isActive}/>)}
-                      {item.id === 'resources' && (<BookIcon active={isActive}/>)}
-                    </span>
-                    <span style={{
-                    fontFamily: 'Gilroy-Medium, Inter, sans-serif',
-                    fontWeight: 'var(--font-weight-normal)',
-                    fontSize: 'var(--font-heading)',
-                    lineHeight: '20px',
-                    textTransform: 'capitalize',
-                    whiteSpace: 'nowrap',
-                    ...(isActive
-                        ? {
-                            background: 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                        }
-                        : { color: 'rgba(2,7,27,0.9)' }),
-                }}>
-                      {item.label}
-                    </span>
-                  </button>);
-        })}
-            </div>
-          </div>
-          <div style={{ width: '100%', height: 1, background: '#DBE1E8' }}/>
-        </aside>
-
-        
-        <main style={{
-            flex: 1,
-            overflowY: 'auto',
-            background: '#F7F8FA',
-            padding: '19px 24px 48px',
-            boxSizing: 'border-box',
-        }}>
+    return (<DashLayout
+            navItems={HOST_DASH_NAV}
+            activeHref={pathname ?? '/host/dashboard'}
+            topbarFirstName={profile?.contactFirstName ?? undefined}
+            topbarLastName={profile?.contactLastName ?? undefined}
+        >
           <div style={{
             maxWidth: 1180,
             display: 'flex',
             flexDirection: 'column',
             gap: 24,
         }}>
-            
+          
+            {showJobPostedConfirmation && (<div role="status" aria-live="polite" style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 14,
+                    padding: '16px 18px',
+                    borderRadius: 10,
+                    background: '#ECFDF5',
+                    border: '1px solid #A7F3D0',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.12)',
+                }}>
+              <div style={{
+                        flexShrink: 0,
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        background: '#D1FAE5',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 18,
+                        lineHeight: 1,
+                        color: '#047857',
+                    }} aria-hidden>
+                ✓
+              </div>
+              <div style={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 700,
+                        fontSize: 'var(--font-heading)',
+                        color: '#065F46',
+                        lineHeight: 1.35,
+                    }}>
+                You have posted your locum shifts successfully.
+              </div>
+              <button type="button" onClick={() => setShowJobPostedConfirmation(false)} aria-label="Dismiss confirmation" style={{
+                        flexShrink: 0,
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        padding: '4px 8px',
+                        fontSize: 22,
+                        lineHeight: 1,
+                        color: '#065F46',
+                        opacity: 0.75,
+                    }}>
+              ×
+            </button>
+            </div>)}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{
@@ -2211,7 +2381,11 @@ export default function HostDashboard(props: {
                 color: '#0B0F1F',
                 marginTop: 8,
             }}>
-                      {activeTab === 'draft' ? 'No drafts yet' : 'No posts yet'}
+                      {activeTab === 'deleted'
+                        ? 'No deleted shifts'
+                        : activeTab === 'draft'
+                            ? 'No drafts yet'
+                            : 'No posts yet'}
                     </span>
                     <span style={{
                 fontFamily: 'Inter, sans-serif',
@@ -2220,11 +2394,13 @@ export default function HostDashboard(props: {
                 color: '#6B7280',
             }}>
                       {activeTab === 'active' &&
-                'You have not posted any jobs yet'}
+                'You have not posted any posts yet'}
                       {activeTab === 'ongoing' &&
-                'No jobs are currently ongoing'}
-                      {activeTab === 'recent' && 'No completed jobs'}
-                      {activeTab === 'draft' && 'No draft jobs saved'}
+                'No shifts are currently ongoing'}
+                      {activeTab === 'recent' && 'No completed shifts'}
+                      {activeTab === 'draft' && 'No draft shifts saved'}
+                      {activeTab === 'deleted' &&
+                'Shifts you delete from the dashboard appear here'}
                     </span>
                   </div>)}
 
@@ -2241,16 +2417,15 @@ export default function HostDashboard(props: {
               </div>
             </div>
           </div>
-        </main>
-      </div>
 
       
       {showJobOverlay && (<JobPostingOverlay verified={verified} onClose={() => setShowJobOverlay(false)} onSuccess={() => {
                 setShowJobOverlay(false);
-                loadDashboardFromApi();
+                setShowJobPostedConfirmation(true);
+                void loadDashboardFromApi();
             }}/>)}
 
       
       {reopenTarget && (<ReOpenModal key={reopenTarget.id} job={reopenTarget} onConfirm={handleReopen} onCancel={() => setReopenTarget(null)}/>)}
-    </div>);
+    </DashLayout>);
 }

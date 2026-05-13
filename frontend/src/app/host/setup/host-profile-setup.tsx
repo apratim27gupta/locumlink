@@ -27,6 +27,7 @@ import {
 } from '@/lib/canadianCities';
 import BarWaveButton from '@/components/ui/BarWaveButton';
 import { beforeClientNavigation } from '@/lib/topLoader';
+import { sortStringsLocale } from '@/lib/sortLocale';
 
 const HOST_SETUP_MODAL = {
   widthPx: 476,
@@ -44,7 +45,7 @@ const HOST_SETUP_MODAL = {
   boxShadow: '0 20px 60px rgba(0, 0, 0, 0.28)',
 } as const;
 
-const SPECIALITY_OPTIONS = [
+const SPECIALITY_OPTIONS = sortStringsLocale([
   'Family Physician',
   'Internal medicine',
   'Emergency',
@@ -53,7 +54,7 @@ const SPECIALITY_OPTIONS = [
   'Emergency Medicine',
   'Anaesthetics',
   'Paediatrics',
-] as const;
+]);
 
 function parseSpecialities(s: string): string[] {
   return s

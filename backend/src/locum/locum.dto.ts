@@ -34,6 +34,9 @@ export class SaveLocumProfileDto {
     province?: string;
     @IsString()
     @IsOptional()
+    phone?: string;
+    @IsString()
+    @IsOptional()
     licenseFileName?: string;
     @IsString()
     @IsOptional()

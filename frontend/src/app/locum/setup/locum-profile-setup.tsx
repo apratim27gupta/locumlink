@@ -9,6 +9,7 @@ import type { LocumProfile } from '@/types';
 import { sanitizeCpsnsInput, } from '@/lib/cpsnsVerify';
 import BarWaveButton from '@/components/ui/BarWaveButton';
 import { beforeClientNavigation } from '@/lib/topLoader';
+import { sortStringsLocale } from '@/lib/sortLocale';
 const LOCUM_SETUP_MODAL = {
     widthPx: 476,
     heightPx: 790,
@@ -24,7 +25,7 @@ const LOCUM_SETUP_MODAL = {
     bodyTopGapPx: 24,
     boxShadow: '0 20px 60px rgba(0, 0, 0, 0.28)',
 } as const;
-const SPECIALIZATION_OPTIONS = [
+const SPECIALIZATION_OPTIONS = sortStringsLocale([
     'Family Medicine',
     'Internal Medicine',
     'Emergency Medicine',
@@ -35,7 +36,7 @@ const SPECIALIZATION_OPTIONS = [
     'Obstetrics & Gynaecology',
     'Psychiatry',
     'Surgery',
-] as const;
+]);
 function parseSpecializations(s: string): string[] {
     return s
         .split(',')
@@ -1126,7 +1127,7 @@ export default function LocumSetupPage() {
                         </span>
                         <UploadCloudIcon />
                       </div>
-                      <input ref={extraRef} type="file" style={{ display: 'none' }} onChange={async (e) => {
+                      <input ref={extraRef} type="file" accept=".pdf,.doc,.docx,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png" style={{ display: 'none' }} onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file)
                     return;
@@ -1160,7 +1161,7 @@ export default function LocumSetupPage() {
                 fontWeight: 400,
                 color: '#9CA3AF',
             }}>
-                        Accepted formats: pdf, doc, docx
+                        Accepted formats: PDF, DOC, DOCX, PNG
                       </p>
                     </div>
                   </div>

@@ -86,8 +86,26 @@ function statusToUi(status: ApplicationRecord['status']): 'shortlisted' | 'pendi
     return status === 'SHORTLISTED' || status === 'CONFIRMED' ? 'shortlisted' : 'pending';
 }
 
+function statusBadgeLabel(status: ApplicationRecord['status']): string {
+    switch (status) {
+        case 'APPLIED':
+            return 'Pending';
+        case 'SHORTLISTED':
+            return 'Shortlisted';
+        case 'CONFIRMED':
+            return 'Confirmed';
+        case 'REJECTED':
+            return 'Rejected';
+        case 'WITHDRAWN':
+            return 'Withdrawn';
+        default:
+            return status;
+    }
+}
+
 function StatusBadge({ status }: { status: ApplicationRecord['status'] }) {
-    const shortlisted = statusToUi(status) === 'shortlisted';
+    const dotColor = STATUS_COLOR[status] ?? '#6B7280';
+    const label = statusBadgeLabel(status);
     return (<span style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -105,10 +123,9 @@ function StatusBadge({ status }: { status: ApplicationRecord['status'] }) {
             height: 8,
             borderRadius: '50%',
             flexShrink: 0,
-            background: shortlisted ? '#22C55E' : 'transparent',
-            border: shortlisted ? 'none' : '1px solid #6B7280',
+            background: dotColor,
         }}/>
-      {shortlisted ? 'Shortlisted' : 'Pending'}
+      {label}
     </span>);
 }
 
@@ -969,8 +986,8 @@ export default function HostApplicantsPage(props: {
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <button type="button" disabled={!jobId || selected.status !== 'APPLIED'} onClick={async () => {
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button type="button" disabled={!jobId || selected.status !== 'APPLIED' || actioning.has(selected.id)} onClick={async () => {
                         if (!jobId)
                             return;
                         const app = selected;
@@ -989,14 +1006,14 @@ export default function HostApplicantsPage(props: {
                         }
                     }} style={{
                         all: 'unset',
-                        cursor: jobId && selected.status === 'APPLIED' ? 'pointer' : 'default',
+                        cursor: jobId && selected.status === 'APPLIED' && !actioning.has(selected.id) ? 'pointer' : 'default',
                         boxSizing: 'border-box',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         padding: '10px 12px',
                         height: 44,
-                        background: jobId && selected.status === 'APPLIED'
+                        background: jobId && selected.status === 'APPLIED' && !actioning.has(selected.id)
                             ? 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)'
                             : '#E5E7EB',
                         borderRadius: 8,
@@ -1006,12 +1023,65 @@ export default function HostApplicantsPage(props: {
                         fontWeight: 500,
                         fontSize: 14,
                         lineHeight: '150%',
-                        color: jobId && selected.status === 'APPLIED' ? '#fff' : '#6B7280',
+                        color: jobId && selected.status === 'APPLIED' && !actioning.has(selected.id) ? '#fff' : '#6B7280',
                         textTransform: 'capitalize',
                     }}>
-                      {selected.status === 'APPLIED' ? 'Shortlist' : 'Shortlisted'}
+                      {selected.status === 'APPLIED'
+                        ? (actioning.has(selected.id) ? 'Shortlisting…' : 'Shortlist')
+                        : selected.status === 'SHORTLISTED'
+                            ? 'Shortlisted'
+                            : selected.status === 'CONFIRMED'
+                                ? 'Confirmed'
+                                : selected.status === 'REJECTED'
+                                    ? 'Rejected'
+                                    : selected.status === 'WITHDRAWN'
+                                        ? 'Withdrawn'
+                                        : '—'}
                     </span>
                   </button>
+
+                  {selected.status === 'SHORTLISTED' && (<button type="button" disabled={!jobId || actioning.has(selected.id)} onClick={async () => {
+                        if (!jobId)
+                            return;
+                        const app = selected;
+                        setActioning((prev) => new Set(prev).add(app.id));
+                        try {
+                            await hostApi.updateApplication(jobId, app.id, 'CONFIRMED');
+                            setApps((prev) => prev.map((x) => x.id === app.id ? { ...x, status: 'CONFIRMED' } : x));
+                            setSelected((prev) => prev ? { ...prev, status: 'CONFIRMED' } : prev);
+                        }
+                        finally {
+                            setActioning((prev) => {
+                                const next = new Set(prev);
+                                next.delete(app.id);
+                                return next;
+                            });
+                        }
+                    }} style={{
+                        all: 'unset',
+                        cursor: jobId && !actioning.has(selected.id) ? 'pointer' : 'default',
+                        boxSizing: 'border-box',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '10px 12px',
+                        height: 44,
+                        background: jobId && !actioning.has(selected.id)
+                            ? 'linear-gradient(270deg,#6366F1 0%,#4F46E5 100%)'
+                            : '#E5E7EB',
+                        borderRadius: 8,
+                    }}>
+                    <span style={{
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 600,
+                        fontSize: 14,
+                        lineHeight: '150%',
+                        color: jobId && !actioning.has(selected.id) ? '#fff' : '#6B7280',
+                        textTransform: 'capitalize',
+                    }}>
+                      {actioning.has(selected.id) ? 'Confirming…' : 'Confirm locum'}
+                    </span>
+                  </button>)}
 
                   <button type="button" onClick={statusToUi(selected.status) === 'shortlisted'
                         ? () => {

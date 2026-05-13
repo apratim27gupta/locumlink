@@ -181,38 +181,43 @@ export class HostService {
         });
         return { success: true, job };
     }
-    async getJobs(userId: string) {
+    async getJobs(userId: string, options?: { deletedOnly?: boolean }) {
         const hostProfileId = await this.getHostProfileId(userId);
+        const deletedOnly = options?.deletedOnly === true;
         const jobs = await this.prisma.jobPosting.findMany({
-            where: { hostProfileId, isDeleted: false },
+            where: deletedOnly
+                ? { hostProfileId, isDeleted: true }
+                : { hostProfileId, isDeleted: false },
             orderBy: { createdAt: 'desc' },
             include: {
                 _count: { select: { applications: true } },
                 shifts: true,
             },
         });
-        const now = new Date();
-        // Auto-transition ONGOING -> COMPLETED when end date has passed
-        const toComplete = jobs.filter(
-            (j) => j.status === 'ONGOING' && j.endDate && new Date(j.endDate) < now
-        );
-        if (toComplete.length > 0) {
-            await this.prisma.jobPosting.updateMany({
-                where: { id: { in: toComplete.map((j) => j.id) } },
-                data: { status: 'COMPLETED' },
-            });
-            toComplete.forEach((j) => { j.status = 'COMPLETED' as any; });
-        }
-        // Also auto-transition ACTIVE -> EXPIRED when end date has passed
-        const toExpire = jobs.filter(
-            (j) => j.status === 'ACTIVE' && j.endDate && new Date(j.endDate) < now
-        );
-        if (toExpire.length > 0) {
-            await this.prisma.jobPosting.updateMany({
-                where: { id: { in: toExpire.map((j) => j.id) } },
-                data: { status: 'EXPIRED' },
-            });
-            toExpire.forEach((j) => { j.status = 'EXPIRED' as any; });
+        if (!deletedOnly) {
+            const now = new Date();
+            // Auto-transition ONGOING -> COMPLETED when end date has passed
+            const toComplete = jobs.filter(
+                (j) => j.status === 'ONGOING' && j.endDate && new Date(j.endDate) < now
+            );
+            if (toComplete.length > 0) {
+                await this.prisma.jobPosting.updateMany({
+                    where: { id: { in: toComplete.map((j) => j.id) } },
+                    data: { status: 'COMPLETED' },
+                });
+                toComplete.forEach((j) => { j.status = 'COMPLETED' as any; });
+            }
+            // Also auto-transition ACTIVE -> EXPIRED when end date has passed
+            const toExpire = jobs.filter(
+                (j) => j.status === 'ACTIVE' && j.endDate && new Date(j.endDate) < now
+            );
+            if (toExpire.length > 0) {
+                await this.prisma.jobPosting.updateMany({
+                    where: { id: { in: toExpire.map((j) => j.id) } },
+                    data: { status: 'EXPIRED' },
+                });
+                toExpire.forEach((j) => { j.status = 'EXPIRED' as any; });
+            }
         }
         return {
             jobs: jobs.map((j) => ({

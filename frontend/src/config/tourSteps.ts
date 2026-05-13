@@ -28,7 +28,7 @@ export const tourSteps: DriveStep[] = [
         element: '#nav-messages',
         popover: {
             title: 'Messages',
-            description: 'Chat with clinics about your applications.',
+            description: 'Chat with clinics about your shifts.',
             side: 'right',
         },
     },

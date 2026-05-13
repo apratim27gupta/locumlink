@@ -1,6 +1,8 @@
 'use client';
 import { useState, useRef } from 'react';
-export const AMENITY_OPTIONS_STEP3 = [
+import { sortStringsLocale } from '@/lib/sortLocale';
+
+export const AMENITY_OPTIONS_STEP3 = sortStringsLocale([
     'On-site Parking',
     'Digital X-Ray',
     'Laboratory services',
@@ -9,7 +11,7 @@ export const AMENITY_OPTIONS_STEP3 = [
     'Private Office space',
     'Admin support',
     'IT support',
-] as const;
+]);
 export interface AmenitiesSelectorProps {
     selected: string[];
     onChange?: (items: string[]) => void;

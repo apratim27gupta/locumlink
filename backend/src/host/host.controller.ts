@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Req, HttpCode, HttpStatus, } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, HttpCode, HttpStatus, } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { HostService } from './host.service.js';
 import { SaveHostProfileDto, CreateJobDto, UpdateJobDto, UpdateApplicationDto, ReopenJobDto, } from './host.dto.js';
@@ -45,8 +45,10 @@ export class HostController {
     @Get('jobs')
     getJobs(
     @Req()
-    req: JwtRequest) {
-        return this.hostService.getJobs(req.user.id);
+    req: JwtRequest, 
+    @Query('deleted')
+    deleted?: string) {
+        return this.hostService.getJobs(req.user.id, { deletedOnly: deleted === 'true' });
     }
     @Get('jobs/:id')
     getJob(

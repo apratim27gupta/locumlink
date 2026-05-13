@@ -11,6 +11,7 @@ export function buildLocumSavePayload(form: Partial<LocumProfile>, files: {
         yearsOfExperience: form.yearsOfExperience === undefined ? null : form.yearsOfExperience,
         professionalSummary: form.professionalSummary ?? '',
         specialization: form.specialization ?? '',
+        phone: form.phone ?? '',
         address1: form.address1 ?? '',
         address2: form.address2 ?? '',
         postalCode: form.postalCode ?? '',

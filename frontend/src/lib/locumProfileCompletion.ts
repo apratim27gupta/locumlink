@@ -17,10 +17,7 @@ export function locumProfileCompletionPct(profile: LocumProfile | null | undefin
         isCpsnsNineDigitsFormat(profile.cpsnsNumber ?? ''),
         !!(profile.professionalSummary ?? '').trim(),
         specs.length > 0,
-        !!(profile.address1 ?? '').trim(),
-        !!(profile.postalCode ?? '').trim(),
-        !!(profile.city ?? '').trim(),
-        !!(profile.province ?? '').trim(),
+        !!(profile.phone ?? '').trim(),
         hasTrimmedFile(profile.licenseFile, profile.licenseFileName),
         hasTrimmedFile(profile.resumeFile, profile.resumeFileName),
     ];

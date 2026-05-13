@@ -7,6 +7,7 @@ import { hostApi } from '@/lib/api';
 import { useHostProfile } from '@/hooks/useHostProfile';
 import { isCpsnsVerified } from '@/lib/cpsnsVerify';
 import { beforeClientNavigation } from '@/lib/topLoader';
+import { sortStringsLocale } from '@/lib/sortLocale';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 const inp: React.CSSProperties = {
     width: '100%',
@@ -39,14 +40,14 @@ const sectionStack: React.CSSProperties = {
     gap: 16,
     marginTop: 14,
 };
-const CREDENTIAL_OPTIONS = [
+const CREDENTIAL_OPTIONS = sortStringsLocale([
     'CPSNS Full License',
     'CFPC Eligible',
     'CMPA coverage',
     'BLS (ACLS preferred)',
     'DEA License',
     'PALS Certified',
-];
+]);
 function fmtIsoToMmDdYyyy(iso: string | null | undefined): string {
     if (!iso)
         return '';

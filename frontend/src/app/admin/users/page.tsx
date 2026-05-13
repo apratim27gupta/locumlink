@@ -223,9 +223,9 @@ export default function AdminUsersPage() {
                                         }
                                         style={selectStyle}
                                     >
-                                        <option value="LOCUM">LOCUM</option>
-                                        <option value="HOST">HOST</option>
                                         <option value="ADMIN">ADMIN</option>
+                                        <option value="HOST">HOST</option>
+                                        <option value="LOCUM">LOCUM</option>
                                     </select>
                                 </div>
                                 <div>

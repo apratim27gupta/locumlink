@@ -384,19 +384,43 @@ button:disabled {
 
 
 .btn-signin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  min-width: 92px;
+  height: 44px;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #ffffff;
   font-family: 'Inter', sans-serif;
   font-weight: 500;
   font-size: 18px;
   line-height: 140%;
   color: #0b0f1f;
   text-decoration: none;
-  transition: color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    opacity 0.15s;
 }
 .btn-signin:hover {
   color: #1b31d2;
+  border-color: #9ca3af;
+  background: #f9fafb;
 }
 .btn-signin:active {
   color: #1522a6;
+  border-color: #6b7280;
+  background: #f3f4f6;
+}
+.btn-signin:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px rgba(59, 79, 216, 0.45);
 }
 
 
@@ -437,9 +461,11 @@ button:disabled {
 }
 .btn-signin--disabled {
   color: #9ca3af !important;
+  border-color: #e5e7eb !important;
+  background: #f9fafb !important;
   cursor: not-allowed !important;
   pointer-events: none !important;
-  opacity: 0.6;
+  opacity: 0.85;
 }
 
 

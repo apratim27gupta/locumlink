@@ -185,9 +185,16 @@ export default function LocumDashboard(props: {
             cancelled = true;
         };
     }, [authLoading, userId]);
-    const displayName = profile
-        ? `Welcome Dr ${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim()
-        : 'Welcome';
+    const displayName = (() => {
+        if (!profile)
+            return 'Welcome Dr';
+        const f = profile.firstName?.trim() ?? '';
+        const l = profile.lastName?.trim() ?? '';
+        const full = `${f} ${l}`.trim();
+        if (!full)
+            return 'Welcome Dr';
+        return `Welcome Dr ${full}`;
+    })();
     const completionPct = locumProfileCompletionPct(profile);
     const cpsnsVerified = isCpsnsVerified(profile?.cpsnsNumber);
     const ringPct = Math.min(100, Math.max(0, completionPct)) / 100;

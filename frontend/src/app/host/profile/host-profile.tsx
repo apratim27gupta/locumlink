@@ -9,6 +9,7 @@ import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { isCpsnsNineDigitsFormat, isCpsnsVerified, sanitizeCpsnsInput, } from '@/lib/cpsnsVerify';
 import { filterCanadianCities, CANADIAN_PROVINCE_NAMES, formatCanadianCityDisplay, type CanadianCityRow, } from '@/lib/canadianCities';
+import { sortByLabel, sortStringsLocale } from '@/lib/sortLocale';
 const NAV = [
     {
         label: 'My Postings',
@@ -95,7 +96,7 @@ const stepNavLabel: React.CSSProperties = {
     lineHeight: '124%',
     color: '#0B0F1F',
 };
-const AMENITY_OPTIONS = [
+const AMENITY_OPTIONS = sortStringsLocale([
     'On-site Parking',
     'Digital X-Ray',
     'Laboratory services',
@@ -104,7 +105,7 @@ const AMENITY_OPTIONS = [
     'Private Office Space',
     'Admin Support',
     'IT Support',
-];
+]);
 const CITY_MATCH_MARK: React.CSSProperties = {
     background: 'rgba(15,42,122,0.12)',
     color: '#0F2A7A',
@@ -127,7 +128,7 @@ function highlightCityName(text: string, query: string): React.ReactNode {
       {text.slice(idx + q.length)}
     </>);
 }
-const SPECIALITY_OPTIONS = [
+const SPECIALITY_OPTIONS = sortStringsLocale([
     'Emergency Medicine',
     'Anaesthetics',
     'Family Physician',
@@ -137,7 +138,14 @@ const SPECIALITY_OPTIONS = [
     'ENT',
     'Psychiatry',
     'Radiology',
-];
+]);
+const PRACTICE_TYPE_OPTIONS = sortByLabel([
+    { value: 'Collaborative Family Practice', label: 'Collaborative Family Practice' },
+    { value: 'Nurse Practitioner (NP) Clinic', label: 'Nurse Practitioner (NP) Clinic' },
+    { value: 'Primary Care Clinic', label: 'Primary Care Clinic' },
+    { value: 'Traditional Fee for Service Practice', label: 'Traditional Fee for Service Practice' },
+    { value: 'Virtual Care Clinic', label: 'Virtual Care Clinic' },
+]);
 type StepStatus = 'upcoming' | 'active' | 'complete' | 'incomplete';
 function stepBorderColor(s: StepStatus) {
     if (s === 'active')
@@ -1197,18 +1205,9 @@ export default function HostProfilePage(props: {
                   <option value="" disabled>
                     Select practice type
                   </option>
-                  <option value="Collaborative Family Practice">
-                    Collaborative Family Practice
-                  </option>
-                  <option value="Primary Care Clinic">Primary Care Clinic</option>
-                  <option value="Virtual Care Clinic">Virtual Care Clinic</option>
-                  <option value="Traditional Fee for Service Practice">
-                    Traditional Fee for Service Practice
-                  </option>
-                  <option value="Nurse Practitioner (NP) Clinic">
-                    Nurse Practitioner (NP) Clinic
-                  </option>
-                  {/* <option value="More">More</option> */}
+                  {PRACTICE_TYPE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>))}
                 </select>
                   <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{
             position: 'absolute',
@@ -1240,9 +1239,9 @@ export default function HostProfilePage(props: {
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={lbl}>
-                  Patient Volume
+                  Patient Volume Per Day
                 </label>
-                <input style={fieldInput} value={patientVol} onChange={(e) => setPatientVol(e.target.value)} placeholder="No. of Patient"/>
+                <input style={fieldInput} value={patientVol} onChange={(e) => setPatientVol(e.target.value)} placeholder="No. of patients per day"/>
               </div>
             </div>
 
@@ -1296,9 +1295,7 @@ export default function HostProfilePage(props: {
                 seen.add(a);
                 return true;
             });
-            const picked = unique.filter((a) => amenities.includes(a));
-            const rest = unique.filter((a) => !amenities.includes(a));
-            return [...picked, ...rest];
+            return sortStringsLocale(unique);
         })().map((a) => (<span key={a} onClick={(e) => {
                 e.stopPropagation();
                 setAmenities((am) => am.includes(a) ? am.filter((x) => x !== a) : [...am, a]);

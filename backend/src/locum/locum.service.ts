@@ -39,6 +39,7 @@ export type LocumProfileApi = {
     postalCode?: string;
     city?: string;
     province?: string;
+    phone?: string;
     licenseFile?: string;
     resumeFile?: string;
     extraFile?: string;
@@ -85,6 +86,7 @@ function parseSaveBody(body: Record<string, unknown>): SaveLocumProfileDto {
         postalCode: s('postalCode') || undefined,
         city: s('city') || undefined,
         province: s('province') || undefined,
+        phone: s('phone') || undefined,
         licenseFileName: s('licenseFileName') || undefined,
         resumeFileName: s('resumeFileName') || undefined,
         extraFileName: s('extraFileName') || undefined,
@@ -108,6 +110,7 @@ export class LocumService {
             postalCode: profile.postalCode ?? undefined,
             city: profile.city ?? undefined,
             province: profile.province ?? undefined,
+            phone: profile.phone ?? undefined,
             licenseFile: profile.licenseFileName ?? undefined,
             resumeFile: profile.resumeFileName ?? undefined,
             extraFile: profile.extraFileName ?? undefined,
@@ -151,6 +154,7 @@ export class LocumService {
                 postalCode: dto.postalCode?.trim() || null,
                 city: dto.city?.trim() || null,
                 province: dto.province?.trim() || null,
+                phone: dto.phone?.trim() || null,
                 licenseFileName: dto.licenseFileName?.trim() || null,
                 resumeFileName: dto.resumeFileName?.trim() || null,
                 extraFileName: dto.extraFileName?.trim() || null,
@@ -168,6 +172,7 @@ export class LocumService {
                 postalCode: dto.postalCode?.trim() ?? null,
                 city: dto.city?.trim() ?? null,
                 province: dto.province?.trim() ?? null,
+                phone: dto.phone?.trim() ?? null,
                 licenseFileName: dto.licenseFileName?.trim() ?? null,
                 resumeFileName: dto.resumeFileName?.trim() ?? null,
                 extraFileName: dto.extraFileName?.trim() ?? null,

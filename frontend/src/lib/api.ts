@@ -381,6 +381,7 @@ export type Job = {
     title: string;
     description: string;
     status: PostingStatus;
+    isDeleted?: boolean;
     applicationsCount: number;
     maxApplicants?: number;
     startDate?: string | null;
@@ -511,12 +512,13 @@ export const hostApi = {
         }
         return res.json();
     },
-    getJobs: async (): Promise<{
+    getJobs: async (opts?: { deleted?: boolean }): Promise<{
         jobs: Job[];
     }> => {
         let res: Response;
+        const qs = opts?.deleted ? '?deleted=true' : '';
         try {
-            res = await trackedFetch(`${NEST_BASE}/api/host/jobs`, {
+            res = await trackedFetch(`${NEST_BASE}/api/host/jobs${qs}`, {
                 cache: 'no-store',
                 headers: nestHeaders(false),
             });

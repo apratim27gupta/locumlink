@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, useMemo, type KeyboardEvent } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
@@ -11,7 +11,8 @@ import type { LocumProfile } from '@/types';
 import { isCpsnsNineDigitsFormat, isCpsnsVerified, sanitizeCpsnsInput, } from '@/lib/cpsnsVerify';
 import { locumProfileCompletionPct } from '@/lib/locumProfileCompletion';
 import { beforeClientNavigation } from '@/lib/topLoader';
-import citiesRaw from '@/data/cities.json';
+import { getEmail } from '@/lib/auth';
+import { sortStringsLocale } from '@/lib/sortLocale';
 const NAV = [
     { label: 'Browse Opportunities', href: '/locum/browse', icon: <NavIcon name="browse"/> },
     { label: 'My Applications', href: '/locum/dashboard', icon: <NavIcon name="postings"/> },
@@ -19,39 +20,11 @@ const NAV = [
     { label: 'Messages', href: '/locum/messages', icon: <NavIcon name="messages"/> },
     { label: 'Resources', href: '/locum/resources', icon: <NavIcon name="resources"/> },
 ];
-const SPECIALITY_OPTIONS = [
+const SPECIALITY_OPTIONS = sortStringsLocale([
     'Family Physician', 'Internal medicine', 'Emergency', 'ENT',
-    'General Practice', 'Emergency Medicine', 'Anaesthetics', 'Paediatrics',
-];
-type CityEntry = {
-    name: string;
-    province: string;
-};
-const CITY_ROWS: CityEntry[] = (citiesRaw as [
-    string,
-    string
-][]).map(([name, province]) => ({ name, province }));
+    'Emergency Medicine', 'Anaesthetics', 'Paediatrics',
+]);
 type VerificationStatus = 'pending' | 'under-review' | 'verified';
-const cityHighlight: React.CSSProperties = {
-    background: 'rgba(59, 79, 216, 0.12)',
-    color: '#1B31D2',
-    borderRadius: 3,
-    padding: '0 2px',
-    fontWeight: 600,
-};
-function highlightCityMatch(text: string, query: string): React.ReactNode {
-    const q = query.trim();
-    if (!q)
-        return text;
-    const idx = text.toLowerCase().indexOf(q.toLowerCase());
-    if (idx < 0)
-        return text;
-    return (<>
-      {text.slice(0, idx)}
-      <mark style={cityHighlight}>{text.slice(idx, idx + q.length)}</mark>
-      {text.slice(idx + q.length)}
-    </>);
-}
 const inp: React.CSSProperties = {
     width: '100%',
     padding: '8px 10px',
@@ -165,11 +138,7 @@ export default function LocumProfilePage(props: {
     const [summary, setSummary] = useState('');
     const [speciality, setSpeciality] = useState('');
     const [specialityTags, setSpecialityTags] = useState<string[]>([]);
-    const [addr1, setAddr1] = useState('');
-    const [addr2, setAddr2] = useState('');
-    const [postalCode, setPostalCode] = useState('');
-    const [city, setCity] = useState('');
-    const [province, setProvince] = useState('');
+    const [phone, setPhone] = useState('');
     const [licenseFile, setLicenseFile] = useState('');
     const [resumeFile, setResumeFile] = useState('');
     const [extraFile, setExtraFile] = useState('');
@@ -180,56 +149,7 @@ export default function LocumProfilePage(props: {
     const licenseRef = useRef<HTMLInputElement>(null);
     const resumeRef = useRef<HTMLInputElement>(null);
     const extraRef = useRef<HTMLInputElement>(null);
-    const cityInputRef = useRef<HTMLInputElement>(null);
-    const cityDropRef = useRef<HTMLDivElement>(null);
-    const cityBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const stepSectionRefs = useRef<Record<number, HTMLDivElement | null>>({});
-    const [cityResults, setCityResults] = useState<CityEntry[]>([]);
-    const [cityDropOpen, setCityDropOpen] = useState(false);
-    const [cityActiveIdx, setCityActiveIdx] = useState(-1);
-    function searchCities(qRaw: string) {
-        const q = qRaw.trim().toLowerCase();
-        if (q.length < 2) {
-            setCityResults([]);
-            setCityDropOpen(false);
-            setCityActiveIdx(-1);
-            return;
-        }
-        const starts = CITY_ROWS.filter((c) => c.name.toLowerCase().startsWith(q)).slice(0, 8);
-        const seen = new Set(starts.map((c) => `${c.name}|${c.province}`));
-        const contains = starts.length < 8
-            ? CITY_ROWS.filter((c) => !seen.has(`${c.name}|${c.province}`) &&
-                c.name.toLowerCase().includes(q)).slice(0, 8 - starts.length)
-            : [];
-        setCityResults([...starts, ...contains]);
-        setCityActiveIdx(-1);
-        setCityDropOpen(true);
-    }
-    function handleCitySelect(nextCity: CityEntry) {
-        setCity(nextCity.name);
-        setProvince(nextCity.province);
-        setCityResults([]);
-        setCityDropOpen(false);
-        setCityActiveIdx(-1);
-    }
-    function handleCityKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-        if (!cityDropOpen)
-            return;
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            setCityActiveIdx((idx) => Math.min(idx + 1, cityResults.length - 1));
-        }
-        if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            setCityActiveIdx((idx) => Math.max(idx - 1, 0));
-        }
-        if (e.key === 'Enter' && cityActiveIdx >= 0 && cityResults[cityActiveIdx]) {
-            e.preventDefault();
-            handleCitySelect(cityResults[cityActiveIdx]);
-        }
-        if (e.key === 'Escape')
-            setCityDropOpen(false);
-    }
     useEffect(() => {
         locumApi.getProfile()
             .then((data) => {
@@ -256,11 +176,7 @@ export default function LocumProfilePage(props: {
             setSpecialityTags(p.specialization
                 ? p.specialization.split(',').map((s: string) => s.trim()).filter(Boolean)
                 : []);
-            setAddr1(p.address1 ?? '');
-            setAddr2(p.address2 ?? '');
-            setPostalCode(p.postalCode ?? '');
-            setCity(p.city ?? '');
-            setProvince(p.province ?? '');
+            setPhone(p.phone ?? '');
             const lf = p.licenseFile ?? p.licenseFileName ?? '';
             const rf = p.resumeFile ?? p.resumeFileName ?? '';
             const xf = p.extraFile ?? p.extraFileName ?? '';
@@ -281,7 +197,7 @@ export default function LocumProfilePage(props: {
         isCpsnsNineDigitsFormat(cpsns) &&
         summary &&
         specialityTags.length);
-    const step2Done = !!(addr1 && postalCode && city && province);
+    const step2Done = !!phone.trim();
     const step3Done = !!(licenseFile && resumeFile);
     const stepDone = [step1Done, step2Done, step3Done];
     const profileDraft = useMemo((): LocumProfile => ({
@@ -291,11 +207,12 @@ export default function LocumProfilePage(props: {
         yearsOfExperience: yearsOfExperience === '' ? null : Math.max(0, yearsOfExperience),
         professionalSummary: summary,
         specialization: specialityTags.join(', '),
-        address1: addr1,
-        address2: addr2,
-        postalCode,
-        city,
-        province,
+        phone,
+        address1: '',
+        address2: '',
+        postalCode: '',
+        city: '',
+        province: '',
         licenseFile,
         resumeFile,
         extraFile,
@@ -306,11 +223,7 @@ export default function LocumProfilePage(props: {
         yearsOfExperience,
         summary,
         specialityTags,
-        addr1,
-        addr2,
-        postalCode,
-        city,
-        province,
+        phone,
         licenseFile,
         resumeFile,
         extraFile,
@@ -356,11 +269,12 @@ export default function LocumProfilePage(props: {
                 yearsOfExperience: yearsOfExperience === '' ? null : Math.max(0, yearsOfExperience),
                 professionalSummary: summary,
                 specialization: specialityTags.join(', '),
-                address1: addr1,
-                address2: addr2,
-                postalCode,
-                city,
-                province,
+                phone,
+                address1: '',
+                address2: '',
+                postalCode: '',
+                city: '',
+                province: '',
             }, { licenseFile, resumeFile, extraFile }));
             setSaved(true);
             window.setTimeout(() => {
@@ -377,7 +291,7 @@ export default function LocumProfilePage(props: {
     }
     const steps = [
         { n: 1, label: 'Basic Information', sub: 'Your personal identity' },
-        { n: 2, label: 'Location', sub: 'Location & branding' },
+        { n: 2, label: 'Contact details', sub: 'Phone & email' },
         { n: 3, label: 'Relevant Documents', sub: 'Licence & documents' },
     ];
     const sectionBorder = (n: number) => {
@@ -599,7 +513,7 @@ export default function LocumProfilePage(props: {
             height: 68,
             resize: 'none',
             lineHeight: 1.45,
-        } as React.CSSProperties} value={summary} onChange={(e) => setSummary(e.target.value)} onClick={(e) => e.stopPropagation()} placeholder="Professional Summary "/>
+        } as React.CSSProperties} value={summary} onChange={(e) => setSummary(e.target.value)} onClick={(e) => e.stopPropagation()} placeholder="Professional Profile (Career Summary)"/>
           </div>
           <div aria-hidden/>
         </div>
@@ -680,93 +594,32 @@ export default function LocumProfilePage(props: {
             borderRadius: '50%',
             overflow: 'hidden',
             flexShrink: 0,
-            opacity: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#EEF0FB',
         }}>
-            <Image src="/location.png" alt="" width={24} height={24} style={{ objectFit: 'contain' }}/>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden style={{ color: '#1B31D2' }}>
+              <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V21c0 .55-.45 1-1 1-9.94 0-18-8.06-18-18 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="currentColor"/>
+            </svg>
           </div>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#0f1523' }}>
-            Location
+            Contact details
           </span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div>
-            <label style={lbl}>Address Line 1</label>
-            <input style={inp} value={addr1} onChange={(e) => setAddr1(e.target.value)} onClick={(e) => e.stopPropagation()} placeholder="Address Line 1"/>
-          </div>
-          <div>
-            <label style={lbl}>Address Line 2</label>
-            <input style={inp} value={addr2} onChange={(e) => setAddr2(e.target.value)} onClick={(e) => e.stopPropagation()} placeholder="Address Line 2"/>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
-          <div style={{ position: 'relative' }}>
-            <label style={lbl}>City</label>
-            <input ref={cityInputRef} style={inp} value={city} onChange={(e) => {
-            setCity(e.target.value);
-            searchCities(e.target.value);
-        }} onClick={(e) => e.stopPropagation()} onKeyDown={handleCityKeyDown} onFocus={() => {
-            if (cityBlurTimer.current != null)
-                clearTimeout(cityBlurTimer.current);
-            if (cityResults.length)
-                setCityDropOpen(true);
-        }} onBlur={() => {
-            cityBlurTimer.current = setTimeout(() => setCityDropOpen(false), 160);
-        }} placeholder="City" autoComplete="off"/>
-            {cityDropOpen && (<div ref={cityDropRef} style={{
-                position: 'absolute',
-                top: 'calc(100% + 4px)',
-                left: 0,
-                right: 0,
-                zIndex: 30,
-                background: '#fff',
-                border: '1px solid #E4E8F0',
-                borderRadius: 10,
-                boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
-                maxHeight: 220,
-                overflowY: 'auto',
-            }}>
-              {cityResults.length === 0 ? (<div style={{
-                    padding: '12px 14px',
-                    fontSize: 'var(--font-small)',
-                    color: '#8892a4',
-                    textAlign: 'center',
-                }}>
-                  No city found
-                </div>) : (cityResults.map((entry, idx) => (<div key={`${entry.name}-${entry.province}`} role="option" aria-selected={idx === cityActiveIdx} onMouseDown={() => handleCitySelect(entry)} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 10,
-                    padding: '10px 14px',
-                    cursor: 'pointer',
-                    background: idx === cityActiveIdx ? 'rgba(59, 79, 216, 0.08)' : 'transparent',
-                    borderBottom: '1px solid rgba(226, 229, 238, 0.7)',
-                }}>
-                  <span style={{ fontSize: 'var(--font-body)', fontWeight: 'var(--font-weight-bold)', color: '#0f1523' }}>
-                    {highlightCityMatch(entry.name, city)}
-                  </span>
-                  <span style={{
-                        fontSize: 'var(--font-small)',
-                        fontWeight: 'var(--font-weight-bold)',
-                        color: '#1B31D2',
-                        background: 'rgba(59, 79, 216, 0.1)',
-                        borderRadius: 20,
-                        padding: '2px 8px',
-                        flexShrink: 0,
-                    }}>
-                    {entry.province}
-                  </span>
-                </div>)))}
-            </div>)}
+            <label style={lbl}>Phone number</label>
+            <input style={inp} value={phone} onChange={(e) => setPhone(e.target.value)} onClick={(e) => e.stopPropagation()} placeholder="Phone number" type="tel" autoComplete="tel"/>
           </div>
           <div>
-            <label style={lbl}>Province</label>
-            <input style={inp} value={province} onChange={(e) => setProvince(e.target.value)} onClick={(e) => e.stopPropagation()} placeholder="Province"/>
+            <label style={lbl}>Email</label>
+            <input style={{
+                ...inp,
+                background: '#F9FAFB',
+                color: '#4B5563',
+            }} value={getEmail() ?? ''} readOnly tabIndex={-1} onClick={(e) => e.stopPropagation()} placeholder="Your sign-in email"/>
           </div>
-        </div>
-        <div>
-          <label style={lbl}>Postal Code</label>
-          <input style={{ ...inp, width: '50%' }} value={postalCode} onChange={(e) => setPostalCode(e.target.value)} onClick={(e) => e.stopPropagation()} placeholder="Postal code"/>
         </div>
       </div>
 
@@ -996,8 +849,8 @@ export default function LocumProfilePage(props: {
             </button>) : null}
           </div>
         </div>
-        <p style={documentFormatHint}>Accepted formats: PDF, DOC, DOCX.</p>
-        <input ref={extraRef} type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style={{ display: 'none' }} onChange={async (e) => {
+        <p style={documentFormatHint}>Accepted formats: PDF, DOC, DOCX, PNG.</p>
+        <input ref={extraRef} type="file" accept=".pdf,.doc,.docx,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png" style={{ display: 'none' }} onChange={async (e) => {
             const file = e.target.files?.[0];
             if (!file)
                 return;
