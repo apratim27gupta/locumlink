@@ -2,9 +2,7 @@ import type { HostProfile, LocumProfile } from '@/types';
 import type { Role } from '@/lib/auth';
 import { getToken, clearSession, syncCookies } from '@/lib/auth';
 import { startLoader, stopLoader } from '@/lib/topLoader';
-const NEST_BASE = (typeof window === 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '')
-    : '');
+const NEST_BASE = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '') || (typeof window === 'undefined' ? 'http://localhost:3000' : '');
 function networkFetchError(label: string, err: unknown): Error {
     const isProd = process.env.NODE_ENV === 'production';
     const baseHint = NEST_BASE
@@ -89,7 +87,7 @@ const ALLOWED_UPLOAD_MIME_TYPES = new Set([
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]);
-const BROWSER_API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
+const BROWSER_API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '') || (typeof window !== 'undefined' ? window.location.origin : '');
 export async function uploadFile(file: File, folder?: string): Promise<UploadResult> {
     if (file.size > MAX_UPLOAD_BYTES) {
         throw new Error('File must be 10 MB or smaller.');
@@ -470,7 +468,7 @@ export interface CreateJobPayload {
 }
 export const hostApi = {
     getProfile: async (): Promise<HostProfile | null> => {
-        const res = await trackedFetch(`/api/host/profile`, {
+        const res = await trackedFetch(`${BROWSER_API_BASE}/api/host/profile`, {
             cache: 'no-store',
             headers: nestHeaders(false),
         });
@@ -480,10 +478,11 @@ export const hostApi = {
             const text = await res.text();
             throw nestHttpError(text, res.status, 'Loading host profile');
         }
-        return res.json() as Promise<HostProfile>;
+        const data = await res.json() as any;
+        return (data.profile ?? data) as HostProfile;
     },
     saveProfile: async (data: HostProfile): Promise<HostProfile> => {
-        const res = await trackedFetch(`/api/host/profile`, {
+        const res = await trackedFetch(`${BROWSER_API_BASE}/api/host/profile`, {
             method: 'POST',
             headers: nestHeaders(true),
             body: JSON.stringify(data),
@@ -492,7 +491,8 @@ export const hostApi = {
             const text = await res.text();
             throw nestHttpError(text, res.status, 'Saving host profile');
         }
-        return res.json() as Promise<HostProfile>;
+        const resData = await res.json() as any;
+        return (resData.profile ?? resData) as HostProfile;
     },
     createJob: async (body: CreateJobPayload): Promise<unknown> => {
         let res: Response;
