@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
@@ -31,6 +31,17 @@ const NAV = [
 const QUICK_MESSAGE_PANEL_STORAGE_KEY = 'l2-host-applicants-quick-message-panel-pos';
 const QUICK_MESSAGE_PANEL_WIDTH = 384;
 const QUICK_MESSAGE_PANEL_MAX_HEIGHT = 280;
+const DETAIL_PANEL_STORAGE_KEY = 'l2-host-applicants-detail-panel-width';
+const DETAIL_PANEL_MIN = 320;
+const DETAIL_PANEL_MAX_CAP = 900;
+const DETAIL_PANEL_DEFAULT = 420;
+
+function clampDetailPanelWidth(w: number): number {
+    if (typeof window === 'undefined')
+        return Math.min(Math.max(w, DETAIL_PANEL_MIN), DETAIL_PANEL_MAX_CAP);
+    const maxW = Math.min(DETAIL_PANEL_MAX_CAP, window.innerWidth - 24);
+    return Math.min(Math.max(w, DETAIL_PANEL_MIN), maxW);
+}
 function clampQuickMessagePanelPos(p: {
     left: number;
     top: number;
@@ -388,6 +399,7 @@ export default function HostApplicantsPage(props: {
     const [error, setError] = useState<string | null>(null);
     const [actioning, setActioning] = useState<Set<string>>(new Set());
     const [selected, setSelected] = useState<ApplicationRecord | null>(null);
+    const [detailPanelWidth, setDetailPanelWidth] = useState(DETAIL_PANEL_DEFAULT);
     const [aboutExpanded, setAboutExpanded] = useState(false);
     const [composeOpen, setComposeOpen] = useState(false);
     const [composeText, setComposeText] = useState('');
@@ -405,6 +417,26 @@ export default function HostApplicantsPage(props: {
         startLeft: number;
         startTop: number;
     } | null>(null);
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(DETAIL_PANEL_STORAGE_KEY);
+            if (raw) {
+                const w = Number(raw);
+                if (Number.isFinite(w))
+                    setDetailPanelWidth(clampDetailPanelWidth(w));
+            }
+        }
+        catch {
+            /* ignore */
+        }
+    }, []);
+    useEffect(() => {
+        function onResize() {
+            setDetailPanelWidth((w) => clampDetailPanelWidth(w));
+        }
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
     useEffect(() => {
         try {
             const raw = localStorage.getItem(QUICK_MESSAGE_PANEL_STORAGE_KEY);
@@ -531,6 +563,34 @@ export default function HostApplicantsPage(props: {
                 return next;
             });
         }
+    }
+    function onDetailPanelResizeMouseDown(e: ReactMouseEvent<HTMLDivElement>) {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startW = detailPanelWidth;
+        let latestW = startW;
+        const onMove = (ev: MouseEvent) => {
+            const dx = startX - ev.clientX;
+            latestW = clampDetailPanelWidth(startW + dx);
+            setDetailPanelWidth(latestW);
+        };
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            try {
+                localStorage.setItem(DETAIL_PANEL_STORAGE_KEY, String(latestW));
+            }
+            catch {
+                /* ignore */
+            }
+        };
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
     }
     function onQuickPanelDragStart(e: ReactPointerEvent<HTMLDivElement>) {
         if (e.button !== 0)
@@ -903,7 +963,7 @@ export default function HostApplicantsPage(props: {
                 position: 'fixed',
                 top: 0,
                 right: 0,
-                width: 420,
+                width: detailPanelWidth,
                 height: '100vh',
                 background: '#eef0fa',
                 zIndex: 221,
@@ -912,7 +972,20 @@ export default function HostApplicantsPage(props: {
                 boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
                 fontFamily: 'Inter, sans-serif',
             }}>
-            
+            <div
+              title="Drag to resize"
+              onMouseDown={onDetailPanelResizeMouseDown}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 8,
+                zIndex: 5,
+                cursor: 'ew-resize',
+                background: 'transparent',
+              }}
+            />
             <div style={{
                 padding: '20px 18px 14px',
                 display: 'flex',

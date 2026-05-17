@@ -132,20 +132,31 @@ const SPECIALITY_OPTIONS = sortStringsLocale([
     'Emergency Medicine',
     'Anaesthetics',
     'Family Physician',
-    'General Practice',
     'Internal medicine',
     'Paediatrics',
     'ENT',
     'Psychiatry',
     'Radiology',
 ]);
-const PRACTICE_TYPE_OPTIONS = sortByLabel([
+const CUSTOM_PRACTICE_TYPE = '__custom__';
+const KNOWN_PRACTICE_TYPE_VALUES = sortByLabel([
     { value: 'Collaborative Family Practice', label: 'Collaborative Family Practice' },
     { value: 'Nurse Practitioner (NP) Clinic', label: 'Nurse Practitioner (NP) Clinic' },
     { value: 'Primary Care Clinic', label: 'Primary Care Clinic' },
     { value: 'Traditional Fee for Service Practice', label: 'Traditional Fee for Service Practice' },
     { value: 'Virtual Care Clinic', label: 'Virtual Care Clinic' },
 ]);
+const PRACTICE_TYPE_OPTIONS = [...KNOWN_PRACTICE_TYPE_VALUES, {
+    value: CUSTOM_PRACTICE_TYPE,
+    label: 'Custom practice type',
+}];
+function splitPracticeTypeFromSaved(saved: string): { choice: string; custom: string } {
+    if (!saved.trim())
+        return { choice: '', custom: '' };
+    if (KNOWN_PRACTICE_TYPE_VALUES.some((o) => o.value === saved))
+        return { choice: saved, custom: '' };
+    return { choice: CUSTOM_PRACTICE_TYPE, custom: saved };
+}
 type StepStatus = 'upcoming' | 'active' | 'complete' | 'incomplete';
 function stepBorderColor(s: StepStatus) {
     if (s === 'active')
@@ -221,7 +232,8 @@ export default function HostProfilePage(props: {
     const [postal, setPostal] = useState('');
     const [city, setCity] = useState('');
     const [province, setProvince] = useState('');
-    const [practiceType, setPracticeType] = useState('');
+    const [practiceTypeChoice, setPracticeTypeChoice] = useState('');
+    const [practiceTypeCustom, setPracticeTypeCustom] = useState('');
     const [numPhysicians, setNumPhysicians] = useState('');
     const [emr, setEmr] = useState('');
     const [patientVol, setPatientVol] = useState('');
@@ -304,7 +316,11 @@ export default function HostProfilePage(props: {
         setPostal(profile.postalCode ?? '');
         setCity(formatCanadianCityDisplay(profile.city ?? ''));
         setProvince(profile.province ?? '');
-        setPracticeType(profile.practiceType ?? '');
+        {
+            const { choice, custom } = splitPracticeTypeFromSaved(profile.practiceType ?? '');
+            setPracticeTypeChoice(choice);
+            setPracticeTypeCustom(custom);
+        }
         setNumPhysicians(profile.numPhysicians ?? '');
         setEmr(profile.emr ?? '');
         setPatientVol(profile.patientVol ?? '');
@@ -314,17 +330,21 @@ export default function HostProfilePage(props: {
     }, [profile]);
     useEffect(() => {
         let cancelled = false;
-        void (async () => {
+        const refreshAvatar = async () => {
             try {
                 const me = await authApi.getMe();
                 if (!cancelled)
-                    setAvatarPhotoUrl(me.avatarUrl);
+                    setAvatarPhotoUrl(me.avatarUrl ?? null);
             }
             catch {
+                /* keep prior avatar */
             }
-        })();
+        };
+        void refreshAvatar();
+        window.addEventListener('focus', refreshAvatar);
         return () => {
             cancelled = true;
+            window.removeEventListener('focus', refreshAvatar);
         };
     }, []);
     useEffect(() => {
@@ -355,6 +375,9 @@ export default function HostProfilePage(props: {
             clearTimeout(hostCityBlurTimer.current);
         }
     }, []);
+    const resolvedPracticeType = practiceTypeChoice === CUSTOM_PRACTICE_TYPE
+        ? practiceTypeCustom.trim()
+        : practiceTypeChoice.trim();
     const derivedContactFirst = (hostFirst || contactFirst).trim();
     const derivedContactLast = (hostLast || contactLast).trim();
     const progressPct = hostProfileCompletionPct({
@@ -368,7 +391,7 @@ export default function HostProfilePage(props: {
         postalCode: postal,
         city,
         province,
-        practiceType,
+        practiceType: resolvedPracticeType,
         numPhysicians,
         emr,
         patientVol,
@@ -399,7 +422,7 @@ export default function HostProfilePage(props: {
             isCpsnsNineDigitsFormat(cpsns) &&
             specialties.length),
         !!(addr1 && postal && city && province),
-        !!(practiceType && numPhysicians && emr && patientVol),
+        !!(resolvedPracticeType && numPhysicians && emr && patientVol),
         amenities.length > 0,
     ];
     function getStatus(n: number): StepStatus {
@@ -454,7 +477,7 @@ export default function HostProfilePage(props: {
             province,
             amenities,
             accommodationProvided: accommodation,
-            practiceType,
+            practiceType: resolvedPracticeType,
             numPhysicians,
             emr,
             patientVol,
@@ -728,10 +751,36 @@ export default function HostProfilePage(props: {
         }} onClick={() => goToStep(1)}>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: '#0f1523' }} aria-hidden>
-              <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M4 20c0-3.866 3.582-7 8-7s8 3.134 8 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <div style={{
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              flexShrink: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              {avatarPhotoUrl ? (
+                <img
+                  src={avatarPhotoUrl}
+                  alt=""
+                  width={24}
+                  height={24}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                />
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: '#0f1523' }} aria-hidden>
+                  <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M4 20c0-3.866 3.582-7 8-7s8 3.134 8 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </div>
             <span style={cardHeaderTitle}>
               Basic Information
             </span>
@@ -1201,7 +1250,12 @@ export default function HostProfilePage(props: {
                   Practice Type
                 </label>
                 <div style={{ position: 'relative' }}>
-                  <select style={selectField} value={practiceType} onChange={(e) => setPracticeType(e.target.value)}>
+                  <select style={selectField} value={practiceTypeChoice} onChange={(e) => {
+            const v = e.target.value;
+            setPracticeTypeChoice(v);
+            if (v !== CUSTOM_PRACTICE_TYPE)
+                setPracticeTypeCustom('');
+        }}>
                   <option value="" disabled>
                     Select practice type
                   </option>
@@ -1220,6 +1274,18 @@ export default function HostProfilePage(props: {
                     <path d="M4.5 6.75L9 11.25l4.5-4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </div>
+                {practiceTypeChoice === CUSTOM_PRACTICE_TYPE ? (<>
+                  <label htmlFor="host-practice-type-custom" style={{ ...lbl, marginTop: 12 }}>
+                    Describe your practice type
+                  </label>
+                  <input id="host-practice-type-custom" type="text" value={practiceTypeCustom} placeholder="Enter practice type" onChange={(e) => setPracticeTypeCustom(e.target.value)} autoComplete="off" style={{
+            ...fieldInput,
+            marginTop: 5,
+            ...(practiceTypeChoice === CUSTOM_PRACTICE_TYPE && !practiceTypeCustom.trim()
+                ? { border: '1px solid #f97316' }
+                : {}),
+        }}/>
+                </>) : null}
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={lbl}>

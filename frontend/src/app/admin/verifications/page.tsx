@@ -1,324 +1,307 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  CheckCircle,
+  Clock,
+  Eye,
+  FileText,
+  XCircle,
+} from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { adminFetchJson } from '@/lib/adminApi';
 
 type VerificationRow = {
-    id: string;
-    userId: string;
-    email: string;
-    name: string;
-    cpsns: string;
-    submittedAt: string;
-    verificationStatus:
-        | 'UNVERIFIED'
-        | 'PENDING_REVIEW'
-        | 'VERIFIED'
-        | 'REJECTED';
+  id: string;
+  userId: string;
+  email: string;
+  name: string;
+  cpsns: string;
+  submittedAt: string;
+  verificationStatus:
+    | 'UNVERIFIED'
+    | 'PENDING_REVIEW'
+    | 'VERIFIED'
+    | 'REJECTED';
 };
 
-function StatusTag({ status }: { status: VerificationRow['verificationStatus'] }) {
-    const map = {
-        UNVERIFIED: {
-            label: 'Unverified',
-            bg: 'rgba(107,114,128,0.12)',
-            border: 'rgba(107,114,128,0.35)',
-            color: '#374151',
-        },
-        PENDING_REVIEW: {
-            label: 'Pending',
-            bg: 'rgba(59,79,216,0.10)',
-            border: 'rgba(59,79,216,0.22)',
-            color: '#1B31D2',
-        },
-        VERIFIED: {
-            label: 'Verified',
-            bg: 'rgba(34,197,94,0.10)',
-            border: 'rgba(34,197,94,0.22)',
-            color: '#166534',
-        },
-        REJECTED: {
-            label: 'Rejected',
-            bg: 'rgba(220,38,38,0.10)',
-            border: 'rgba(220,38,38,0.18)',
-            color: '#991B1B',
-        },
-    };
-    const s = map[status];
-    return (
-        <span
-            style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '4px 10px',
-                borderRadius: 999,
-                fontSize: 12,
-                fontWeight: 900,
-                border: `1px solid ${s.border}`,
-                background: s.bg,
-                color: s.color,
-                whiteSpace: 'nowrap',
-                lineHeight: 1,
-            }}
-        >
-            {s.label}
-        </span>
-    );
+function waitDays(submittedAt: string): number {
+  const ms = Date.now() - new Date(submittedAt).getTime();
+  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
+}
+
+function fmtDate(ts: string): string {
+  try {
+    return new Date(ts).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch {
+    return ts;
+  }
 }
 
 export default function AdminVerificationsPage() {
-    const [tab, setTab] = useState<'pending' | 'VERIFIED' | 'REJECTED'>('pending');
-    const [rows, setRows] = useState<VerificationRow[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [err, setErr] = useState<string | null>(null);
-    const [busyId, setBusyId] = useState<string | null>(null);
+  const [rows, setRows] = useState<VerificationRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [review, setReview] = useState<VerificationRow | null>(null);
+  const [notes, setNotes] = useState('');
 
-    const statusQuery = useMemo(() => {
-        if (tab === 'pending') return '';
-        return tab;
-    }, [tab]);
-
-    const load = useCallback(async () => {
-        setLoading(true);
-        setErr(null);
-        try {
-            const qs = new URLSearchParams();
-            if (statusQuery) qs.set('status', statusQuery);
-            const path = qs.toString()
-                ? `/api/admin/verifications?${qs.toString()}`
-                : `/api/admin/verifications`;
-            const data = await adminFetchJson<{ items: VerificationRow[] }>(path);
-            setRows(data.items ?? []);
-        }
- catch (e) {
-            setErr(e instanceof Error ? e.message : 'Failed to load');
-            setRows([]);
-        }
- finally {
-            setLoading(false);
-        }
-    }, [statusQuery, tab]);
-
-    useEffect(() => {
-        load();
-    }, [load]);
-
-    async function patchStatus(id: string, verificationStatus: 'VERIFIED' | 'REJECTED') {
-        setBusyId(id);
-        setErr(null);
-        try {
-            await adminFetchJson(`/api/admin/verifications/${id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ verificationStatus }),
-            });
-            await load();
-        }
- catch (e) {
-            setErr(e instanceof Error ? e.message : 'Update failed');
-        }
- finally {
-            setBusyId(null);
-        }
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const data = await adminFetchJson<{ items: VerificationRow[] }>(
+        '/api/admin/verifications',
+      );
+      const pending = (data.items ?? []).filter(
+        (r) =>
+          r.verificationStatus === 'PENDING_REVIEW'
+          || r.verificationStatus === 'UNVERIFIED',
+      );
+      setRows(pending);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Failed to load');
+      setRows([]);
+    } finally {
+      setLoading(false);
     }
+  }, []);
 
-    function fmt(ts: string) {
-        try {
-            const d = new Date(ts);
-            return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-            })}`;
-        }
- catch {
-            return ts;
-        }
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function patchStatus(id: string, verificationStatus: 'VERIFIED' | 'REJECTED') {
+    setBusyId(id);
+    setErr(null);
+    try {
+      await adminFetchJson(`/api/admin/verifications/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ verificationStatus }),
+      });
+      setReview(null);
+      setNotes('');
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Update failed');
+    } finally {
+      setBusyId(null);
     }
+  }
 
-    return (
-        <AdminLayout
-            title="Verifications"
-            subtitle="Locum profiles from locum_profiles; approve or reject CPSNS verification."
-            right={
-                <div style={{ display: 'flex', gap: 10 }}>
-                    {(['pending', 'VERIFIED', 'REJECTED'] as const).map((k) => {
-                        const active = tab === k;
-                        const label = k === 'pending' ? 'Pending' : k === 'VERIFIED' ? 'Verified' : 'Rejected';
-                        return (
-                            <button
-                                key={k}
-                                type="button"
-                                onClick={() => setTab(k)}
-                                style={{
-                                    height: 40,
-                                    padding: '0 12px',
-                                    borderRadius: 999,
-                                    border: `1px solid ${active ? 'rgba(59,79,216,0.30)' : '#E5E7EB'}`,
-                                    background: active ? 'rgba(59,79,216,0.10)' : '#fff',
-                                    color: active ? '#1B31D2' : '#374151',
-                                    fontSize: 13,
-                                    fontWeight: 900,
-                                    cursor: 'pointer',
-                                    fontFamily: 'inherit',
-                                }}
-                            >
-                                {label}
-                            </button>
-                        );
-                    })}
-                </div>
-            }
-        >
-            {err ? (
-                <div
-                    style={{
-                        marginBottom: 12,
-                        padding: 12,
-                        borderRadius: 10,
-                        background: 'rgba(220,38,38,0.08)',
-                        border: '1px solid rgba(220,38,38,0.22)',
-                        color: '#991B1B',
-                        fontSize: 13,
-                        fontWeight: 700,
-                    }}
-                >
-                    {err}
-                </div>
-            ) : null}
+  const pendingCount = rows.length;
 
-            <div
-                style={{
-                    background: '#fff',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                }}
-            >
-                <div
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: tab === 'pending' ? '1.15fr 1fr 0.65fr 1fr 0.55fr 1.1fr' : '1.15fr 1fr 0.65fr 1fr 0.65fr',
-                        gap: 10,
-                        padding: '12px 14px',
-                        borderBottom: '1px solid #F3F4F6',
-                        fontSize: 11,
-                        fontWeight: 900,
-                        letterSpacing: '0.08em',
-                        color: '#9CA3AF',
-                        textTransform: 'uppercase',
-                    }}
-                >
-                    <div>Locum</div>
-                    <div>Email</div>
-                    <div>CPSNS</div>
-                    <div>Updated</div>
-                    <div>Status</div>
-                    {tab === 'pending' ? <div>Actions</div> : null}
-                </div>
+  return (
+    <AdminLayout>
+      <div className="header-with-actions">
+        <div className="page-header" style={{ marginBottom: 0 }}>
+          <h1 className="page-title">Credential Verification Queue</h1>
+          <p className="page-description">
+            Review and verify locum physician credentials (Target: 48h turnaround)
+          </p>
+        </div>
+        <div className="header-actions">
+          <span className="pending-count">
+            {loading ? '…' : `${pendingCount} Pending`}
+          </span>
+        </div>
+      </div>
 
-                {loading ? (
-                    <div style={{ padding: 20, fontSize: 13, color: '#6B7280' }}>Loading…</div>
-                ) : (
-                    rows.map((r) => (
-                        <div
-                            key={r.id}
-                            style={{
-                                display: 'grid',
-                                gridTemplateColumns:
-                                    tab === 'pending'
-                                        ? '1.15fr 1fr 0.65fr 1fr 0.55fr 1.1fr'
-                                        : '1.15fr 1fr 0.65fr 1fr 0.65fr',
-                                gap: 10,
-                                padding: '12px 14px',
-                                borderBottom: '1px solid #F9FAFB',
-                                alignItems: 'center',
-                            }}
-                        >
-                            <div style={{ minWidth: 0 }}>
-                                <div
-                                    style={{
-                                        fontSize: 13,
-                                        fontWeight: 900,
-                                        color: '#0f1523',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                    }}
-                                >
-                                    {r.name}
-                                </div>
-                                <div style={{ fontSize: 12, color: '#9CA3AF' }}>{r.id}</div>
-                            </div>
-                            <div
-                                style={{
-                                    fontSize: 13,
-                                    color: '#374151',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                }}
-                            >
-                                {r.email}
-                            </div>
-                            <div style={{ fontSize: 13, fontWeight: 800, color: '#0f1523' }}>{r.cpsns}</div>
-                            <div style={{ fontSize: 13, color: '#374151' }}>{fmt(r.submittedAt)}</div>
-                            <div>
-                                <StatusTag status={r.verificationStatus} />
-                            </div>
-                            {tab === 'pending' ? (
-                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    <button
-                                        type="button"
-                                        disabled={
-                                            busyId === r.id
-                                            || (
-                                                r.verificationStatus !== 'PENDING_REVIEW'
-                                                && r.verificationStatus !== 'UNVERIFIED'
-                                            )
-                                        }
-                                        onClick={() => patchStatus(r.id, 'VERIFIED')}
-                                        style={{
-                                            padding: '6px 12px',
-                                            borderRadius: 8,
-                                            border: '1px solid rgba(34,197,94,0.35)',
-                                            background: 'rgba(34,197,94,0.10)',
-                                            color: '#166534',
-                                            fontSize: 12,
-                                            fontWeight: 900,
-                                            cursor: 'pointer',
-                                            fontFamily: 'inherit',
-                                        }}
-                                    >
-                                        Approve
-                                    </button>
-                                    <button
-                                        type="button"
-                                        disabled={
-                                            busyId === r.id
-                                            || (
-                                                r.verificationStatus !== 'PENDING_REVIEW'
-                                                && r.verificationStatus !== 'UNVERIFIED'
-                                            )
-                                        }
-                                        onClick={() => patchStatus(r.id, 'REJECTED')}
-                                        style={{
-                                            padding: '6px 12px',
-                                            borderRadius: 8,
-                                            border: '1px solid rgba(220,38,38,0.28)',
-                                            background: 'rgba(220,38,38,0.08)',
-                                            color: '#991B1B',
-                                            fontSize: 12,
-                                            fontWeight: 900,
-                                            cursor: 'pointer',
-                                            fontFamily: 'inherit',
-                                        }}
-                                    >
-                                        Reject
-                                    </button>
-                                </div>
-                            ) : null}
-                        </div>
-                    ))
-                )}
+      {err ? <div className="error-banner">{err}</div> : null}
+
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Physician</th>
+              <th>CPSNS #</th>
+              <th>Submitted</th>
+              <th>Documents</th>
+              <th>Wait Time</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="text-muted">
+                  Loading…
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-muted">
+                  No pending verifications.
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => {
+                const days = waitDays(r.submittedAt);
+                const urgent = days >= 3;
+                return (
+                  <tr key={r.id}>
+                    <td>
+                      <div className="font-medium">{r.name}</div>
+                      <div className="text-sm text-muted">{r.email}</div>
+                    </td>
+                    <td>
+                      <code>{r.cpsns}</code>
+                    </td>
+                    <td className="text-muted">{fmtDate(r.submittedAt)}</td>
+                    <td>
+                      <span className="tag">CPSNS License</span>
+                      <span className="tag">Profile</span>
+                    </td>
+                    <td>
+                      <span
+                        className={`text-sm flex items-center gap-1${urgent ? ' font-medium' : ''}`}
+                        style={{ color: urgent ? '#dc2626' : '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Clock size={16} />
+                        {days === 0 ? '< 1 day' : `${days} day${days === 1 ? '' : 's'}`}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => {
+                          setReview(r);
+                          setNotes('');
+                        }}
+                      >
+                        Review
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div
+        className={`modal-overlay${review ? ' active' : ''}`}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setReview(null);
+        }}
+        onKeyDown={() => {}}
+        role="presentation"
+      >
+        {review ? (
+          <div className="modal" role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <div>
+                <h2 className="modal-title">{review.name}</h2>
+                <p className="modal-subtitle">
+                  CPSNS: <span>{review.cpsns}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setReview(null)}
+                aria-label="Close"
+              >
+                <XCircle size={20} color="#64748b" />
+              </button>
             </div>
-        </AdminLayout>
-    );
+            <div className="modal-body">
+              <div className="grid-2 mb-4">
+                <div>
+                  <p className="text-xs font-medium text-muted" style={{ marginBottom: 4 }}>
+                    Email
+                  </p>
+                  <p className="text-sm">{review.email}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted" style={{ marginBottom: 4 }}>
+                    Submitted
+                  </p>
+                  <p className="text-sm">{fmtDate(review.submittedAt)}</p>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-sm font-medium mb-4">Uploaded Documents</p>
+                <div className="document-item">
+                  <div className="document-info">
+                    <FileText size={20} color="#64748b" />
+                    <span className="document-name">CPSNS License</span>
+                  </div>
+                  <button type="button" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 13 }}>
+                    <Eye size={16} />
+                    View
+                  </button>
+                </div>
+                <div className="document-item">
+                  <div className="document-info">
+                    <FileText size={20} color="#64748b" />
+                    <span className="document-name">Profile data</span>
+                  </div>
+                  <button type="button" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 13 }}>
+                    <Eye size={16} />
+                    View
+                  </button>
+                </div>
+              </div>
+
+              <div className="info-box">
+                <p className="info-title">Verification Steps:</p>
+                <ol className="info-list">
+                  <li>Cross-reference CPSNS number with CPSNS public registry</li>
+                  <li>Verify active license status and specialty</li>
+                  <li>Review uploaded CV for qualifications</li>
+                  <li>Check for any disciplinary actions or restrictions</li>
+                </ol>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-sm font-medium mb-4">Decision</p>
+                <div className="grid-2 mb-4">
+                  <button
+                    type="button"
+                    className="btn btn-success"
+                    style={{ padding: 12 }}
+                    disabled={busyId === review.id}
+                    onClick={() => patchStatus(review.id, 'VERIFIED')}
+                  >
+                    <CheckCircle size={20} />
+                    Verify &amp; Approve
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: 12 }}
+                    disabled={busyId === review.id}
+                    onClick={() => patchStatus(review.id, 'REJECTED')}
+                  >
+                    <XCircle size={20} />
+                    Reject
+                  </button>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="review-notes">
+                    Reason / Notes (required for rejection)
+                  </label>
+                  <textarea
+                    id="review-notes"
+                    className="input"
+                    placeholder="Enter verification notes or rejection reason…"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </AdminLayout>
+  );
 }

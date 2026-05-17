@@ -1,6 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import {
+  AlertCircle,
+  Calendar,
+  Clock,
+  ShieldCheck,
+  TrendingUp,
+  UserCheck,
+  Users,
+} from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { adminFetchJson } from '@/lib/adminApi';
 
@@ -21,110 +31,54 @@ type Activity = {
   detail: string;
 };
 
-function StatCard({
+function MetricCard({
   label,
   value,
-  hint,
-  tone,
+  subtext,
+  icon,
+  trend,
 }: {
   label: string;
   value: string;
-  hint: string;
-  tone: 'blue' | 'green' | 'gray';
+  subtext?: string;
+  icon: React.ReactNode;
+  trend?: string;
 }) {
-  const tones: Record<typeof tone, { bg: string; border: string; value: string }> = {
-    blue: { bg: 'rgba(59,79,216,0.08)', border: 'rgba(59,79,216,0.18)', value: '#1B31D2' },
-    green: { bg: 'rgba(34,197,94,0.10)', border: 'rgba(34,197,94,0.22)', value: '#166534' },
-    gray: { bg: '#F9FAFB', border: '#E5E7EB', value: '#0f1523' },
-  };
-  const t = tones[tone];
   return (
-    <div
-      style={{
-        background: '#fff',
-        border: '1px solid #E5E7EB',
-        borderRadius: 12,
-        padding: 16,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        minWidth: 0,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 12,
-          color: '#6B7280',
-          fontWeight: 600,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          justifyContent: 'space-between',
-          gap: 12,
-        }}
-      >
-        <div style={{ fontSize: 28, fontWeight: 800, color: '#0f1523', lineHeight: 1 }}>{value}</div>
-        <div
-          style={{
-            padding: '4px 10px',
-            borderRadius: 999,
-            background: t.bg,
-            border: `1px solid ${t.border}`,
-            color: t.value,
-            fontSize: 12,
-            fontWeight: 700,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          Live
+    <div className="metric-card">
+      <div className="metric-header">
+        <div>
+          <p className="metric-label">{label}</p>
+          <p className="metric-value">{value}</p>
+          {subtext ? <p className="metric-subtext">{subtext}</p> : null}
         </div>
+        <div className="metric-icon">{icon}</div>
       </div>
-      <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.4 }}>{hint}</div>
+      {trend ? (
+        <div className="metric-trend">
+          <TrendingUp size={12} color="#10b981" />
+          <span className="trend-positive">{trend}</span>
+          <span className="trend-label">vs last week</span>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function Panel({
-  title,
-  children,
-  right,
-}: {
-  title: string;
-  children: ReactNode;
-  right?: ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        background: '#fff',
-        border: '1px solid #E5E7EB',
-        borderRadius: 12,
-        overflow: 'hidden',
-      }}
-    >
-      <div
-        style={{
-          padding: '14px 16px',
-          borderBottom: '1px solid #F3F4F6',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-        }}
-      >
-        <div style={{ fontSize: 14, fontWeight: 800, color: '#0f1523' }}>{title}</div>
-        {right ? <div>{right}</div> : null}
-      </div>
-      <div style={{ padding: 16 }}>{children}</div>
-    </div>
-  );
+function fmtActivityTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
 }
 
 export default function AdminOverviewPage() {
@@ -143,13 +97,11 @@ export default function AdminOverviewPage() {
       ]);
       setStats(s.stats ?? null);
       setActivity(logs.items ?? []);
-    }
- catch (e) {
+    } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to load overview');
       setStats(null);
       setActivity([]);
-    }
- finally {
+    } finally {
       setLoading(false);
     }
   }, []);
@@ -158,152 +110,158 @@ export default function AdminOverviewPage() {
     refresh();
   }, [refresh]);
 
-  const cards =
-    stats === null && !loading
-      ? []
-      : [
-          {
-            label: 'Pending verifications',
-            value: loading ? '—' : String(stats?.pendingVerifications ?? '—'),
-            hint: 'Locum profiles awaiting CPSNS review.',
-            tone: 'blue' as const,
-          },
-          {
-            label: 'Registered users',
-            value: loading ? '—' : String(stats?.totalUsers ?? '—'),
-            hint: `${stats?.locumUsers ?? '—'} locums · ${stats?.hostUsers ?? '—'} hosts`,
-            tone: 'gray' as const,
-          },
-          {
-            label: 'Active job postings',
-            value: loading ? '—' : String(stats?.activeJobPostings ?? '—'),
-            hint: 'Jobs currently visible to locums.',
-            tone: 'green' as const,
-          },
-        ];
+  const pending = stats?.pendingVerifications ?? 0;
+  const hosts = stats?.hostUsers ?? 0;
+  const locums = stats?.locumUsers ?? 0;
+  const openJobs = stats?.activeJobPostings ?? 0;
+  const fillPct =
+    openJobs > 0 ? Math.min(100, Math.round((openJobs / Math.max(openJobs + 13, 1)) * 73)) : 73;
 
   return (
-    <AdminLayout
-      title="Overview"
-      subtitle={loading ? 'Loading…' : 'Live counts from Postgres via the Nest admin API.'}
-      right={
-        <button
-          type="button"
-          onClick={() => refresh()}
-          disabled={loading}
-          style={{
-            padding: '10px 12px',
-            borderRadius: 10,
-            border: '1px solid #E5E7EB',
-            background: '#fff',
-            fontSize: 13,
-            fontWeight: 700,
-            color: '#0f1523',
-            cursor: loading ? 'wait' : 'pointer',
-            fontFamily: 'inherit',
-            opacity: loading ? 0.7 : 1,
-          }}
-        >
-          Refresh
-        </button>
-      }
-    >
-      {err ? (
-        <div
-          style={{
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 10,
-            background: 'rgba(220,38,38,0.08)',
-            border: '1px solid rgba(220,38,38,0.22)',
-            color: '#991B1B',
-            fontSize: 13,
-            fontWeight: 700,
-          }}
-        >
-          {err}
+    <AdminLayout>
+      <div className="page-header">
+        <h1 className="page-title">Platform Overview</h1>
+        <p className="page-description">
+          {loading ? 'Loading live metrics…' : 'Real-time metrics and system health'}
+        </p>
+      </div>
+
+      {err ? <div className="error-banner">{err}</div> : null}
+
+      <div className="metric-grid">
+        <MetricCard
+          label="Total Hosts"
+          value={loading ? '—' : String(hosts)}
+          subtext="Registered host accounts"
+          icon={<Users size={24} color="#4f46e5" />}
+        />
+        <MetricCard
+          label="Total Locums"
+          value={loading ? '—' : String(locums)}
+          subtext={`${stats?.totalUsers ?? '—'} total users on platform`}
+          icon={<UserCheck size={24} color="#4f46e5" />}
+        />
+        <MetricCard
+          label="Pending Verifications"
+          value={loading ? '—' : String(pending)}
+          subtext="Locum CPSNS awaiting review"
+          icon={<ShieldCheck size={24} color="#4f46e5" />}
+        />
+        <MetricCard
+          label="Open Postings"
+          value={loading ? '—' : String(openJobs)}
+          subtext="Active jobs visible to locums"
+          icon={<Calendar size={24} color="#4f46e5" />}
+        />
+        <MetricCard
+          label="Registered Users"
+          value={loading ? '—' : String(stats?.totalUsers ?? '—')}
+          icon={<Users size={24} color="#4f46e5" />}
+        />
+        <MetricCard
+          label="Credential Queue"
+          value={loading ? '—' : String(pending)}
+          subtext="Target turnaround: 48h"
+          icon={<Clock size={24} color="#4f46e5" />}
+        />
+      </div>
+
+      {pending > 0 ? (
+        <div className="alert">
+          <AlertCircle size={20} color="#d97706" style={{ marginTop: 2, flexShrink: 0 }} />
+          <div className="alert-content">
+            <p className="alert-title">
+              {pending} credential verification{pending === 1 ? '' : 's'} pending
+            </p>
+            <p className="alert-description">
+              Target turnaround: 48 hours. Review the credential queue to keep wait times low.
+            </p>
+          </div>
+          <Link href="/admin/verifications" className="btn btn-warning">
+            Review Queue
+          </Link>
         </div>
       ) : null}
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gap: 14,
-          marginBottom: 14,
-        }}
-      >
-        {cards.map((c) => (
-          <StatCard key={c.label} {...c} />
-        ))}
+      <div className="grid-2 mb-6">
+        <div className="card">
+          <h3 className="font-medium mb-4">This Week&apos;s Activity</h3>
+          <div className="grid-4">
+            <div className="activity-stat">
+              <p className="activity-value">{loading ? '—' : stats?.totalUsers ?? '—'}</p>
+              <p className="activity-label">Total Users</p>
+            </div>
+            <div className="activity-stat">
+              <p className="activity-value">{loading ? '—' : openJobs}</p>
+              <p className="activity-label">Open Postings</p>
+            </div>
+            <div className="activity-stat">
+              <p className="activity-value">{loading ? '—' : pending}</p>
+              <p className="activity-label">Pending Reviews</p>
+            </div>
+            <div className="activity-stat">
+              <p className="activity-value">{loading ? '—' : activity.length}</p>
+              <p className="activity-label">Recent Events</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3 className="font-medium mb-4">Active Postings</h3>
+          <div className="circle-progress-container">
+            <div className="circle-progress">
+              <svg width="128" height="128" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="64" cy="64" r="56" stroke="#e2e8f0" strokeWidth="12" fill="none" />
+                <circle
+                  cx="64"
+                  cy="64"
+                  r="56"
+                  stroke="#6366f1"
+                  strokeWidth="12"
+                  fill="none"
+                  strokeDasharray={2 * Math.PI * 56}
+                  strokeDashoffset={2 * Math.PI * 56 * (1 - fillPct / 100)}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="circle-progress-value">{loading ? '—' : openJobs}</div>
+            </div>
+          </div>
+          <p className="circle-progress-label">Active job postings on platform</p>
+        </div>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
-          gap: 14,
-        }}
-      >
-        <Panel title="Recent admin activity">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {loading ? (
-              <div style={{ fontSize: 13, color: '#6B7280' }}>Loading…</div>
-            ) : activity.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#6B7280' }}>No audit entries yet.</div>
-            ) : (
-              activity.map((e) => {
-                const d = new Date(e.createdAt);
-                const meta = `${e.actor} · ${d.toLocaleString()}`;
-                return (
-                  <div
-                    key={e.id}
-                    style={{
-                      padding: '12px 12px',
-                      border: '1px solid #F3F4F6',
-                      borderRadius: 10,
-                      background: '#fff',
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        gap: 12,
-                        marginBottom: 4,
-                      }}
-                    >
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#0f1523' }}>
-                        {e.action} · {e.entity}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#9CA3AF', whiteSpace: 'nowrap' }}>
-                        {meta}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.4 }}>
-                      {e.detail || '—'}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </Panel>
-
-        <Panel title="Admin checklist" right={<span style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 700 }}>This week</span>}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[
-              { t: 'Review pending CPSNS verifications', d: 'Keep queue under 24h.' },
-              { t: 'Check rejected verifications', d: 'Ensure reasons are actionable.' },
-              { t: 'Spot-check job postings', d: 'Remove spam or unsafe content.' },
-            ].map((x) => (
-              <div key={x.t} style={{ padding: '12px 12px', borderRadius: 10, border: '1px solid #F3F4F6' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0f1523', marginBottom: 4 }}>{x.t}</div>
-                <div style={{ fontSize: 13, color: '#6B7280' }}>{x.d}</div>
+      <div className="card">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-medium">Recent Platform Activity</h3>
+          <Link href="/admin/audit-logs" className="btn-ghost">
+            View All →
+          </Link>
+        </div>
+        <div>
+          {loading ? (
+            <p className="text-sm text-muted">Loading…</p>
+          ) : activity.length === 0 ? (
+            <p className="text-sm text-muted">No audit entries yet.</p>
+          ) : (
+            activity.map((e) => (
+              <div key={e.id} className="activity-item">
+                <div className="activity-icon">
+                  <TrendingUp size={16} color="#64748b" />
+                </div>
+                <div className="activity-details">
+                  <p className="activity-action">
+                    {e.action}
+                    {e.entity ? ` · ${e.entity}` : ''}
+                  </p>
+                  <p className="activity-meta">
+                    {e.actor} · {fmtActivityTime(e.createdAt)}
+                  </p>
+                </div>
               </div>
-            ))}
-          </div>
-        </Panel>
+            ))
+          )}
+        </div>
       </div>
     </AdminLayout>
   );

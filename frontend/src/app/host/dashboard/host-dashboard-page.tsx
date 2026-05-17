@@ -22,10 +22,10 @@ const HOST_DASH_NAV = [
 ];
 const TABS = [
     { id: 'active', label: 'Active Posts' },
-    { id: 'ongoing', label: 'Ongoing Shifts' },
-    { id: 'recent', label: 'Completed Shifts' },
-    { id: 'draft', label: 'Draft Shifts' },
-    { id: 'deleted', label: 'Deleted Shifts' },
+    { id: 'ongoing', label: 'Ongoing Locum Shifts' },
+    { id: 'recent', label: 'Completed Locum Shifts' },
+    { id: 'draft', label: 'Draft Locum Shifts' },
+    { id: 'deleted', label: 'Deleted Locum Shifts' },
 ];
 const CREDENTIAL_OPTIONS = sortStringsLocale([
     'CPSNS Full License',
@@ -192,6 +192,26 @@ function getLocumDisplayName(app: ApplicationRecord): string {
     if (firstName || lastName)
         return `Dr ${firstName ?? ''} ${lastName ?? ''}`.trim();
     return user.email.split('@')[0];
+}
+
+function applicationStatusDisplay(status: ApplicationRecord['status']): {
+    label: string;
+    dotColor: string;
+    textColor: string;
+} {
+    switch (status) {
+        case 'SHORTLISTED':
+            return { label: 'Shortlisted', dotColor: '#10B981', textColor: '#166534' };
+        case 'CONFIRMED':
+            return { label: 'Confirmed', dotColor: '#6366F1', textColor: '#4338CA' };
+        case 'REJECTED':
+            return { label: 'Rejected', dotColor: '#EF4444', textColor: '#991B1B' };
+        case 'WITHDRAWN':
+            return { label: 'Withdrawn', dotColor: '#9CA3AF', textColor: '#6B7280' };
+        case 'APPLIED':
+        default:
+            return { label: 'Pending', dotColor: '#3B82F6', textColor: '#6B7280' };
+    }
 }
 function DetailsIcon() {
     return (<svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -620,7 +640,7 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
 
       {!loading &&
             preview.map((app, idx) => {
-                const isShortlisted = app.status === 'SHORTLISTED' || app.status === 'CONFIRMED';
+                const statusUi = applicationStatusDisplay(app.status);
                 const rawSpec = app.locumProfile.specialty ?? '';
                 const specText = String((app.locumProfile as any).specializationText ?? '');
                 const fromSpecText = specText.split(',').map((s: string) => s.trim()).filter(Boolean);
@@ -680,14 +700,14 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
                         width: 7,
                         height: 7,
                         borderRadius: '50%',
-                        background: isShortlisted ? '#22C55E' : '#D1D5DB',
+                        background: statusUi.dotColor,
                         flexShrink: 0,
                     }}/>
                 <span style={{
                         fontSize: 'var(--font-body)',
-                        color: isShortlisted ? '#166534' : '#6B7280',
+                        color: statusUi.textColor,
                     }}>
-                  {isShortlisted ? 'Shortlisted' : 'Pending'}
+                  {statusUi.label}
                 </span>
               </div>
               <span style={{
@@ -697,10 +717,10 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
                         borderRadius: 8,
                         fontSize: 13,
                         fontWeight: 600,
-                        background: (app as any).locumResponse === 'ACCEPTED' ? '#D1FAE5' : (app as any).locumResponse === 'REJECTED' ? '#FEE2E2' : '#F3F4F6',
-                        color: (app as any).locumResponse === 'ACCEPTED' ? '#065F46' : (app as any).locumResponse === 'REJECTED' ? '#991B1B' : '#6B7280',
+                        background: app.locumResponse === 'ACCEPTED' ? '#D1FAE5' : app.locumResponse === 'REJECTED' ? '#FEE2E2' : '#F3F4F6',
+                        color: app.locumResponse === 'ACCEPTED' ? '#065F46' : app.locumResponse === 'REJECTED' ? '#991B1B' : '#6B7280',
                     }}>
-                {(app as any).locumResponse === 'ACCEPTED' ? 'Accepted' : (app as any).locumResponse === 'REJECTED' ? 'Rejected' : '—'}
+                {app.locumResponse === 'ACCEPTED' ? 'Accepted' : app.locumResponse === 'REJECTED' ? 'Rejected' : '—'}
               </span>
             </div>);
             })}
@@ -2382,10 +2402,10 @@ export default function HostDashboard(props: {
                 marginTop: 8,
             }}>
                       {activeTab === 'deleted'
-                        ? 'No deleted shifts'
+                        ? 'No deleted locum shifts'
                         : activeTab === 'draft'
                             ? 'No drafts yet'
-                            : 'No posts yet'}
+                            : 'No locum shifts yet'}
                     </span>
                     <span style={{
                 fontFamily: 'Inter, sans-serif',
@@ -2394,13 +2414,13 @@ export default function HostDashboard(props: {
                 color: '#6B7280',
             }}>
                       {activeTab === 'active' &&
-                'You have not posted any posts yet'}
+                'You have not posted any locum shifts yet'}
                       {activeTab === 'ongoing' &&
-                'No shifts are currently ongoing'}
-                      {activeTab === 'recent' && 'No completed shifts'}
-                      {activeTab === 'draft' && 'No draft shifts saved'}
+                'No locum shifts are currently ongoing'}
+                      {activeTab === 'recent' && 'No completed locum shifts'}
+                      {activeTab === 'draft' && 'No draft locum shifts saved'}
                       {activeTab === 'deleted' &&
-                'Shifts you delete from the dashboard appear here'}
+                'Locum shifts you delete from the dashboard appear here'}
                     </span>
                   </div>)}
 
