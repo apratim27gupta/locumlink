@@ -8,15 +8,19 @@ export function hostProfileCompletionPct(fields: Fields): number {
         ?.split(',')
         .map((s) => s.trim())
         .filter(Boolean) ?? [];
-    const step1Complete = !!(fields.clinicName &&
+    const step1Complete = !!(
         fields.contactFirstName &&
         fields.contactLastName &&
         isCpsnsNineDigitsFormat(fields.cpsnsNumber) &&
-        specs.length);
-    const step2Complete = !!(fields.address1 &&
+        specs.length
+    );
+    const step2Complete = !!(
+        fields.clinicName &&
+        fields.address1 &&
         fields.postalCode &&
         fields.city &&
-        fields.province);
+        fields.province
+    );
     const step3Complete = !!(fields.practiceType &&
         fields.numPhysicians &&
         fields.emr &&
