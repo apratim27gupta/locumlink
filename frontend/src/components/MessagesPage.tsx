@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useState, useRef, useCallback, useMemo, Suspense, } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo, Suspense, type MouseEvent as ReactMouseEvent, } from 'react';
+import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
@@ -52,6 +53,18 @@ const LOCUM_NAV = [
         icon: <NavIcon name="resources"/>,
     },
 ];
+const MESSAGES_LIST_WIDTH_KEY = 'll-messages-list-width';
+const MESSAGES_LIST_MIN = 260;
+const MESSAGES_LIST_MAX = 560;
+const MESSAGES_LIST_DEFAULT = 360;
+function readStoredMessagesListWidth(): number {
+    if (typeof window === 'undefined')
+        return MESSAGES_LIST_DEFAULT;
+    const n = parseInt(localStorage.getItem(MESSAGES_LIST_WIDTH_KEY) ?? '', 10);
+    if (!Number.isFinite(n))
+        return MESSAGES_LIST_DEFAULT;
+    return Math.min(MESSAGES_LIST_MAX, Math.max(MESSAGES_LIST_MIN, n));
+}
 const QUICK_EMOJIS = [
     '👍',
     '❤️',
@@ -342,6 +355,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const [deleteTarget, setDeleteTarget] = useState<ThreadMessage | null>(null);
     const [myApplications, setMyApplications] = useState<MyApplication[]>([]);
     const [myListPreviewName, setMyListPreviewName] = useState<string | null>(null);
+    const [listPanelWidth, setListPanelWidth] = useState(readStoredMessagesListWidth);
     useEffect(() => { setMyListPreviewName(null); }, [pathname]);
     useEffect(() => {
         if (authLoading || !getToken())
@@ -388,7 +402,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const imagePickRef = useRef<HTMLInputElement>(null);
     const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
     const emojiPickerRef = useRef<HTMLDivElement>(null);
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const threadSinceRef = useRef<string | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         if (!menuOpenId)
@@ -470,7 +484,10 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         try {
             const { messages, partner: p } = await messageApi.getThread(partnerId);
             const hiddenIds = new Set(JSON.parse(localStorage.getItem('deleted-for-me') || '[]'));
-            setThread(messages.filter((m: ThreadMessage) => !hiddenIds.has(m.id)));
+            const visible = messages.filter((m: ThreadMessage) => !hiddenIds.has(m.id));
+            setThread(visible);
+            const last = visible[visible.length - 1];
+            threadSinceRef.current = last?.sentAt ?? null;
             setPartner(p);
             setConversations((prev) => prev.map((c) => c.partnerId === partnerId ? { ...c, unreadCount: 0 } : c));
         }
@@ -509,31 +526,42 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         return () => window.cancelAnimationFrame(id);
     }, [thread, loadingThread]);
     useEffect(() => {
-        if (!selectedPartnerId || authLoading || !getToken())
+        threadSinceRef.current = null;
+    }, [selectedPartnerId]);
+    const pollMessages = useCallback(async () => {
+        if (!selectedPartnerId || !getToken())
             return;
-        pollRef.current = setInterval(async () => {
-            if (!getToken())
-                return;
-            try {
-                const [{ messages }, { conversations: convs }] = await Promise.all([
-                    messageApi.getThread(selectedPartnerId, { skipTopLoader: true }),
-                    messageApi.getConversations({
-                        skipTopLoader: true,
-                        q: debouncedSearchQuery || undefined,
-                    }),
-                ]);
-                const hiddenIds2 = new Set(JSON.parse(localStorage.getItem('deleted-for-me') || '[]'));
-                setThread(messages.filter((m: ThreadMessage) => !hiddenIds2.has(m.id)));
-                setConversations(convs.map((c) => c.partnerId === selectedPartnerId ? { ...c, unreadCount: 0 } : c));
+        const since = threadSinceRef.current ?? undefined;
+        try {
+            const [threadResult, { conversations: convs }] = await Promise.all([
+                since
+                    ? messageApi.getThread(selectedPartnerId, { skipTopLoader: true, since })
+                    : Promise.resolve({ messages: [] as ThreadMessage[], partner: null }),
+                messageApi.getConversations({
+                    skipTopLoader: true,
+                    q: debouncedSearchQuery || undefined,
+                }),
+            ]);
+            const hiddenIds2 = new Set(JSON.parse(localStorage.getItem('deleted-for-me') || '[]'));
+            const incoming = threadResult.messages.filter((m: ThreadMessage) => !hiddenIds2.has(m.id));
+            if (incoming.length > 0) {
+                const lastIncoming = incoming[incoming.length - 1];
+                threadSinceRef.current = lastIncoming.sentAt;
+                setThread((prev) => {
+                    const byId = new Map(prev.map((m) => [m.id, m]));
+                    for (const m of incoming)
+                        byId.set(m.id, m);
+                    return [...byId.values()].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+                });
             }
-            catch {
-            }
-        }, 5000);
-        return () => {
-            if (pollRef.current)
-                clearInterval(pollRef.current);
-        };
-    }, [selectedPartnerId, authLoading, debouncedSearchQuery]);
+            setConversations(convs.map((c) => c.partnerId === selectedPartnerId ? { ...c, unreadCount: 0 } : c));
+        }
+        catch {
+        }
+    }, [selectedPartnerId, debouncedSearchQuery]);
+    useVisibilityPolling(() => {
+        void pollMessages();
+    }, 10_000, Boolean(selectedPartnerId) && !authLoading && Boolean(getToken()));
     useEffect(() => {
         if (role !== 'host' || !selectedPartnerId || !composeJobPostingId) {
             setThreadHostApplication(null);
@@ -583,6 +611,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             const { message } = await messageApi.sendMessage(selectedPartnerId, body, composeJobPostingId ?? undefined, attachments);
             stickToBottomRef.current = true;
             setThread((prev) => [...prev, message as ThreadMessage]);
+            threadSinceRef.current = message.sentAt;
             setPendingFiles([]);
             void loadConversations();
         }
@@ -764,6 +793,32 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const hostThreadNeedsConfirm = Boolean(showHostThreadConfirm &&
         (threadHostApplication?.status === 'APPLIED' || threadHostApplication?.status === 'SHORTLISTED'));
     const hostThreadAlreadyConfirmed = Boolean(showHostThreadConfirm && threadHostApplication?.status === 'CONFIRMED');
+    function onListPanelResizeMouseDown(e: ReactMouseEvent<HTMLDivElement>) {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startW = listPanelWidth;
+        let latest = startW;
+        const onMove = (ev: MouseEvent) => {
+            const dx = ev.clientX - startX;
+            latest = Math.min(MESSAGES_LIST_MAX, Math.max(MESSAGES_LIST_MIN, startW + dx));
+            setListPanelWidth(latest);
+        };
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            try {
+                localStorage.setItem(MESSAGES_LIST_WIDTH_KEY, String(latest));
+            }
+            catch { /* ignore */ }
+        };
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    }
     return (<DashLayout navItems={navItems} activeHref={activeHref} topbarFirstName={undefined} topbarLastName={undefined}>
       <h1 style={{
             fontSize: 22,
@@ -787,11 +842,12 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         }}>
         
         <div style={{
-            width: 360,
+            width: listPanelWidth,
             flexShrink: 0,
-            borderRight: '1px solid #E5E7EB',
+            position: 'relative',
             display: 'flex',
             flexDirection: 'column',
+            borderRight: '1px solid #E5E7EB',
         }}>
           
           <div style={{
@@ -873,7 +929,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        maxWidth: 140,
+                        maxWidth: Math.max(80, listPanelWidth - 120),
                     }}>
                             {name}
                           </span>
@@ -1162,6 +1218,29 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                     </div>)}
               </>)}
           </div>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize conversation list"
+            title="Drag to resize"
+            onMouseDown={onListPanelResizeMouseDown}
+            style={{
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: 6,
+                zIndex: 3,
+                cursor: 'ew-resize',
+                background: 'transparent',
+            }}
+            onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(59, 79, 216, 0.12)';
+            }}
+            onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+            }}
+          />
         </div>
 
         
@@ -1267,10 +1346,16 @@ function MessagesPageInner({ role }: MessagesPageProps) {
 
                     
                     {location ? (<span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        width: 'fit-content',
+                        padding: '4px 10px',
+                        borderRadius: 40,
+                        background: 'rgba(171, 230, 234, 0.35)',
                         fontSize: 14,
-                        fontWeight: 400,
+                        fontWeight: 600,
                         lineHeight: '142%',
-                        color: '#6B7280',
+                        color: '#309BB7',
                         textTransform: 'capitalize',
                     }}>
                         {location}

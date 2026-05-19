@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards, Req, HttpCode, HttpStatus, } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import { Controller, Get, Post, Patch, Body, Param, Req, HttpCode, HttpStatus, } from '@nestjs/common';
+import { Public } from '../auth/decorators/public.decorator.js';
 import { LocumService } from './locum.service.js';
 import { ApplyJobDto, RespondToConfirmedPlacementDto } from './locum.dto.js';
 interface JwtRequest {
@@ -10,7 +10,6 @@ interface JwtRequest {
     };
 }
 @Controller('locum')
-@UseGuards(AuthGuard('jwt'))
 export class LocumController {
     constructor(private readonly locumService: LocumService) { }
     @Post('profile')
@@ -27,6 +26,12 @@ export class LocumController {
     @Req()
     req: JwtRequest) {
         return this.locumService.getProfile(req.user.id);
+    }
+    @Public()
+    @Get('jobs/browse-count')
+    async browseJobsCount() {
+        const count = await this.locumService.countBrowseOpportunities();
+        return { count };
     }
     @Get('jobs')
     browseJobs() {

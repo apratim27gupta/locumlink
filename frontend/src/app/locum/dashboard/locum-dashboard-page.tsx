@@ -9,7 +9,7 @@ import { getToken } from '@/lib/auth';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { useAuth } from '@/providers/AuthProvider';
 import type { LocumProfile } from '@/types';
-import { isCpsnsVerified } from '@/lib/cpsnsVerify';
+import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 import { locumProfileCompletionPct } from '@/lib/locumProfileCompletion';
 import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
 import { beforeClientNavigation } from '@/lib/topLoader';
@@ -196,7 +196,7 @@ export default function LocumDashboard(props: {
         return `Welcome Dr ${full}`;
     })();
     const completionPct = locumProfileCompletionPct(profile);
-    const cpsnsVerified = isCpsnsVerified(profile?.cpsnsNumber);
+    const cpsnsVerified = isCpsnsVerificationApproved(profile?.verificationStatus);
     const ringPct = Math.min(100, Math.max(0, completionPct)) / 100;
     const ringDash = ringPct * PROFILE_RING_C;
     const today = new Date();

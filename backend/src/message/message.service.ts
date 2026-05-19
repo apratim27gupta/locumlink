@@ -14,9 +14,25 @@ const userSelect = {
         },
     },
 } as const;
+/** Cap rows loaded when building the inbox list (avoids OOM on busy accounts). */
+const CONVERSATION_SCAN_LIMIT = 400;
 @Injectable()
 export class MessageService {
     constructor(private readonly prisma: PrismaService, private readonly gcs: GcsService) { }
+    private async signAttachments<T extends {
+        attachments?: {
+            storagePath: string;
+            [k: string]: unknown;
+        }[];
+    }>(messages: T[]): Promise<T[]> {
+        return Promise.all(messages.map(async (m) => ({
+            ...m,
+            attachments: await Promise.all((m.attachments ?? []).map(async (a) => ({
+                ...a,
+                signedUrl: await this.gcs.signedUrl(a.storagePath),
+            }))),
+        })));
+    }
     async getConversations(userId: string, search?: string) {
         const trimmed = search?.trim() ?? '';
         const hasSearch = trimmed.length > 0;
@@ -124,6 +140,7 @@ export class MessageService {
             this.prisma.message.findMany({
                 where: whereClause,
                 orderBy: { sentAt: 'desc' },
+                take: CONVERSATION_SCAN_LIMIT,
                 include: {
                     sender: { select: userSelect },
                     recipient: { select: userSelect },
@@ -164,60 +181,60 @@ export class MessageService {
         }
         return { conversations };
     }
-    async getThread(userId: string, partnerId: string) {
-        await this.prisma.message.updateMany({
-            where: { senderId: partnerId, recipientId: userId, readAt: null },
-            data: { readAt: new Date() },
+    async getThread(userId: string, partnerId: string, since?: Date) {
+        const isDelta = since != null;
+        if (!isDelta) {
+            await this.prisma.message.updateMany({
+                where: { senderId: partnerId, recipientId: userId, readAt: null },
+                data: { readAt: new Date() },
+            });
+        }
+        const threadWhere = {
+            OR: [
+                { senderId: userId, recipientId: partnerId },
+                { senderId: partnerId, recipientId: userId },
+            ],
+            ...(isDelta ? { sentAt: { gt: since } } : {}),
+        };
+        const messages = await this.prisma.message.findMany({
+            where: threadWhere,
+            orderBy: { sentAt: 'asc' },
+            include: {
+                sender: { select: userSelect },
+                attachments: true,
+            },
         });
-        const [messages, partner] = await Promise.all([
-            this.prisma.message.findMany({
-                where: {
-                    OR: [
-                        { senderId: userId, recipientId: partnerId },
-                        { senderId: partnerId, recipientId: userId },
-                    ],
-                },
-                orderBy: { sentAt: 'asc' },
-                include: {
-                    sender: { select: userSelect },
-                    attachments: true,
-                },
-            }),
-            this.prisma.user.findUnique({
-                where: { id: partnerId },
-                select: {
-                    id: true,
-                    email: true,
-                    role: true,
-                    locumProfile: {
-                        select: {
-                            firstName: true,
-                            lastName: true,
-                            specializationText: true,
-                            specialty: true,
-                            city: true,
-                            province: true,
-                        },
-                    },
-                    hostProfile: {
-                        select: {
-                            contactFirstName: true,
-                            contactLastName: true,
-                            practiceName: true,
-                            city: true,
-                            province: true,
-                        },
+        const withSigned = await this.signAttachments(messages);
+        if (isDelta) {
+            return { messages: withSigned, partner: null };
+        }
+        const partner = await this.prisma.user.findUnique({
+            where: { id: partnerId },
+            select: {
+                id: true,
+                email: true,
+                role: true,
+                locumProfile: {
+                    select: {
+                        firstName: true,
+                        lastName: true,
+                        specializationText: true,
+                        specialty: true,
+                        city: true,
+                        province: true,
                     },
                 },
-            }),
-        ]);
-        const withSigned = await Promise.all(messages.map(async (m) => ({
-            ...m,
-            attachments: await Promise.all((m.attachments ?? []).map(async (a) => ({
-                ...a,
-                signedUrl: await this.gcs.signedUrl(a.storagePath),
-            }))),
-        })));
+                hostProfile: {
+                    select: {
+                        contactFirstName: true,
+                        contactLastName: true,
+                        practiceName: true,
+                        city: true,
+                        province: true,
+                    },
+                },
+            },
+        });
         return { messages: withSigned, partner };
     }
     async sendMessage(senderId: string, recipientId: string, body: string | undefined, jobPostingId?: string, attachments: {
@@ -249,15 +266,8 @@ export class MessageService {
             },
             include: { sender: { select: userSelect }, attachments: true },
         });
-        return {
-            message: {
-                ...message,
-                attachments: await Promise.all((message.attachments ?? []).map(async (a) => ({
-                    ...a,
-                    signedUrl: await this.gcs.signedUrl(a.storagePath),
-                }))),
-            },
-        };
+        const [signed] = await this.signAttachments([message]);
+        return { message: signed };
     }
     async editMessage(userId: string, messageId: string, body: string) {
         const message = await this.prisma.message.findUnique({

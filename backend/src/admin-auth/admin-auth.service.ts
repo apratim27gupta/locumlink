@@ -2,7 +2,8 @@ import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/c
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { ADMIN_AUTH_COOKIE } from './admin-auth.constants.js';
+import { ADMIN_AUTH_COOKIE, ADMIN_AUTH_COOKIE_OPTS } from './admin-auth.constants.js';
+import type { Response } from 'express';
 import type { AdminJwtPayload } from './admin-auth.types.js';
 
 @Injectable()
@@ -13,15 +14,46 @@ export class AdminAuthService {
     private readonly config: ConfigService,
   ) {}
 
+  getAllowedAdminEmail(): string {
+    return this.config
+      .get<string>('ADMIN_ALLOWED_EMAIL', 'aroradamini873@gmail.com')
+      .trim()
+      .toLowerCase();
+  }
+
   async assertEmailIsAllowedAdmin(email?: string | null) {
     if (!email)
       throw new UnauthorizedException('Signed-in account has no email');
+    const normalized = email.trim().toLowerCase();
+    if (normalized !== this.getAllowedAdminEmail())
+      throw new ForbiddenException('This account is not allowed as an admin');
     const admin = await this.prisma.admin.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: normalized },
     });
     if (!admin)
       throw new ForbiddenException('This account is not allowed as an admin');
     return admin;
+  }
+
+  async loginWithEmail(rawEmail: string): Promise<{ adminId: string; email: string }> {
+    const email = rawEmail.trim().toLowerCase();
+    if (!email || !email.includes('@'))
+      throw new UnauthorizedException('Enter a valid email address');
+    if (email !== this.getAllowedAdminEmail())
+      throw new ForbiddenException('This email is not authorized for admin access');
+    const admin = await this.prisma.admin.upsert({
+      where: { email },
+      update: {},
+      create: { email, name: 'Admin', role: 'admin' },
+    });
+    return { adminId: admin.id, email: admin.email };
+  }
+
+  setAdminSessionCookie(res: Response, token: string) {
+    res.cookie(this.getCookieName(), token, {
+      ...ADMIN_AUTH_COOKIE_OPTS,
+      maxAge: this.parseAdminJwtCookieMaxAgeMs(),
+    });
   }
 
   async signAdminJwt(params: { adminId: string; email: string }): Promise<string> {
@@ -49,7 +81,7 @@ export class AdminAuthService {
   }
 
   getFrontendRedirectUrl() {
-    return this.config.get<string>('ADMIN_FRONTEND_REDIRECT_URL', 'http://localhost:3001/admin/dashboard');
+    return this.config.get<string>('ADMIN_FRONTEND_REDIRECT_URL', 'http://localhost:3002/admin/dashboard');
   }
 
   /** Origin derived from ADMIN_FRONTEND_REDIRECT_URL so login links stay in sync. */
@@ -58,7 +90,7 @@ export class AdminAuthService {
       return new URL(this.getFrontendRedirectUrl()).origin;
     }
     catch {
-      return 'http://localhost:3001';
+      return 'http://localhost:3002';
     }
   }
 

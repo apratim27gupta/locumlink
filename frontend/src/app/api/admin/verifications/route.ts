@@ -13,22 +13,44 @@ export async function GET(req: Request) {
 
   const db = getDb();
 
-  const profiles = await db.locumProfile.findMany({
-    orderBy: { createdAt: 'asc' },
-    include: {
-      user: { select: { email: true, createdAt: true } },
-    },
-  });
+  const [locumProfiles, hostProfiles] = await Promise.all([
+    db.locumProfile.findMany({
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        user: { select: { email: true, createdAt: true } },
+      },
+    }),
+    db.hostProfile.findMany({
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        user: { select: { email: true, createdAt: true } },
+      },
+    }),
+  ]);
 
-  const items = profiles.map((p) => ({
+  const locumItems = locumProfiles.map((p) => ({
     id: p.id,
+    profileType: 'locum' as const,
     userId: p.userId,
     email: p.user.email,
     name: [p.firstName, p.lastName].filter(Boolean).join(' ') || p.user.email,
     cpsns: p.cpsnsId ?? '',
-    submittedAt: p.createdAt.toISOString(),
+    submittedAt: p.updatedAt.toISOString(),
     verificationStatus: p.verificationStatus,
   }));
 
-  return NextResponse.json({ items });
+  const hostItems = hostProfiles
+    .filter((p) => p.cpsnsNumber && p.cpsnsNumber.replace(/\D/g, '').length === 9)
+    .map((p) => ({
+      id: p.id,
+      profileType: 'host' as const,
+      userId: p.userId,
+      email: p.user.email,
+      name: p.practiceName || p.user.email,
+      cpsns: p.cpsnsNumber ?? '',
+      submittedAt: p.updatedAt.toISOString(),
+      verificationStatus: p.cpsnsVerificationStatus,
+    }));
+
+  return NextResponse.json({ items: [...locumItems, ...hostItems] });
 }

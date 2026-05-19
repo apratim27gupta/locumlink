@@ -68,23 +68,26 @@ export class AdminService {
         pendingVerifications: number;
         activeJobPostings: number;
     }> {
-        const [
-            totalUsers,
-            hostUsers,
-            locumUsers,
-            pendingVerifications,
-            activeJobPostings,
-        ] = await Promise.all([
-            this.prisma.user.count(),
-            this.prisma.user.count({ where: { role: Role.HOST } }),
-            this.prisma.user.count({ where: { role: Role.LOCUM } }),
+        const [roleGroups, pendingVerifications, activeJobPostings] = await Promise.all([
+            this.prisma.user.groupBy({
+                by: ['role'],
+                _count: { id: true },
+            }),
             this.prisma.locumProfile.count({
                 where: { verificationStatus: VerificationStatus.PENDING_REVIEW },
             }),
             this.prisma.jobPosting.count({
-                where: { status: PostingStatus.ACTIVE },
+                where: { status: PostingStatus.ACTIVE, isDeleted: false },
             }),
         ]);
+        let hostUsers = 0;
+        let locumUsers = 0;
+        let totalUsers = 0;
+        for (const g of roleGroups) {
+            totalUsers += g._count.id;
+            if (g.role === Role.HOST) hostUsers = g._count.id;
+            if (g.role === Role.LOCUM) locumUsers = g._count.id;
+        }
         return {
             totalUsers,
             hostUsers,

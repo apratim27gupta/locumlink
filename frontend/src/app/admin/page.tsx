@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertCircle,
@@ -12,6 +12,7 @@ import {
   Users,
 } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
+import { useAdminStats } from '@/components/AdminStatsContext';
 import { adminFetchJson } from '@/lib/adminApi';
 
 type Stats = {
@@ -82,47 +83,56 @@ function fmtActivityTime(iso: string): string {
 }
 
 export default function AdminOverviewPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
+  const { stats, loading: statsLoading, error: statsErr } = useAdminStats();
   const [activity, setActivity] = useState<Activity[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      const [s, logs] = await Promise.all([
-        adminFetchJson<{ stats: Stats }>('/api/admin/stats'),
-        adminFetchJson<{ items: Activity[] }>('/api/admin/audit-logs?take=12'),
-      ]);
-      setStats(s.stats ?? null);
-      setActivity(logs.items ?? []);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Failed to load overview');
-      setStats(null);
-      setActivity([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [activityErr, setActivityErr] = useState<string | null>(null);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    let cancelled = false;
+    setActivityLoading(true);
+    setActivityErr(null);
+    void adminFetchJson<{ items: Activity[] }>('/api/admin/audit-logs?take=12')
+      .then((logs) => {
+        if (!cancelled) setActivity(logs.items ?? []);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setActivityErr(e instanceof Error ? e.message : 'Failed to load activity');
+          setActivity([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setActivityLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
+  const loading = statsLoading || activityLoading;
+  const err = statsErr ?? activityErr;
   const pending = stats?.pendingVerifications ?? 0;
   const hosts = stats?.hostUsers ?? 0;
   const locums = stats?.locumUsers ?? 0;
+  const totalUsers = stats?.totalUsers ?? 0;
   const openJobs = stats?.activeJobPostings ?? 0;
+  const totalJobs = stats?.totalJobPostings ?? 0;
+
+  const metric = (n: number) => (loading ? '—' : String(n));
   const fillPct =
-    openJobs > 0 ? Math.min(100, Math.round((openJobs / Math.max(openJobs + 13, 1)) * 73)) : 73;
+    totalJobs > 0 ? Math.min(100, Math.round((openJobs / totalJobs) * 100)) : 0;
 
   return (
     <AdminLayout>
       <div className="page-header">
         <h1 className="page-title">Platform Overview</h1>
         <p className="page-description">
-          {loading ? 'Loading live metrics…' : 'Real-time metrics and system health'}
+          {loading
+            ? 'Loading live metrics…'
+            : err
+              ? 'Could not load metrics'
+              : 'Real-time metrics from your database'}
         </p>
       </div>
 
@@ -131,36 +141,40 @@ export default function AdminOverviewPage() {
       <div className="metric-grid">
         <MetricCard
           label="Total Hosts"
-          value={loading ? '—' : String(hosts)}
+          value={metric(hosts)}
           subtext="Registered host accounts"
           icon={<Users size={24} color="#4f46e5" />}
         />
         <MetricCard
           label="Total Locums"
-          value={loading ? '—' : String(locums)}
-          subtext={`${stats?.totalUsers ?? '—'} total users on platform`}
+          value={metric(locums)}
+          subtext={
+            loading
+              ? 'Loading…'
+              : `${totalUsers} total users on platform`
+          }
           icon={<UserCheck size={24} color="#4f46e5" />}
         />
         <MetricCard
           label="Pending Verifications"
-          value={loading ? '—' : String(pending)}
+          value={metric(pending)}
           subtext="Locum CPSNS awaiting review"
           icon={<ShieldCheck size={24} color="#4f46e5" />}
         />
         <MetricCard
           label="Open Postings"
-          value={loading ? '—' : String(openJobs)}
+          value={metric(openJobs)}
           subtext="Active jobs visible to locums"
           icon={<Calendar size={24} color="#4f46e5" />}
         />
         <MetricCard
           label="Registered Users"
-          value={loading ? '—' : String(stats?.totalUsers ?? '—')}
+          value={metric(totalUsers)}
           icon={<Users size={24} color="#4f46e5" />}
         />
         <MetricCard
           label="Credential Queue"
-          value={loading ? '—' : String(pending)}
+          value={metric(pending)}
           subtext="Target turnaround: 48h"
           icon={<Clock size={24} color="#4f46e5" />}
         />
@@ -188,11 +202,11 @@ export default function AdminOverviewPage() {
           <h3 className="font-medium mb-4">This Week&apos;s Activity</h3>
           <div className="grid-4">
             <div className="activity-stat">
-              <p className="activity-value">{loading ? '—' : stats?.totalUsers ?? '—'}</p>
+              <p className="activity-value">{metric(totalUsers)}</p>
               <p className="activity-label">Total Users</p>
             </div>
             <div className="activity-stat">
-              <p className="activity-value">{loading ? '—' : openJobs}</p>
+              <p className="activity-value">{metric(openJobs)}</p>
               <p className="activity-label">Open Postings</p>
             </div>
             <div className="activity-stat">
@@ -200,7 +214,7 @@ export default function AdminOverviewPage() {
               <p className="activity-label">Pending Reviews</p>
             </div>
             <div className="activity-stat">
-              <p className="activity-value">{loading ? '—' : activity.length}</p>
+              <p className="activity-value">{loading ? '—' : String(activity.length)}</p>
               <p className="activity-label">Recent Events</p>
             </div>
           </div>
@@ -227,7 +241,13 @@ export default function AdminOverviewPage() {
               <div className="circle-progress-value">{loading ? '—' : openJobs}</div>
             </div>
           </div>
-          <p className="circle-progress-label">Active job postings on platform</p>
+          <p className="circle-progress-label">
+            {loading
+              ? 'Loading…'
+              : totalJobs > 0
+                ? `${openJobs} active of ${totalJobs} postings (${fillPct}%)`
+                : 'No job postings yet'}
+          </p>
         </div>
       </div>
 

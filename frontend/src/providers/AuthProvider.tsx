@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext, useEffect, useState, ReactNode, } from 'react';
+import { getAppOrigin } from '@/lib/appOrigin';
 import { authApi } from '@/lib/api';
 import { formatSupabaseNetworkError, getSupabase } from '@/lib/supabaseClient';
 import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, clearProfileCompleteCookies, popLastPath, clearLastPath, type Role, } from '@/lib/auth';
@@ -156,7 +157,23 @@ export function AuthProvider({ children }: {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, role: role === 'clinic' ? 'clinic' : 'locum' }),
             });
-            if (!res.ok) throw new Error('Dev login failed');
+            if (!res.ok) {
+                let detail = 'Dev login failed';
+                try {
+                    const j = await res.json() as { message?: string };
+                    if (j.message)
+                        detail = j.message;
+                }
+                catch {
+                    try {
+                        detail = await res.text();
+                    }
+                    catch { /* keep default */ }
+                }
+                if (/ECONNREFUSED|connect/i.test(detail))
+                    throw new Error('Dev login failed: database is not running. Start Docker Desktop, then run: npm run db:up');
+                throw new Error(detail);
+            }
             const tokens = await res.json();
             saveToken(tokens.accessToken);
             syncCookies();
@@ -221,7 +238,7 @@ export function AuthProvider({ children }: {
         saveRole(chosenRole);
         setRoleState(chosenRole);
         const supabase = getSupabase();
-        const redirectTo = `${window.location.origin}/auth/callback`;
+        const redirectTo = `${getAppOrigin()}/auth/callback`;
         const { error } = await supabase.auth.signInWithOAuth({
             provider: provider === 'azure' ? 'azure' : 'google',
             options: { redirectTo },

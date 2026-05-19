@@ -96,7 +96,11 @@ class EnvironmentVariables {
 
     @IsUrl({ require_tld: false })
     @IsOptional()
-    ADMIN_FRONTEND_REDIRECT_URL: string = 'http://localhost:3001/admin/dashboard';
+    ADMIN_FRONTEND_REDIRECT_URL: string = 'http://localhost:3002/admin/dashboard';
+
+    @IsString()
+    @IsOptional()
+    ADMIN_ALLOWED_EMAIL: string = 'aroradamini873@gmail.com';
 }
 export function validate(config: Record<string, unknown>) {
     const validatedConfig = plainToInstance(EnvironmentVariables, config, {

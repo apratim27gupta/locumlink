@@ -47,10 +47,25 @@ export class SaveHostProfileDto {
     emrSystem?: string;
     @IsString()
     @IsOptional()
+    emr?: string;
+    @IsString()
+    @IsOptional()
     patientVolume?: string;
     @IsString()
     @IsOptional()
+    patientVol?: string;
+    @IsString()
+    @IsOptional()
     clinicDescription?: string;
+    @IsString()
+    @IsOptional()
+    clinicDesc?: string;
+    @IsString()
+    @IsOptional()
+    licenseFile?: string | null;
+    @IsString()
+    @IsOptional()
+    licenseOriginalName?: string | null;
 }
 export class CreateJobDto {
     @IsString()
@@ -59,6 +74,9 @@ export class CreateJobDto {
     @IsString()
     @IsIn(['ACTIVE', 'DRAFT'])
     status?: string;
+    @IsBoolean()
+    @IsOptional()
+    saveAsDraft?: boolean;
     @IsString()
     @IsOptional()
     description?: string;

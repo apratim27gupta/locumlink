@@ -7,8 +7,8 @@ import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { getToken } from '@/lib/auth';
 import { useAuth } from '@/providers/AuthProvider';
 import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
-import { isCpsnsVerified } from '@/lib/cpsnsVerify';
-import { ApiHttpError, hostApi, type Job, type ApplicationRecord, type CreateJobPayload, } from '@/lib/api';
+import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
+import { ApiHttpError, hostApi, isActiveJob, isDraftJob, type Job, type ApplicationRecord, type CreateJobPayload, } from '@/lib/api';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { HostProfile } from '@/types';
@@ -43,36 +43,13 @@ const JOB_TITLE_PRESET_OPTIONS = sortStringsLocale([
     'Family Physician – Virtual Care',
     'Family Physician – Mixed Practice',
 ]);
-type JobDescriptionPresetItem = {
-    label: string;
-    body: string;
-};
-const JOB_DESCRIPTION_PRESET_ITEMS: readonly JobDescriptionPresetItem[] = sortByLabel([
-    {
-        label: 'Walk-in Clinic Coverage',
-        body: 'This role provides walk-in clinic coverage. The locum supports episodic visits, acute concerns, and same-day access in a high-volume primary care environment.',
-    },
-    {
-        label: 'Collaborative Practice',
-        body: 'Collaborative family practice — working with colleagues and allied health on shared panels, team-based care, and coordinated patient management.',
-    },
-    {
-        label: 'Longitudinal Practice',
-        body: 'Longitudinal family practice with continuity of care for a defined patient panel, including preventive care, chronic disease management, and follow-up.',
-    },
-    {
-        label: 'Long-Term Care (LTC)',
-        body: 'Long-term care coverage for residents, including chronic disease management, medication oversight, and participation in interdisciplinary rounds.',
-    },
-    {
-        label: 'Mixed Practice',
-        body: 'Mixed practice combining in-clinic visits, varied clinical responsibilities, and flexible workflows across service types as agreed with the host site.',
-    },
-    {
-        label: 'Virtual Care',
-        body: 'Virtual / telemedicine family practice — secure remote visits, follow-up, and documentation aligned with the clinic’s digital care standards.',
-    },
-    { label: 'Custom', body: '' },
+const JOB_DESCRIPTION_PRESET_OPTIONS = sortStringsLocale([
+    'Walk-in Clinic Coverage',
+    'Collaborative Practice',
+    'Longitudinal Practice',
+    'Long-Term Care (LTC)',
+    'Mixed Practice',
+    'Virtual Care',
 ]);
 type ResponsibilitySectionDef = {
     readonly key: string;
@@ -80,7 +57,6 @@ type ResponsibilitySectionDef = {
     readonly options: readonly {
         readonly id: string;
         readonly label: string;
-        readonly isCustom?: boolean;
     }[];
 };
 const RESPONSIBILITY_SECTIONS: readonly ResponsibilitySectionDef[] = [
@@ -95,7 +71,6 @@ const RESPONSIBILITY_SECTIONS: readonly ResponsibilitySectionDef[] = [
             { id: 'rx', label: 'Prescription renewals' },
             { id: 'chronic', label: 'Chronic disease management' },
             { id: 'preventive', label: 'Preventive care' },
-            { id: 'custom', label: 'Custom', isCustom: true },
         ]),
     },
     {
@@ -104,7 +79,6 @@ const RESPONSIBILITY_SECTIONS: readonly ResponsibilitySectionDef[] = [
         options: sortByLabel([
             { id: 'ltc_rounds', label: 'Long-term care rounds' },
             { id: 'admission', label: 'Admission/discharge coordination' },
-            { id: 'custom', label: 'Custom', isCustom: true },
         ]),
     },
     {
@@ -112,15 +86,31 @@ const RESPONSIBILITY_SECTIONS: readonly ResponsibilitySectionDef[] = [
         title: 'Optional',
         options: sortByLabel([
             { id: 'supervise', label: 'Supervise learners' },
-            { id: 'custom', label: 'Custom', isCustom: true },
         ]),
     },
 ];
 function emptyResponsibilitySelection(): Record<string, Set<string>> {
     return Object.fromEntries(RESPONSIBILITY_SECTIONS.map((s) => [s.key, new Set<string>()]));
 }
-function emptyResponsibilityCustom(): Record<string, string> {
-    return Object.fromEntries(RESPONSIBILITY_SECTIONS.map((s) => [s.key, '']));
+function buildResponsibilitySelection(optionIds: readonly string[]): Record<string, Set<string>> {
+    const idSet = new Set(optionIds);
+    return Object.fromEntries(RESPONSIBILITY_SECTIONS.map((s) => [
+        s.key,
+        new Set(s.options.filter((o) => idSet.has(o.id)).map((o) => o.id)),
+    ]));
+}
+/** Auto-select key responsibilities for Walk-in, LTC, and Virtual job titles only. */
+function autoResponsibilitiesForJobTitle(title: string): Record<string, Set<string>> | null {
+    const t = title.trim().toLowerCase();
+    if (!t)
+        return null;
+    if (t.includes('walk-in') || t.includes('walk in'))
+        return buildResponsibilitySelection(['walkin', 'rx']);
+    if (t.includes('ltc') || t.includes('long-term care') || t.includes('long term care'))
+        return buildResponsibilitySelection(['ltc_rounds', 'chronic', 'rx']);
+    if (t.includes('virtual'))
+        return buildResponsibilitySelection(['phone_virtual']);
+    return null;
 }
 const fieldInp: React.CSSProperties = {
     width: '100%',
@@ -186,6 +176,74 @@ function parseMmDdYyyyToIso(input: string): string {
     return d.getFullYear() === yyyy && d.getMonth() + 1 === mm && d.getDate() === dd
         ? iso
         : '';
+}
+function isoToMmDdYyyy(iso: string): string {
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m)
+        return '';
+    return `${m[2]}-${m[3]}-${m[1]}`;
+}
+function formatMmDdYyyyInput(raw: string): string {
+    const digits = raw.replace(/\D/g, '').slice(0, 8);
+    if (digits.length <= 2)
+        return digits;
+    if (digits.length <= 4)
+        return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+}
+function MmDdYyyyDateField({ value, onChange, inputStyle, }: {
+    value: string;
+    onChange: (value: string) => void;
+    inputStyle?: React.CSSProperties;
+}) {
+    const pickerRef = useRef<HTMLInputElement>(null);
+    const isoValue = parseMmDdYyyyToIso(value);
+    function openCalendar() {
+        const el = pickerRef.current;
+        if (!el)
+            return;
+        try {
+            el.showPicker();
+        }
+        catch {
+            el.click();
+        }
+    }
+    return (<div style={{ position: 'relative' }}>
+      <input type="text" inputMode="numeric" autoComplete="off" placeholder="MM-DD-YYYY" pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}" title="MM-DD-YYYY" style={{
+            ...inputStyle,
+            paddingRight: 40,
+        }} value={value} onChange={(e) => onChange(formatMmDdYyyyInput(e.target.value))}/>
+      <button type="button" aria-label="Open calendar" onClick={openCalendar} style={{
+            position: 'absolute',
+            right: 2,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 36,
+            height: 34,
+            border: 'none',
+            background: 'transparent',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+        }}>
+        <CalendarIcon />
+      </button>
+      <input ref={pickerRef} type="date" tabIndex={-1} aria-hidden value={isoValue} onChange={(e) => {
+            const iso = e.target.value;
+            onChange(iso ? isoToMmDdYyyy(iso) : '');
+        }} style={{
+            position: 'absolute',
+            width: 1,
+            height: 1,
+            opacity: 0,
+            pointerEvents: 'none',
+            border: 'none',
+            padding: 0,
+        }}/>
+    </div>);
 }
 function getLocumDisplayName(app: ApplicationRecord): string {
     const { firstName, lastName, user } = app.locumProfile;
@@ -1059,9 +1117,10 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
       {isExpanded && !isDraft && !isSoftDeleted && (<InlineApplicantsTable jobId={job.id} jobTitle={job.title} applications={applications[job.id] ?? []} loading={loadingAppsFor === job.id} onViewAll={() => onViewAll(job.id)}/>)}
     </div>);
 }
-function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
+function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false, }: {
     onClose: () => void;
     onSuccess: () => void;
+    onDraftSaved?: (job: Job) => void | Promise<void>;
     verified?: boolean;
 }) {
     const JOB_POST_PANEL_MIN = 320;
@@ -1071,7 +1130,8 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
     const [jobTitle, setJobTitle] = useState('');
     const [jobDescription, setJobDescription] = useState('');
     const [respBySection, setRespBySection] = useState<Record<string, Set<string>>>(() => emptyResponsibilitySelection());
-    const [respCustomBySection, setRespCustomBySection] = useState<Record<string, string>>(() => emptyResponsibilityCustom());
+    const lastAutoRespJobTitleRef = useRef<string | null>(null);
+    const [respCustom, setRespCustom] = useState('');
     const [startDateInput, setStartDateInput] = useState('');
     const [endDateInput, setEndDateInput] = useState('');
     const [startTime, setStartTime] = useState('05:00');
@@ -1084,7 +1144,10 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
     const [customCredential, setCustomCredential] = useState('');
     const [travelReq, setTravelReq] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [savingDraft, setSavingDraft] = useState(false);
+    const [saveDraftPromptOpen, setSaveDraftPromptOpen] = useState(false);
     const [submitError, setSubmitError] = useState('');
+    const postedRef = useRef(false);
     const jobTitleWrapRef = useRef<HTMLDivElement>(null);
     const jobTitleMenuRef = useRef<HTMLDivElement>(null);
     const [jobTitleListOpen, setJobTitleListOpen] = useState(false);
@@ -1175,6 +1238,19 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
             window.removeEventListener('scroll', onReposition, true);
         };
     }, [jobDescListOpen, syncJobDescMenuBox]);
+    useEffect(() => {
+        const trimmed = jobTitle.trim();
+        const auto = autoResponsibilitiesForJobTitle(trimmed);
+        if (!auto) {
+            lastAutoRespJobTitleRef.current = null;
+            return;
+        }
+        const key = trimmed.toLowerCase();
+        if (lastAutoRespJobTitleRef.current === key)
+            return;
+        lastAutoRespJobTitleRef.current = key;
+        setRespBySection(auto);
+    }, [jobTitle]);
     function toggle(c: string) {
         setCredentials((p) => p.includes(c) ? p.filter((x) => x !== c) : [...p, c]);
     }
@@ -1199,23 +1275,88 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
         const lines: string[] = [];
         for (const section of RESPONSIBILITY_SECTIONS) {
             const selected = respBySection[section.key] ?? new Set<string>();
-            const customLines = (respCustomBySection[section.key] ?? '')
-                .split('\n')
-                .map((s) => s.trim())
-                .filter(Boolean);
             for (const opt of section.options) {
                 if (!selected.has(opt.id))
                     continue;
-                if (opt.isCustom) {
-                    for (const line of customLines)
-                        lines.push(`${section.title}: ${line}`);
-                }
-                else {
-                    lines.push(`${section.title}: ${opt.label}`);
-                }
+                lines.push(`${section.title}: ${opt.label}`);
             }
         }
+        for (const line of respCustom
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean)) {
+            lines.push(line);
+        }
         return lines;
+    }
+    function hasDraftContent(): boolean {
+        if (jobTitle.trim() || jobDescription.trim() || respCustom.trim())
+            return true;
+        if (startDateInput.trim() || endDateInput.trim() || ratePerDay.trim() || yearsExp.trim())
+            return true;
+        if (travelReq)
+            return true;
+        if (credentials.length !== 1 || credentials[0] !== 'CPSNS Full License')
+            return true;
+        for (const section of RESPONSIBILITY_SECTIONS) {
+            if ((respBySection[section.key]?.size ?? 0) > 0)
+                return true;
+        }
+        return false;
+    }
+    function buildDraftPayload(): CreateJobPayload {
+        const startIso = parseMmDdYyyyToIso(startDateInput);
+        const endIso = parseMmDdYyyyToIso(endDateInput);
+        const rateNum = ratePerDay.trim() ? Number(ratePerDay) : NaN;
+        const yearsNum = yearsExp.trim() ? Number(yearsExp) : NaN;
+        const keyResponsibilities = buildKeyResponsibilitiesPayload();
+        return {
+            title: jobTitle.trim() || 'Draft locum shift',
+            description: jobDescription.trim() || undefined,
+            keyResponsibilities: keyResponsibilities.length ? keyResponsibilities : undefined,
+            startDate: startIso || undefined,
+            endDate: endIso || undefined,
+            startTime: startTime || undefined,
+            endTime: endTime || undefined,
+            payPerDay: Number.isFinite(rateNum) && rateNum > 0 ? rateNum : undefined,
+            minYearsExperience: yearsExp.trim() && Number.isFinite(yearsNum) ? yearsNum : undefined,
+            requiredCredentials: credentials,
+            travelRequired: travelReq,
+            scheduleFlexible: false,
+            status: 'DRAFT',
+            saveAsDraft: true,
+        };
+    }
+    function handleAttemptClose() {
+        if (savingDraft || saveDraftPromptOpen)
+            return;
+        if (postedRef.current || !hasDraftContent()) {
+            onClose();
+            return;
+        }
+        setSaveDraftPromptOpen(true);
+    }
+    async function confirmSaveDraft() {
+        setSavingDraft(true);
+        try {
+            const { job } = await hostApi.createJob(buildDraftPayload());
+            if (job.status !== 'DRAFT') {
+                throw new Error('Draft was not saved correctly. Please try again.');
+            }
+            setSaveDraftPromptOpen(false);
+            onDraftSaved?.(job);
+            onClose();
+        }
+        catch (e) {
+            window.alert(e instanceof Error ? e.message : 'Could not save draft. Please try again.');
+        }
+        finally {
+            setSavingDraft(false);
+        }
+    }
+    function discardWithoutSave() {
+        setSaveDraftPromptOpen(false);
+        onClose();
     }
     async function handleDone() {
         if (!jobTitle.trim()) {
@@ -1278,8 +1419,10 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
                 requiredCredentials: credentials,
                 travelRequired: travelReq,
                 scheduleFlexible: false,
+                status: verified ? 'ACTIVE' : 'DRAFT',
             };
             await hostApi.createJob(payload);
+            postedRef.current = true;
             onSuccess();
         }
         catch (e: unknown) {
@@ -1337,11 +1480,12 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
         }}>
           ⚠️  CPSNS is not  verified — this job will be saved as a Draft.
         </div>)}
-      <div onClick={onClose} style={{
+      <div onClick={handleAttemptClose} style={{
             position: 'fixed',
             inset: 0,
             background: 'rgba(28,50,130,0.45)',
             zIndex: 200,
+            cursor: savingDraft ? 'wait' : 'pointer',
         }}/>
       <div style={{
             position: 'fixed',
@@ -1378,14 +1522,15 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
           <span style={{ fontSize: 20, fontWeight: 700, color: '#0B0F1F' }}>
             Create New Post
           </span>
-          <button onClick={onClose} style={{
+          <button type="button" onClick={handleAttemptClose} disabled={savingDraft} aria-label="Close" style={{
             background: 'none',
             border: 'none',
-            cursor: 'pointer',
+            cursor: savingDraft ? 'wait' : 'pointer',
             fontSize: 22,
             color: '#6B7280',
             lineHeight: 1,
             padding: 0,
+            opacity: savingDraft ? 0.5 : 1,
         }}>
             ×
           </button>
@@ -1547,8 +1692,8 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
                 maxHeight: 280,
                 overflowY: 'auto',
             }}>
-                    {JOB_DESCRIPTION_PRESET_ITEMS.map((item) => (<button key={item.label} type="button" onClick={() => {
-                setJobDescription(item.body);
+                    {JOB_DESCRIPTION_PRESET_OPTIONS.map((label) => (<button key={label} type="button" onClick={() => {
+                setJobDescription(label);
                 setJobDescListOpen(false);
             }} style={{
                 display: 'block',
@@ -1567,7 +1712,7 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
             }} onMouseLeave={(e) => {
                 e.currentTarget.style.background = '#fff';
             }}>
-                        {item.label}
+                        {label}
                       </button>))}
                   </div>, document.body) : null}
                 </div>
@@ -1576,7 +1721,6 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {RESPONSIBILITY_SECTIONS.map((section) => {
                         const selected = respBySection[section.key] ?? new Set<string>();
-                        const showCustom = section.options.some((o) => o.isCustom && selected.has(o.id));
                         return (<div key={section.key}>
                           <div style={{
                                 fontSize: 13,
@@ -1606,17 +1750,23 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
                               <span>{opt.label}</span>
                             </label>))}
                           </div>
-                          {showCustom ? (<textarea style={{
-                                ...fieldInp,
-                                marginTop: 8,
-                                minHeight: 56,
-                                resize: 'vertical',
-                            } as React.CSSProperties} value={respCustomBySection[section.key] ?? ''} onChange={(e) => setRespCustomBySection((p) => ({
-                                ...p,
-                                [section.key]: e.target.value,
-                            }))} placeholder="Custom responsibilities for this category (one per line)"/>) : null}
                         </div>);
                     })}
+                    <div>
+                      <div style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: '#111827',
+                            marginBottom: 8,
+                        }}>
+                        Custom
+                      </div>
+                      <textarea style={{
+                            ...fieldInp,
+                            minHeight: 56,
+                            resize: 'vertical',
+                        } as React.CSSProperties} value={respCustom} onChange={(e) => setRespCustom(e.target.value)} placeholder="Other responsibilities (one per line)"/>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1669,11 +1819,11 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
             }}>
                   <div>
                     <label style={lbl}>Start Date *</label>
-                    <input type="text" inputMode="numeric" autoComplete="off" placeholder="MM-DD-YYYY" pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}" title="MM-DD-YYYY" style={fieldInp} value={startDateInput} onChange={(e) => setStartDateInput(e.target.value)}/>
+                    <MmDdYyyyDateField value={startDateInput} onChange={setStartDateInput} inputStyle={fieldInp}/>
                   </div>
                   <div>
                     <label style={lbl}>End Date *</label>
-                    <input type="text" inputMode="numeric" autoComplete="off" placeholder="MM-DD-YYYY" pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}" title="MM-DD-YYYY" style={fieldInp} value={endDateInput} onChange={(e) => setEndDateInput(e.target.value)}/>
+                    <MmDdYyyyDateField value={endDateInput} onChange={setEndDateInput} inputStyle={fieldInp}/>
                   </div>
                 </div>
                 <div style={{
@@ -1865,6 +2015,86 @@ function JobPostingOverlay({ onClose, onSuccess, verified = false, }: {
             </button>)}
         </div>
       </div>
+
+      {saveDraftPromptOpen ? (<>
+          <div onClick={() => setSaveDraftPromptOpen(false)} style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.35)',
+                zIndex: 210,
+            }}/>
+          <div role="dialog" aria-modal="true" aria-labelledby="save-draft-prompt-title" style={{
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                background: '#fff',
+                borderRadius: 12,
+                padding: '24px 28px',
+                width: 'min(400px, calc(100vw - 32px))',
+                zIndex: 211,
+                boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+                fontFamily: 'Inter, sans-serif',
+            }}>
+            <h2 id="save-draft-prompt-title" style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: '#0B0F1F',
+                margin: '0 0 8px',
+            }}>
+              Save as draft?
+            </h2>
+            <p style={{
+                fontSize: 14,
+                color: '#6B7280',
+                margin: '0 0 20px',
+                lineHeight: 1.5,
+            }}>
+              You have unsaved changes. Save this job as a draft? It will appear under Draft Locum Shifts.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button type="button" onClick={() => void confirmSaveDraft()} disabled={savingDraft} style={{
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: savingDraft ? '#9CA3AF' : '#1C32D2',
+                    color: '#fff',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: savingDraft ? 'default' : 'pointer',
+                    fontFamily: 'inherit',
+                }}>
+                {savingDraft ? 'Saving…' : 'Save as draft'}
+              </button>
+              <button type="button" onClick={discardWithoutSave} disabled={savingDraft} style={{
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    border: '1px solid #D0D5DD',
+                    background: '#fff',
+                    color: '#374151',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: savingDraft ? 'default' : 'pointer',
+                    fontFamily: 'inherit',
+                }}>
+                Don&apos;t save
+              </button>
+              <button type="button" onClick={() => setSaveDraftPromptOpen(false)} disabled={savingDraft} style={{
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#6B7280',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: savingDraft ? 'default' : 'pointer',
+                    fontFamily: 'inherit',
+                }}>
+                Keep editing
+              </button>
+            </div>
+          </div>
+        </>) : null}
     </>);
 }
 export default function HostDashboard(props: {
@@ -1891,7 +2121,7 @@ export default function HostDashboard(props: {
     const [initialDashboardLoad, setInitialDashboardLoad] = useState(true);
     const hostFirst = profile?.contactFirstName ?? '';
     const hostLast = profile?.contactLastName ?? '';
-    const verified = isCpsnsVerified(profile?.cpsnsNumber);
+    const verified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
     const doctorLabel = hostFirst || hostLast ? `Dr ${hostFirst} ${hostLast}`.trim() : 'Doctor';
     const clinicName = profile?.clinicName || 'Welcome';
     const profilePct = hostProfileCompletionPct(profile);
@@ -1906,8 +2136,11 @@ export default function HostDashboard(props: {
         : verified
             ? '100% · CPSNS verified'
             : '100% · Awaiting manual CPSNS verification';
-    const loadDashboardFromApi = useCallback(async () => {
-        setLoadingData(true);
+    const loadDashboardFromApi = useCallback(async (options?: {
+        silent?: boolean;
+    }) => {
+        if (!options?.silent)
+            setLoadingData(true);
         setDataLoadError(null);
         try {
             const errs: string[] = [];
@@ -1986,9 +2219,10 @@ export default function HostDashboard(props: {
         return () => window.clearTimeout(t);
     }, [showJobPostedConfirmation]);
     const today = new Date();
-    const draftJobs = jobs.filter((j) => j.status === 'DRAFT');
-    const activePosts = jobs.filter((j) => j.status === 'ACTIVE' || j.status === 'ONGOING');
-    const ongoingJobs = jobs.filter((j) => j.status === 'ONGOING');
+    const jobStatus = (j: Job) => String(j.status ?? '').toUpperCase();
+    const draftJobs = jobs.filter((j) => jobStatus(j) === 'DRAFT');
+    const activePosts = jobs.filter((j) => jobStatus(j) === 'ACTIVE');
+    const ongoingJobs = jobs.filter((j) => jobStatus(j) === 'ONGOING');
     const recentJobs = jobs.filter((j) => j.status === 'COMPLETED' || j.status === 'CANCELLED' || j.status === 'EXPIRED');
     const tabJobs = activeTab === 'deleted'
         ? deletedJobs
@@ -2001,7 +2235,7 @@ export default function HostDashboard(props: {
                     : draftJobs;
     const statsDisplay = [
         {
-            label: 'Total Locum Shifts Posted',
+            label: 'Active postings',
             value: activePosts.length,
         },
         {
@@ -2036,7 +2270,7 @@ export default function HostDashboard(props: {
             return;
         await hostApi.reopenJob(reopenTarget.id, payload);
         setReopenTarget(null);
-        loadDashboardFromApi();
+        void loadDashboardFromApi({ silent: true });
     }
     if (!mounted || profileComplete === false || authLoading || initialDashboardLoad) {
         return (<div style={{
@@ -2439,10 +2673,21 @@ export default function HostDashboard(props: {
           </div>
 
       
-      {showJobOverlay && (<JobPostingOverlay verified={verified} onClose={() => setShowJobOverlay(false)} onSuccess={() => {
+      {showJobOverlay && (<JobPostingOverlay verified={verified} onClose={() => setShowJobOverlay(false)} onDraftSaved={async (savedJob) => {
+                const draftJob: Job = { ...savedJob, status: 'DRAFT' };
+                setJobs((prev) => [draftJob, ...prev.filter((j) => j.id !== draftJob.id)]);
+                setActiveTab('draft');
+                try {
+                    const { jobs: fromApi } = await hostApi.getJobs();
+                    setJobs(fromApi.map((j) => j.id === draftJob.id ? { ...j, status: 'DRAFT' } : j));
+                }
+                catch {
+                    /* keep optimistic draft row */
+                }
+            }} onSuccess={() => {
                 setShowJobOverlay(false);
                 setShowJobPostedConfirmation(true);
-                void loadDashboardFromApi();
+                void loadDashboardFromApi({ silent: true });
             }}/>)}
 
       

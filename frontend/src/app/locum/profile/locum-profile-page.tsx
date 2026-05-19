@@ -6,11 +6,13 @@ import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { ProfileStatusGlyph, type ProfileStatusGlyphVariant } from '@/components/ProfileStatusGlyph';
 import { locumApi, uploadFile } from '@/lib/api';
 import { buildLocumSavePayload } from '@/lib/locumProfilePayload';
+import { formatUploadedFileLabel, originalUploadFileName } from '@/lib/uploadDisplayName';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { LocumProfile } from '@/types';
 import {
+  type CpsnsVerificationStatus,
   isCpsnsNineDigitsFormat,
-  isCpsnsVerified,
+  isCpsnsVerificationApproved,
   sanitizeCpsnsInput,
 } from '@/lib/cpsnsVerify';
 import { locumProfileCompletionPct } from '@/lib/locumProfileCompletion';
@@ -119,7 +121,7 @@ function VerificationBanner({ status }: { status: VerificationStatus }) {
     'under-review': {
       glyph: 'underReview' as ProfileStatusGlyphVariant,
       title: 'CPSNS not verified yet',
-      sub: 'Your profile is complete, but your CPSNS number must match our verified list before you can apply to jobs.',
+      sub: 'Your profile is complete. An administrator will verify your CPSNS number and license before you can apply to jobs.',
       bg: '#EFF6FF', border: '#BFDBFE', titleColor: '#1E40AF', subColor: '#3B82F6',
     },
     verified: {
@@ -166,6 +168,7 @@ export default function LocumProfilePage(props: {
   const [firstName,        setFirstName]        = useState('');
   const [lastName,         setLastName]         = useState('');
   const [cpsns,            setCpsns]            = useState('');
+  const [verificationStatus, setVerificationStatus] = useState<CpsnsVerificationStatus | undefined>();
   const [yearsOfExperience,setYearsOfExperience]= useState<number | ''>('');
   const [summary,          setSummary]          = useState('');
   const [specialityTags,   setSpecialityTags]   = useState<string[]>([]);
@@ -190,8 +193,11 @@ export default function LocumProfilePage(props: {
 
   /* ── step 4 – relevant documents ───────────────────────────────────── */
   const [licenseFile,    setLicenseFile]    = useState('');
+  const [licenseLabel,   setLicenseLabel]   = useState('');
   const [resumeFile,     setResumeFile]     = useState('');
+  const [resumeLabel,    setResumeLabel]    = useState('');
   const [extraFile,      setExtraFile]      = useState('');
+  const [extraLabel,     setExtraLabel]     = useState('');
   const [licenseViewUrl, setLicenseViewUrl] = useState<string | null>(null);
   const [resumeViewUrl,  setResumeViewUrl]  = useState<string | null>(null);
   const [extraViewUrl,   setExtraViewUrl]   = useState<string | null>(null);
@@ -266,6 +272,7 @@ export default function LocumProfilePage(props: {
         setFirstName(p.firstName ?? '');
         setLastName(p.lastName ?? '');
         setCpsns(p.cpsnsNumber ?? '');
+        setVerificationStatus(p.verificationStatus);
         setYearsOfExperience(
           typeof (p as { yearsOfExperience?: unknown }).yearsOfExperience === 'number'
             ? ((p as { yearsOfExperience: number }).yearsOfExperience ?? 0)
@@ -288,8 +295,11 @@ export default function LocumProfilePage(props: {
         const rf = p.resumeFile  ?? p.resumeFileName  ?? '';
         const xf = p.extraFile   ?? p.extraFileName   ?? '';
         setLicenseFile(lf);
+        setLicenseLabel(p.licenseOriginalName ?? '');
         setResumeFile(rf);
+        setResumeLabel(p.resumeOriginalName ?? '');
         setExtraFile(xf);
+        setExtraLabel(p.extraOriginalName ?? '');
         setLicenseViewUrl(/^https?:\/\//.test(lf) ? lf : null);
         setResumeViewUrl(/^https?:\/\//.test(rf)  ? rf : null);
         setExtraViewUrl(/^https?:\/\//.test(xf)   ? xf : null);
@@ -328,9 +338,13 @@ export default function LocumProfilePage(props: {
 
   const progressPct = locumProfileCompletionPct(profileDraft);
   const allStepsDone = progressPct === 100;
-  const profileVerificationStatus: VerificationStatus = allStepsDone
-    ? isCpsnsVerified(cpsns) ? 'verified' : 'under-review'
-    : 'pending';
+  const profileVerificationStatus: VerificationStatus = !allStepsDone
+    ? 'pending'
+    : isCpsnsVerificationApproved(verificationStatus)
+      ? 'verified'
+      : verificationStatus === 'REJECTED'
+        ? 'under-review'
+        : 'under-review';
 
   /* ── step status / navigation ─────────────────────────────────────────── */
   function getStatus(n: number): StepStatus {
@@ -371,7 +385,14 @@ export default function LocumProfilePage(props: {
         postalCode: postal,
         city,
         province,
-      }, { licenseFile, resumeFile, extraFile }));
+      }, {
+        licenseFile,
+        resumeFile,
+        extraFile,
+        licenseOriginalName: licenseLabel,
+        resumeOriginalName: resumeLabel,
+        extraOriginalName: extraLabel,
+      }));
       setSaved(true);
       window.setTimeout(() => {
         beforeClientNavigation('/locum/dashboard');
@@ -842,12 +863,12 @@ export default function LocumProfilePage(props: {
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
                 <Image src="/document-link.png" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
                 <span style={{ fontSize: 13, color: licenseFile ? '#3B4FD8' : '#8892a4' }}>
-                  {uploading === 'license' ? 'Uploading…' : licenseFile ? licenseFile.split('/').pop() : 'CPSNS License'}
+                  {uploading === 'license' ? 'Uploading…' : formatUploadedFileLabel(licenseFile, licenseLabel, 'CPSNS License')}
                 </span>
                 {licenseFile && (
                   <button
                     type="button" aria-label="Delete CPSNS License"
-                    onClick={(e) => { e.stopPropagation(); setLicenseFile(''); setLicenseViewUrl(null); }}
+                    onClick={(e) => { e.stopPropagation(); setLicenseFile(''); setLicenseLabel(''); setLicenseViewUrl(null); }}
                     style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, background: 'transparent', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 0, flexShrink: 0 }}
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -871,6 +892,7 @@ export default function LocumProfilePage(props: {
                 try {
                   const result = await uploadFile(file, 'locum/license');
                   setLicenseFile(result.path);
+                  setLicenseLabel(originalUploadFileName(result, file));
                   setLicenseViewUrl(result.signedUrl);
                 } catch { alert('Upload failed. Try again.'); }
                 finally { setUploading(null); e.target.value = ''; }
@@ -896,12 +918,12 @@ export default function LocumProfilePage(props: {
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
                 <Image src="/document-link.png" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
                 <span style={{ fontSize: 13, color: resumeFile ? '#3B4FD8' : '#8892a4' }}>
-                  {uploading === 'resume' ? 'Uploading…' : resumeFile ? resumeFile.split('/').pop() : 'Resume'}
+                  {uploading === 'resume' ? 'Uploading…' : formatUploadedFileLabel(resumeFile, resumeLabel, 'Resume')}
                 </span>
                 {resumeFile && (
                   <button
                     type="button" aria-label="Delete Resume"
-                    onClick={(e) => { e.stopPropagation(); setResumeFile(''); setResumeViewUrl(null); }}
+                    onClick={(e) => { e.stopPropagation(); setResumeFile(''); setResumeLabel(''); setResumeViewUrl(null); }}
                     style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, background: 'transparent', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 0, flexShrink: 0 }}
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -925,6 +947,7 @@ export default function LocumProfilePage(props: {
                 try {
                   const result = await uploadFile(file, 'locum/resume');
                   setResumeFile(result.path);
+                  setResumeLabel(originalUploadFileName(result, file));
                   setResumeViewUrl(result.signedUrl);
                 } catch { alert('Upload failed. Try again.'); }
                 finally { setUploading(null); e.target.value = ''; }
@@ -951,12 +974,12 @@ export default function LocumProfilePage(props: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
             <Image src="/document-link.png" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
             <span style={{ fontSize: 13, color: extraFile ? '#3B4FD8' : '#8892a4' }}>
-              {uploading === 'extra' ? 'Uploading…' : extraFile ? extraFile.split('/').pop() : 'Add'}
+              {uploading === 'extra' ? 'Uploading…' : formatUploadedFileLabel(extraFile, extraLabel, 'Add')}
             </span>
             {extraFile && (
               <button
                 type="button" aria-label="Delete additional documents"
-                onClick={(e) => { e.stopPropagation(); setExtraFile(''); setExtraViewUrl(null); }}
+                onClick={(e) => { e.stopPropagation(); setExtraFile(''); setExtraLabel(''); setExtraViewUrl(null); }}
                 style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, background: 'transparent', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 0, flexShrink: 0 }}
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -980,6 +1003,7 @@ export default function LocumProfilePage(props: {
             try {
               const result = await uploadFile(file, 'locum/extra');
               setExtraFile(result.path);
+              setExtraLabel(originalUploadFileName(result, file));
               setExtraViewUrl(result.signedUrl);
             } catch { alert('Upload failed. Try again.'); }
             finally { setUploading(null); e.target.value = ''; }

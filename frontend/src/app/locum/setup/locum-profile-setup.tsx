@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { HomeLandingView } from '@/components/HomeLandingView';
 import { useAuth } from '@/providers/AuthProvider';
 import { locumApi, uploadFile } from '@/lib/api';
+import { formatUploadedFileLabel, originalUploadFileName } from '@/lib/uploadDisplayName';
 import type { LocumProfile } from '@/types';
 import { sanitizeCpsnsInput, } from '@/lib/cpsnsVerify';
 import BarWaveButton from '@/components/ui/BarWaveButton';
@@ -211,8 +212,11 @@ export default function LocumSetupPage() {
         city: '',
         province: '',
         licenseFileName: '',
+        licenseOriginalName: '',
         resumeFileName: '',
+        resumeOriginalName: '',
         extraFileName: '',
+        extraOriginalName: '',
     });
     const [specializationTags, setSpecializationTags] = useState<string[]>([]);
     const [addingCustomSpec, setAddingCustomSpec] = useState(false);
@@ -1021,9 +1025,7 @@ export default function LocumSetupPage() {
             }}>
                           {uploading === 'license'
                 ? 'Uploading…'
-                : form.licenseFileName
-                    ? form.licenseFileName.split('/').pop()
-                    : 'Upload (optional)'}
+                : formatUploadedFileLabel(form.licenseFileName, form.licenseOriginalName, 'Upload (optional)')}
                         </span>
                         <UploadCloudIcon />
                       </div>
@@ -1034,7 +1036,11 @@ export default function LocumSetupPage() {
                 setUploading('license');
                 try {
                     const result = await uploadFile(file, 'locum/license');
-                    set('licenseFileName', result.path);
+                    setForm((f) => ({
+                        ...f,
+                        licenseFileName: result.path,
+                        licenseOriginalName: originalUploadFileName(result, file),
+                    }));
                 }
                 catch (err) {
                     alert(err instanceof Error ? err.message : 'Upload failed. Try again.');
@@ -1071,9 +1077,7 @@ export default function LocumSetupPage() {
             }}>
                           {uploading === 'resume'
                 ? 'Uploading…'
-                : form.resumeFileName
-                    ? form.resumeFileName.split('/').pop()
-                    : 'Upload (optional)'}
+                : formatUploadedFileLabel(form.resumeFileName, form.resumeOriginalName, 'Upload (optional)')}
                         </span>
                         <UploadCloudIcon />
                       </div>
@@ -1084,7 +1088,11 @@ export default function LocumSetupPage() {
                 setUploading('resume');
                 try {
                     const result = await uploadFile(file, 'locum/resume');
-                    set('resumeFileName', result.path);
+                    setForm((f) => ({
+                        ...f,
+                        resumeFileName: result.path,
+                        resumeOriginalName: originalUploadFileName(result, file),
+                    }));
                 }
                 catch (err) {
                     alert(err instanceof Error ? err.message : 'Upload failed. Try again.');
@@ -1121,9 +1129,7 @@ export default function LocumSetupPage() {
             }}>
                           {uploading === 'extra'
                 ? 'Uploading…'
-                : form.extraFileName
-                    ? form.extraFileName.split('/').pop()
-                    : 'Upload Document'}
+                : formatUploadedFileLabel(form.extraFileName, form.extraOriginalName, 'Upload Document')}
                         </span>
                         <UploadCloudIcon />
                       </div>
@@ -1134,7 +1140,11 @@ export default function LocumSetupPage() {
                 setUploading('extra');
                 try {
                     const result = await uploadFile(file, 'locum/extra');
-                    set('extraFileName', result.path);
+                    setForm((f) => ({
+                        ...f,
+                        extraFileName: result.path,
+                        extraOriginalName: originalUploadFileName(result, file),
+                    }));
                 }
                 catch (err) {
                     alert(err instanceof Error ? err.message : 'Upload failed. Try again.');

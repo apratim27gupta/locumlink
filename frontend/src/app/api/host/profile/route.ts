@@ -16,6 +16,7 @@ interface HostProfileRow {
     cpsnsNumber: string | null;
     speciality: string | null;
     licenseFile: string | null;
+    licenseOriginalName: string | null;
     address1: string | null;
     address2: string | null;
     accommodationProvided: boolean;
@@ -45,6 +46,7 @@ function rowToApi(row: HostProfileRow): HostProfile {
         cpsnsNumber: row.cpsnsNumber ?? '',
         speciality: row.speciality ?? '',
         licenseFile: row.licenseFile ?? null,
+        licenseOriginalName: row.licenseOriginalName ?? null,
         address1: row.address1 ?? '',
         address2: row.address2 ?? '',
         postalCode: row.postalCode,
@@ -87,7 +89,7 @@ export async function POST(req: Request) {
     catch {
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
-    const { clinicName, contactFirstName, contactLastName, cpsnsNumber, speciality, licenseFile, address1, address2, postalCode, city, province, amenities, accommodationProvided, practiceType, numPhysicians, emr, patientVol, clinicDesc, } = body;
+    const { clinicName, contactFirstName, contactLastName, cpsnsNumber, speciality, licenseFile, licenseOriginalName, address1, address2, postalCode, city, province, amenities, accommodationProvided, practiceType, numPhysicians, emr, patientVol, clinicDesc, } = body;
     const a1 = address1 ?? '';
     const a2 = address2 ?? '';
     const data = {
@@ -103,6 +105,7 @@ export async function POST(req: Request) {
         cpsnsNumber: cpsnsNumber?.trim() || null,
         speciality: speciality?.trim() || null,
         licenseFile: licenseFile ?? null,
+        licenseOriginalName: licenseOriginalName?.trim() || null,
         address1: a1 || null,
         address2: a2 || null,
         accommodationProvided: accommodationProvided ?? false,
@@ -160,6 +163,9 @@ export async function PUT(req: Request) {
         }),
         ...(body.licenseFile !== undefined && {
             licenseFile: body.licenseFile ?? null,
+        }),
+        ...(body.licenseOriginalName !== undefined && {
+            licenseOriginalName: body.licenseOriginalName?.trim() || null,
         }),
         ...(body.accommodationProvided !== undefined && {
             accommodationProvided: body.accommodationProvided,

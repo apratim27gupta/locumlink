@@ -5,6 +5,7 @@
   "scripts": {
     "postinstall": "prisma generate --schema=../database/prisma/schema.prisma",
     "dev": "node --max-old-space-size=1536 ../node_modules/next/dist/bin/next dev -p 3001",
+    "dev:vm": "node --max-old-space-size=1024 ../node_modules/next/dist/bin/next dev -p 3001",
     "dev:webpack": "node --max-old-space-size=1024 ../node_modules/next/dist/bin/next dev -p 3001",
     "dev:turbo": "node --max-old-space-size=1024 ../node_modules/next/dist/bin/next dev --turbo -p 3001",
     "dev:clean": "node --max-old-space-size=1024 ../node_modules/next/dist/bin/next dev -p 3001",

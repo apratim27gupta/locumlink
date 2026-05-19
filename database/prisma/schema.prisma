@@ -153,8 +153,11 @@ model LocumProfile {
   province            String?
   specializationText  String?            @map("specialization_text") @db.Text
   licenseFileName     String?            @map("license_file_name")
+  licenseOriginalName String?            @map("license_original_name")
   resumeFileName      String?            @map("resume_file_name")
+  resumeOriginalName  String?            @map("resume_original_name")
   extraFileName       String?            @map("extra_file_name")
+  extraOriginalName   String?            @map("extra_original_name")
 
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
@@ -183,9 +186,12 @@ model HostProfile {
 
   contactFirstName     String?
   contactLastName      String?
-  cpsnsNumber          String?
+  cpsnsNumber               String?
+  cpsnsVerificationStatus   VerificationStatus @default(UNVERIFIED) @map("cpsns_verification_status")
+  cpsnsVerifiedAt           DateTime?          @map("cpsns_verified_at")
   speciality           String?    @db.Text
   licenseFile          String?
+  licenseOriginalName  String?    @map("license_original_name")
   address1             String?
   address2             String?
   accommodationProvided Boolean   @default(false)

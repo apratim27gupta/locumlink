@@ -17,8 +17,10 @@ export async function GET(req: Request) {
     totalUsers,
     hostUsers,
     locumUsers,
-    pendingVerifications,
+    pendingLocumVerifications,
+    pendingHostVerifications,
     activeJobPostings,
+    totalJobPostings,
   ] = await Promise.all([
     db.user.count(),
     db.user.count({ where: { role: 'HOST' } }),
@@ -28,18 +30,27 @@ export async function GET(req: Request) {
         verificationStatus: { in: ['UNVERIFIED', 'PENDING_REVIEW'] },
       },
     }),
+    db.hostProfile.count({
+      where: {
+        cpsnsVerificationStatus: { in: ['UNVERIFIED', 'PENDING_REVIEW'] },
+        cpsnsNumber: { not: null },
+      },
+    }),
     db.jobPosting.count({
       where: { status: 'ACTIVE', isDeleted: false },
     }),
+    db.jobPosting.count({ where: { isDeleted: false } }),
   ]);
 
   return NextResponse.json({
+    admin: { email: session.actorEmail },
     stats: {
       totalUsers,
       hostUsers,
       locumUsers,
-      pendingVerifications,
+      pendingVerifications: pendingLocumVerifications + pendingHostVerifications,
       activeJobPostings,
+      totalJobPostings,
     },
   });
 }

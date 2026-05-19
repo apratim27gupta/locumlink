@@ -3,6 +3,9 @@ export function buildLocumSavePayload(form: Partial<LocumProfile>, files: {
     licenseFile: string;
     resumeFile: string;
     extraFile: string;
+    licenseOriginalName?: string;
+    resumeOriginalName?: string;
+    extraOriginalName?: string;
 }): LocumProfile {
     return {
         firstName: form.firstName ?? '',
@@ -18,7 +21,10 @@ export function buildLocumSavePayload(form: Partial<LocumProfile>, files: {
         city: form.city ?? '',
         province: form.province ?? '',
         licenseFileName: files.licenseFile ?? '',
+        licenseOriginalName: files.licenseOriginalName ?? '',
         resumeFileName: files.resumeFile ?? '',
+        resumeOriginalName: files.resumeOriginalName ?? '',
         extraFileName: files.extraFile ?? '',
+        extraOriginalName: files.extraOriginalName ?? '',
     };
 }

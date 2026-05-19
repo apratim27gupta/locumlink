@@ -5,7 +5,7 @@ import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { hostApi } from '@/lib/api';
 import { useHostProfile } from '@/hooks/useHostProfile';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
-import { isCpsnsVerified } from '@/lib/cpsnsVerify';
+import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 import { beforeClientNavigation } from '@/lib/topLoader';
 const NAV = [
     {
@@ -51,7 +51,7 @@ export default function HostPostJobPage(props: {
     useNextPageClientProps(props);
     const router = useRouter();
     const { profile, loading: profileLoading } = useHostProfile();
-    const verified = isCpsnsVerified(profile?.cpsnsNumber);
+    const verified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState('');

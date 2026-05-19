@@ -1,5 +1,6 @@
 'use client';
 import { ReactNode, useEffect, useRef, useState, useCallback } from 'react';
+import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
@@ -83,7 +84,6 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [notifTotal, setNotifTotal] = useState(0);
     const bellRef = useRef<HTMLDivElement>(null);
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
     useTrackLastPath();
     useEffect(() => {
         let cancelled = false;
@@ -170,14 +170,10 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     }, []);
     useEffect(() => {
         void fetchNotifications();
-        pollRef.current = setInterval(() => {
-            void fetchNotifications();
-        }, 7000);
-        return () => {
-            if (pollRef.current)
-                clearInterval(pollRef.current);
-        };
     }, [fetchNotifications]);
+    useVisibilityPolling(() => {
+        void fetchNotifications();
+    }, 12_000, Boolean(getToken()));
     useEffect(() => {
         if (!getToken())
             return;

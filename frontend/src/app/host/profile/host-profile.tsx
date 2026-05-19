@@ -3,11 +3,12 @@ import { useState, useEffect, useRef, useCallback, type KeyboardEvent, } from 'r
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { ProfileStatusGlyph, type ProfileStatusGlyphVariant, } from '@/components/ProfileStatusGlyph';
 import { authApi, uploadFile } from '@/lib/api';
+import { formatUploadedFileLabel, originalUploadFileName } from '@/lib/uploadDisplayName';
 import { useHostProfile } from '@/hooks/useHostProfile';
 import type { HostProfile } from '@/types';
 import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
-import { isCpsnsNineDigitsFormat, isCpsnsVerified, sanitizeCpsnsInput, } from '@/lib/cpsnsVerify';
+import { isCpsnsNineDigitsFormat, isCpsnsVerificationApproved, sanitizeCpsnsInput, } from '@/lib/cpsnsVerify';
 import { filterCanadianCities, CANADIAN_PROVINCE_NAMES, formatCanadianCityDisplay, type CanadianCityRow, } from '@/lib/canadianCities';
 import { sortByLabel, sortStringsLocale } from '@/lib/sortLocale';
 
@@ -222,7 +223,7 @@ export default function HostProfilePage(props: {
 }) {
     useNextPageClientProps(props);
     const { profile, loading, saveProfile, saving } = useHostProfile();
-    const verified = isCpsnsVerified(profile?.cpsnsNumber);
+    const verified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
     const welcomeDoctorLabel =
         profile?.contactFirstName || profile?.contactLastName
             ? `Dr ${(profile?.contactFirstName ?? '').trim()} ${(profile?.contactLastName ?? '').trim()}`.trim()
@@ -235,6 +236,7 @@ export default function HostProfilePage(props: {
     const [hostLast, setHostLast] = useState('');
     const [cpsns, setCpsns] = useState('');
     const [licenseFile, setLicenseFile] = useState<string | null>(null);
+    const [licenseLabel, setLicenseLabel] = useState('');
     const [uploading, setUploading] = useState(false);
     const [specialties, setSpecialties] = useState<string[]>([]);
     const [specialtyInput, setSpecialtyInput] = useState('');
@@ -315,6 +317,7 @@ export default function HostProfilePage(props: {
         setHostLast(profile.contactLastName ?? '');
         setCpsns(profile.cpsnsNumber ?? '');
         setLicenseFile(profile.licenseFile ?? null);
+        setLicenseLabel(profile.licenseOriginalName ?? '');
         setSpecialties(
             profile.speciality
                 ? profile.speciality.split(',').map((s) => s.trim()).filter(Boolean)
@@ -1006,13 +1009,14 @@ export default function HostProfilePage(props: {
                                         >
                                             {uploading
                                                 ? 'Uploading…'
-                                                : (licenseFile?.split('/').pop() ?? licenseFile)}
+                                                : formatUploadedFileLabel(licenseFile, licenseLabel, 'CPSNS License')}
                                         </span>
                                         <button
                                             type="button"
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setLicenseFile(null);
+                                                setLicenseLabel('');
                                             }}
                                             title="Remove file"
                                             style={{
@@ -1078,6 +1082,7 @@ export default function HostProfilePage(props: {
                                                 try {
                                                     const result = await uploadFile(file, 'host/license');
                                                     setLicenseFile(result.path);
+                                                    setLicenseLabel(originalUploadFileName(result, file));
                                                 } catch {
                                                     alert('Upload failed. Try again.');
                                                 } finally {

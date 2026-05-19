@@ -1,33 +1,32 @@
 'use client';
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
 import HostDashboard from '@/app/host/dashboard/host-dashboard-page';
 import { hostApi } from '@/lib/api';
 import { useHostProfile } from '@/hooks/useHostProfile';
-import { isCpsnsVerified } from '@/lib/cpsnsVerify';
+import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 import { beforeClientNavigation } from '@/lib/topLoader';
-import { sortStringsLocale } from '@/lib/sortLocale';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
-const inp: React.CSSProperties = {
-    width: '100%',
-    padding: '10px 12px',
-    border: '1px solid #d0d4e4',
-    borderRadius: 8,
-    fontSize: 14,
-    color: '#0f1523',
-    background: '#fff',
-    outline: 'none',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box',
-};
-const lbl: React.CSSProperties = {
-    display: 'block',
-    fontSize: 12,
-    fontWeight: 500,
-    color: '#374151',
-    marginBottom: 6,
-};
+import {
+    HostJobDescriptionField,
+    HostJobTitleField,
+    HostKeyResponsibilitiesField,
+    MmDdYyyyDateField,
+} from '@/components/host/HostJobPostingFormFields';
+import {
+    HOST_JOB_CREDENTIAL_OPTIONS,
+    autoResponsibilitiesForJobTitle,
+    buildKeyResponsibilitiesPayload,
+    emptyResponsibilitySelection,
+    fmtIsoToMmDdYyyy,
+    hostJobFieldInp,
+    hostJobFieldLbl,
+    parseKeyResponsibilitiesFromLines,
+    parseMmDdYyyyToIso,
+} from '@/lib/hostJobPostingForm';
+const inp = hostJobFieldInp;
+const lbl = hostJobFieldLbl;
 const sectionCard: React.CSSProperties = {
     border: '1px solid #E5E7EB',
     borderRadius: 10,
@@ -37,46 +36,9 @@ const sectionCard: React.CSSProperties = {
 const sectionStack: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    gap: 16,
+    gap: 14,
     marginTop: 14,
 };
-const CREDENTIAL_OPTIONS = sortStringsLocale([
-    'CPSNS Full License',
-    'CFPC Eligible',
-    'CMPA coverage',
-    'BLS (ACLS preferred)',
-    'DEA License',
-    'PALS Certified',
-]);
-function fmtIsoToMmDdYyyy(iso: string | null | undefined): string {
-    if (!iso)
-        return '';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime()))
-        return '';
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const yyyy = String(d.getFullYear());
-    return `${mm}-${dd}-${yyyy}`;
-}
-function parseMmDdYyyyToIso(input: string): string {
-    const t = input.trim();
-    if (!t)
-        return '';
-    const m = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-    if (!m)
-        return '';
-    const mm = Number(m[1]);
-    const dd = Number(m[2]);
-    const yyyy = Number(m[3]);
-    if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || yyyy < 1900 || yyyy > 2100)
-        return '';
-    const iso = `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
-    const d = new Date(`${iso}T12:00:00`);
-    return d.getFullYear() === yyyy && d.getMonth() + 1 === mm && d.getDate() === dd
-        ? iso
-        : '';
-}
 function toDatetimeLocalValue(iso: string | null | undefined): string {
     if (!iso)
         return '';
@@ -95,16 +57,17 @@ export default function HostEditJobPage(props: {
     const jobId = typeof params?.jobId === 'string' ? params.jobId : '';
     const router = useRouter();
     const { profile, loading: profileLoading } = useHostProfile();
-    const verified = isCpsnsVerified(profile?.cpsnsNumber);
+    const verified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [keyResponsibilities, setKeyResponsibilities] = useState('');
+    const [respBySection, setRespBySection] = useState<Record<string, Set<string>>>(() => emptyResponsibilitySelection());
+    const [respCustom, setRespCustom] = useState('');
+    const lastAutoRespJobTitleRef = useRef<string | null>(null);
     const [location, setLocation] = useState('');
     const [startDateInput, setStartDateInput] = useState('');
     const [endDateInput, setEndDateInput] = useState('');
     const [startTime, setStartTime] = useState('05:00');
     const [endTime, setEndTime] = useState('14:00');
-    const [flexible, setFlexible] = useState(false);
     const [ratePerDay, setRatePerDay] = useState('');
     const [expiresAt, setExpiresAt] = useState('');
     const [servicesRaw, setServicesRaw] = useState('');
@@ -134,6 +97,29 @@ export default function HostEditJobPage(props: {
         setCredentials((prev) => (prev.includes(v) ? prev : [...prev, v]));
         setCustomCredential('');
     }
+    function toggleResponsibility(sectionKey: string, optionId: string) {
+        setRespBySection((prev) => {
+            const cur = new Set(prev[sectionKey] ?? []);
+            if (cur.has(optionId))
+                cur.delete(optionId);
+            else
+                cur.add(optionId);
+            return { ...prev, [sectionKey]: cur };
+        });
+    }
+    useEffect(() => {
+        const trimmed = title.trim();
+        const auto = autoResponsibilitiesForJobTitle(trimmed);
+        if (!auto) {
+            lastAutoRespJobTitleRef.current = null;
+            return;
+        }
+        const key = trimmed.toLowerCase();
+        if (lastAutoRespJobTitleRef.current === key)
+            return;
+        lastAutoRespJobTitleRef.current = key;
+        setRespBySection(auto);
+    }, [title]);
     useEffect(() => {
         if (!jobId) {
             setErr('Invalid job link.');
@@ -155,15 +141,20 @@ export default function HostEditJobPage(props: {
             const kr = (job as {
                 keyResponsibilities?: unknown;
             }).keyResponsibilities;
-            setKeyResponsibilities(Array.isArray(kr) ? kr.join('\n') : typeof kr === 'string' ? kr : '');
+            const krLines = Array.isArray(kr)
+                ? kr.filter((x): x is string => typeof x === 'string')
+                : typeof kr === 'string' && kr.trim()
+                    ? [kr]
+                    : [];
+            const parsed = parseKeyResponsibilitiesFromLines(krLines);
+            setRespBySection(parsed.respBySection);
+            setRespCustom(parsed.respCustom);
+            lastAutoRespJobTitleRef.current = (job.title ?? '').trim().toLowerCase() || null;
             setLocation(typeof job.location === 'string' ? job.location : '');
-            setStartDateInput(fmtIsoToMmDdYyyy(job.startDate));
-            setEndDateInput(fmtIsoToMmDdYyyy(job.endDate));
+            setStartDateInput(fmtIsoToMmDdYyyy(job.startDate as string | null | undefined));
+            setEndDateInput(fmtIsoToMmDdYyyy(job.endDate as string | null | undefined));
             setStartTime(typeof job.startTime === 'string' ? job.startTime : '05:00');
             setEndTime(typeof job.endTime === 'string' ? job.endTime : '14:00');
-            setFlexible(Boolean((job as {
-                scheduleFlexible?: unknown;
-            }).scheduleFlexible));
             const ppd = (job as {
                 payPerDay?: unknown;
             }).payPerDay ??
@@ -245,10 +236,7 @@ export default function HostEditJobPage(props: {
             await hostApi.updateJob(jobId, {
                 title: t,
                 description: description.trim() || undefined,
-                keyResponsibilities: keyResponsibilities
-                    .split('\n')
-                    .map((s) => s.trim())
-                    .filter(Boolean),
+                keyResponsibilities: buildKeyResponsibilitiesPayload(respBySection, respCustom),
                 location: location.trim() || undefined,
                 startDate: startIso || undefined,
                 endDate: endIso || undefined,
@@ -258,7 +246,6 @@ export default function HostEditJobPage(props: {
                 minYearsExperience: yearsExp.trim() && Number.isFinite(yearsNum) ? yearsNum : undefined,
                 requiredCredentials: credentials,
                 travelRequired: travelReq,
-                scheduleFlexible: flexible,
                 expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
                 servicesRequired: servicesRequired.length ? servicesRequired : [],
                 isRural,
@@ -304,7 +291,6 @@ export default function HostEditJobPage(props: {
     </>);
     }
     const editOverlay = (<>
-      
       <div onClick={() => {
             beforeClientNavigation('/host/dashboard');
             router.push('/host/dashboard');
@@ -327,7 +313,6 @@ export default function HostEditJobPage(props: {
             fontFamily: 'Inter, sans-serif',
             boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
         }}>
-        
         <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -354,8 +339,6 @@ export default function HostEditJobPage(props: {
             ×
           </button>
         </div>
-
-        
         <div style={{
             flex: 1,
             overflowY: 'auto',
@@ -376,42 +359,28 @@ export default function HostEditJobPage(props: {
               <strong>Your CPSNS number is pending verification.</strong> Edits
               are saved; listings stay as drafts until verified.
             </div>)}
-
           {loadBusy && (<p style={{ fontSize: 14, color: '#6b7280' }}>Loading job…</p>)}
-
           {!loadBusy && !jobLoaded && err && (<p style={{ fontSize: 14, color: '#dc2626' }}>{err}</p>)}
-
           {!loadBusy && jobLoaded && (<form onSubmit={handleSubmit} style={{
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 16,
                 minHeight: 0,
             }}>
-              
               <div style={sectionCard}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#0B0F1F' }}>
                   Details
                 </div>
-
                 <div style={sectionStack}>
+                  <HostJobTitleField value={title} onChange={setTitle} inputStyle={inp} labelStyle={lbl}/>
+                  <HostJobDescriptionField value={description} onChange={setDescription} inputStyle={inp} labelStyle={lbl}/>
+                  <HostKeyResponsibilitiesField respBySection={respBySection} respCustom={respCustom} onToggle={toggleResponsibility} onCustomChange={setRespCustom} inputStyle={inp} labelStyle={lbl}/>
                   <div>
-                    <label style={lbl}>Job title *</label>
-                    <input style={inp} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Family physician locum — 2 weeks" maxLength={200}/>
-                  </div>
-
-                  <div>
-                    <label style={lbl}>Job Description</label>
-                    <textarea style={{ ...inp, minHeight: 110, resize: 'vertical' }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Shift expectations, clinic context, etc."/>
-                  </div>
-
-                  <div>
-                    <label style={lbl}>Key Responsibilities (one per line)</label>
-                    <textarea style={{ ...inp, minHeight: 90, resize: 'vertical' }} value={keyResponsibilities} onChange={(e) => setKeyResponsibilities(e.target.value)} placeholder="List key responsibilities…"/>
+                    <label style={lbl}>Location</label>
+                    <input style={inp} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Clinic address or city"/>
                   </div>
                 </div>
               </div>
-
-              
               <div style={sectionCard}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#0B0F1F' }}>
                   Schedule
@@ -419,65 +388,41 @@ export default function HostEditJobPage(props: {
                 <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
                   Set dates, times, and pay
                 </div>
-
                 <div style={sectionStack}>
                   <div style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
                 gap: 12,
-                alignItems: 'start',
             }}>
-                    <div style={{ minWidth: 0 }}>
+                    <div>
                       <label style={lbl}>Start Date *</label>
-                      <input type="text" inputMode="numeric" autoComplete="off" placeholder="MM-DD-YYYY" pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}" title="MM-DD-YYYY" style={inp} value={startDateInput} onChange={(e) => setStartDateInput(e.target.value)}/>
+                      <MmDdYyyyDateField value={startDateInput} onChange={setStartDateInput} inputStyle={inp}/>
                     </div>
-                    <div style={{ minWidth: 0 }}>
+                    <div>
                       <label style={lbl}>End Date *</label>
-                      <input type="text" inputMode="numeric" autoComplete="off" placeholder="MM-DD-YYYY" pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}" title="MM-DD-YYYY" style={inp} value={endDateInput} onChange={(e) => setEndDateInput(e.target.value)}/>
+                      <MmDdYyyyDateField value={endDateInput} onChange={setEndDateInput} inputStyle={inp}/>
                     </div>
                   </div>
-
                   <div style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
                 gap: 12,
-                alignItems: 'start',
             }}>
-                    <div style={{ minWidth: 0 }}>
+                    <div>
                       <label style={lbl}>Start Time *</label>
                       <input type="time" style={inp} value={startTime} onChange={(e) => setStartTime(e.target.value)}/>
                     </div>
-                    <div style={{ minWidth: 0 }}>
+                    <div>
                       <label style={lbl}>End Time *</label>
                       <input type="time" style={inp} value={endTime} onChange={(e) => setEndTime(e.target.value)}/>
                     </div>
                   </div>
-
-                  <label style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                fontSize: 14,
-                color: '#374151',
-                cursor: 'pointer',
-            }}>
-                    <input type="checkbox" checked={flexible} onChange={(e) => setFlexible(e.target.checked)} style={{
-                width: 16,
-                height: 16,
-                flexShrink: 0,
-                accentColor: '#1C32D2',
-            }}/>
-                    Schedule is flexible
-                  </label>
-
                   <div>
                     <label style={lbl}>Rate per Day (CAD) *</label>
                     <input style={inp} type="number" value={ratePerDay} onChange={(e) => setRatePerDay(e.target.value)} placeholder="e.g. 2000"/>
                   </div>
                 </div>
               </div>
-
-              
               <div style={sectionCard}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#0B0F1F' }}>
                   Requirements
@@ -485,13 +430,11 @@ export default function HostEditJobPage(props: {
                 <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
                   List mandatory licenses and experience
                 </div>
-
                 <div style={sectionStack}>
                   <div>
                     <label style={lbl}>Years of Experience</label>
-                    <input style={{ ...inp, maxWidth: '100%' }} type="number" value={yearsExp} onChange={(e) => setYearsExp(e.target.value)} placeholder="e.g. 3"/>
+                    <input style={inp} type="number" value={yearsExp} onChange={(e) => setYearsExp(e.target.value)} placeholder="e.g. 3"/>
                   </div>
-
                   <div>
                     <label style={{ ...lbl, marginBottom: 10 }}>
                       Required Credentials
@@ -499,15 +442,13 @@ export default function HostEditJobPage(props: {
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     {(() => {
                 const all = [
-                    ...CREDENTIAL_OPTIONS,
-                    ...credentials.filter((c) => !CREDENTIAL_OPTIONS.includes(c)),
+                    ...HOST_JOB_CREDENTIAL_OPTIONS,
+                    ...credentials.filter((c) => !HOST_JOB_CREDENTIAL_OPTIONS.includes(c)),
                 ];
                 const seen = new Set<string>();
                 const unique = all.filter((c) => {
                     const k = c.trim();
-                    if (!k)
-                        return false;
-                    if (seen.has(k))
+                    if (!k || seen.has(k))
                         return false;
                     seen.add(k);
                     return true;
@@ -567,7 +508,6 @@ export default function HostEditJobPage(props: {
                     </button>
                   </div>
                 </div>
-
                   <label style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -586,11 +526,9 @@ export default function HostEditJobPage(props: {
                   </label>
                 </div>
               </div>
-
               {err && (<p style={{ fontSize: 13, color: '#dc2626', margin: 0 }}>
                   {err}
                 </p>)}
-
               <div style={{
                 display: 'flex',
                 justifyContent: 'flex-end',

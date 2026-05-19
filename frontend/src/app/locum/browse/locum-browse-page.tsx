@@ -7,6 +7,7 @@ import {
   useRef,
   type CSSProperties,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
 import Image from 'next/image';
@@ -14,9 +15,13 @@ import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { locumApi, type BrowseJob } from '@/lib/api';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { LocumProfile } from '@/types';
-import { isCpsnsVerified } from '@/lib/cpsnsVerify';
+import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
-import citiesRaw from '@/data/cities.json';
+import {
+  CANADIAN_PROVINCE_NAMES,
+  filterCanadianCities,
+} from '@/lib/canadianCities';
+import { groupKeyResponsibilitiesForDisplay } from '@/lib/hostJobPostingForm';
 const NAV = [
   {
     label: 'Browse Opportunities',
@@ -44,28 +49,20 @@ const NAV = [
     icon: <NavIcon name="resources" />,
   },
 ];
-type CityEntry = {
-  name: string;
-  province: string;
-};
-const BROWSE_CITY_ROWS: CityEntry[] = (citiesRaw as [string, string][]).map(
-  ([name, province]) => ({ name, province }),
-);
-const BROWSE_PROVINCE_NAMES: Record<string, string> = {
-  AB: 'Alberta',
-  BC: 'British Columbia',
-  MB: 'Manitoba',
-  NB: 'New Brunswick',
-  NL: 'Newfoundland & Labrador',
-  NS: 'Nova Scotia',
-  NT: 'Northwest Territories',
-  NU: 'Nunavut',
-  ON: 'Ontario',
-  PE: 'Prince Edward Island',
-  QC: 'Quebec',
-  SK: 'Saskatchewan',
-  YT: 'Yukon',
-};
+const BROWSE_PROVINCE_NAMES = CANADIAN_PROVINCE_NAMES;
+const BROWSE_LIST_WIDTH_KEY = 'll-browse-list-width';
+const BROWSE_LIST_MIN = 240;
+const BROWSE_LIST_MAX = 520;
+const BROWSE_LIST_DEFAULT = 290;
+const LOGO_TEAL = '#309BB7';
+const LOGO_TEAL_BG = 'rgba(48, 155, 183, 0.14)';
+const LOGO_TEAL_BORDER = 'rgba(48, 155, 183, 0.28)';
+function readStoredBrowseListWidth(): number {
+  if (typeof window === 'undefined') return BROWSE_LIST_DEFAULT;
+  const n = parseInt(localStorage.getItem(BROWSE_LIST_WIDTH_KEY) ?? '', 10);
+  if (!Number.isFinite(n)) return BROWSE_LIST_DEFAULT;
+  return Math.min(BROWSE_LIST_MAX, Math.max(BROWSE_LIST_MIN, n));
+}
 type BrowseSearchSuggestion = {
   id: string;
   primary: string;
@@ -113,18 +110,7 @@ function buildBrowseSearchSuggestions(
     return out.length >= BROWSE_SUGGEST_MAX;
   };
   if (q.length >= 2) {
-    let found = BROWSE_CITY_ROWS.filter((c) =>
-      c.name.toLowerCase().startsWith(q),
-    ).slice(0, 6);
-    if (found.length < 3) {
-      const keys = new Set(found.map((c) => `${c.name}|${c.province}`));
-      const extra = BROWSE_CITY_ROWS.filter(
-        (c) =>
-          !keys.has(`${c.name}|${c.province}`) &&
-          c.name.toLowerCase().includes(q),
-      ).slice(0, 6 - found.length);
-      found = [...found, ...extra];
-    }
+    const found = filterCanadianCities(qt, 6);
     for (const c of found) {
       if (
         push({
@@ -339,6 +325,7 @@ export default function LocumBrowsePage(props: {
   const [applying, setApplying] = useState<string | null>(null);
   const [applyError, setApplyError] = useState('');
   const [profile, setProfile] = useState<LocumProfile | null>(null);
+  const [listPanelWidth, setListPanelWidth] = useState(readStoredBrowseListWidth);
   const loadJobs = useCallback(async () => {
     setLoading(true);
     try {
@@ -446,7 +433,7 @@ export default function LocumBrowsePage(props: {
   }, [filteredJobs, selectedId]);
   const job = filteredJobs.find((j) => j.id === selectedId) ?? null;
   const selectedJobPassed = job ? hasJobEndDatePassed(job) : false;
-  const canApply = isCpsnsVerified(profile?.cpsnsNumber);
+  const canApply = isCpsnsVerificationApproved(profile?.verificationStatus);
   async function handleApply(jobId: string) {
     if (applied.has(jobId)) return;
     const targetJob = jobs.find((j) => j.id === jobId);
@@ -456,7 +443,7 @@ export default function LocumBrowsePage(props: {
     }
     if (!canApply) {
       setApplyError(
-        'Your CPSNS number must be verified before you can apply. Complete your profile and use a CPSNS on the verified list.',
+        'Your CPSNS must be verified by an administrator before you can apply. Complete your profile and upload your license, then wait for approval.',
       );
       return;
     }
@@ -481,6 +468,36 @@ export default function LocumBrowsePage(props: {
   const isApplying = (id: string) => applying === id;
   const applyDisabled = (id: string) =>
     !canApply || isApplied(id) || isApplying(id);
+  function onBrowseListResizeMouseDown(e: ReactMouseEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = listPanelWidth;
+    let latest = startW;
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      latest = Math.min(
+        BROWSE_LIST_MAX,
+        Math.max(BROWSE_LIST_MIN, startW + dx),
+      );
+      setListPanelWidth(latest);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      try {
+        localStorage.setItem(BROWSE_LIST_WIDTH_KEY, String(latest));
+      } catch {
+        /* ignore */
+      }
+    };
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
   const displayName = profile?.firstName
     ? `Dr ${profile.firstName}${profile.lastName ? ` ${profile.lastName}` : ''}`
     : 'Doctor';
@@ -525,8 +542,8 @@ export default function LocumBrowsePage(props: {
                 lineHeight: 1.5,
               }}
             >
-              <strong>CPSNS verification required:</strong> Only CPSNS verified
-              Locums can apply. Please ensure your{' '}
+              <strong>CPSNS verification required:</strong> Only locums with
+              admin-approved CPSNS can apply. Please ensure your{' '}
               <a
                 href="/locum/profile"
                 style={{
@@ -767,13 +784,16 @@ export default function LocumBrowsePage(props: {
         >
           <div
             style={{
-              width: 290,
+              width: listPanelWidth,
               flexShrink: 0,
               minHeight: 0,
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
               borderRight: '1px solid #e2e5ee',
-              overflowY: 'auto',
             }}
           >
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
             <div
               style={{
                 padding: '12px 14px',
@@ -865,9 +885,15 @@ export default function LocumBrowsePage(props: {
                         color: 'var(--brand-primary)',
                       }}
                     >
-                      {j.title.length > 38
-                        ? j.title.slice(0, 38) + '…'
-                        : j.title}
+                      {(() => {
+                        const maxChars = Math.max(
+                          18,
+                          Math.floor((listPanelWidth - 72) / 7),
+                        );
+                        return j.title.length > maxChars
+                          ? j.title.slice(0, maxChars) + '…'
+                          : j.title;
+                      })()}
                     </span>
                     <span
                       style={{
@@ -938,6 +964,30 @@ export default function LocumBrowsePage(props: {
                   )}
                 </div>
               ))}
+            </div>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize job list"
+              title="Drag to resize"
+              onMouseDown={onBrowseListResizeMouseDown}
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: 6,
+                zIndex: 3,
+                cursor: 'ew-resize',
+                background: 'transparent',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(59, 79, 216, 0.12)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            />
           </div>
 
           {job ? (
@@ -1017,7 +1067,21 @@ export default function LocumBrowsePage(props: {
                 >
                   {job.title}
                 </h2>
-                <p style={{ fontSize: 'var(--font-small)', color: '#5a6478', marginBottom: 12 }}>
+                <p
+                  style={{
+                    fontSize: 'var(--font-small)',
+                    fontWeight: 600,
+                    color: LOGO_TEAL,
+                    marginBottom: 12,
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    background: LOGO_TEAL_BG,
+                    border: `1px solid ${LOGO_TEAL_BORDER}`,
+                    display: 'inline-block',
+                    width: 'fit-content',
+                    maxWidth: '100%',
+                  }}
+                >
                   {job.hostProfile.city}, {job.hostProfile.province} ·{' '}
                   {relativeHoursOrDaysAgo(job.createdAt)} ·{' '}
                   {job.applicationsCount} applicant
@@ -1058,11 +1122,13 @@ export default function LocumBrowsePage(props: {
                   {(job.startTime || job.endTime) && (
                     <span
                       style={{
-                        background: '#F1F3F7',
+                        background: LOGO_TEAL_BG,
+                        border: `1px solid ${LOGO_TEAL_BORDER}`,
                         padding: '5px 10px',
                         borderRadius: 5,
                         fontSize: 'var(--font-small)',
-                        color: '#5a6478',
+                        fontWeight: 600,
+                        color: LOGO_TEAL,
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 6,
@@ -1211,35 +1277,98 @@ export default function LocumBrowsePage(props: {
                   </>
                 )}
 
-                {job.keyResponsibilities.length > 0 && (
-                  <>
-                    <h4
-                      style={{
-                        fontSize: 'var(--font-heading)',
-                        fontWeight: 'var(--font-weight-bold)',
-                        color: '#0f1523',
-                        marginBottom: 6,
-                      }}
-                    >
-                      Key Responsibilities
-                    </h4>
-                    <ul style={{ paddingLeft: 16, marginBottom: 14 }}>
-                      {job.keyResponsibilities.map((r, i) => (
-                        <li
-                          key={i}
-                          style={{
-                            fontSize: 'var(--font-body)',
-                            color: '#5a6478',
-                            lineHeight: 1.7,
-                            marginBottom: 3,
-                          }}
-                        >
-                          {r}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
+                {job.keyResponsibilities.length > 0 && (() => {
+                  const grouped = groupKeyResponsibilitiesForDisplay(
+                    job.keyResponsibilities,
+                  );
+                  return (
+                    <>
+                      <h4
+                        style={{
+                          fontSize: 'var(--font-heading)',
+                          fontWeight: 'var(--font-weight-bold)',
+                          color: '#0f1523',
+                          marginBottom: 6,
+                        }}
+                      >
+                        Key Responsibilities
+                      </h4>
+                      <div style={{ marginBottom: 14 }}>
+                        {grouped.sections.map((section) => (
+                          <div
+                            key={section.title}
+                            style={{ marginBottom: 10 }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 'var(--font-small)',
+                                fontWeight: 'var(--font-weight-bold)',
+                                color: '#374151',
+                                marginBottom: 4,
+                              }}
+                            >
+                              {section.title}
+                            </div>
+                            <ul
+                              style={{
+                                paddingLeft: 16,
+                                margin: 0,
+                              }}
+                            >
+                              {section.items.map((item) => (
+                                <li
+                                  key={item}
+                                  style={{
+                                    fontSize: 'var(--font-body)',
+                                    color: '#5a6478',
+                                    lineHeight: 1.7,
+                                    marginBottom: 3,
+                                  }}
+                                >
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                        {grouped.other.length > 0 && (
+                          <div>
+                            <div
+                              style={{
+                                fontSize: 'var(--font-small)',
+                                fontWeight: 'var(--font-weight-bold)',
+                                color: '#374151',
+                                marginBottom: 4,
+                              }}
+                            >
+                              Other
+                            </div>
+                            <ul
+                              style={{
+                                paddingLeft: 16,
+                                margin: 0,
+                              }}
+                            >
+                              {grouped.other.map((item) => (
+                                <li
+                                  key={item}
+                                  style={{
+                                    fontSize: 'var(--font-body)',
+                                    color: '#5a6478',
+                                    lineHeight: 1.7,
+                                    marginBottom: 3,
+                                  }}
+                                >
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
 
                 <h4
                   style={{

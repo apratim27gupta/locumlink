@@ -13,6 +13,7 @@ import { adminFetchJson } from '@/lib/adminApi';
 
 type VerificationRow = {
   id: string;
+  profileType: 'locum' | 'host';
   userId: string;
   email: string;
   name: string;
@@ -23,6 +24,21 @@ type VerificationRow = {
     | 'PENDING_REVIEW'
     | 'VERIFIED'
     | 'REJECTED';
+};
+
+type VerificationDocument = {
+  id: string;
+  label: string;
+  fileName: string;
+  signedUrl: string;
+};
+
+type ProfileField = { label: string; value: string };
+
+type VerificationDetail = {
+  profileType: 'locum' | 'host';
+  documents: VerificationDocument[];
+  profileFields: ProfileField[];
 };
 
 function waitDays(submittedAt: string): number {
@@ -48,7 +64,45 @@ export default function AdminVerificationsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [review, setReview] = useState<VerificationRow | null>(null);
+  const [reviewDetail, setReviewDetail] = useState<VerificationDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailErr, setDetailErr] = useState<string | null>(null);
+  const [showProfileData, setShowProfileData] = useState(false);
   const [notes, setNotes] = useState('');
+
+  const openReview = useCallback(async (row: VerificationRow) => {
+    setReview(row);
+    setNotes('');
+    setShowProfileData(false);
+    setReviewDetail(null);
+    setDetailErr(null);
+    setDetailLoading(true);
+    try {
+      const detail = await adminFetchJson<VerificationDetail>(
+        `/api/admin/verifications/${row.id}?profileType=${row.profileType}`,
+      );
+      setReviewDetail(detail);
+    } catch (e) {
+      setDetailErr(e instanceof Error ? e.message : 'Could not load documents');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  function closeReview() {
+    setReview(null);
+    setReviewDetail(null);
+    setShowProfileData(false);
+    setDetailErr(null);
+  }
+
+  function viewDocument(doc: VerificationDocument) {
+    if (doc.signedUrl) {
+      window.open(doc.signedUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setDetailErr(`Could not open "${doc.fileName}". The file may be missing from storage.`);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,16 +129,18 @@ export default function AdminVerificationsPage() {
     load();
   }, [load]);
 
-  async function patchStatus(id: string, verificationStatus: 'VERIFIED' | 'REJECTED') {
-    setBusyId(id);
+  async function patchStatus(
+    row: VerificationRow,
+    verificationStatus: 'VERIFIED' | 'REJECTED',
+  ) {
+    setBusyId(row.id);
     setErr(null);
     try {
-      await adminFetchJson(`/api/admin/verifications/${id}`, {
+      await adminFetchJson(`/api/admin/verifications/${row.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ verificationStatus }),
+        body: JSON.stringify({ verificationStatus, profileType: row.profileType }),
       });
-      setReview(null);
-      setNotes('');
+      closeReview();
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Update failed');
@@ -147,6 +203,9 @@ export default function AdminVerificationsPage() {
                     <td>
                       <div className="font-medium">{r.name}</div>
                       <div className="text-sm text-muted">{r.email}</div>
+                      <div className="text-sm text-muted" style={{ marginTop: 2 }}>
+                        {r.profileType === 'host' ? 'Host clinic' : 'Locum'}
+                      </div>
                     </td>
                     <td>
                       <code>{r.cpsns}</code>
@@ -169,10 +228,7 @@ export default function AdminVerificationsPage() {
                       <button
                         type="button"
                         className="btn btn-primary"
-                        onClick={() => {
-                          setReview(r);
-                          setNotes('');
-                        }}
+                        onClick={() => openReview(r)}
                       >
                         Review
                       </button>
@@ -188,7 +244,7 @@ export default function AdminVerificationsPage() {
       <div
         className={`modal-overlay${review ? ' active' : ''}`}
         onClick={(e) => {
-          if (e.target === e.currentTarget) setReview(null);
+          if (e.target === e.currentTarget) closeReview();
         }}
         onKeyDown={() => {}}
         role="presentation"
@@ -205,7 +261,7 @@ export default function AdminVerificationsPage() {
               <button
                 type="button"
                 className="modal-close"
-                onClick={() => setReview(null)}
+                onClick={closeReview}
                 aria-label="Close"
               >
                 <XCircle size={20} color="#64748b" />
@@ -229,26 +285,77 @@ export default function AdminVerificationsPage() {
 
               <div className="mb-4">
                 <p className="text-sm font-medium mb-4">Uploaded Documents</p>
-                <div className="document-item">
-                  <div className="document-info">
-                    <FileText size={20} color="#64748b" />
-                    <span className="document-name">CPSNS License</span>
+                {detailLoading ? (
+                  <p className="text-sm text-muted">Loading documents…</p>
+                ) : null}
+                {detailErr ? (
+                  <p className="text-sm" style={{ color: '#dc2626', marginBottom: 8 }}>
+                    {detailErr}
+                  </p>
+                ) : null}
+                {!detailLoading && reviewDetail?.documents.length === 0 ? (
+                  <p className="text-sm text-muted">No documents uploaded yet.</p>
+                ) : null}
+                {reviewDetail?.documents.map((doc) => (
+                  <div key={doc.id} className="document-item">
+                    <div className="document-info">
+                      <FileText size={20} color="#64748b" />
+                      <div>
+                        <span className="document-name">{doc.label}</span>
+                        <div className="text-xs text-muted">{doc.fileName}</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: 13 }}
+                      disabled={detailLoading}
+                      onClick={() => viewDocument(doc)}
+                    >
+                      <Eye size={16} />
+                      View
+                    </button>
                   </div>
-                  <button type="button" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 13 }}>
-                    <Eye size={16} />
-                    View
-                  </button>
-                </div>
-                <div className="document-item">
+                ))}
+                <div className="document-item" style={{ marginTop: 8 }}>
                   <div className="document-info">
                     <FileText size={20} color="#64748b" />
                     <span className="document-name">Profile data</span>
                   </div>
-                  <button type="button" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 13 }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: 13 }}
+                    disabled={detailLoading}
+                    onClick={() => {
+                      if (!reviewDetail?.profileFields.length) {
+                        setDetailErr('Profile data could not be loaded.');
+                        return;
+                      }
+                      setShowProfileData((v) => !v);
+                    }}
+                  >
                     <Eye size={16} />
-                    View
+                    {showProfileData ? 'Hide' : 'View'}
                   </button>
                 </div>
+                {showProfileData && reviewDetail?.profileFields.length ? (
+                  <div
+                    className="info-box"
+                    style={{ marginTop: 12, maxHeight: 280, overflowY: 'auto' }}
+                  >
+                    <dl style={{ margin: 0, display: 'grid', gap: 10 }}>
+                      {reviewDetail.profileFields.map((f) => (
+                        <div key={f.label}>
+                          <dt className="text-xs font-medium text-muted">{f.label}</dt>
+                          <dd className="text-sm" style={{ margin: '4px 0 0', whiteSpace: 'pre-wrap' }}>
+                            {f.value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ) : null}
               </div>
 
               <div className="info-box">
@@ -269,7 +376,7 @@ export default function AdminVerificationsPage() {
                     className="btn btn-success"
                     style={{ padding: 12 }}
                     disabled={busyId === review.id}
-                    onClick={() => patchStatus(review.id, 'VERIFIED')}
+                    onClick={() => patchStatus(review, 'VERIFIED')}
                   >
                     <CheckCircle size={20} />
                     Verify &amp; Approve
@@ -279,7 +386,7 @@ export default function AdminVerificationsPage() {
                     className="btn btn-secondary"
                     style={{ padding: 12 }}
                     disabled={busyId === review.id}
-                    onClick={() => patchStatus(review.id, 'REJECTED')}
+                    onClick={() => patchStatus(review, 'REJECTED')}
                   >
                     <XCircle size={20} />
                     Reject

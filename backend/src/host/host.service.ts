@@ -1,12 +1,70 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, } from '@nestjs/common';
-import { PostingStatus } from '@prisma/client';
+import {
+    PostingStatus,
+    VerificationStatus,
+    type HostProfile as HostProfileRow,
+} from '@prisma/client';
 import { GcsService } from '../gcs/gcs.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SaveHostProfileDto, CreateJobDto, UpdateJobDto } from './host.dto.js';
-import { normalizeCpsns } from '../cpsns/cpsns-verified.js';
+import {
+    isCpsnsVerificationApproved,
+    normalizeCpsns,
+    hostCpsnsVerificationPatch,
+} from '../cpsns/cpsns-verified.js';
+
+export type HostProfileApi = {
+    clinicName: string;
+    contactFirstName: string;
+    contactLastName: string;
+    cpsnsNumber: string;
+    speciality: string;
+    licenseFile: string | null;
+    licenseOriginalName: string | null;
+    address1: string;
+    address2: string;
+    postalCode: string;
+    city: string;
+    province: string;
+    amenities: string[];
+    accommodationProvided: boolean;
+    practiceType: string;
+    numPhysicians: string;
+    emr: string;
+    patientVol: string;
+    clinicDesc: string;
+    cpsnsVerificationStatus: VerificationStatus;
+};
+
 @Injectable()
 export class HostService {
     constructor(private readonly prisma: PrismaService, private readonly gcs: GcsService) { }
+
+    private mapProfileToApi(profile: HostProfileRow): HostProfileApi {
+        return {
+            clinicName: profile.practiceName ?? '',
+            contactFirstName: profile.contactFirstName ?? '',
+            contactLastName: profile.contactLastName ?? '',
+            cpsnsNumber: profile.cpsnsNumber ?? '',
+            speciality: profile.speciality ?? '',
+            licenseFile: profile.licenseFile ?? null,
+            licenseOriginalName: profile.licenseOriginalName ?? null,
+            address1: profile.address1 ?? '',
+            address2: profile.address2 ?? '',
+            postalCode: profile.postalCode ?? '',
+            city: profile.city ?? '',
+            province: profile.province ?? '',
+            amenities: profile.servicesOffered ?? [],
+            accommodationProvided: profile.accommodationProvided ?? false,
+            practiceType: profile.practiceType ?? '',
+            numPhysicians: profile.numPhysicians ?? '',
+            emr: profile.emr ?? '',
+            patientVol: profile.patientVol ?? '',
+            clinicDesc: (profile.highlights ?? '').slice(0, 1000),
+            cpsnsVerificationStatus: profile.cpsnsVerificationStatus,
+        };
+    }
+
     private toHostProfileData(userId: string, dto: SaveHostProfileDto) {
         const rawCpsns = dto.cpsnsNumber?.trim() ?? '';
         const cpsnsDigits = rawCpsns ? normalizeCpsns(rawCpsns) : '';
@@ -23,7 +81,7 @@ export class HostService {
             postalCode: dto.postalCode ?? '',
             province: dto.province ?? 'NS',
             servicesOffered: dto.amenities ?? [],
-            highlights: dto.clinicDescription ?? null,
+            highlights: (dto.clinicDescription ?? dto.clinicDesc)?.trim() || null,
             phone: null as string | null,
             website: null as string | null,
             ruralDesignation: null as string | null,
@@ -36,20 +94,37 @@ export class HostService {
             accommodationProvided: dto.accommodationProvided ?? false,
             practiceType: dto.practiceType?.trim() || null,
             numPhysicians: dto.numPhysicians?.trim() || null,
-            emr: dto.emrSystem?.trim() || null,
-            patientVol: dto.patientVolume?.trim() || null,
+            emr: (dto.emrSystem ?? dto.emr)?.trim() || null,
+            patientVol: (dto.patientVolume ?? dto.patientVol)?.trim() || null,
+            licenseFile: dto.licenseFile ?? null,
+            licenseOriginalName: dto.licenseOriginalName?.trim() || null,
         };
     }
     async saveProfile(userId: string, dto: SaveHostProfileDto) {
         const data = this.toHostProfileData(userId, dto);
         const { userId: _userIdInData, ...update } = data;
         void _userIdInData;
+        const rawCpsns = dto.cpsnsNumber?.trim() ?? '';
+        const cpsnsDigits = rawCpsns ? normalizeCpsns(rawCpsns) : '';
+        const existing = await this.prisma.hostProfile.findUnique({
+            where: { userId },
+            select: { cpsnsNumber: true, cpsnsVerificationStatus: true },
+        });
+        const verificationPatch = hostCpsnsVerificationPatch(
+            existing
+                ? {
+                    cpsnsId: existing.cpsnsNumber ?? '',
+                    verificationStatus: existing.cpsnsVerificationStatus,
+                }
+                : null,
+            cpsnsDigits,
+        );
         const profile = await this.prisma.hostProfile.upsert({
             where: { userId },
-            create: data,
-            update,
+            create: { ...data, ...verificationPatch },
+            update: { ...update, ...verificationPatch },
         });
-        return { success: true, profile };
+        return { success: true, profile: this.mapProfileToApi(profile) };
     }
     async getProfile(userId: string) {
         const profile = await this.prisma.hostProfile.findUnique({
@@ -57,7 +132,7 @@ export class HostService {
         });
         if (!profile)
             return { exists: false, profile: null };
-        return { exists: true, profile };
+        return { exists: true, profile: this.mapProfileToApi(profile) };
     }
     private async getHostProfileId(userId: string): Promise<string> {
         const profile = await this.prisma.hostProfile.findUnique({
@@ -151,10 +226,20 @@ export class HostService {
         const hostProfileId = await this.getHostProfileId(userId);
         const hostProfile = await this.prisma.hostProfile.findUnique({
             where: { id: hostProfileId },
-            select: { cpsnsNumber: true },
+            select: { cpsnsVerificationStatus: true },
         });
-        const isVerified = !!(hostProfile?.cpsnsNumber && hostProfile.cpsnsNumber.replace(/\D/g, '').length === 9);
-        const status: PostingStatus = isVerified ? PostingStatus.ACTIVE : PostingStatus.DRAFT;
+        const isVerified = isCpsnsVerificationApproved(hostProfile?.cpsnsVerificationStatus);
+        const requestedStatus = typeof dto.status === 'string' ? dto.status.toUpperCase() : '';
+        const saveAsDraft = dto.saveAsDraft === true
+            || String(dto.saveAsDraft) === 'true'
+            || requestedStatus === 'DRAFT';
+        const status: PostingStatus = saveAsDraft
+            ? PostingStatus.DRAFT
+            : requestedStatus === 'ACTIVE' && isVerified
+                ? PostingStatus.ACTIVE
+                : isVerified
+                    ? PostingStatus.ACTIVE
+                    : PostingStatus.DRAFT;
         const job = await this.prisma.jobPosting.create({
             data: {
                 hostProfileId,
@@ -179,7 +264,15 @@ export class HostService {
                 requiredCredentials: dto.requiredCredentials ?? [],
             },
         });
-        return { success: true, job };
+        return {
+            success: true,
+            job: {
+                ...job,
+                status: job.status,
+                applicationsCount: 0,
+                payPerDay: job.payPerDay != null ? Number(job.payPerDay) : null,
+            },
+        };
     }
     async getJobs(userId: string, options?: { deletedOnly?: boolean }) {
         const hostProfileId = await this.getHostProfileId(userId);
@@ -220,10 +313,15 @@ export class HostService {
             }
         }
         return {
-            jobs: jobs.map((j) => ({
-                ...j,
-                applicationsCount: j._count.applications,
-            })),
+            jobs: jobs.map((j) => {
+                const { _count, shifts: _shifts, ...rest } = j;
+                return {
+                    ...rest,
+                    status: j.status,
+                    applicationsCount: _count.applications,
+                    payPerDay: j.payPerDay != null ? Number(j.payPerDay) : null,
+                };
+            }),
         };
     }
     async getJob(userId: string, jobId: string) {

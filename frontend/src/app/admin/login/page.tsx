@@ -6,34 +6,79 @@ import AuthSplitLayout from '@/components/AuthSplitLayout';
 import Logo from '@/components/Logo';
 import { adminApiBase } from '@/lib/adminApi';
 
+const ALLOWED_ADMIN_EMAIL = 'aroradamini873@gmail.com';
+
 function AdminLoginInner() {
   const sp = useSearchParams();
+  const nextPath = sp.get('next') || '/admin';
   const error = sp.get('error');
-  const reason = sp.get('reason');
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
   const reasonText = useMemo(() => {
+    const reason = sp.get('reason');
     if (!reason) return '';
     try {
       return decodeURIComponent(reason);
-    }
-    catch {
+    } catch {
       return reason;
     }
-  }, [reason]);
-  const [busy, setBusy] = useState(false);
+  }, [sp]);
 
-  function continueWithGoogle() {
-    const base = adminApiBase().replace(/\/$/, '');
-    const path = `${base}/api/admin-auth/google`;
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    const normalized = email.trim().toLowerCase();
+    if (!normalized) {
+      setFormError('Enter your email address.');
+      return;
+    }
+    if (normalized !== ALLOWED_ADMIN_EMAIL) {
+      setFormError('This email is not authorized for admin access.');
+      return;
+    }
+
     setBusy(true);
-    window.location.assign(path.startsWith('/') ? path : `${path}`);
+    try {
+      const res = await fetch(`${adminApiBase()}/api/admin-auth/login`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalized }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        redirect?: string;
+        message?: string | string[];
+      };
+      if (!res.ok) {
+        const msg = Array.isArray(data.message)
+          ? data.message.join(', ')
+          : data.message || 'Could not sign in.';
+        setFormError(msg);
+        return;
+      }
+      window.location.assign(
+        typeof data.redirect === 'string' && data.redirect.startsWith('http')
+          ? data.redirect
+          : nextPath,
+      );
+    } catch {
+      setFormError('Could not reach the server. Is the API running?');
+    } finally {
+      setBusy(false);
+    }
   }
 
   const showDenied = error === 'not_allowed';
-  const showOAuthFail = error === 'oauth';
 
   return (
     <AuthSplitLayout variant="signup">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <form
+        onSubmit={(e) => void handleSubmit(e)}
+        style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+      >
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <Logo size="md" />
         </div>
@@ -43,38 +88,9 @@ function AdminLoginInner() {
             Admin Login
           </div>
           <div style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.4 }}>
-            Sign in with Google through the Nest API (<code style={{ fontSize: 13 }}>GOOGLE_ADMIN_*</code> in{' '}
-            <code style={{ fontSize: 13 }}>backend/.env</code>), separate from the main app&apos;s Supabase Google. Your
-            email must exist in the <code style={{ fontSize: 13 }}>admins</code> table ({' '}
-            <code style={{ fontSize: 11 }}>database/seed-admin.mjs</code> ).
+            Enter your authorized admin email to continue.
           </div>
         </div>
-
-        {showOAuthFail ? (
-          <div
-            style={{
-              background: 'rgba(239, 68, 68, 0.08)',
-              border: '1px solid rgba(239, 68, 68, 0.18)',
-              color: '#991B1B',
-              borderRadius: 12,
-              padding: '10px 12px',
-              fontSize: 13,
-              lineHeight: 1.4,
-              fontWeight: 700,
-            }}
-          >
-            Google redirect failed or access was cancelled. In Google Cloud → OAuth client, set Authorized redirect URI
-            to{' '}
-            <code style={{ fontSize: 11 }}>http://localhost:3000/api/admin-auth/google/callback</code> (and your
-            production API callback).
-            {reason ? (
-              <>
-                <br />
-                <span style={{ fontWeight: 600 }}>Detail:</span> {reasonText}
-              </>
-            ) : null}
-          </div>
-        ) : null}
 
         {showDenied ? (
           <div
@@ -89,8 +105,7 @@ function AdminLoginInner() {
               fontWeight: 700,
             }}
           >
-            This signed-in Google account is not in the admins list. Ask a developer to run{' '}
-            <code style={{ fontSize: 12 }}>database/seed-admin.mjs</code> with your email.
+            Access denied.
             {reasonText ? (
               <>
                 <br />
@@ -100,51 +115,65 @@ function AdminLoginInner() {
           </div>
         ) : null}
 
+        {formError ? (
+          <div
+            style={{
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.18)',
+              color: '#991B1B',
+              borderRadius: 12,
+              padding: '10px 12px',
+              fontSize: 13,
+              lineHeight: 1.4,
+              fontWeight: 600,
+            }}
+          >
+            {formError}
+          </div>
+        ) : null}
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Email</span>
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={ALLOWED_ADMIN_EMAIL}
+            disabled={busy}
+            style={{
+              height: 46,
+              borderRadius: 12,
+              border: '1px solid rgba(15, 42, 122, 0.18)',
+              padding: '0 14px',
+              fontSize: 15,
+              fontFamily: 'inherit',
+              color: '#0F2A7A',
+              outline: 'none',
+            }}
+          />
+        </label>
+
         <button
-          type="button"
+          type="submit"
           disabled={busy}
-          onClick={() => continueWithGoogle()}
           style={{
             height: 46,
             borderRadius: 12,
-            border: '1px solid rgba(15, 42, 122, 0.18)',
-            background: '#fff',
+            border: 'none',
+            background: 'linear-gradient(135deg, #1c32d2 0%, #3a65db 100%)',
             cursor: busy ? 'wait' : 'pointer',
             opacity: busy ? 0.75 : 1,
             fontFamily: 'inherit',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
             fontSize: 14,
             fontWeight: 800,
-            color: '#0F2A7A',
+            color: '#fff',
+            boxShadow: '0 2px 12px rgba(28, 50, 210, 0.35)',
           }}
         >
-          <span
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: 6,
-              background: 'rgba(56, 198, 198, 0.18)',
-              border: '1px solid rgba(56, 198, 198, 0.35)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              color: '#0F2A7A',
-              fontWeight: 900,
-            }}
-          >
-            G
-          </span>
-          {busy ? 'Redirecting…' : 'Continue with Google'}
+          {busy ? 'Signing in…' : 'Continue to admin'}
         </button>
-
-        <div style={{ textAlign: 'center', fontSize: 12, color: '#9CA3AF', lineHeight: 1.4 }}>
-          Main-app users continue to use Supabase for Google OAuth. Admin uses only the backend OAuth client credentials.
-        </div>
-      </div>
+      </form>
     </AuthSplitLayout>
   );
 }

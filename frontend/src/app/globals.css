@@ -383,38 +383,86 @@ button:disabled {
 }
 
 
+.home-landing-nav {
+  box-sizing: border-box;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 76px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+
+.home-landing-nav__auth {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .home-landing-nav {
+    padding: 0 16px;
+  }
+
+  .home-landing-nav__auth {
+    gap: 10px;
+  }
+
+  .btn-signin,
+  .btn-signup {
+    min-width: 88px;
+    padding: 10px 14px;
+    font-size: 15px;
+  }
+}
+
 .btn-signin {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 12px;
-  min-width: 92px;
+  padding: 10px 22px;
+  min-width: 108px;
   height: 44px;
-  box-sizing: border-box;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  background: #ffffff;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1c32d2 0%, #3a65db 100%);
   font-family: 'Inter', sans-serif;
-  font-weight: 500;
-  font-size: 18px;
+  font-weight: 600;
+  font-size: 16px;
   line-height: 140%;
-  color: #0b0f1f;
+  letter-spacing: 0.02em;
+  color: #ffffff;
   text-decoration: none;
+  box-sizing: border-box;
+  box-shadow:
+    0 2px 12px rgba(28, 50, 210, 0.35),
+    0 0 0 1px rgba(58, 101, 219, 0.2) inset;
   transition:
-    background 0.15s,
-    border-color 0.15s,
-    color 0.15s,
-    opacity 0.15s;
+    background 0.2s,
+    box-shadow 0.2s,
+    transform 0.2s,
+    opacity 0.2s;
 }
 .btn-signin:hover {
-  color: #1b31d2;
-  border-color: #9ca3af;
-  background: #f9fafb;
+  background: linear-gradient(135deg, #2a44e0 0%, #4d78e8 100%);
+  box-shadow:
+    0 6px 20px rgba(28, 50, 210, 0.4),
+    0 0 0 1px rgba(91, 126, 232, 0.25) inset;
+  transform: translateY(-1px);
 }
 .btn-signin:active {
-  color: #1522a6;
-  border-color: #6b7280;
-  background: #f3f4f6;
+  background: linear-gradient(135deg, #1522a6 0%, #2a50c0 100%);
+  box-shadow: 0 2px 8px rgba(28, 50, 210, 0.3);
+  transform: translateY(0);
 }
 .btn-signin:focus-visible {
   outline: none;
@@ -434,38 +482,143 @@ button:disabled {
 
 
 .btn-signup {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 12px;
-  width: 92px;
+  padding: 10px 22px;
+  min-width: 108px;
   height: 44px;
-  background: linear-gradient(270deg, #3a65db 0%, #1b31d2 100%);
-  border-radius: 4px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1c32d2 0%, #3a65db 100%);
   font-family: 'Inter', sans-serif;
-  font-weight: 500;
-  font-size: 18px;
+  font-weight: 600;
+  font-size: 16px;
   line-height: 140%;
+  letter-spacing: 0.02em;
   color: #ffffff;
   text-decoration: none;
   box-sizing: border-box;
+  box-shadow:
+    0 2px 12px rgba(28, 50, 210, 0.35),
+    0 0 0 1px rgba(58, 101, 219, 0.2) inset;
   transition:
-    background 0.15s,
-    opacity 0.15s;
+    background 0.2s,
+    box-shadow 0.2s,
+    transform 0.2s,
+    opacity 0.2s;
 }
 .btn-signup:hover {
-  background: linear-gradient(270deg, #5b7ee8 0%, #3547d4 100%);
+  background: linear-gradient(135deg, #2a44e0 0%, #4d78e8 100%);
+  box-shadow:
+    0 6px 20px rgba(28, 50, 210, 0.4),
+    0 0 0 1px rgba(91, 126, 232, 0.25) inset;
+  transform: translateY(-1px);
 }
 .btn-signup:active {
-  background: linear-gradient(270deg, #2a50c0 0%, #1522a6 100%);
+  background: linear-gradient(135deg, #1522a6 0%, #2a50c0 100%);
+  box-shadow: 0 2px 8px rgba(28, 50, 210, 0.3);
+  transform: translateY(0);
+}
+.btn-signup:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px rgba(59, 79, 216, 0.45);
+}
+
+.btn-landing-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 24px;
+  min-width: 234px;
+  height: 59px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1c32d2 0%, #3a65db 100%);
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 140%;
+  letter-spacing: 0.04em;
+  color: #ffffff !important;
+  text-decoration: none;
+  box-sizing: border-box;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow:
+    0 2px 12px rgba(28, 50, 210, 0.35),
+    0 0 0 1px rgba(58, 101, 219, 0.2) inset;
+  transition:
+    background 0.22s ease,
+    box-shadow 0.22s ease,
+    transform 0.22s ease;
+}
+.btn-landing-cta:hover {
+  background: linear-gradient(135deg, #2a44e0 0%, #4d78e8 100%);
+  box-shadow:
+    0 10px 28px rgba(28, 50, 210, 0.42),
+    0 0 0 1px rgba(91, 126, 232, 0.28) inset;
+  transform: translateY(-2px);
+}
+.btn-landing-cta:active {
+  background: linear-gradient(135deg, #1522a6 0%, #2a50c0 100%);
+  box-shadow: 0 3px 10px rgba(28, 50, 210, 0.32);
+  transform: translateY(0);
+}
+.btn-landing-cta:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px rgba(59, 79, 216, 0.45);
+}
+
+.home-admin-login-btn {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.95);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  text-decoration: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s,
+    background 0.15s;
+}
+.home-admin-login-btn:hover {
+  color: #1b31d2;
+  border-color: #c7d2fe;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(27, 49, 210, 0.12);
+}
+.home-admin-login-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px rgba(59, 79, 216, 0.45);
 }
 .btn-signin--disabled {
   color: #9ca3af !important;
-  border-color: #e5e7eb !important;
-  background: #f9fafb !important;
+  border-color: #d1d5db !important;
+  background: #f3f4f6 !important;
+  box-shadow: none !important;
   cursor: not-allowed !important;
   pointer-events: none !important;
-  opacity: 0.85;
+  opacity: 0.75;
+  transform: none !important;
 }
 
 

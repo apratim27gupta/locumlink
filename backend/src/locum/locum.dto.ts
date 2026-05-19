@@ -40,10 +40,19 @@ export class SaveLocumProfileDto {
     licenseFileName?: string;
     @IsString()
     @IsOptional()
+    licenseOriginalName?: string;
+    @IsString()
+    @IsOptional()
     resumeFileName?: string;
     @IsString()
     @IsOptional()
+    resumeOriginalName?: string;
+    @IsString()
+    @IsOptional()
     extraFileName?: string;
+    @IsString()
+    @IsOptional()
+    extraOriginalName?: string;
 }
 export class ApplyJobDto {
     @IsString()

@@ -316,6 +316,21 @@ export const locumApi = {
         }
         return res.json();
     },
+    getBrowseOpportunitiesCount: async (): Promise<{
+        count: number;
+    }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/locum/jobs/browse-count`, {
+            cache: 'no-store',
+            headers: nestHeaders(false),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Loading opportunity count');
+        }
+        return res.json() as Promise<{
+            count: number;
+        }>;
+    },
     browseJobs: async (): Promise<{
         jobs: BrowseJob[];
     }> => {
@@ -392,6 +407,27 @@ export type Job = {
     expiresAt?: string | null;
     [key: string]: unknown;
 };
+function normalizePostingStatus(value: unknown): PostingStatus {
+    const s = String(value ?? 'DRAFT').toUpperCase();
+    if (s === 'ACTIVE' || s === 'ONGOING' || s === 'COMPLETED' || s === 'CANCELLED' || s === 'EXPIRED')
+        return s;
+    return 'DRAFT';
+}
+export function normalizeHostJob(raw: unknown): Job {
+    const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    const count = r.applicationsCount ?? (r._count as {
+        applications?: number;
+    } | undefined)?.applications;
+    return {
+        ...r,
+        id: String(r.id ?? ''),
+        title: String(r.title ?? ''),
+        description: String(r.description ?? ''),
+        status: normalizePostingStatus(r.status),
+        applicationsCount: typeof count === 'number' ? count : Number(count ?? 0),
+        payPerDay: r.payPerDay != null ? Number(r.payPerDay) : null,
+    } as Job;
+}
 export type LocumDocumentSnippet = {
     id: string;
     documentType: string;
@@ -465,10 +501,49 @@ export interface CreateJobPayload {
     scheduleFlexible?: boolean;
     requiredCredentials?: string[];
     status?: 'ACTIVE' | 'DRAFT';
+    /** When true, always persists as DRAFT (draft locum shift), even if host is CPSNS-verified. */
+    saveAsDraft?: boolean;
+}
+function parseHostProfileResponse(data: unknown): HostProfile | null {
+    if (data == null || typeof data !== 'object')
+        return null;
+    const wrapped = data as { exists?: boolean; profile?: unknown };
+    if (wrapped.exists === false)
+        return null;
+    const raw = ((wrapped.profile ?? data) as Record<string, unknown>);
+    if (raw.practiceName != null && raw.clinicName == null) {
+        return {
+            clinicName: String(raw.practiceName ?? ''),
+            contactFirstName: String(raw.contactFirstName ?? ''),
+            contactLastName: String(raw.contactLastName ?? ''),
+            cpsnsNumber: String(raw.cpsnsNumber ?? ''),
+            cpsnsVerificationStatus: raw.cpsnsVerificationStatus as HostProfile['cpsnsVerificationStatus'],
+            speciality: String(raw.speciality ?? ''),
+            licenseFile: (raw.licenseFile as string | null | undefined) ?? null,
+            licenseOriginalName: (raw.licenseOriginalName as string | null | undefined) ?? null,
+            address1: String(raw.address1 ?? ''),
+            address2: String(raw.address2 ?? ''),
+            postalCode: String(raw.postalCode ?? ''),
+            city: String(raw.city ?? ''),
+            province: String(raw.province ?? ''),
+            amenities: Array.isArray(raw.servicesOffered)
+                ? (raw.servicesOffered as string[])
+                : Array.isArray(raw.amenities)
+                    ? (raw.amenities as string[])
+                    : [],
+            accommodationProvided: Boolean(raw.accommodationProvided),
+            practiceType: String(raw.practiceType ?? ''),
+            numPhysicians: String(raw.numPhysicians ?? ''),
+            emr: String(raw.emr ?? ''),
+            patientVol: String(raw.patientVol ?? ''),
+            clinicDesc: String(raw.clinicDesc ?? raw.highlights ?? '').slice(0, 1000),
+        };
+    }
+    return raw as HostProfile;
 }
 export const hostApi = {
     getProfile: async (): Promise<HostProfile | null> => {
-        const res = await trackedFetch(`${BROWSER_API_BASE}/api/host/profile`, {
+        const res = await trackedFetch(`${NEST_BASE}/api/host/profile`, {
             cache: 'no-store',
             headers: nestHeaders(false),
         });
@@ -478,11 +553,11 @@ export const hostApi = {
             const text = await res.text();
             throw nestHttpError(text, res.status, 'Loading host profile');
         }
-        const data = await res.json() as any;
-        return (data.profile ?? data) as HostProfile;
+        const data = await res.json();
+        return parseHostProfileResponse(data);
     },
     saveProfile: async (data: HostProfile): Promise<HostProfile> => {
-        const res = await trackedFetch(`${BROWSER_API_BASE}/api/host/profile`, {
+        const res = await trackedFetch(`${NEST_BASE}/api/host/profile`, {
             method: 'POST',
             headers: nestHeaders(true),
             body: JSON.stringify(data),
@@ -491,10 +566,16 @@ export const hostApi = {
             const text = await res.text();
             throw nestHttpError(text, res.status, 'Saving host profile');
         }
-        const resData = await res.json() as any;
-        return (resData.profile ?? resData) as HostProfile;
+        const resData = await res.json();
+        const saved = parseHostProfileResponse(resData);
+        if (!saved)
+            throw new Error('Saving host profile failed: empty response');
+        return saved;
     },
-    createJob: async (body: CreateJobPayload): Promise<unknown> => {
+    createJob: async (body: CreateJobPayload): Promise<{
+        success: boolean;
+        job: Job;
+    }> => {
         let res: Response;
         try {
             res = await trackedFetch(`${NEST_BASE}/api/host/jobs`, {
@@ -510,7 +591,13 @@ export const hostApi = {
             const text = await res.text();
             throw nestHttpError(text, res.status, 'Creating job');
         }
-        return res.json();
+        const data = await res.json() as {
+            success?: boolean;
+            job?: unknown;
+        };
+        if (!data.job)
+            throw new Error('Creating job failed: empty response');
+        return { success: data.success ?? true, job: normalizeHostJob(data.job) };
     },
     getJobs: async (opts?: { deleted?: boolean }): Promise<{
         jobs: Job[];
@@ -530,9 +617,12 @@ export const hostApi = {
             const text = await res.text();
             throw nestHttpError(text, res.status, 'Loading jobs');
         }
-        return res.json() as Promise<{
-            jobs: Job[];
-        }>;
+        const data = await res.json() as {
+            jobs?: unknown[];
+        };
+        return {
+            jobs: (data.jobs ?? []).map((j) => normalizeHostJob(j)),
+        };
     },
     getJob: async (jobId: string): Promise<{
         job: Job;
@@ -743,11 +833,14 @@ export const messageApi = {
     },
     getThread: async (partnerId: string, opts?: {
         skipTopLoader?: boolean;
+        /** ISO timestamp — poll only messages newer than this (lighter on RAM/CPU). */
+        since?: string;
     }): Promise<{
         messages: ThreadMessage[];
         partner: ThreadPartner | null;
     }> => {
-        const res = await trackedFetch(`${NEST_BASE}/api/messages/thread/${encodeURIComponent(partnerId)}`, {
+        const qs = opts?.since ? `?${new URLSearchParams({ since: opts.since }).toString()}` : '';
+        const res = await trackedFetch(`${NEST_BASE}/api/messages/thread/${encodeURIComponent(partnerId)}${qs}`, {
             cache: 'no-store',
             headers: nestHeaders(false),
             skipTopLoader: opts?.skipTopLoader ?? false,

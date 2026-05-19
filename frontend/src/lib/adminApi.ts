@@ -1,11 +1,28 @@
 'use client';
 
-/** Match `frontend/src/lib/api.ts`: browser uses same-origin + Next rewrites unless env overrides. */
+const nestApiBase = () =>
+  (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+
+/**
+ * API base for admin requests.
+ * In the browser we use the same origin (e.g. :3002) so `/api/*` rewrites to Nest and the
+ * `ll_admin` cookie from OAuth stays on one host. Server components use NEXT_PUBLIC_API_URL.
+ */
 export function adminApiBase(): string {
   if (typeof window !== 'undefined') {
-    return (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
+    return window.location.origin;
   }
-  return (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+  return nestApiBase();
+}
+
+/** Shown on admin login — must match GOOGLE_ADMIN_CALLBACK_URL in backend/.env and Google Cloud. */
+export function adminGoogleOAuthCallbackUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_ADMIN_OAUTH_CALLBACK_URL?.trim();
+  if (fromEnv) return fromEnv;
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/admin-auth/google/callback`;
+  }
+  return `${nestApiBase()}/api/admin-auth/google/callback`;
 }
 
 async function parseError(res: Response): Promise<string> {

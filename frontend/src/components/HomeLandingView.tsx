@@ -1,14 +1,36 @@
 'use client';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
+import { locumApi } from '@/lib/api';
 export type HomeLandingViewProps = {
     interactive?: boolean;
     hasSignedUp?: boolean;
     rootStyle?: React.CSSProperties;
 };
 export function HomeLandingView({ interactive = true, hasSignedUp = false, rootStyle, }: HomeLandingViewProps) {
+    const [browseOpportunityCount, setBrowseOpportunityCount] = useState<number | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        locumApi
+            .getBrowseOpportunitiesCount()
+            .then(({ count }) => {
+            if (!cancelled)
+                setBrowseOpportunityCount(count);
+        })
+            .catch(() => {
+            if (!cancelled)
+                setBrowseOpportunityCount(null);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
     const mainOverflow = interactive ? 'auto' : 'hidden';
+    const opportunityCountLabel = browseOpportunityCount !== null
+        ? browseOpportunityCount.toLocaleString('en-CA')
+        : '—';
     return (<div style={{
             position: 'relative',
             height: '100vh',
@@ -19,26 +41,10 @@ export function HomeLandingView({ interactive = true, hasSignedUp = false, rootS
             fontFamily: 'Inter, sans-serif',
             ...rootStyle,
         }}>
-      <nav style={{
-            boxSizing: 'border-box',
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            width: '100%',
-            height: 76,
-            display: 'flex',
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '0 20px',
-            gap: 12,
-            background: '#FFFFFF',
-            borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
-            zIndex: 10,
-        }}>
+      <nav className="home-landing-nav">
         <Logo size="md" />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
+        <div className="home-landing-nav__auth">
           {interactive ? (<>
               <Link href={hasSignedUp ? '/auth?mode=signin' : '#'} className={`btn-signin ${!hasSignedUp ? 'btn-signin--disabled' : ''}`} onClick={(e) => !hasSignedUp && e.preventDefault()}>
                 Sign in
@@ -136,87 +142,17 @@ export function HomeLandingView({ interactive = true, hasSignedUp = false, rootS
             gap: 32,
         }}>
             {interactive ? (<>
-                <Link href="/auth?role=clinic" className="btn-outline-gray" style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '16px 12px',
-                minWidth: 234,
-                height: 59,
-                border: '1px solid #D1D5DB',
-                borderRadius: 8,
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: 20,
-                letterSpacing: '0.04em',
-                color: '#0B0F1F',
-                textDecoration: 'none',
-                background: '#FFFFFF',
-                boxSizing: 'border-box',
-                whiteSpace: 'nowrap',
-            }}>
+                <Link href="/auth?role=clinic" className="btn-landing-cta">
                   Post a Locum Request
                 </Link>
-                <Link href="/locum/browse" className="btn-outline-gray" style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '16px 12px',
-                minWidth: 234,
-                height: 59,
-                border: '1px solid #D1D5DB',
-                borderRadius: 8,
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: 20,
-                letterSpacing: '0.04em',
-                color: '#0B0F1F',
-                textDecoration: 'none',
-                background: '#FFFFFF',
-                boxSizing: 'border-box',
-                whiteSpace: 'nowrap',
-            }}>
+                <Link href="/locum/browse" className="btn-landing-cta">
                   Browse Locum Shifts
                 </Link>
               </>) : (<>
-                <span className="btn-outline-gray" style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '16px 12px',
-                minWidth: 234,
-                height: 59,
-                border: '1px solid #D1D5DB',
-                borderRadius: 8,
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: 20,
-                letterSpacing: '0.04em',
-                color: '#0B0F1F',
-                background: '#FFFFFF',
-                boxSizing: 'border-box',
-                whiteSpace: 'nowrap',
-            }}>
+                <span className="btn-landing-cta" style={{ pointerEvents: 'none' }}>
                   Post a Locum Request
                 </span>
-                <span className="btn-outline-gray" style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '16px 12px',
-                minWidth: 234,
-                height: 59,
-                border: '1px solid #D1D5DB',
-                borderRadius: 8,
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: 20,
-                letterSpacing: '0.04em',
-                color: '#0B0F1F',
-                background: '#FFFFFF',
-                boxSizing: 'border-box',
-                whiteSpace: 'nowrap',
-            }}>
+                <span className="btn-landing-cta" style={{ pointerEvents: 'none' }}>
                   Browse Locum Shifts
                 </span>
               </>)}
@@ -253,7 +189,7 @@ export function HomeLandingView({ interactive = true, hasSignedUp = false, rootS
             lineHeight: '140%',
             color: '#0B0F1F',
         }}>
-              <span style={{ fontWeight: 700, fontSize: 22 }}>500+</span>
+              <span style={{ fontWeight: 700, fontSize: 22 }}>{opportunityCountLabel}</span>
               <span style={{ fontWeight: 400 }}>
                 {' '}
                 active Locum opportunities across
@@ -359,7 +295,7 @@ export function HomeLandingView({ interactive = true, hasSignedUp = false, rootS
             fontSize: 18,
             color: '#FFFFFF',
         }}>
-                  +500
+                  {opportunityCountLabel}
                 </span>
               </div>
             </div>
@@ -400,5 +336,11 @@ export function HomeLandingView({ interactive = true, hasSignedUp = false, rootS
           </div>
         </footer>
       </main>
+
+      {interactive ? (
+        <Link href="/admin/login" className="home-admin-login-btn">
+          Admin login
+        </Link>
+      ) : null}
     </div>);
 }

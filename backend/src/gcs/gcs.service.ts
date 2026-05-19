@@ -2,6 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Storage } from '@google-cloud/storage';
 import { randomUUID } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { unlink } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
 @Injectable()
 export class GcsService {
     private readonly logger = new Logger(GcsService.name);
@@ -44,6 +47,23 @@ export class GcsService {
             .save(buffer, { metadata: { contentType }, resumable: false });
         this.logger.log(`Uploaded: ${path}`);
         return path;
+    }
+    /** Stream from disk temp file — avoids holding full file in heap after multer diskStorage. */
+    async uploadFromPath(localPath: string, folder: string, originalName: string, contentType: string): Promise<string> {
+        const ext = originalName.split('.').pop()?.toLowerCase() ?? 'bin';
+        const path = `${folder}/${randomUUID()}.${ext}`;
+        const gcsFile = this.storage.bucket(this.bucket).file(path);
+        try {
+            await pipeline(
+                createReadStream(localPath),
+                gcsFile.createWriteStream({ metadata: { contentType }, resumable: false }),
+            );
+            this.logger.log(`Uploaded: ${path}`);
+            return path;
+        }
+        finally {
+            await unlink(localPath).catch(() => { });
+        }
     }
     async signedUrl(path: string): Promise<string> {
         if (!path)

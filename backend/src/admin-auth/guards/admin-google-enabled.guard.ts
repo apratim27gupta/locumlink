@@ -24,7 +24,7 @@ export class AdminGoogleEnabledGuard implements CanActivate {
         'Admin Google sign-in is not configured. Put GOOGLE_ADMIN_CLIENT_ID and GOOGLE_ADMIN_CLIENT_SECRET '
         + 'in backend/.env — they persist even under NODE_ENV=staging because .env loads together with '
         + '.env.staging. Set GOOGLE_ADMIN_CALLBACK_URL + Google Cloud redirect URI to '
-        + 'your Nest URL /api/admin-auth/google/callback.',
+        + 'your app origin + /api/admin-auth/google/callback (e.g. http://localhost:3002/api/admin-auth/google/callback).',
       );
     }
     return true;

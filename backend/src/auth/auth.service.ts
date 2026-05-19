@@ -101,13 +101,6 @@ export class AuthService {
         }
         return user;
     }
-    async devOtpLogin(email: string, role: string): Promise<AuthTokens> {
-        const prismaRole = role === 'clinic' ? 'HOST' as any : 'LOCUM' as any;
-        let user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-        if (!user) { user = await this.prisma.user.create({ data: { email: email.toLowerCase(), passwordHash: '', role: prismaRole, status: 'ACTIVE' } }); }
-        await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-        return this.issueTokens(user);
-    }
     async syncFromSupabaseToken(authorizationHeader: string | undefined, roleHint: Role): Promise<AuthTokens> {
         const raw = authorizationHeader?.replace(/^Bearer\s+/i, '').trim();
         if (!raw) {

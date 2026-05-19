@@ -1,56 +1,57 @@
+import { VerificationStatus } from '@prisma/client';
+
 export function normalizeCpsns(input: string | null | undefined): string {
     return String(input ?? '').replace(/\D/g, '');
 }
+
 export function isCpsnsNineDigitsFormat(input: string | null | undefined): boolean {
     return normalizeCpsns(input).length === 9;
 }
-const VERIFIED_CPSNS = new Set([
-    '895874638',
-    '152364789',
-    '741258963',
-    '582369741',
-    '104582731',
-    '217406895',
-    '398175204',
-    '482691357',
-    '563820149',
-    '674913582',
-    '715284936',
-    '826507143',
-    '937164820',
-    '148295673',
-    '259736481',
-    '361948725',
-    '472583916',
-    '584107362',
-    '695321874',
-    '706498251',
-    '817235649',
-    '928614507',
-    '139527864',
-    '240683915',
-    '351794286',
-    '462805731',
-    '573916428',
-    '684127593',
-    '795238164',
-    '806349275',
-    '917450836',
-    '128561947',
-    '239672518',
-    '340783629',
-    '451894730',
-    '562905841',
-    '673016952',
-    '784127063',
-    '895238174',
-    '906349285',
-    '117450396',
-    '228561407',
-    '339672518',
-    '440783629',
-]);
-export function isCpsnsVerified(cpsns: string | null | undefined): boolean {
-    const n = normalizeCpsns(cpsns);
-    return n.length > 0 && VERIFIED_CPSNS.has(n);
+
+/** True only after an admin approves CPSNS in the verifications queue. */
+export function isCpsnsVerificationApproved(
+    status: VerificationStatus | string | null | undefined,
+): boolean {
+    return status === VerificationStatus.VERIFIED || status === 'VERIFIED';
+}
+
+export function verificationStatusAfterCpsnsSave(
+    existing: { cpsnsId: string; verificationStatus: VerificationStatus } | null,
+    cpsnsDigits: string,
+): Pick<{ verificationStatus: VerificationStatus; verifiedAt: Date | null }, 'verificationStatus' | 'verifiedAt'> | Record<string, never> {
+    if (cpsnsDigits.length !== 9)
+        return {};
+    if (!existing)
+        return { verificationStatus: VerificationStatus.PENDING_REVIEW };
+    const prevDigits = normalizeCpsns(existing.cpsnsId);
+    const cpsnsChanged = prevDigits !== cpsnsDigits;
+    if (existing.verificationStatus === VerificationStatus.VERIFIED && cpsnsChanged) {
+        return {
+            verificationStatus: VerificationStatus.PENDING_REVIEW,
+            verifiedAt: null,
+        };
+    }
+    if (
+        existing.verificationStatus === VerificationStatus.UNVERIFIED
+        || existing.verificationStatus === VerificationStatus.REJECTED
+    ) {
+        return { verificationStatus: VerificationStatus.PENDING_REVIEW };
+    }
+    return {};
+}
+
+/** Host profiles store CPSNS verification on `cpsnsVerificationStatus`, not `verificationStatus`. */
+export function hostCpsnsVerificationPatch(
+    existing: { cpsnsId: string; verificationStatus: VerificationStatus } | null,
+    cpsnsDigits: string,
+): Pick<
+    { cpsnsVerificationStatus: VerificationStatus; cpsnsVerifiedAt: Date | null },
+    'cpsnsVerificationStatus' | 'cpsnsVerifiedAt'
+> | Record<string, never> {
+    const patch = verificationStatusAfterCpsnsSave(existing, cpsnsDigits);
+    if (!('verificationStatus' in patch)) return {};
+    return {
+        cpsnsVerificationStatus: patch.verificationStatus,
+        ...('verifiedAt' in patch ? { cpsnsVerifiedAt: patch.verifiedAt } : {}),
+    };
 }

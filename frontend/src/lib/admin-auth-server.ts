@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
+import { ensureAdminEnv } from '@/lib/ensure-admin-env';
 
 export interface AdminSession {
   adminId: string;
@@ -9,9 +10,11 @@ export interface AdminSession {
 export async function getAdminSession(
   request?: Request,
 ): Promise<AdminSession | null> {
-  const secret = process.env.JWT_SECRET;
+  ensureAdminEnv();
+  const secret =
+    process.env.ADMIN_JWT_SECRET?.trim() || process.env.JWT_SECRET?.trim();
   if (!secret) {
-    console.error('[admin-auth] JWT_SECRET is not set');
+    console.error('[admin-auth] ADMIN_JWT_SECRET or JWT_SECRET must be set');
     return null;
   }
 
@@ -27,9 +30,18 @@ export async function getAdminSession(
     if (payload.role !== 'admin') return null;
     if (typeof payload.sub !== 'string' || !payload.sub) return null;
 
+    const actorEmail =
+      typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+    const allowed = (
+      process.env.ADMIN_ALLOWED_EMAIL ?? 'aroradamini873@gmail.com'
+    )
+      .trim()
+      .toLowerCase();
+    if (!actorEmail || actorEmail !== allowed) return null;
+
     return {
       adminId: payload.sub,
-      actorEmail: typeof payload.email === 'string' ? payload.email : 'admin',
+      actorEmail,
     };
   } catch {
     return null;

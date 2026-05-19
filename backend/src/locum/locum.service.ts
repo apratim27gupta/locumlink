@@ -1,7 +1,16 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, } from '@nestjs/common';
-import { DocumentType, Specialty, type LocumProfile as LocumProfileRow, } from '@prisma/client';
+import {
+    DocumentType,
+    Specialty,
+    VerificationStatus,
+    type LocumProfile as LocumProfileRow,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { isCpsnsVerified, normalizeCpsns, } from '../cpsns/cpsns-verified.js';
+import {
+    isCpsnsVerificationApproved,
+    normalizeCpsns,
+    verificationStatusAfterCpsnsSave,
+} from '../cpsns/cpsns-verified.js';
 import type { SaveLocumProfileDto } from './locum.dto.js';
 function mapSpecialty(raw?: string): Specialty {
     if (!raw?.trim())
@@ -41,8 +50,12 @@ export type LocumProfileApi = {
     province?: string;
     phone?: string;
     licenseFile?: string;
+    licenseOriginalName?: string;
     resumeFile?: string;
+    resumeOriginalName?: string;
     extraFile?: string;
+    extraOriginalName?: string;
+    verificationStatus?: VerificationStatus;
 };
 function parseSaveBody(body: Record<string, unknown>): SaveLocumProfileDto {
     const s = (k: string) => {
@@ -88,8 +101,11 @@ function parseSaveBody(body: Record<string, unknown>): SaveLocumProfileDto {
         province: s('province') || undefined,
         phone: s('phone') || undefined,
         licenseFileName: s('licenseFileName') || undefined,
+        licenseOriginalName: s('licenseOriginalName') || undefined,
         resumeFileName: s('resumeFileName') || undefined,
+        resumeOriginalName: s('resumeOriginalName') || undefined,
         extraFileName: s('extraFileName') || undefined,
+        extraOriginalName: s('extraOriginalName') || undefined,
     };
 }
 @Injectable()
@@ -112,8 +128,12 @@ export class LocumService {
             province: profile.province ?? undefined,
             phone: profile.phone ?? undefined,
             licenseFile: profile.licenseFileName ?? undefined,
+            licenseOriginalName: profile.licenseOriginalName ?? undefined,
             resumeFile: profile.resumeFileName ?? undefined,
+            resumeOriginalName: profile.resumeOriginalName ?? undefined,
             extraFile: profile.extraFileName ?? undefined,
+            extraOriginalName: profile.extraOriginalName ?? undefined,
+            verificationStatus: profile.verificationStatus,
         };
     }
     async saveProfile(userId: string, body: Record<string, unknown>) {
@@ -138,11 +158,17 @@ export class LocumService {
         const summary = dto.professionalSummary?.trim() || null;
         const specializationText = dto.specialization?.trim() || null;
         const yearsOfExperience = dto.yearsOfExperience === undefined ? null : dto.yearsOfExperience;
+        const existing = await this.prisma.locumProfile.findUnique({
+            where: { userId },
+            select: { cpsnsId: true, verificationStatus: true },
+        });
+        const verificationPatch = verificationStatusAfterCpsnsSave(existing, cpsnsDigits);
         const profile = await this.prisma.locumProfile.upsert({
             where: { userId },
             create: {
                 userId,
                 cpsnsId,
+                ...verificationPatch,
                 specialty,
                 summary,
                 firstName: dto.firstName,
@@ -156,11 +182,15 @@ export class LocumService {
                 province: dto.province?.trim() || null,
                 phone: dto.phone?.trim() || null,
                 licenseFileName: dto.licenseFileName?.trim() || null,
+                licenseOriginalName: dto.licenseOriginalName?.trim() || null,
                 resumeFileName: dto.resumeFileName?.trim() || null,
+                resumeOriginalName: dto.resumeOriginalName?.trim() || null,
                 extraFileName: dto.extraFileName?.trim() || null,
+                extraOriginalName: dto.extraOriginalName?.trim() || null,
             },
             update: {
                 ...(cpsnsDigits.length === 9 ? { cpsnsId: cpsnsDigits } : {}),
+                ...verificationPatch,
                 specialty,
                 summary,
                 firstName: dto.firstName,
@@ -174,22 +204,28 @@ export class LocumService {
                 province: dto.province?.trim() ?? null,
                 phone: dto.phone?.trim() ?? null,
                 licenseFileName: dto.licenseFileName?.trim() ?? null,
+                licenseOriginalName: dto.licenseOriginalName?.trim() ?? null,
                 resumeFileName: dto.resumeFileName?.trim() ?? null,
+                resumeOriginalName: dto.resumeOriginalName?.trim() ?? null,
                 extraFileName: dto.extraFileName?.trim() ?? null,
+                extraOriginalName: dto.extraOriginalName?.trim() ?? null,
             },
         });
         const docInputs = [
             {
                 type: DocumentType.CPSNS_LICENSE,
                 storageUrl: dto.licenseFileName?.trim() || '',
+                displayName: dto.licenseOriginalName?.trim() || '',
             },
             {
                 type: DocumentType.CV,
                 storageUrl: dto.resumeFileName?.trim() || '',
+                displayName: dto.resumeOriginalName?.trim() || '',
             },
             {
                 type: DocumentType.OTHER,
                 storageUrl: dto.extraFileName?.trim() || '',
+                displayName: dto.extraOriginalName?.trim() || '',
             },
         ] as const;
         await Promise.all(docInputs.map(async (d) => {
@@ -198,7 +234,7 @@ export class LocumService {
             });
             if (!d.storageUrl)
                 return;
-            const fileName = d.storageUrl.split('/').pop() || d.storageUrl;
+            const fileName = d.displayName || d.storageUrl.split('/').pop() || d.storageUrl;
             await this.prisma.document.create({
                 data: {
                     locumProfileId: profile.id,
@@ -221,9 +257,14 @@ export class LocumService {
             profile: profile ? this.mapProfileToApi(profile) : null,
         };
     }
+    async countBrowseOpportunities(): Promise<number> {
+        return this.prisma.jobPosting.count({
+            where: { status: 'ACTIVE', isDeleted: false },
+        });
+    }
     async browseJobs() {
         const jobs = await this.prisma.jobPosting.findMany({
-            where: { status: 'ACTIVE' },
+            where: { status: 'ACTIVE', isDeleted: false },
             orderBy: { createdAt: 'desc' },
             include: {
                 hostProfile: {
@@ -253,12 +294,12 @@ export class LocumService {
     async applyToJob(userId: string, jobId: string, coverNote?: string) {
         const locumProfile = await this.prisma.locumProfile.findUnique({
             where: { userId },
-            select: { id: true, cpsnsId: true },
+            select: { id: true, verificationStatus: true },
         });
         if (!locumProfile)
             throw new NotFoundException('Complete your profile before applying to jobs.');
-        if (!isCpsnsVerified(locumProfile.cpsnsId)) {
-            throw new BadRequestException('Your CPSNS number must be on the verified list before you can apply to jobs.');
+        if (!isCpsnsVerificationApproved(locumProfile.verificationStatus)) {
+            throw new BadRequestException('Your CPSNS must be verified by an administrator before you can apply to jobs.');
         }
         const job = await this.prisma.jobPosting.findUnique({
             where: { id: jobId },

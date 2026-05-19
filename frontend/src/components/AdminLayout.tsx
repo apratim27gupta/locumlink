@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useCallback, useEffect, useState } from 'react';
+import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -10,7 +10,8 @@ import {
   Shield,
   Users,
 } from 'lucide-react';
-import { adminApiBase, adminFetchJson } from '@/lib/adminApi';
+import { adminApiBase } from '@/lib/adminApi';
+import { useAdminStats } from '@/components/AdminStatsContext';
 import '@/styles/admin-portal.css';
 
 type NavItem = {
@@ -28,27 +29,10 @@ function adminInitials(email: string): string {
   return local.slice(0, 2).toUpperCase() || 'AD';
 }
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+function AdminLayoutInner({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [pendingCount, setPendingCount] = useState(0);
-  const [adminEmail, setAdminEmail] = useState('admin@locumlink.ca');
-
-  const loadMeta = useCallback(async () => {
-    try {
-      const data = await adminFetchJson<{
-        admin?: { email?: string };
-        stats?: { pendingVerifications?: number };
-      }>('/api/admin/stats');
-      if (data.admin?.email) setAdminEmail(data.admin.email);
-      setPendingCount(data.stats?.pendingVerifications ?? 0);
-    } catch {
-      /* sidebar still usable */
-    }
-  }, []);
-
-  useEffect(() => {
-    loadMeta();
-  }, [loadMeta]);
+  const { stats, adminEmail } = useAdminStats();
+  const pendingCount = stats?.pendingVerifications ?? 0;
 
   const nav: NavItem[] = [
     {
@@ -150,4 +134,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       </div>
     </div>
   );
+}
+
+export default function AdminLayout({ children }: { children: ReactNode }) {
+  return <AdminLayoutInner>{children}</AdminLayoutInner>;
 }

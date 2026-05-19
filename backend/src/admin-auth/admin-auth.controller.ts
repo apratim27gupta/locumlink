@@ -1,10 +1,11 @@
-import { Controller, Get, Req, Res, UseFilters, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res, UseFilters, UseGuards } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import type { AdminJwtPayload } from './admin-auth.types.js';
 import { Public } from '../auth/decorators/public.decorator.js';
 import { AdminAuthService } from './admin-auth.service.js';
-import { ADMIN_AUTH_COOKIE_OPTS, ADMIN_GOOGLE_STRATEGY } from './admin-auth.constants.js';
+import { ADMIN_GOOGLE_STRATEGY, resolveAdminGoogleCallbackUrl } from './admin-auth.constants.js';
 import { AdminJwtAuthGuard } from './guards/admin-jwt-auth.guard.js';
 import { AdminGoogleEnabledGuard } from './guards/admin-google-enabled.guard.js';
 import { RedirectAdminOAuthToLoginFilter } from './filters/redirect-admin-oauth-login.filter.js';
@@ -13,9 +14,42 @@ import { CurrentAdmin } from './decorators/current-admin.decorator.js';
 @Public()
 @Controller('admin-auth')
 export class AdminAuthController {
-  constructor(private readonly adminAuth: AdminAuthService) {}
+  constructor(
+    private readonly adminAuth: AdminAuthService,
+    private readonly config: ConfigService,
+  ) {}
 
-  /** Browser hits this → redirect to Google (credentials in backend/.env, not Supabase). */
+  @Post('login')
+  async emailLogin(
+    @Body() body: { email?: string },
+    @Res() res: Response,
+  ) {
+    const u = await this.adminAuth.loginWithEmail(body.email ?? '');
+    const token = await this.adminAuth.signAdminJwt({
+      adminId: u.adminId,
+      email: u.email,
+    });
+    this.adminAuth.setAdminSessionCookie(res, token);
+    return res.status(200).json({
+      ok: true,
+      redirect: this.adminAuth.getFrontendRedirectUrl(),
+    });
+  }
+
+  /** Legacy Google OAuth — disabled in UI; use POST /admin-auth/login instead. */
+  @Get('oauth-setup')
+  oauthSetup() {
+    const callbackUrl = resolveAdminGoogleCallbackUrl(this.config);
+    const frontendRedirect = this.adminAuth.getFrontendRedirectUrl();
+    return {
+      callbackUrl,
+      frontendRedirect,
+      allowedEmail: this.adminAuth.getAllowedAdminEmail(),
+      googleCloudHint:
+        'APIs & Services → Credentials → your OAuth client → Authorized redirect URIs → paste callbackUrl exactly.',
+    };
+  }
+
   @Get('google')
   @UseGuards(AdminGoogleEnabledGuard, AuthGuard(ADMIN_GOOGLE_STRATEGY))
   googleAuth(): void {
@@ -35,10 +69,7 @@ export class AdminAuthController {
       email: u.email,
     });
 
-    res.cookie(this.adminAuth.getCookieName(), token, {
-      ...ADMIN_AUTH_COOKIE_OPTS,
-      maxAge: this.adminAuth.parseAdminJwtCookieMaxAgeMs(),
-    });
+    this.adminAuth.setAdminSessionCookie(res, token);
 
     return res.redirect(this.adminAuth.getFrontendRedirectUrl());
   }

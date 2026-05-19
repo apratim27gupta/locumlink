@@ -3,6 +3,8 @@
   background-color: #f8fafc;
   color: #0f172a;
   min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .admin-portal * {
@@ -12,6 +14,8 @@
 .admin-portal .admin-container {
   display: flex;
   min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .admin-portal .sidebar {
@@ -147,6 +151,11 @@
   padding: 32px;
   flex: 1;
   min-width: 0;
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
 }
 
 .admin-portal .page-header {

@@ -16,42 +16,54 @@ export class NotificationsService {
         notifications: NotificationItem[];
     }> {
         const notifications: NotificationItem[] = [];
-        const unreadMessages = await this.prisma.message.findMany({
+        const unreadGroups = await this.prisma.message.groupBy({
+            by: ['senderId'],
             where: { recipientId: userId, readAt: null, deletedAt: null },
-            orderBy: { sentAt: 'desc' },
-            include: {
-                sender: {
-                    select: {
-                        id: true,
-                        locumProfile: { select: { firstName: true, lastName: true } },
-                        hostProfile: { select: { contactFirstName: true, contactLastName: true, practiceName: true } },
+            _count: { id: true },
+            _max: { sentAt: true },
+        });
+        if (unreadGroups.length > 0) {
+            const senderIds = unreadGroups.map((g) => g.senderId);
+            const unreadCountBySender = new Map(unreadGroups.map((g) => [g.senderId, g._count.id]));
+            const latestUnread = await this.prisma.message.findMany({
+                where: {
+                    recipientId: userId,
+                    readAt: null,
+                    deletedAt: null,
+                    senderId: { in: senderIds },
+                },
+                orderBy: { sentAt: 'desc' },
+                distinct: ['senderId'],
+                include: {
+                    sender: {
+                        select: {
+                            id: true,
+                            locumProfile: { select: { firstName: true, lastName: true } },
+                            hostProfile: { select: { contactFirstName: true, contactLastName: true, practiceName: true } },
+                        },
                     },
                 },
-            },
-        });
-        const seenSenders = new Set<string>();
-        for (const msg of unreadMessages) {
-            if (seenSenders.has(msg.senderId))
-                continue;
-            seenSenders.add(msg.senderId);
-            const s = msg.sender;
-            let senderName = s.locumProfile?.firstName
-                ? `Dr ${s.locumProfile.firstName} ${s.locumProfile.lastName ?? ''}`.trim()
-                : s.hostProfile?.contactFirstName
-                    ? `Dr ${s.hostProfile.contactFirstName} ${s.hostProfile.contactLastName ?? ''}`.trim()
-                    : s.hostProfile?.practiceName ?? 'Someone';
-            const unreadCount = unreadMessages.filter((m) => m.senderId === msg.senderId).length;
-            const href = role === 'HOST'
-                ? `/host/messages?partnerId=${msg.senderId}`
-                : `/locum/messages?partnerId=${msg.senderId}`;
-            notifications.push({
-                id: `msg-${msg.senderId}`,
-                type: 'message',
-                title: `${unreadCount > 1 ? `${unreadCount} new messages` : 'New message'} from ${senderName}`,
-                body: msg.deletedAt ? 'Message deleted' : msg.body.slice(0, 80),
-                href,
-                createdAt: msg.sentAt,
             });
+            for (const msg of latestUnread) {
+                const s = msg.sender;
+                const senderName = s.locumProfile?.firstName
+                    ? `Dr ${s.locumProfile.firstName} ${s.locumProfile.lastName ?? ''}`.trim()
+                    : s.hostProfile?.contactFirstName
+                        ? `Dr ${s.hostProfile.contactFirstName} ${s.hostProfile.contactLastName ?? ''}`.trim()
+                        : s.hostProfile?.practiceName ?? 'Someone';
+                const unreadCount = unreadCountBySender.get(msg.senderId) ?? 1;
+                const href = role === 'HOST'
+                    ? `/host/messages?partnerId=${msg.senderId}`
+                    : `/locum/messages?partnerId=${msg.senderId}`;
+                notifications.push({
+                    id: `msg-${msg.senderId}`,
+                    type: 'message',
+                    title: `${unreadCount > 1 ? `${unreadCount} new messages` : 'New message'} from ${senderName}`,
+                    body: msg.deletedAt ? 'Message deleted' : msg.body.slice(0, 80),
+                    href,
+                    createdAt: msg.sentAt,
+                });
+            }
         }
         if (role === 'HOST') {
             const hostProfile = await this.prisma.hostProfile.findUnique({
