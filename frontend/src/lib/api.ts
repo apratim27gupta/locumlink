@@ -428,6 +428,12 @@ export function normalizeHostJob(raw: unknown): Job {
         payPerDay: r.payPerDay != null ? Number(r.payPerDay) : null,
     } as Job;
 }
+export function isActiveJob(job: Job): boolean {
+    return job.status === 'ACTIVE' || job.status === 'ONGOING';
+}
+export function isDraftJob(job: Job): boolean {
+    return job.status === 'DRAFT';
+}
 export type LocumDocumentSnippet = {
     id: string;
     documentType: string;
@@ -504,6 +510,34 @@ export interface CreateJobPayload {
     /** When true, always persists as DRAFT (draft locum shift), even if host is CPSNS-verified. */
     saveAsDraft?: boolean;
 }
+function mapRawToHostProfile(raw: Record<string, unknown>): HostProfile {
+    return {
+        clinicName: String(raw.clinicName ?? raw.practiceName ?? ''),
+        contactFirstName: String(raw.contactFirstName ?? ''),
+        contactLastName: String(raw.contactLastName ?? ''),
+        cpsnsNumber: String(raw.cpsnsNumber ?? ''),
+        cpsnsVerificationStatus: raw.cpsnsVerificationStatus as HostProfile['cpsnsVerificationStatus'],
+        speciality: String(raw.speciality ?? ''),
+        licenseFile: (raw.licenseFile as string | null | undefined) ?? null,
+        licenseOriginalName: (raw.licenseOriginalName as string | null | undefined) ?? null,
+        address1: String(raw.address1 ?? ''),
+        address2: String(raw.address2 ?? ''),
+        postalCode: String(raw.postalCode ?? ''),
+        city: String(raw.city ?? ''),
+        province: String(raw.province ?? ''),
+        amenities: Array.isArray(raw.servicesOffered)
+            ? (raw.servicesOffered as string[])
+            : Array.isArray(raw.amenities)
+                ? (raw.amenities as string[])
+                : [],
+        accommodationProvided: Boolean(raw.accommodationProvided),
+        practiceType: String(raw.practiceType ?? ''),
+        numPhysicians: String(raw.numPhysicians ?? ''),
+        emr: String(raw.emr ?? ''),
+        patientVol: String(raw.patientVol ?? ''),
+        clinicDesc: String(raw.clinicDesc ?? raw.highlights ?? '').slice(0, 1000),
+    };
+}
 function parseHostProfileResponse(data: unknown): HostProfile | null {
     if (data == null || typeof data !== 'object')
         return null;
@@ -511,35 +545,7 @@ function parseHostProfileResponse(data: unknown): HostProfile | null {
     if (wrapped.exists === false)
         return null;
     const raw = ((wrapped.profile ?? data) as Record<string, unknown>);
-    if (raw.practiceName != null && raw.clinicName == null) {
-        return {
-            clinicName: String(raw.practiceName ?? ''),
-            contactFirstName: String(raw.contactFirstName ?? ''),
-            contactLastName: String(raw.contactLastName ?? ''),
-            cpsnsNumber: String(raw.cpsnsNumber ?? ''),
-            cpsnsVerificationStatus: raw.cpsnsVerificationStatus as HostProfile['cpsnsVerificationStatus'],
-            speciality: String(raw.speciality ?? ''),
-            licenseFile: (raw.licenseFile as string | null | undefined) ?? null,
-            licenseOriginalName: (raw.licenseOriginalName as string | null | undefined) ?? null,
-            address1: String(raw.address1 ?? ''),
-            address2: String(raw.address2 ?? ''),
-            postalCode: String(raw.postalCode ?? ''),
-            city: String(raw.city ?? ''),
-            province: String(raw.province ?? ''),
-            amenities: Array.isArray(raw.servicesOffered)
-                ? (raw.servicesOffered as string[])
-                : Array.isArray(raw.amenities)
-                    ? (raw.amenities as string[])
-                    : [],
-            accommodationProvided: Boolean(raw.accommodationProvided),
-            practiceType: String(raw.practiceType ?? ''),
-            numPhysicians: String(raw.numPhysicians ?? ''),
-            emr: String(raw.emr ?? ''),
-            patientVol: String(raw.patientVol ?? ''),
-            clinicDesc: String(raw.clinicDesc ?? raw.highlights ?? '').slice(0, 1000),
-        };
-    }
-    return raw as HostProfile;
+    return mapRawToHostProfile(raw);
 }
 export const hostApi = {
     getProfile: async (): Promise<HostProfile | null> => {
