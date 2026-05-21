@@ -15,7 +15,14 @@ import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { locumApi, type BrowseJob } from '@/lib/api';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { LocumProfile } from '@/types';
+import LocumAccountNotice from '@/components/LocumAccountNotice';
+import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
+import {
+  getLocumApplyBlockedMessage,
+  getLocumAccountNotice,
+  locumCanApplyToJobs,
+} from '@/lib/locumAccountNotice';
 import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
 import {
   CANADIAN_PROVINCE_NAMES,
@@ -433,7 +440,8 @@ export default function LocumBrowsePage(props: {
   }, [filteredJobs, selectedId]);
   const job = filteredJobs.find((j) => j.id === selectedId) ?? null;
   const selectedJobPassed = job ? hasJobEndDatePassed(job) : false;
-  const canApply = isCpsnsVerificationApproved(profile?.verificationStatus);
+  const accountNotice = getLocumAccountNotice(profile);
+  const canApply = locumCanApplyToJobs(profile);
   async function handleApply(jobId: string) {
     if (applied.has(jobId)) return;
     const targetJob = jobs.find((j) => j.id === jobId);
@@ -442,9 +450,7 @@ export default function LocumBrowsePage(props: {
       return;
     }
     if (!canApply) {
-      setApplyError(
-        'Your CPSNS must be verified by an administrator before you can apply. Complete your profile and upload your license, then wait for approval.',
-      );
+      setApplyError(getLocumApplyBlockedMessage(profile));
       return;
     }
     setApplying(jobId);
@@ -523,13 +529,22 @@ export default function LocumBrowsePage(props: {
               fontWeight: 700,
               color: '#0f1523',
               marginBottom: 3,
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 6,
             }}
           >
-            Welcome {displayName}
+            <NameWithVerifiedShield verified={cpsnsVerified}>
+              <span>Welcome {displayName}</span>
+            </NameWithVerifiedShield>
           </h1>
           <p style={{ fontSize: 12, color: '#8892a4', marginBottom: 14 }}></p>
 
-          {!canApply && profile && (
+          {!canApply && profile && accountNotice ? (
+            <LocumAccountNotice profile={profile} />
+          ) : null}
+          {!canApply && profile && !accountNotice ? (
             <div
               style={{
                 marginBottom: 14,
@@ -560,7 +575,7 @@ export default function LocumBrowsePage(props: {
               </a>{' '}
               is verified.
             </div>
-          )}
+          ) : null}
 
           <div
             style={{
@@ -1499,7 +1514,7 @@ export default function LocumBrowsePage(props: {
                     selectedJobPassed
                       ? 'This job has passed'
                       : !canApply
-                        ? 'Verify CPSNS to apply'
+                        ? accountNotice?.title ?? 'Verify CPSNS to apply'
                         : undefined
                   }
                   style={{ display: 'inline-block' }}

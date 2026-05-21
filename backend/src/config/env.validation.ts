@@ -96,7 +96,7 @@ class EnvironmentVariables {
 
     @IsUrl({ require_tld: false })
     @IsOptional()
-    ADMIN_FRONTEND_REDIRECT_URL: string = 'http://localhost:3002/admin/dashboard';
+    ADMIN_FRONTEND_REDIRECT_URL: string = 'http://localhost:3001/admin';
 
     @IsString()
     @IsOptional()

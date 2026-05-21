@@ -13,7 +13,10 @@ import { beforeClientNavigation } from '@/lib/topLoader';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { HostProfile } from '@/types';
 import { sortByLabel, sortStringsLocale } from '@/lib/sortLocale';
-import { EmptyIllustration, PlusIcon, ReopenJobIcon, ShieldIcon, TrashIcon, UserEditIcon, } from './host-dashboard-icons';
+import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
+import { EmptyIllustration, PlusIcon, ReopenJobIcon, TrashIcon, UserEditIcon, } from './host-dashboard-icons';
+import { ProfileStatusGlyph } from '@/components/ProfileStatusGlyph';
+import { getHostProfileStatusCard } from '@/lib/hostAccountNotice';
 const HOST_DASH_NAV = [
     { label: 'My Postings', href: '/host/dashboard', icon: <NavIcon name="postings"/> },
     { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile"/> },
@@ -2125,17 +2128,7 @@ export default function HostDashboard(props: {
     const doctorLabel = hostFirst || hostLast ? `Dr ${hostFirst} ${hostLast}`.trim() : 'Doctor';
     const clinicName = profile?.clinicName || 'Welcome';
     const profilePct = hostProfileCompletionPct(profile);
-    const profileAllStepsDone = profilePct === 100;
-    const dashboardProfileTitle = !profileAllStepsDone
-        ? 'Set up your complete profile'
-        : verified
-            ? 'Profile complete and verified'
-            : 'Profile complete — CPSNS under verification';
-    const dashboardProfileSubtitle = !profileAllStepsDone
-        ? `${profilePct}% Completed`
-        : verified
-            ? '100% · CPSNS verified'
-            : '100% · Awaiting manual CPSNS verification';
+    const profileStatusCard = getHostProfileStatusCard(profile, profilePct);
     const loadDashboardFromApi = useCallback(async (options?: {
         silent?: boolean;
     }) => {
@@ -2233,10 +2226,13 @@ export default function HostDashboard(props: {
                 : activeTab === 'recent'
                     ? recentJobs
                     : draftJobs;
+    const totalLocumShiftsPosted = jobs.filter(
+        (j) => jobStatus(j) !== 'DRAFT',
+    ).length;
     const statsDisplay = [
         {
-            label: 'Active postings',
-            value: activePosts.length,
+            label: 'Total locum shifts posted',
+            value: totalLocumShiftsPosted,
         },
         {
             label: 'Total Locum Shifts Completed',
@@ -2369,9 +2365,15 @@ export default function HostDashboard(props: {
             color: '#309BB7',
             textTransform: 'capitalize',
         }}>
-                    {doctorLabel}
+                    <NameWithVerifiedShield
+                      verified={verified}
+                      shieldSize={20}
+                      shieldStroke="#309BB7"
+                      gap={6}
+                    >
+                      <span>{doctorLabel}</span>
+                    </NameWithVerifiedShield>
                   </span>
-                  {verified && <ShieldIcon />}
                 </div>
                 <h1 style={{
             margin: 0,
@@ -2462,41 +2464,27 @@ export default function HostDashboard(props: {
             justifyContent: 'space-between',
         }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{
-            width: 52,
-            height: 52,
-            borderRadius: '50%',
-            background: 'rgba(15,42,175,0.16)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-        }}>
-                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                    <path d="M8 4h12l4 4v16H4V4h4Z" stroke="#803BDB" strokeWidth="1.5" strokeLinejoin="round"/>
-                    <path d="M9 12h10M9 16h6" stroke="#803BDB" strokeWidth="1.5" strokeLinecap="round"/>
-                    <circle cx="20" cy="20" r="5" fill="#72BC7A" stroke="#72BC7A" strokeWidth="1"/>
-                    <path d="M17.5 20l2 2 3-3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <ProfileStatusGlyph variant={profileStatusCard.glyphVariant} size={52} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
                   <span style={{
             fontFamily: 'Gilroy-Medium, Inter, sans-serif',
             fontWeight: 'var(--font-weight-bold)',
             fontSize: 'var(--font-heading)',
-            lineHeight: '100%',
+            lineHeight: '120%',
             color: '#151414',
         }}>
-                    {dashboardProfileTitle}
+                    {profileStatusCard.title}
                   </span>
                   <span style={{
             fontFamily: 'Gilroy-Medium, Inter, sans-serif',
             fontWeight: 'var(--font-weight-normal)',
             fontSize: 'var(--font-body)',
-            lineHeight: '100%',
+            lineHeight: '140%',
             color: '#606061',
+            whiteSpace: 'normal',
+            maxWidth: 520,
         }}>
-                    {dashboardProfileSubtitle}
+                    {profileStatusCard.subtitle}
                   </span>
                 </div>
               </div>

@@ -53,7 +53,8 @@ export async function PATCH(
   const { id } = await params;
 
   let body: {
-    verificationStatus: 'VERIFIED' | 'REJECTED';
+    cpsnsVerificationStatus: 'VERIFIED' | 'REJECTED';
+    rejectionReason?: string;
     notes?: string;
     profileType?: 'locum' | 'host';
   };
@@ -63,17 +64,32 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { verificationStatus, notes, profileType } = body;
+  const { cpsnsVerificationStatus, profileType } = body;
+  const rejectionReason = (body.rejectionReason ?? body.notes ?? '').trim();
 
-  if (verificationStatus !== 'VERIFIED' && verificationStatus !== 'REJECTED') {
+  if (
+    cpsnsVerificationStatus !== 'VERIFIED'
+    && cpsnsVerificationStatus !== 'REJECTED'
+  ) {
     return NextResponse.json(
-      { error: 'verificationStatus must be VERIFIED or REJECTED' },
+      { error: 'cpsnsVerificationStatus must be VERIFIED or REJECTED' },
+      { status: 400 },
+    );
+  }
+
+  if (cpsnsVerificationStatus === 'REJECTED' && !rejectionReason) {
+    return NextResponse.json(
+      {
+        error:
+          'Rejection reason is required when rejecting a credential submission.',
+      },
       { status: 400 },
     );
   }
 
   const db = getDb();
-  const verifiedAt = verificationStatus === 'VERIFIED' ? new Date() : null;
+  const cpsnsVerifiedAt =
+    cpsnsVerificationStatus === 'VERIFIED' ? new Date() : null;
 
   if (profileType === 'host') {
     const existing = await db.hostProfile.findUnique({ where: { id } });
@@ -84,8 +100,8 @@ export async function PATCH(
     const updated = await db.hostProfile.update({
       where: { id },
       data: {
-        cpsnsVerificationStatus: verificationStatus,
-        cpsnsVerifiedAt: verifiedAt,
+        cpsnsVerificationStatus,
+        cpsnsVerifiedAt,
       },
       include: { user: { select: { email: true, id: true } } },
     });
@@ -97,15 +113,20 @@ export async function PATCH(
         action: 'STATUS_CHANGE',
         entity: 'HostProfile',
         entityId: id,
+        outcome: 'SUCCESS',
+        actorRole: 'admin',
         before: { cpsnsVerificationStatus: existing.cpsnsVerificationStatus },
-        after: { cpsnsVerificationStatus: verificationStatus, notes: notes ?? null },
+        after: {
+          cpsnsVerificationStatus,
+          rejectionReason: rejectionReason || null,
+        },
         endpoint: `/api/admin/verifications/${id}`,
       },
     });
 
     return NextResponse.json({
       ok: true,
-      verificationStatus: updated.cpsnsVerificationStatus,
+      cpsnsVerificationStatus: updated.cpsnsVerificationStatus,
     });
   }
 
@@ -117,13 +138,16 @@ export async function PATCH(
   const updated = await db.locumProfile.update({
     where: { id },
     data: {
-      verificationStatus,
-      verifiedAt,
+      cpsnsVerificationStatus,
+      cpsnsVerifiedAt,
+      rejectionReason:
+        cpsnsVerificationStatus === 'REJECTED' ? rejectionReason : null,
+      rejectedAt: cpsnsVerificationStatus === 'REJECTED' ? new Date() : null,
     },
     include: { user: { select: { email: true, id: true } } },
   });
 
-  if (verificationStatus === 'VERIFIED') {
+  if (cpsnsVerificationStatus === 'VERIFIED') {
     await db.user.update({
       where: { id: updated.userId },
       data: { status: 'ACTIVE' },
@@ -137,11 +161,16 @@ export async function PATCH(
       action: 'STATUS_CHANGE',
       entity: 'LocumProfile',
       entityId: id,
-      before: { verificationStatus: existing.verificationStatus },
-      after: { verificationStatus, notes: notes ?? null },
+      outcome: 'SUCCESS',
+      actorRole: 'admin',
+      before: { cpsnsVerificationStatus: existing.cpsnsVerificationStatus },
+      after: {
+        cpsnsVerificationStatus,
+        rejectionReason: rejectionReason || null,
+      },
       endpoint: `/api/admin/verifications/${id}`,
     },
   });
 
-  return NextResponse.json({ ok: true, verificationStatus });
+  return NextResponse.json({ ok: true, cpsnsVerificationStatus });
 }

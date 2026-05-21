@@ -1,5 +1,11 @@
 'use client';
-export type ProfileStatusGlyphVariant = 'incomplete' | 'verified' | 'underReview' | 'pendingStaff';
+export type ProfileStatusGlyphVariant =
+    | 'incomplete'
+    | 'verified'
+    | 'underReview'
+    | 'pendingStaff'
+    | 'rejected'
+    | 'suspended';
 type Props = {
     variant: ProfileStatusGlyphVariant;
     size?: number;
@@ -26,6 +32,18 @@ export function ProfileStatusGlyph({ variant, size = 48, className, style, }: Pr
         <circle cx="24" cy="24" r="22" fill="#EFF6FF" stroke="#93C5FD" strokeWidth="2"/>
         <circle cx="24" cy="24" r="10" stroke="#2563EB" strokeWidth="1.8"/>
         <path d="M24 16v8l5 3.5" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>);
+    }
+    if (variant === 'rejected') {
+        return (<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden className={className} style={{ ...dim, ...style }}>
+        <circle cx="24" cy="24" r="22" fill="#FEE2E2" stroke="#FCA5A5" strokeWidth="2"/>
+        <path d="M17 17l14 14M31 17L17 31" stroke="#DC2626" strokeWidth="2.5" strokeLinecap="round"/>
+      </svg>);
+    }
+    if (variant === 'suspended') {
+        return (<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden className={className} style={{ ...dim, ...style }}>
+        <circle cx="24" cy="24" r="22" fill="#FEF3C7" stroke="#FCD34D" strokeWidth="2"/>
+        <path d="M24 14v14M24 32v2" stroke="#D97706" strokeWidth="2.5" strokeLinecap="round"/>
       </svg>);
     }
     return (<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden className={className} style={{ ...dim, ...style }}>

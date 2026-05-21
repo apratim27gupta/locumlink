@@ -19,7 +19,7 @@ type VerificationRow = {
   name: string;
   cpsns: string;
   submittedAt: string;
-  verificationStatus:
+  cpsnsVerificationStatus:
     | 'UNVERIFIED'
     | 'PENDING_REVIEW'
     | 'VERIFIED'
@@ -113,8 +113,8 @@ export default function AdminVerificationsPage() {
       );
       const pending = (data.items ?? []).filter(
         (r) =>
-          r.verificationStatus === 'PENDING_REVIEW'
-          || r.verificationStatus === 'UNVERIFIED',
+          r.cpsnsVerificationStatus === 'PENDING_REVIEW'
+          || r.cpsnsVerificationStatus === 'UNVERIFIED',
       );
       setRows(pending);
     } catch (e) {
@@ -131,14 +131,24 @@ export default function AdminVerificationsPage() {
 
   async function patchStatus(
     row: VerificationRow,
-    verificationStatus: 'VERIFIED' | 'REJECTED',
+    cpsnsVerificationStatus: 'VERIFIED' | 'REJECTED',
   ) {
+    const rejectionReason = notes.trim();
+    if (cpsnsVerificationStatus === 'REJECTED' && !rejectionReason) {
+      setErr('Enter a rejection reason before rejecting.');
+      return;
+    }
+
     setBusyId(row.id);
     setErr(null);
     try {
       await adminFetchJson(`/api/admin/verifications/${row.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ verificationStatus, profileType: row.profileType }),
+        body: JSON.stringify({
+          cpsnsVerificationStatus,
+          profileType: row.profileType,
+          ...(cpsnsVerificationStatus === 'REJECTED' ? { rejectionReason } : {}),
+        }),
       });
       closeReview();
       await load();
@@ -218,16 +228,16 @@ export default function AdminVerificationsPage() {
                         className="tag"
                         style={{
                           background:
-                            r.verificationStatus === 'PENDING_REVIEW'
+                            r.cpsnsVerificationStatus === 'PENDING_REVIEW'
                               ? 'rgba(59, 79, 216, 0.12)'
                               : 'rgba(234, 179, 8, 0.15)',
                           color:
-                            r.verificationStatus === 'PENDING_REVIEW'
+                            r.cpsnsVerificationStatus === 'PENDING_REVIEW'
                               ? '#1B31D2'
                               : '#92400e',
                         }}
                       >
-                        {r.verificationStatus === 'PENDING_REVIEW'
+                        {r.cpsnsVerificationStatus === 'PENDING_REVIEW'
                           ? 'Awaiting review'
                           : 'Not verified'}
                       </span>
@@ -407,7 +417,12 @@ export default function AdminVerificationsPage() {
                     type="button"
                     className="btn btn-secondary"
                     style={{ padding: 12 }}
-                    disabled={busyId === review.id}
+                    disabled={busyId === review.id || !notes.trim()}
+                    title={
+                      !notes.trim()
+                        ? 'Enter a rejection reason in the notes field'
+                        : undefined
+                    }
                     onClick={() => patchStatus(review, 'REJECTED')}
                   >
                     <XCircle size={20} />

@@ -15,43 +15,38 @@ export function isCpsnsVerificationApproved(
     return status === VerificationStatus.VERIFIED || status === 'VERIFIED';
 }
 
-export function verificationStatusAfterCpsnsSave(
-    existing: { cpsnsId: string; verificationStatus: VerificationStatus } | null,
-    cpsnsDigits: string,
-): Pick<{ verificationStatus: VerificationStatus; verifiedAt: Date | null }, 'verificationStatus' | 'verifiedAt'> | Record<string, never> {
-    if (cpsnsDigits.length !== 9)
-        return {};
-    if (!existing)
-        return { verificationStatus: VerificationStatus.PENDING_REVIEW };
-    const prevDigits = normalizeCpsns(existing.cpsnsId);
-    const cpsnsChanged = prevDigits !== cpsnsDigits;
-    if (existing.verificationStatus === VerificationStatus.VERIFIED && cpsnsChanged) {
-        return {
-            verificationStatus: VerificationStatus.PENDING_REVIEW,
-            verifiedAt: null,
-        };
-    }
-    if (
-        existing.verificationStatus === VerificationStatus.UNVERIFIED
-        || existing.verificationStatus === VerificationStatus.REJECTED
-    ) {
-        return { verificationStatus: VerificationStatus.PENDING_REVIEW };
-    }
-    return {};
-}
+type CpsnsProfileVerification = {
+    cpsnsNumber: string | null;
+    cpsnsVerificationStatus: VerificationStatus;
+};
 
-/** Host profiles store CPSNS verification on `cpsnsVerificationStatus`, not `verificationStatus`. */
-export function hostCpsnsVerificationPatch(
-    existing: { cpsnsId: string; verificationStatus: VerificationStatus } | null,
+export function cpsnsVerificationPatch(
+    existing: CpsnsProfileVerification | null,
     cpsnsDigits: string,
 ): Pick<
     { cpsnsVerificationStatus: VerificationStatus; cpsnsVerifiedAt: Date | null },
     'cpsnsVerificationStatus' | 'cpsnsVerifiedAt'
 > | Record<string, never> {
-    const patch = verificationStatusAfterCpsnsSave(existing, cpsnsDigits);
-    if (!('verificationStatus' in patch)) return {};
-    return {
-        cpsnsVerificationStatus: patch.verificationStatus,
-        ...('verifiedAt' in patch ? { cpsnsVerifiedAt: patch.verifiedAt } : {}),
-    };
+    if (cpsnsDigits.length !== 9) return {};
+    if (!existing) {
+        return { cpsnsVerificationStatus: VerificationStatus.PENDING_REVIEW };
+    }
+    const prevDigits = normalizeCpsns(existing.cpsnsNumber);
+    const cpsnsChanged = prevDigits !== cpsnsDigits;
+    if (
+        existing.cpsnsVerificationStatus === VerificationStatus.VERIFIED
+        && cpsnsChanged
+    ) {
+        return {
+            cpsnsVerificationStatus: VerificationStatus.PENDING_REVIEW,
+            cpsnsVerifiedAt: null,
+        };
+    }
+    if (
+        existing.cpsnsVerificationStatus === VerificationStatus.UNVERIFIED
+        || existing.cpsnsVerificationStatus === VerificationStatus.REJECTED
+    ) {
+        return { cpsnsVerificationStatus: VerificationStatus.PENDING_REVIEW };
+    }
+    return {};
 }

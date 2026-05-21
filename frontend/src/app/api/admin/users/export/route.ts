@@ -42,7 +42,7 @@ export async function GET(req: Request) {
           firstName: true,
           lastName: true,
           cpsnsId: true,
-          verificationStatus: true,
+          cpsnsVerificationStatus: true,
         },
       },
       hostProfile: {
@@ -71,7 +71,7 @@ export async function GET(req: Request) {
         ? u.locumProfile?.cpsnsId ?? ''
         : `${u.hostProfile?.city ?? ''}, ${u.hostProfile?.province ?? ''}`.replace(/^, |, $/, '');
     const verification =
-      u.role === 'LOCUM' ? (u.locumProfile?.verificationStatus ?? '') : 'N/A';
+      u.role === 'LOCUM' ? (u.locumProfile?.cpsnsVerificationStatus ?? '') : 'N/A';
 
     return [
       u.id, u.email, u.role, u.status,

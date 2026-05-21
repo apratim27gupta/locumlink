@@ -68,7 +68,7 @@ export async function fetchLocumVerificationDetail(
     field('Province', profile.province),
     field('Postal code', profile.postalCode),
     field('Professional summary', profile.summary),
-    field('Verification status', profile.verificationStatus),
+    field('Verification status', profile.cpsnsVerificationStatus),
   ].filter((f): f is AdminProfileField => f !== null);
 
   return {

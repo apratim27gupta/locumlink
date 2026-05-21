@@ -42,7 +42,7 @@ export function BellIcon() {
     </svg>);
 }
 export function ShieldIcon() {
-    return (<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    return (<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
       <path d="M8.333 10.417 9.583 11.667l2.292-2.5M10 2.083l-6.667 2.5v4.25c0 3.875 2.85 7.5 6.667 8.417 3.816-.917 6.667-4.542 6.667-8.417v-4.25L10 2.083Z" stroke="#309BB7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>);
 }

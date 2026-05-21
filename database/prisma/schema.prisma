@@ -1,5 +1,3 @@
-
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -85,6 +83,7 @@ enum DocumentType {
   DEA_CERTIFICATE
   CV
   PHOTO_ID
+  REFERENCE_LETTER
   OTHER
 }
 
@@ -101,29 +100,36 @@ enum AuditAction {
 }
 
 model User {
-  id                String     @id @default(cuid())
-  email             String     @unique
-  passwordHash      String
-  role              Role
-  status            UserStatus @default(PENDING)
-  emailVerified     Boolean    @default(false)
-  emailVerifiedAt   DateTime?
-  lastLoginAt       DateTime?
+  id                 String     @id @default(cuid())
+  email              String     @unique
+  passwordHash       String
+  role               Role
+  status             UserStatus @default(PENDING)
+  emailVerified      Boolean    @default(false)
+  emailVerifiedAt    DateTime?
+  lastLoginAt        DateTime?
   hashedRefreshToken String?
-  
-  lastAppPath       String?
-  
-  avatarStoragePath String?    @map("avatar_storage_path")
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  lastAppPath        String?
+  avatarStoragePath  String?    @map("avatar_storage_path")
 
-  locumProfile      LocumProfile?
-  hostProfile       HostProfile?
-  sentMessages      Message[]         @relation("SentMessages")
-  receivedMessages  Message[]         @relation("ReceivedMessages")
-  auditLogs         AuditLog[]        @relation("AuditSubject")
-  auditActorLogs    AuditLog[]        @relation("AuditActor")
-  notifications     NotificationEvent[]
+  // PIPEDA consent (L2-E6.4)
+  consentGivenAt     DateTime?  @map("consent_given_at")
+  consentVersion     String?    @map("consent_version")
+
+  // Suspension fields (L2-E7.4)
+  suspensionNote     String?    @map("suspension_note")
+  suspendedAt        DateTime?  @map("suspended_at")
+
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  locumProfile       LocumProfile?
+  hostProfile        HostProfile?
+  sentMessages       Message[]          @relation("SentMessages")
+  receivedMessages   Message[]          @relation("ReceivedMessages")
+  auditLogs          AuditLog[]         @relation("AuditSubject")
+  auditActorLogs     AuditLog[]         @relation("AuditActor")
+  notifications      NotificationEvent[]
 
   @@map("users")
 }
@@ -141,16 +147,21 @@ model LocumProfile {
   summary             String?            @db.Text
   yearsOfExperience   Int?
   ruralExperienced    Boolean            @default(false)
-  verificationStatus  VerificationStatus @default(UNVERIFIED)
-  verifiedAt          DateTime?
+  cpsnsVerificationStatus VerificationStatus @default(UNVERIFIED) @map("cpsns_verification_status")
+  cpsnsVerifiedAt         DateTime?          @map("cpsns_verified_at")
+
+  // Rejection fields (L2-E7.3 / AD-02)
+  rejectionReason     String?            @map("rejection_reason") @db.Text
+  rejectedAt          DateTime?          @map("rejected_at")
+
   firstName           String?            @map("first_name")
   lastName            String?            @map("last_name")
-
   address1            String?
   address2            String?
   postalCode          String?            @map("postal_code")
   city                String?
   province            String?
+  phone               String?
   specializationText  String?            @map("specialization_text") @db.Text
   licenseFileName     String?            @map("license_file_name")
   licenseOriginalName String?            @map("license_original_name")
@@ -169,54 +180,65 @@ model LocumProfile {
 }
 
 model HostProfile {
-  id                String     @id @default(cuid())
-  userId            String     @unique
-  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                      String             @id @default(cuid())
+  userId                  String             @unique
+  user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  practiceName      String
-  address           String
-  city              String
-  postalCode        String
-  province          String     @default("NS")
-  ruralDesignation  String?
-  servicesOffered   String[]
-  highlights        String?    @db.Text
-  phone             String?
-  website           String?
+  practiceName            String
+  address                 String
+  city                    String
+  postalCode              String
+  province                String             @default("NS")
+  ruralDesignation        String?
+  servicesOffered         String[]
+  highlights              String?            @db.Text
+  phone                   String?
+  website                 String?
 
-  contactFirstName     String?
-  contactLastName      String?
-  cpsnsNumber               String?
-  cpsnsVerificationStatus   VerificationStatus @default(UNVERIFIED) @map("cpsns_verification_status")
-  cpsnsVerifiedAt           DateTime?          @map("cpsns_verified_at")
-  speciality           String?    @db.Text
-  licenseFile          String?
-  licenseOriginalName  String?    @map("license_original_name")
-  address1             String?
-  address2             String?
-  accommodationProvided Boolean   @default(false)
-  practiceType         String?
-  numPhysicians        String?
-  emr                  String?
-  patientVol           String?
+  contactFirstName        String?
+  contactLastName         String?
+  cpsnsNumber             String?
+  cpsnsVerificationStatus VerificationStatus @default(UNVERIFIED) @map("cpsns_verification_status")
+  cpsnsVerifiedAt         DateTime?          @map("cpsns_verified_at")
+  rejectionReason         String?            @map("rejection_reason") @db.Text
+  rejectedAt              DateTime?          @map("rejected_at")
+  speciality              String?            @db.Text
+  licenseFile             String?
+  licenseOriginalName     String?            @map("license_original_name")
 
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  // Photo ID upload (PRD 9.1 comment AT42)
+  photoIdFile             String?            @map("photo_id_file")
+  photoIdOriginalName     String?            @map("photo_id_original_name")
 
-  postings          JobPosting[]
+  address1                String?
+  address2                String?
+  accommodationProvided   Boolean            @default(false)
+  practiceType            String?
+  numPhysicians           String?
+  emr                     String?
+  patientVol              String?
+
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  postings                JobPosting[]
 
   @@map("host_profiles")
 }
 
 model JobPosting {
-  id                String        @id @default(cuid())
-  hostProfileId     String
-  hostProfile       HostProfile   @relation(fields: [hostProfileId], references: [id], onDelete: Cascade)
+  id                  String        @id @default(cuid())
+  hostProfileId       String
+  hostProfile         HostProfile   @relation(fields: [hostProfileId], references: [id], onDelete: Cascade)
 
-  title             String
-  description       String        @db.Text
-  servicesRequired  String[]
-  status            PostingStatus @default(DRAFT)
+  title               String
+  description         String        @db.Text
+  servicesRequired    String[]
+  status              PostingStatus @default(DRAFT)
+
+  // PRD Section 2.2 required fields
+  leaveType           String?       @map("leave_type")
+  fullHalfDay         String?       @map("full_half_day")
 
   dailyRateGP         Decimal       @default(1200.00) @db.Decimal(10, 2)
   dailyRateSpecialist Decimal       @default(1600.00) @db.Decimal(10, 2)
@@ -232,18 +254,18 @@ model JobPosting {
   updatedAt             DateTime    @updatedAt
   expiresAt             DateTime?
 
-  keyResponsibilities   String[]  @default([]) @map("key_responsibilities")
-  startDate             DateTime? @map("start_date") @db.Date
-  endDate               DateTime? @map("end_date") @db.Date
-  startTime             String?   @map("start_time") @db.VarChar(10)
-  endTime               String?   @map("end_time") @db.VarChar(10)
-  payPerDay             Decimal?  @map("pay_per_day") @db.Decimal(10, 2)
-  minYearsExperience    Int?      @map("min_years_experience")
-  maxApplicants         Int       @default(20) @map("max_applicants")
-  travelRequired        Boolean   @default(false) @map("travel_required")
-  scheduleFlexible      Boolean   @default(false) @map("schedule_flexible")
-  requiredCredentials   String[]  @default([]) @map("required_credentials")
-  isDeleted             Boolean   @default(false) @map("is_deleted")
+  keyResponsibilities   String[]    @default([]) @map("key_responsibilities")
+  startDate             DateTime?   @map("start_date") @db.Date
+  endDate               DateTime?   @map("end_date") @db.Date
+  startTime             String?     @map("start_time") @db.VarChar(10)
+  endTime               String?     @map("end_time") @db.VarChar(10)
+  payPerDay             Decimal?    @map("pay_per_day") @db.Decimal(10, 2)
+  minYearsExperience    Int?        @map("min_years_experience")
+  maxApplicants         Int         @default(20) @map("max_applicants")
+  travelRequired        Boolean     @default(false) @map("travel_required")
+  scheduleFlexible      Boolean     @default(false) @map("schedule_flexible")
+  requiredCredentials   String[]    @default([]) @map("required_credentials")
+  isDeleted             Boolean     @default(false) @map("is_deleted")
 
   shifts                Shift[]
   applications          Application[]
@@ -253,17 +275,17 @@ model JobPosting {
 }
 
 model Shift {
-  id            String     @id @default(cuid())
-  jobPostingId  String
-  jobPosting    JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  jobPostingId String
+  jobPosting   JobPosting @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
 
-  date          DateTime   @db.Date
-  shiftType     ShiftType  @default(FULL_DAY)
-  startTime     DateTime?  @db.Time()
-  endTime       DateTime?  @db.Time()
-  isFilled      Boolean    @default(false)
+  date         DateTime   @db.Date
+  shiftType    ShiftType  @default(FULL_DAY)
+  startTime    DateTime?  @db.Time()
+  endTime      DateTime?  @db.Time()
+  isFilled     Boolean    @default(false)
 
-  createdAt     DateTime   @default(now())
+  createdAt    DateTime   @default(now())
 
   @@map("shifts")
 }
@@ -280,7 +302,10 @@ model Application {
   coverNote       String?           @db.Text
   appliedAt       DateTime          @default(now())
   statusChangedAt DateTime          @updatedAt
-  locumAcceptedAt DateTime?       @map("locum_accepted_at")
+  locumAcceptedAt DateTime?         @map("locum_accepted_at")
+
+  // Placement timestamp for fill rate + avg time-to-placement (L2-E7.1)
+  placedAt        DateTime?         @map("placed_at")
 
   @@unique([jobPostingId, locumProfileId])
   @@map("applications")
@@ -306,83 +331,85 @@ model Document {
 }
 
 model Message {
-  id            String     @id @default(cuid())
-  senderId      String
-  sender        User       @relation("SentMessages", fields: [senderId], references: [id])
-  recipientId   String
-  recipient     User       @relation("ReceivedMessages", fields: [recipientId], references: [id])
-  jobPostingId  String?
-  jobPosting    JobPosting? @relation(fields: [jobPostingId], references: [id])
+  id           String      @id @default(cuid())
+  senderId     String
+  sender       User        @relation("SentMessages", fields: [senderId], references: [id])
+  recipientId  String
+  recipient    User        @relation("ReceivedMessages", fields: [recipientId], references: [id])
+  jobPostingId String?
+  jobPosting   JobPosting? @relation(fields: [jobPostingId], references: [id])
 
-  body          String     @db.Text
-  readAt        DateTime?
-  sentAt        DateTime   @default(now())
-  
-  editedAt   DateTime?  @map("edited_at")
-  deletedAt  DateTime?  @map("deleted_at")
+  body         String      @db.Text
+  readAt       DateTime?
+  sentAt       DateTime    @default(now())
+  editedAt     DateTime?   @map("edited_at")
+  deletedAt    DateTime?   @map("deleted_at")
 
-  attachments MessageAttachment[]
+  attachments  MessageAttachment[]
 
   @@map("messages")
 }
 
 model MessageAttachment {
-  id         String   @id @default(cuid())
-  messageId  String
-  message    Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  messageId   String
+  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-  
-  storagePath String  @map("storage_path")
-  fileName    String  @map("file_name")
-  mimeType    String  @map("mime_type")
+  storagePath String   @map("storage_path")
+  fileName    String   @map("file_name")
+  mimeType    String   @map("mime_type")
   size        Int
 
-  createdAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   @@index([messageId])
   @@map("message_attachments")
 }
 
 model NotificationEvent {
-  id              String   @id @default(cuid())
-  recipientId     String
-  recipient       User     @relation(fields: [recipientId], references: [id])
+  id             String    @id @default(cuid())
+  recipientId    String
+  recipient      User      @relation(fields: [recipientId], references: [id])
 
-  eventType       String
-  referenceId     String?
-  referenceType   String?
-  payload         Json?
-  deliveryStatus  String   @default("PENDING")
-  deliveredAt     DateTime?
-  sentAt          DateTime @default(now())
+  eventType      String
+  referenceId    String?
+  referenceType  String?
+  payload        Json?
+  deliveryStatus String    @default("PENDING")
+  deliveredAt    DateTime?
+  sentAt         DateTime  @default(now())
 
   @@map("notification_events")
 }
 
 model AuditLog {
-  id            String      @id @default(cuid())
+  id           String      @id @default(cuid())
 
-  actorId       String?
-  actor         User?       @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorId      String?
+  actor        User?       @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
 
-  adminActorId  String?
-  adminActor    Admin?      @relation(fields: [adminActorId], references: [id], onDelete: SetNull)
+  adminActorId String?
+  adminActor   Admin?      @relation(fields: [adminActorId], references: [id], onDelete: SetNull)
 
-  subjectId     String?
-  subject       User?       @relation("AuditSubject", fields: [subjectId], references: [id], onDelete: SetNull)
+  subjectId    String?
+  subject      User?       @relation("AuditSubject", fields: [subjectId], references: [id], onDelete: SetNull)
 
-  action        AuditAction
-  entity        String
-  entityId      String?
+  action       AuditAction
+  entity       String
+  entityId     String?
 
-  before        Json?
-  after         Json?
+  // PRD Section 11.3 required fields
+  outcome      String      @default("SUCCESS")
+  actorRole    String?     @map("actor_role")
 
-  ipAddress     String?
-  userAgent     String?
-  endpoint      String?
+  before       Json?
+  after        Json?
 
-  createdAt     DateTime    @default(now())
+  ipAddress    String?
+  userAgent    String?
+  endpoint     String?
+
+  createdAt    DateTime    @default(now())
 
   @@index([actorId])
   @@index([adminActorId])
@@ -391,6 +418,26 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+model EmailLog {
+  id                String    @id @default(cuid())
+  recipient         String
+  eventType         String    @map("event_type")
+  status            String    @default("PENDING")
+  provider          String    @default("zeptomail")
+  providerMessageId String?   @map("provider_message_id")
+  error             String?
+  referenceId       String?   @map("reference_id")
+  referenceType     String?   @map("reference_type")
+  sentAt            DateTime  @default(now()) @map("sent_at")
+  deliveredAt       DateTime? @map("delivered_at")
+
+  @@index([recipient])
+  @@index([sentAt])
+  @@index([eventType])
+  @@map("email_logs")
+}
+
 model Otp {
   id        String   @id @default(cuid())
   email     String

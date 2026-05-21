@@ -546,9 +546,8 @@ export default function LocumSetupPage() {
             }}>
                       <label htmlFor="locum-setup-cpsns" style={lbl}>
                         CPSNS Number
-                        <ReqStar />
                       </label>
-                      <input id="locum-setup-cpsns" className="locum-setup-input" style={inp} inputMode="numeric" autoComplete="off" placeholder="License number" value={form.cpsnsNumber} onChange={(e) => set('cpsnsNumber', sanitizeCpsnsInput(e.target.value))} aria-required/>
+                      <input id="locum-setup-cpsns" className="locum-setup-input" style={inp} inputMode="numeric" autoComplete="off" placeholder="License number" value={form.cpsnsNumber} onChange={(e) => set('cpsnsNumber', sanitizeCpsnsInput(e.target.value))}/>
                     </div>
 
                     

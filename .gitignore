@@ -21,3 +21,4 @@ frontend/tsconfig.tsbuildinfo
 dist/
 generated/
 frontend/tsconfig.tsbuildinfo
+.cursorignore

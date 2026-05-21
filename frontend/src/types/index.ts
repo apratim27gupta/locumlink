@@ -1,11 +1,18 @@
 import type { CpsnsVerificationStatus } from '@/lib/cpsnsVerify';
 
+export type HostAccountStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
+
 export interface HostProfile {
     clinicName: string;
     contactFirstName: string;
     contactLastName: string;
     cpsnsNumber: string;
     cpsnsVerificationStatus?: CpsnsVerificationStatus;
+    rejectionReason?: string | null;
+    rejectedAt?: string | null;
+    accountStatus?: HostAccountStatus;
+    suspensionNote?: string | null;
+    suspendedAt?: string | null;
     speciality: string;
     licenseFile?: string | null;
     licenseOriginalName?: string | null;
@@ -22,11 +29,18 @@ export interface HostProfile {
     patientVol?: string;
     clinicDesc?: string;
 }
+export type LocumAccountStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
+
 export interface LocumProfile {
     firstName?: string;
     lastName?: string;
     cpsnsNumber?: string;
-    verificationStatus?: CpsnsVerificationStatus;
+    cpsnsVerificationStatus?: CpsnsVerificationStatus;
+    rejectionReason?: string | null;
+    rejectedAt?: string | null;
+    accountStatus?: LocumAccountStatus;
+    suspensionNote?: string | null;
+    suspendedAt?: string | null;
     yearsOfExperience?: number | null;
     professionalSummary?: string;
     specialization?: string;

@@ -11,6 +11,8 @@ import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { isCpsnsNineDigitsFormat, isCpsnsVerificationApproved, sanitizeCpsnsInput, } from '@/lib/cpsnsVerify';
 import { filterCanadianCities, CANADIAN_PROVINCE_NAMES, formatCanadianCityDisplay, type CanadianCityRow, } from '@/lib/canadianCities';
 import { sortByLabel, sortStringsLocale } from '@/lib/sortLocale';
+import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
+import { getHostProfileStatusCard } from '@/lib/hostAccountNotice';
 
 const NAV = [
     {
@@ -420,24 +422,11 @@ export default function HostProfilePage(props: {
     });
 
     const allDone = progressPct === 100;
-
-    const completionGlyphVariant: ProfileStatusGlyphVariant = !allDone
-        ? 'incomplete'
-        : verified
-        ? 'verified'
-        : 'underReview';
-
-    const completionTitle = !allDone
-        ? 'Complete your profile to find Locums'
-        : verified
-        ? 'Your profile is complete and verified'
-        : 'Your profile is complete — CPSNS under verification';
-
-    const completionSubtitle = !allDone
-        ? `${progressPct}% completed`
-        : verified
-        ? '100% completed · CPSNS verified'
-        : '100% completed · Awaiting manual CPSNS verification';
+    const profileStatusCard = getHostProfileStatusCard(profile, progressPct);
+    const completionGlyphVariant: ProfileStatusGlyphVariant =
+        profileStatusCard.glyphVariant;
+    const completionTitle = profileStatusCard.title;
+    const completionSubtitle = profileStatusCard.subtitle;
 
     const stepComplete = [
         !!(
@@ -565,37 +554,12 @@ export default function HostProfilePage(props: {
                             flexWrap: 'wrap',
                         }}
                     >
-                        <span>Welcome{welcomeDoctorLabel ? ` ${welcomeDoctorLabel}` : ''}</span>
-                        {verified ? (
-                            <span
-                                style={{ display: 'inline-flex', alignItems: 'center' }}
-                                title="CPSNS verified"
-                                aria-label="CPSNS verified"
-                            >
-                                <svg
-                                    width="22"
-                                    height="22"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    aria-hidden
-                                    style={{ flexShrink: 0, verticalAlign: 'middle' }}
-                                >
-                                    <path
-                                        d="M12 3.25 19 5.9v5.25c0 4.45-2.82 7.95-7 9.6-4.18-1.65-7-5.15-7-9.6V5.9l7-2.65Z"
-                                        stroke="#1B31D2"
-                                        strokeWidth="1.8"
-                                        strokeLinejoin="round"
-                                    />
-                                    <path
-                                        d="M8.6 12.1 10.9 14.4 15.7 9.6"
-                                        stroke="#1B31D2"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                    />
-                                </svg>
+                        <NameWithVerifiedShield verified={verified}>
+                            <span>
+                                Welcome
+                                {welcomeDoctorLabel ? ` ${welcomeDoctorLabel}` : ''}
                             </span>
-                        ) : null}
+                        </NameWithVerifiedShield>
                     </h1>
                 </div>
 
@@ -661,46 +625,6 @@ export default function HostProfilePage(props: {
                         <div style={{ width: 1, height: 1 }} />
                     </div>
                 </div>
-
-                {/* ── CPSNS pending banner ── */}
-                {allDone && !verified && (
-                    <div
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 12,
-                            background: '#FFFBEB',
-                            border: '1px solid #FDE68A',
-                            borderRadius: 8,
-                            padding: '12px 16px',
-                            marginBottom: 20,
-                        }}
-                    >
-                        <ProfileStatusGlyph variant="pendingStaff" size={36} />
-                        <div>
-                            <div
-                                style={{
-                                    fontFamily: 'Inter, sans-serif',
-                                    fontSize: 13,
-                                    fontWeight: 600,
-                                    color: '#92400E',
-                                }}
-                            >
-                                CPSNS under verification
-                            </div>
-                            <div
-                                style={{
-                                    fontFamily: 'Inter, sans-serif',
-                                    fontSize: 12,
-                                    color: '#B45309',
-                                }}
-                            >
-                                An administrator will verify your CPSNS number. You can post jobs once
-                                verified.
-                            </div>
-                        </div>
-                    </div>
-                )}
 
                 {/* ── Step nav ── */}
                 <div

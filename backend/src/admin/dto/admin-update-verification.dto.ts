@@ -1,7 +1,13 @@
 import { VerificationStatus } from '@prisma/client';
-import { IsIn } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class AdminUpdateVerificationDto {
-    @IsIn([VerificationStatus.VERIFIED, VerificationStatus.REJECTED])
-    verificationStatus!: VerificationStatus.VERIFIED | VerificationStatus.REJECTED;
+  @IsIn([VerificationStatus.VERIFIED, VerificationStatus.REJECTED])
+  cpsnsVerificationStatus!: VerificationStatus.VERIFIED | VerificationStatus.REJECTED;
+
+  // PRD L2-E7.3 / AD-02: mandatory reason on rejection
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  rejectionReason?: string;
 }

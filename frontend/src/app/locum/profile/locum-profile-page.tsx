@@ -15,6 +15,7 @@ import {
   isCpsnsVerificationApproved,
   sanitizeCpsnsInput,
 } from '@/lib/cpsnsVerify';
+import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { locumProfileCompletionPct } from '@/lib/locumProfileCompletion';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { getEmail } from '@/lib/auth';
@@ -168,7 +169,7 @@ export default function LocumProfilePage(props: {
   const [firstName,        setFirstName]        = useState('');
   const [lastName,         setLastName]         = useState('');
   const [cpsns,            setCpsns]            = useState('');
-  const [verificationStatus, setVerificationStatus] = useState<CpsnsVerificationStatus | undefined>();
+  const [cpsnsVerificationStatus, setCpsnsVerificationStatus] = useState<CpsnsVerificationStatus | undefined>();
   const [yearsOfExperience,setYearsOfExperience]= useState<number | ''>('');
   const [summary,          setSummary]          = useState('');
   const [specialityTags,   setSpecialityTags]   = useState<string[]>([]);
@@ -272,7 +273,7 @@ export default function LocumProfilePage(props: {
         setFirstName(p.firstName ?? '');
         setLastName(p.lastName ?? '');
         setCpsns(p.cpsnsNumber ?? '');
-        setVerificationStatus(p.verificationStatus);
+        setCpsnsVerificationStatus(p.cpsnsVerificationStatus);
         setYearsOfExperience(
           typeof (p as { yearsOfExperience?: unknown }).yearsOfExperience === 'number'
             ? ((p as { yearsOfExperience: number }).yearsOfExperience ?? 0)
@@ -338,11 +339,16 @@ export default function LocumProfilePage(props: {
 
   const progressPct = locumProfileCompletionPct(profileDraft);
   const allStepsDone = progressPct === 100;
+  const cpsnsVerified = isCpsnsVerificationApproved(cpsnsVerificationStatus);
+  const welcomeDoctorLabel =
+    firstName || lastName
+      ? `Dr ${firstName.trim()} ${lastName.trim()}`.trim()
+      : '';
   const profileVerificationStatus: VerificationStatus = !allStepsDone
     ? 'pending'
-    : isCpsnsVerificationApproved(verificationStatus)
+    : isCpsnsVerificationApproved(cpsnsVerificationStatus)
       ? 'verified'
-      : verificationStatus === 'REJECTED'
+      : cpsnsVerificationStatus === 'REJECTED'
         ? 'under-review'
         : 'under-review';
 
@@ -424,8 +430,23 @@ export default function LocumProfilePage(props: {
       topbarLastName={lastName}
     >
       {/* ── page title ─────────────────────────────────────────────────── */}
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f1523', marginBottom: 3 }}>
-        Welcome
+      <h1
+        style={{
+          fontSize: 22,
+          fontWeight: 700,
+          color: '#0f1523',
+          marginBottom: 3,
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 8,
+        }}
+      >
+        <NameWithVerifiedShield verified={cpsnsVerified}>
+          <span>
+            Welcome{welcomeDoctorLabel ? ` ${welcomeDoctorLabel}` : ''}
+          </span>
+        </NameWithVerifiedShield>
       </h1>
 
       {/* ── verification banner ────────────────────────────────────────── */}

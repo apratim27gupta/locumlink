@@ -15,7 +15,6 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { VerificationStatus } from '@prisma/client';
 import { Public } from '../auth/decorators/public.decorator.js';
 import { AdminJwtAuthGuard } from '../admin-auth/guards/admin-jwt-auth.guard.js';
 import { CurrentAdmin } from '../admin-auth/decorators/current-admin.decorator.js';
@@ -74,20 +73,19 @@ export class AdminController {
     return { items: await this.admin.listVerifications({ filter }) };
   }
 
-  @Patch('verifications/:locumProfileId')
+  @Patch('verifications/:profileId')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async patchVerification(
     @Req() req: Request,
     @CurrentAdmin() admin: AdminJwtPayload,
-    @Param('locumProfileId') locumProfileId: string,
+    @Param('profileId') profileId: string,
+    @Query('profileType') profileType: string | undefined,
     @Body() dto: AdminUpdateVerificationDto,
   ) {
-    return this.admin.updateLocumVerification(
-      req,
-      admin,
-      locumProfileId,
-      dto.verificationStatus,
-    );
+    if (profileType === 'host') {
+      return this.admin.updateHostVerification(req, admin, profileId, dto);
+    }
+    return this.admin.updateLocumVerification(req, admin, profileId, dto);
   }
 
   @Get('audit-logs')
@@ -104,14 +102,9 @@ export class AdminController {
   }
 }
 
-function parseVerificationTab(
-  raw?: string,
-):
-  | 'PENDING_TAB'
-  | VerificationStatus.VERIFIED
-  | VerificationStatus.REJECTED {
+function parseVerificationTab(raw?: string): 'PENDING_TAB' | 'VERIFIED' | 'REJECTED' {
   const s = raw?.trim();
-  if (s === VerificationStatus.VERIFIED) return VerificationStatus.VERIFIED;
-  if (s === VerificationStatus.REJECTED) return VerificationStatus.REJECTED;
+  if (s === 'VERIFIED') return 'VERIFIED';
+  if (s === 'REJECTED') return 'REJECTED';
   return 'PENDING_TAB';
 }

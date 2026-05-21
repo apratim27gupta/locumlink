@@ -8,6 +8,8 @@ import { hostApi, locumApi, messageApi, uploadFile, type ApplicationRecord, type
 import { getEmail, getToken } from '@/lib/auth';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { useAuth } from '@/providers/AuthProvider';
+import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
+import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 const HOST_NAV = [
     {
         label: 'My Postings',
@@ -355,8 +357,12 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const [deleteTarget, setDeleteTarget] = useState<ThreadMessage | null>(null);
     const [myApplications, setMyApplications] = useState<MyApplication[]>([]);
     const [myListPreviewName, setMyListPreviewName] = useState<string | null>(null);
+    const [myCpsnsVerified, setMyCpsnsVerified] = useState(false);
     const [listPanelWidth, setListPanelWidth] = useState(readStoredMessagesListWidth);
-    useEffect(() => { setMyListPreviewName(null); }, [pathname]);
+    useEffect(() => {
+        setMyListPreviewName(null);
+        setMyCpsnsVerified(false);
+    }, [pathname]);
     useEffect(() => {
         if (authLoading || !getToken())
             return;
@@ -367,6 +373,9 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                     const p = await hostApi.getProfile();
                     if (cancelled || !p)
                         return;
+                    setMyCpsnsVerified(
+                        isCpsnsVerificationApproved(p.cpsnsVerificationStatus),
+                    );
                     if (p.contactFirstName?.trim()) {
                         setMyListPreviewName(`Dr ${p.contactFirstName} ${p.contactLastName ?? ''}`.trim());
                     }
@@ -378,6 +387,9 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                     const { exists, profile } = await locumApi.getProfile();
                     if (cancelled || !exists || !profile?.firstName?.trim())
                         return;
+                    setMyCpsnsVerified(
+                        isCpsnsVerificationApproved(profile.cpsnsVerificationStatus),
+                    );
                     setMyListPreviewName(`Dr ${profile.firstName} ${profile.lastName ?? ''}`.trim());
                 }
             }
@@ -930,8 +942,23 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                         maxWidth: Math.max(80, listPanelWidth - 120),
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
                     }}>
-                            {name}
+                            {!lastPreviewFromPartner ? (
+                              <NameWithVerifiedShield
+                                verified={myCpsnsVerified}
+                                shieldSize={14}
+                                gap={4}
+                              >
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {listPreviewSenderLabel}
+                                </span>
+                              </NameWithVerifiedShield>
+                            ) : (
+                              name
+                            )}
                           </span>
                           <div style={{
                         display: 'flex',
@@ -1502,13 +1529,30 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                         gap: 8,
                         minWidth: 0,
                     }}>
-                              <span style={{
-                        fontSize: 14,
-                        fontWeight: 600,
-                        color: '#0f1523',
-                    }}>
-                                {isMine ? (myListPreviewName ?? getDisplayName(msg.sender as AnyUser)) : getDisplayName(msg.sender as AnyUser)}
-                              </span>
+                              {isMine ? (
+                                <NameWithVerifiedShield
+                                  verified={myCpsnsVerified}
+                                  shieldSize={16}
+                                  gap={6}
+                                  style={{ minWidth: 0 }}
+                                >
+                                  <span style={{
+                                    fontSize: 14,
+                                    fontWeight: 600,
+                                    color: '#0f1523',
+                                  }}>
+                                    {myListPreviewName ?? getDisplayName(msg.sender as AnyUser)}
+                                  </span>
+                                </NameWithVerifiedShield>
+                              ) : (
+                                <span style={{
+                                  fontSize: 14,
+                                  fontWeight: 600,
+                                  color: '#0f1523',
+                                }}>
+                                  {getDisplayName(msg.sender as AnyUser)}
+                                </span>
+                              )}
                               <span style={{ fontSize: 11, color: '#9CA3AF' }}>
                                 {fmtTime(msg.sentAt)}
                               </span>

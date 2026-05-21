@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     db.user.count({ where: { role: 'LOCUM' } }),
     db.locumProfile.count({
       where: {
-        verificationStatus: { in: ['UNVERIFIED', 'PENDING_REVIEW'] },
+        cpsnsVerificationStatus: { in: ['UNVERIFIED', 'PENDING_REVIEW'] },
       },
     }),
     db.hostProfile.count({

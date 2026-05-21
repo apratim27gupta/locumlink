@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedHostUserId } from '@/lib/auth-server';
 import { getDb } from '@/lib/db';
+import { cpsnsVerificationData, normalizeCpsns } from '@/lib/cpsnsVerify';
 import type { HostProfile } from '@/types';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -92,6 +93,12 @@ export async function POST(req: Request) {
     const { clinicName, contactFirstName, contactLastName, cpsnsNumber, speciality, licenseFile, licenseOriginalName, address1, address2, postalCode, city, province, amenities, accommodationProvided, practiceType, numPhysicians, emr, patientVol, clinicDesc, } = body;
     const a1 = address1 ?? '';
     const a2 = address2 ?? '';
+    const cpsnsDigits = normalizeCpsns(cpsnsNumber);
+    const existing = await getDb().hostProfile.findUnique({
+        where: { userId },
+        select: { cpsnsNumber: true, cpsnsVerificationStatus: true },
+    });
+    const verificationPatch = cpsnsVerificationData(existing, cpsnsDigits);
     const data = {
         practiceName: clinicName ?? '',
         address: combinedAddress(a1, a2),
@@ -102,7 +109,7 @@ export async function POST(req: Request) {
         highlights: sanitizeClinicDescription(clinicDesc),
         contactFirstName: contactFirstName?.trim() || null,
         contactLastName: contactLastName?.trim() || null,
-        cpsnsNumber: cpsnsNumber?.trim() || null,
+        cpsnsNumber: cpsnsDigits.length === 9 ? cpsnsDigits : null,
         speciality: speciality?.trim() || null,
         licenseFile: licenseFile ?? null,
         licenseOriginalName: licenseOriginalName?.trim() || null,
@@ -116,8 +123,8 @@ export async function POST(req: Request) {
     };
     const profile = await getDb().hostProfile.upsert({
         where: { userId },
-        update: data,
-        create: { userId, ...data },
+        update: { ...data, ...(verificationPatch ?? {}) },
+        create: { userId, ...data, ...(verificationPatch ?? {}) },
     });
     return NextResponse.json(rowToApi(profile as unknown as HostProfileRow));
 }
@@ -135,6 +142,16 @@ export async function PUT(req: Request) {
     }
     const a1 = body.address1 ?? '';
     const a2 = body.address2 ?? '';
+    const existing = await getDb().hostProfile.findUnique({
+        where: { userId },
+        select: { cpsnsNumber: true, cpsnsVerificationStatus: true },
+    });
+    const cpsnsDigits =
+        body.cpsnsNumber !== undefined ? normalizeCpsns(body.cpsnsNumber) : null;
+    const verificationPatch =
+        cpsnsDigits !== null
+            ? cpsnsVerificationData(existing, cpsnsDigits)
+            : null;
     const data = {
         ...(body.clinicName !== undefined && { practiceName: body.clinicName }),
         ...(body.address1 !== undefined && {
@@ -156,7 +173,7 @@ export async function PUT(req: Request) {
             contactLastName: body.contactLastName?.trim() || null,
         }),
         ...(body.cpsnsNumber !== undefined && {
-            cpsnsNumber: body.cpsnsNumber?.trim() || null,
+            cpsnsNumber: cpsnsDigits && cpsnsDigits.length === 9 ? cpsnsDigits : null,
         }),
         ...(body.speciality !== undefined && {
             speciality: body.speciality?.trim() || null,
@@ -183,7 +200,7 @@ export async function PUT(req: Request) {
     };
     const profile = await getDb().hostProfile.update({
         where: { userId },
-        data,
+        data: { ...data, ...(verificationPatch ?? {}) },
     });
     return NextResponse.json(rowToApi(profile as unknown as HostProfileRow));
 }

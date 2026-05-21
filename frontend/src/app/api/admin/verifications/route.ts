@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAdminSession } from '@/lib/admin-auth-server';
 import {
-  hostCpsnsVerificationData,
+  cpsnsVerificationData,
   isCpsnsNineDigitsFormat,
   isHostVerificationPending,
   normalizeCpsns,
@@ -38,14 +38,17 @@ export async function GET(req: Request) {
   const hostProfiles = await Promise.all(
     hostProfilesRaw.map(async (p) => {
       const digits = normalizeCpsns(p.cpsnsNumber);
-      const patch = hostCpsnsVerificationData(
+      const patch = cpsnsVerificationData(
         {
           cpsnsNumber: p.cpsnsNumber,
           cpsnsVerificationStatus: p.cpsnsVerificationStatus,
         },
         digits,
       );
-      if (!patch || p.cpsnsVerificationStatus === patch.cpsnsVerificationStatus) {
+      if (
+        !patch ||
+        p.cpsnsVerificationStatus === patch.cpsnsVerificationStatus
+      ) {
         return p;
       }
       return db.hostProfile.update({
@@ -64,7 +67,7 @@ export async function GET(req: Request) {
     name: [p.firstName, p.lastName].filter(Boolean).join(' ') || p.user.email,
     cpsns: p.cpsnsId ?? '',
     submittedAt: p.updatedAt.toISOString(),
-    verificationStatus: p.verificationStatus,
+    cpsnsVerificationStatus: p.cpsnsVerificationStatus,
   }));
 
   const hostItems = hostProfiles
@@ -82,7 +85,7 @@ export async function GET(req: Request) {
       name: p.practiceName || p.user.email,
       cpsns: normalizeCpsns(p.cpsnsNumber) || '—',
       submittedAt: p.updatedAt.toISOString(),
-      verificationStatus: p.cpsnsVerificationStatus,
+      cpsnsVerificationStatus: p.cpsnsVerificationStatus,
     }));
 
   return NextResponse.json({ items: [...locumItems, ...hostItems] });

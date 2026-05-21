@@ -9,6 +9,7 @@ import { getToken } from '@/lib/auth';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { useAuth } from '@/providers/AuthProvider';
 import type { LocumProfile } from '@/types';
+import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 import { locumProfileCompletionPct } from '@/lib/locumProfileCompletion';
 import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
@@ -196,7 +197,7 @@ export default function LocumDashboard(props: {
         return `Welcome Dr ${full}`;
     })();
     const completionPct = locumProfileCompletionPct(profile);
-    const cpsnsVerified = isCpsnsVerificationApproved(profile?.verificationStatus);
+    const cpsnsVerified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
     const ringPct = Math.min(100, Math.max(0, completionPct)) / 100;
     const ringDash = ringPct * PROFILE_RING_C;
     const today = new Date();
@@ -259,13 +260,9 @@ export default function LocumDashboard(props: {
             flexShrink: 0,
             textTransform: 'capitalize',
         }}>
-        <span>{displayName}</span>
-        {profile && cpsnsVerified ? (<span style={{ display: 'inline-flex', alignItems: 'center' }} title="CPSNS verified" aria-label="CPSNS verified">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden style={{ flexShrink: 0, verticalAlign: 'middle' }}>
-              <path d="M12 3.25 19 5.9v5.25c0 4.45-2.82 7.95-7 9.6-4.18-1.65-7-5.15-7-9.6V5.9l7-2.65Z" stroke="#1B31D2" strokeWidth="1.8" strokeLinejoin="round"/>
-              <path d="M8.6 12.1 10.9 14.4 15.7 9.6" stroke="#1B31D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </span>) : null}
+        <NameWithVerifiedShield verified={cpsnsVerified}>
+            <span>{displayName}</span>
+        </NameWithVerifiedShield>
       </h1>
       <p style={{ fontSize: 12, color: '#8892a4', marginBottom: 18 }}></p>
       {profileError ? (<div style={{ fontSize: 12, color: '#dc2626', marginBottom: 14 }}>

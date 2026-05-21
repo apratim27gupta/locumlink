@@ -16,7 +16,10 @@ export async function PATCH(
 
   const { id } = await params;
 
-  let body: { status: 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED' };
+  let body: {
+    status: 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
+    suspensionNote?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -24,9 +27,17 @@ export async function PATCH(
   }
 
   const { status } = body;
+  const suspensionNote = body.suspensionNote?.trim() ?? '';
   const allowed = ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'] as const;
   if (!allowed.includes(status as (typeof allowed)[number])) {
     return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
+  }
+
+  if (status === 'SUSPENDED' && !suspensionNote) {
+    return NextResponse.json(
+      { error: 'Suspension note is required when suspending a user.' },
+      { status: 400 },
+    );
   }
 
   const db = getDb();
@@ -45,7 +56,20 @@ export async function PATCH(
 
   const updated = await db.user.update({
     where: { id },
-    data: { status },
+    data:
+      status === 'SUSPENDED'
+        ? {
+            status,
+            suspensionNote,
+            suspendedAt: new Date(),
+          }
+        : status === 'ACTIVE'
+          ? {
+              status,
+              suspensionNote: null,
+              suspendedAt: null,
+            }
+          : { status },
     select: { id: true, email: true, status: true },
   });
 
@@ -56,8 +80,13 @@ export async function PATCH(
       action: 'STATUS_CHANGE',
       entity: 'User',
       entityId: id,
+      outcome: 'SUCCESS',
+      actorRole: 'admin',
       before: { status: target.status },
-      after: { status },
+      after: {
+        status,
+        ...(status === 'SUSPENDED' ? { suspensionNote } : {}),
+      },
       endpoint: `/api/admin/users/${id}`,
     },
   });

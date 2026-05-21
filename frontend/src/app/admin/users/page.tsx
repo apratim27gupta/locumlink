@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Ban, Download, Search, UserCheck } from 'lucide-react';
+import { Ban, Download, Search, UserCheck, XCircle } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { adminFetchJson, adminDownloadUsersCsv } from '@/lib/adminApi';
 
@@ -55,6 +55,8 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [suspendTarget, setSuspendTarget] = useState<Row | null>(null);
+  const [suspensionNote, setSuspensionNote] = useState('');
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -83,7 +85,10 @@ export default function AdminUsersPage() {
     load();
   }, [load]);
 
-  async function patchUser(id: string, patch: Partial<Pick<Row, 'status'>>) {
+  async function patchUser(
+    id: string,
+    patch: { status: Row['status']; suspensionNote?: string },
+  ) {
     setSavingId(id);
     setErr(null);
     try {
@@ -91,12 +96,38 @@ export default function AdminUsersPage() {
         method: 'PATCH',
         body: JSON.stringify(patch),
       });
+      setSuspendTarget(null);
+      setSuspensionNote('');
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Update failed');
     } finally {
       setSavingId(null);
     }
+  }
+
+  function openSuspendModal(row: Row) {
+    setSuspendTarget(row);
+    setSuspensionNote('');
+    setErr(null);
+  }
+
+  function closeSuspendModal() {
+    setSuspendTarget(null);
+    setSuspensionNote('');
+  }
+
+  async function confirmSuspend() {
+    if (!suspendTarget) return;
+    const note = suspensionNote.trim();
+    if (!note) {
+      setErr('Enter a suspension note before suspending this user.');
+      return;
+    }
+    await patchUser(suspendTarget.id, {
+      status: 'SUSPENDED',
+      suspensionNote: note,
+    });
   }
 
   const filtered = rows.filter((r) => {
@@ -222,7 +253,7 @@ export default function AdminUsersPage() {
                           className="icon-btn icon-btn-danger"
                           disabled={savingId === r.id || r.role === 'ADMIN'}
                           title="Suspend"
-                          onClick={() => patchUser(r.id, { status: 'SUSPENDED' })}
+                          onClick={() => openSuspendModal(r)}
                         >
                           <Ban size={16} color="#dc2626" />
                         </button>
@@ -234,6 +265,80 @@ export default function AdminUsersPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div
+        className={`modal-overlay${suspendTarget ? ' active' : ''}`}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) closeSuspendModal();
+        }}
+        onKeyDown={() => {}}
+        role="presentation"
+      >
+        {suspendTarget ? (
+          <div className="modal" role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <div>
+                <h2 className="modal-title">Suspend user</h2>
+                <p className="modal-subtitle">{suspendTarget.email}</p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={closeSuspendModal}
+                aria-label="Close"
+                disabled={savingId === suspendTarget.id}
+              >
+                <XCircle size={20} color="#64748b" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="text-sm text-muted" style={{ marginBottom: 16 }}>
+                This account will be blocked from signing in until you reinstate it.
+                A suspension note is required for the audit log.
+              </p>
+              <div className="form-group">
+                <label className="form-label" htmlFor="suspension-note">
+                  Suspension note (required)
+                </label>
+                <textarea
+                  id="suspension-note"
+                  className="input"
+                  placeholder="e.g. Policy violation, duplicate account, requested by user…"
+                  value={suspensionNote}
+                  onChange={(e) => setSuspensionNote(e.target.value)}
+                  rows={4}
+                  disabled={savingId === suspendTarget.id}
+                />
+              </div>
+              <div className="grid-2" style={{ marginTop: 20 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: 12 }}
+                  disabled={savingId === suspendTarget.id}
+                  onClick={closeSuspendModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{
+                    padding: 12,
+                    borderColor: '#fecaca',
+                    color: '#dc2626',
+                  }}
+                  disabled={savingId === suspendTarget.id || !suspensionNote.trim()}
+                  onClick={() => void confirmSuspend()}
+                >
+                  <Ban size={18} />
+                  {savingId === suspendTarget.id ? 'Suspending…' : 'Confirm suspend'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </AdminLayout>
   );

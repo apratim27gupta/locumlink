@@ -2,14 +2,16 @@ import { Injectable, NotFoundException, BadRequestException, ForbiddenException,
 import {
     DocumentType,
     Specialty,
+    UserStatus,
     VerificationStatus,
     type LocumProfile as LocumProfileRow,
+    type User,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
     isCpsnsVerificationApproved,
     normalizeCpsns,
-    verificationStatusAfterCpsnsSave,
+    cpsnsVerificationPatch,
 } from '../cpsns/cpsns-verified.js';
 import type { SaveLocumProfileDto } from './locum.dto.js';
 function mapSpecialty(raw?: string): Specialty {
@@ -55,7 +57,12 @@ export type LocumProfileApi = {
     resumeOriginalName?: string;
     extraFile?: string;
     extraOriginalName?: string;
-    verificationStatus?: VerificationStatus;
+    cpsnsVerificationStatus?: VerificationStatus;
+    rejectionReason: string | null;
+    rejectedAt: string | null;
+    accountStatus: UserStatus;
+    suspensionNote: string | null;
+    suspendedAt: string | null;
 };
 function parseSaveBody(body: Record<string, unknown>): SaveLocumProfileDto {
     const s = (k: string) => {
@@ -111,7 +118,26 @@ function parseSaveBody(body: Record<string, unknown>): SaveLocumProfileDto {
 @Injectable()
 export class LocumService {
     constructor(private readonly prisma: PrismaService) { }
-    private mapProfileToApi(profile: LocumProfileRow): LocumProfileApi {
+
+    private async assertLocumCanWrite(userId: string): Promise<void> {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { status: true },
+        });
+        if (user?.status === UserStatus.SUSPENDED) {
+            throw new ForbiddenException(
+                'Your account is suspended. Contact support if you have questions.',
+            );
+        }
+        if (user?.status === UserStatus.DEACTIVATED) {
+            throw new ForbiddenException('Your account is deactivated.');
+        }
+    }
+
+    private mapProfileToApi(
+        profile: LocumProfileRow,
+        user: Pick<User, 'status' | 'suspensionNote' | 'suspendedAt'>,
+    ): LocumProfileApi {
         const spec = profile.specializationText?.trim() ||
             specialtyToDisplay(profile.specialty);
         return {
@@ -133,10 +159,16 @@ export class LocumService {
             resumeOriginalName: profile.resumeOriginalName ?? undefined,
             extraFile: profile.extraFileName ?? undefined,
             extraOriginalName: profile.extraOriginalName ?? undefined,
-            verificationStatus: profile.verificationStatus,
+            cpsnsVerificationStatus: profile.cpsnsVerificationStatus,
+            rejectionReason: profile.rejectionReason ?? null,
+            rejectedAt: profile.rejectedAt?.toISOString() ?? null,
+            accountStatus: user.status,
+            suspensionNote: user.suspensionNote ?? null,
+            suspendedAt: user.suspendedAt?.toISOString() ?? null,
         };
     }
     async saveProfile(userId: string, body: Record<string, unknown>) {
+        await this.assertLocumCanWrite(userId);
         const dto = parseSaveBody(body);
         const trimmedRaw = dto.cpsnsNumber?.trim() ?? '';
         const pendingFallback = `pending-${userId}`;
@@ -160,9 +192,17 @@ export class LocumService {
         const yearsOfExperience = dto.yearsOfExperience === undefined ? null : dto.yearsOfExperience;
         const existing = await this.prisma.locumProfile.findUnique({
             where: { userId },
-            select: { cpsnsId: true, verificationStatus: true },
+            select: { cpsnsId: true, cpsnsVerificationStatus: true },
         });
-        const verificationPatch = verificationStatusAfterCpsnsSave(existing, cpsnsDigits);
+        const verificationPatch = cpsnsVerificationPatch(
+            existing
+                ? {
+                      cpsnsNumber: existing.cpsnsId,
+                      cpsnsVerificationStatus: existing.cpsnsVerificationStatus,
+                  }
+                : null,
+            cpsnsDigits,
+        );
         const profile = await this.prisma.locumProfile.upsert({
             where: { userId },
             create: {
@@ -246,15 +286,26 @@ export class LocumService {
                 },
             });
         }));
-        return { success: true, profile: this.mapProfileToApi(profile) };
+        const user = await this.prisma.user.findUniqueOrThrow({
+            where: { id: userId },
+            select: { status: true, suspensionNote: true, suspendedAt: true },
+        });
+        return { success: true, profile: this.mapProfileToApi(profile, user) };
     }
     async getProfile(userId: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { status: true, suspensionNote: true, suspendedAt: true },
+        });
+        if (!user) {
+            return { exists: false, profile: null };
+        }
         const profile = await this.prisma.locumProfile.findUnique({
             where: { userId },
         });
         return {
             exists: !!profile,
-            profile: profile ? this.mapProfileToApi(profile) : null,
+            profile: profile ? this.mapProfileToApi(profile, user) : null,
         };
     }
     async countBrowseOpportunities(): Promise<number> {
@@ -292,13 +343,14 @@ export class LocumService {
         };
     }
     async applyToJob(userId: string, jobId: string, coverNote?: string) {
+        await this.assertLocumCanWrite(userId);
         const locumProfile = await this.prisma.locumProfile.findUnique({
             where: { userId },
-            select: { id: true, verificationStatus: true },
+            select: { id: true, cpsnsVerificationStatus: true },
         });
         if (!locumProfile)
             throw new NotFoundException('Complete your profile before applying to jobs.');
-        if (!isCpsnsVerificationApproved(locumProfile.verificationStatus)) {
+        if (!isCpsnsVerificationApproved(locumProfile.cpsnsVerificationStatus)) {
             throw new BadRequestException('Your CPSNS must be verified by an administrator before you can apply to jobs.');
         }
         const job = await this.prisma.jobPosting.findUnique({
