@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   DefaultValuePipe,
   Get,
   Header,
+  NotFoundException,
   Param,
   ParseIntPipe,
   Patch,
@@ -37,9 +39,9 @@ export class AdminController {
 
   @Get('users')
   async users(
-    @Query('q') q?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('pageSize', new DefaultValuePipe(50), ParseIntPipe) pageSize: number,
+    @Query('q') q?: string,
   ) {
     return this.admin.listUsers({
       q,
@@ -73,6 +75,23 @@ export class AdminController {
     return { items: await this.admin.listVerifications({ filter }) };
   }
 
+  @Get('verifications/:profileId')
+  async getVerification(
+    @Param('profileId') profileId: string,
+    @Query('profileType') profileType: string | undefined,
+  ) {
+    if (profileType !== 'locum' && profileType !== 'host') {
+      throw new BadRequestException(
+        'profileType query must be locum or host',
+      );
+    }
+    const detail = await this.admin.getVerificationDetail(profileId, profileType);
+    if (!detail) {
+      throw new NotFoundException('Profile not found');
+    }
+    return detail;
+  }
+
   @Patch('verifications/:profileId')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async patchVerification(
@@ -90,8 +109,8 @@ export class AdminController {
 
   @Get('audit-logs')
   async auditLogs(
-    @Query('q') q?: string,
     @Query('take', new DefaultValuePipe(200), ParseIntPipe) take: number,
+    @Query('q') q?: string,
   ) {
     return {
       items: await this.admin.listAuditLogs({

@@ -14,7 +14,8 @@ import { adminVerificationStatusTag } from '@/lib/cpsnsVerify';
 
 type VerificationRow = {
   id: string;
-  profileType: 'locum' | 'host';
+  profileType?: 'locum' | 'host';
+  userRole?: 'LOCUM' | 'HOST';
   userId: string;
   email: string;
   name: string;
@@ -45,6 +46,16 @@ type VerificationDetail = {
 function waitDays(submittedAt: string): number {
   const ms = Date.now() - new Date(submittedAt).getTime();
   return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
+}
+
+function resolveProfileType(
+  row: Pick<VerificationRow, 'profileType' | 'userRole'>,
+): 'locum' | 'host' {
+  if (row.profileType === 'host' || row.profileType === 'locum') {
+    return row.profileType;
+  }
+  if (row.userRole === 'HOST') return 'host';
+  return 'locum';
 }
 
 function fmtDate(ts: string): string {
@@ -79,8 +90,9 @@ export default function AdminVerificationsPage() {
     setDetailErr(null);
     setDetailLoading(true);
     try {
+      const profileType = resolveProfileType(row);
       const detail = await adminFetchJson<VerificationDetail>(
-        `/api/admin/verifications/${row.id}?profileType=${row.profileType}`,
+        `/api/admin/verifications/${row.id}?profileType=${profileType}`,
       );
       setReviewDetail(detail);
     } catch (e) {
@@ -112,7 +124,12 @@ export default function AdminVerificationsPage() {
       const data = await adminFetchJson<{ items: VerificationRow[] }>(
         '/api/admin/verifications',
       );
-      setRows(data.items ?? []);
+      setRows(
+        (data.items ?? []).map((item) => ({
+          ...item,
+          profileType: resolveProfileType(item),
+        })),
+      );
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to load');
       setRows([]);
@@ -142,7 +159,7 @@ export default function AdminVerificationsPage() {
         method: 'PATCH',
         body: JSON.stringify({
           cpsnsVerificationStatus,
-          profileType: row.profileType,
+          profileType: resolveProfileType(row),
           ...(cpsnsVerificationStatus === 'REJECTED' ? { rejectionReason } : {}),
         }),
       });
@@ -217,7 +234,7 @@ export default function AdminVerificationsPage() {
                       <div className="font-medium">{r.name}</div>
                       <div className="text-sm text-muted">{r.email}</div>
                       <div className="text-sm text-muted" style={{ marginTop: 2 }}>
-                        {r.profileType === 'host' ? 'Host clinic' : 'Locum'}
+                        {resolveProfileType(r) === 'host' ? 'Host clinic' : 'Locum'}
                       </div>
                     </td>
                     <td>

@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
+import { GcsModule } from '../gcs/gcs.module.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
 import { AdminController } from './admin.controller.js';
 import { AdminService } from './admin.service.js';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, GcsModule],
   controllers: [AdminController],
   providers: [AdminService],
 })

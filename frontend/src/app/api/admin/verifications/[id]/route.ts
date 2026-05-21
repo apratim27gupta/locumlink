@@ -21,6 +21,13 @@ export async function GET(
   const { id } = await params;
   const profileType = new URL(req.url).searchParams.get('profileType');
 
+  if (profileType !== 'locum' && profileType !== 'host') {
+    return NextResponse.json(
+      { error: 'profileType query must be locum or host' },
+      { status: 400 },
+    );
+  }
+
   try {
     const db = getDb();
     const detail =
