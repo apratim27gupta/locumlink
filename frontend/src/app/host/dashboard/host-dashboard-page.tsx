@@ -2231,7 +2231,7 @@ export default function HostDashboard(props: {
     ).length;
     const statsDisplay = [
         {
-            label: 'Total locum shifts posted',
+            label: 'Total Locum Shifts Posted',
             value: totalLocumShiftsPosted,
         },
         {

@@ -11,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import {
     isCpsnsVerificationApproved,
     normalizeCpsns,
-    cpsnsVerificationPatch,
+    credentialReviewPatchOnProfileSave,
 } from '../cpsns/cpsns-verified.js';
 import type { SaveLocumProfileDto } from './locum.dto.js';
 function mapSpecialty(raw?: string): Specialty {
@@ -194,7 +194,13 @@ export class LocumService {
             where: { userId },
             select: { cpsnsId: true, cpsnsVerificationStatus: true },
         });
-        const verificationPatch = cpsnsVerificationPatch(
+        const profileSubmittedForReview = Boolean(
+            dto.licenseFileName?.trim()
+            || dto.resumeFileName?.trim()
+            || dto.firstName?.trim()
+            || dto.lastName?.trim(),
+        );
+        const verificationPatch = credentialReviewPatchOnProfileSave(
             existing
                 ? {
                       cpsnsNumber: existing.cpsnsId,
@@ -202,6 +208,7 @@ export class LocumService {
                   }
                 : null,
             cpsnsDigits,
+            profileSubmittedForReview,
         );
         const profile = await this.prisma.locumProfile.upsert({
             where: { userId },

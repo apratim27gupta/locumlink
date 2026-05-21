@@ -93,4 +93,19 @@ export class AuthController {
         await this.authService.clearUserAvatar(user.id);
         return { success: true };
     }
+    @Post('me/deactivate')
+    @UseGuards(JwtAuthGuard)
+    @HttpCode(HttpStatus.OK)
+    async deactivateAccount(
+    @CurrentUser()
+    user: User,
+    @Ip()
+    ip: string,
+    @Headers('user-agent')
+    userAgent: string): Promise<{
+        success: true;
+    }> {
+        await this.authService.deactivateAccount(user.id, { ip, userAgent });
+        return { success: true };
+    }
 }

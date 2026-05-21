@@ -31,6 +31,8 @@ export async function GET(req: Request) {
       status: true,
       createdAt: true,
       lastLoginAt: true,
+      locumProfile: { select: { cpsnsVerificationStatus: true } },
+      hostProfile: { select: { cpsnsVerificationStatus: true } },
     },
   });
 
@@ -40,6 +42,12 @@ export async function GET(req: Request) {
       email: u.email,
       role: u.role,
       status: u.status,
+      cpsnsVerificationStatus:
+        u.role === 'LOCUM'
+          ? u.locumProfile?.cpsnsVerificationStatus ?? null
+          : u.role === 'HOST'
+            ? u.hostProfile?.cpsnsVerificationStatus ?? null
+            : null,
       createdAt: u.createdAt.toISOString(),
       lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
     })),

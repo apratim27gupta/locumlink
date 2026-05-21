@@ -15,7 +15,9 @@ import { adminFetchJson } from '@/lib/adminApi';
 export type AdminStats = {
   totalUsers: number;
   hostUsers: number;
+  verifiedHostUsers: number;
   locumUsers: number;
+  verifiedLocumUsers: number;
   pendingVerifications: number;
   activeJobPostings: number;
   totalJobPostings: number;

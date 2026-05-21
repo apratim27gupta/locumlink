@@ -1,58 +1,21 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-import { subscribeTopLoader } from '@/lib/topLoader';
+import { useEffect, useState } from 'react';
+import { subscribeTopLoader, subscribeTopLoaderProgress } from '@/lib/topLoader';
 export { startLoader, stopLoader } from '@/lib/topLoader';
 export default function TopLoadingBar() {
     const [active, setActive] = useState(false);
     const [width, setWidth] = useState(0);
     const [leaving, setLeaving] = useState(false);
-    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => subscribeTopLoader(setActive), []);
-    useEffect(() => {
-        if (intervalRef.current != null)
-            clearInterval(intervalRef.current);
-        if (timeoutRef.current != null)
-            clearTimeout(timeoutRef.current);
-        intervalRef.current = null;
-        timeoutRef.current = null;
-        if (active) {
+    useEffect(() => subscribeTopLoaderProgress((percent, isActive) => {
+        setWidth(percent);
+        if (isActive)
             setLeaving(false);
-            setWidth(10);
-            intervalRef.current = setInterval(() => {
-                setWidth((w) => {
-                    if (w >= 85) {
-                        if (intervalRef.current != null) {
-                            clearInterval(intervalRef.current);
-                            intervalRef.current = null;
-                        }
-                        return 85;
-                    }
-                    const step = w < 30 ? 8 : w < 60 ? 4 : w < 80 ? 1.5 : 0.5;
-                    return Math.min(w + step, 85);
-                });
-            }, 200);
-        }
-        else {
-            setWidth(100);
-            timeoutRef.current = setTimeout(() => {
-                setLeaving(true);
-                timeoutRef.current = setTimeout(() => {
-                    setWidth(0);
-                    setLeaving(false);
-                    timeoutRef.current = null;
-                }, 400);
-            }, 200);
-        }
-        return () => {
-            if (intervalRef.current != null)
-                clearInterval(intervalRef.current);
-            if (timeoutRef.current != null)
-                clearTimeout(timeoutRef.current);
-            intervalRef.current = null;
-            timeoutRef.current = null;
-        };
-    }, [active]);
+        else if (percent === 100)
+            setLeaving(true);
+        else if (percent === 0)
+            setLeaving(false);
+    }), []);
     if (width === 0 && !active)
         return null;
     return (<>

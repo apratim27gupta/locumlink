@@ -1,6 +1,64 @@
 import type { LocumProfile } from '@/types';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 
+export type LocumDashboardStatusBadge = {
+    label: string;
+    background: string;
+    color: string;
+    border: string;
+};
+
+/** Locum dashboard profile banner: account + CPSNS status pill. */
+export function getLocumDashboardStatusBadge(
+    profile: LocumProfile | null | undefined,
+): LocumDashboardStatusBadge | null {
+    if (!profile) return null;
+    if (profile.accountStatus === 'SUSPENDED') {
+        return {
+            label: 'Suspended',
+            background: '#fee2e2',
+            color: '#991b1b',
+            border: '#fca5a5',
+        };
+    }
+    if (profile.accountStatus === 'DEACTIVATED') {
+        return {
+            label: 'Deactivated',
+            background: '#f1f5f9',
+            color: '#475569',
+            border: '#cbd5e1',
+        };
+    }
+    if (isCpsnsVerificationApproved(profile.cpsnsVerificationStatus)) {
+        return {
+            label: 'Verified',
+            background: '#dbeafe',
+            color: '#1e40af',
+            border: '#93c5fd',
+        };
+    }
+    if (
+        profile.cpsnsVerificationStatus === 'PENDING_REVIEW'
+        || profile.cpsnsVerificationStatus === 'UNVERIFIED'
+    ) {
+        return {
+            label: 'Under verification',
+            background: 'rgba(59, 79, 216, 0.12)',
+            color: '#1B31D2',
+            border: 'rgba(59, 79, 216, 0.25)',
+        };
+    }
+    if (profile.cpsnsVerificationStatus === 'REJECTED') {
+        return {
+            label: 'Not verified',
+            background: '#ffedd5',
+            color: '#9a3412',
+            border: '#fdba74',
+        };
+    }
+    return null;
+}
+
 export type LocumAccountNotice = {
     title: string;
     message: string;

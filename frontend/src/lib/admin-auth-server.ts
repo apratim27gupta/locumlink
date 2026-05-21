@@ -18,7 +18,18 @@ export async function getAdminSession(
     return null;
   }
 
-  const token = (await cookies()).get('ll_admin')?.value ?? null;
+  let token = (await cookies()).get('ll_admin')?.value ?? null;
+  if (!token && request) {
+    const cookieHeader = request.headers.get('cookie') ?? '';
+    const match = cookieHeader.match(/(?:^|;\s*)ll_admin=([^;]+)/);
+    if (match?.[1]) {
+      try {
+        token = decodeURIComponent(match[1]);
+      } catch {
+        token = match[1];
+      }
+    }
+  }
   if (!token) return null;
 
   try {

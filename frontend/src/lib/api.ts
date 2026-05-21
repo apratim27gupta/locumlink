@@ -231,6 +231,16 @@ export const authApi = {
             throw new Error(text || `Could not remove profile photo (${res.status})`);
         }
     },
+    deactivateAccount: async (): Promise<void> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/auth/me/deactivate`, {
+            method: 'POST',
+            headers: nestHeaders(true),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || `Could not deactivate account (${res.status})`);
+        }
+    },
 };
 export type BrowseJobHostProfile = {
     practiceName: string;
@@ -286,6 +296,24 @@ export type MyApplication = {
         };
     };
 };
+export const landingApi = {
+    getRecentHostAvatars: async (): Promise<{
+        avatars: string[];
+    }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/public/recent-host-avatars`, {
+            cache: 'no-store',
+            headers: nestHeaders(false),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Loading host avatars');
+        }
+        return res.json() as Promise<{
+            avatars: string[];
+        }>;
+    },
+};
+
 export const locumApi = {
     getProfile: async (): Promise<{
         exists: boolean;

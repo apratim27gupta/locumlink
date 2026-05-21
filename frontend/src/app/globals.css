@@ -138,7 +138,7 @@
     accent-color: #1522a6;
   }
 }
-button:disabled {
+.auth-bg__card button:disabled {
   background: #8892a4 !important;
 }
 
@@ -408,6 +408,12 @@ button:disabled {
   flex-shrink: 0;
 }
 
+.home-landing-nav__auth .btn-signin,
+.home-landing-nav__auth .btn-signup {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
 @media (max-width: 720px) {
   .home-landing-nav {
     padding: 0 16px;
@@ -432,36 +438,35 @@ button:disabled {
   padding: 10px 22px;
   min-width: 108px;
   height: 44px;
-  border: none;
+  border: 1px solid #1c32d2;
   border-radius: 8px;
-  background: linear-gradient(135deg, #1c32d2 0%, #3a65db 100%);
+  background: #ffffff;
   font-family: 'Inter', sans-serif;
   font-weight: 600;
   font-size: 16px;
   line-height: 140%;
   letter-spacing: 0.02em;
-  color: #ffffff;
-  text-decoration: none;
+  color: #1c32d2;
+  cursor: pointer;
   box-sizing: border-box;
-  box-shadow:
-    0 2px 12px rgba(28, 50, 210, 0.35),
-    0 0 0 1px rgba(58, 101, 219, 0.2) inset;
+  box-shadow: 0 1px 2px rgba(28, 50, 210, 0.08);
   transition:
     background 0.2s,
+    border-color 0.2s,
     box-shadow 0.2s,
     transform 0.2s,
     opacity 0.2s;
 }
-.btn-signin:hover {
-  background: linear-gradient(135deg, #2a44e0 0%, #4d78e8 100%);
-  box-shadow:
-    0 6px 20px rgba(28, 50, 210, 0.4),
-    0 0 0 1px rgba(91, 126, 232, 0.25) inset;
+.btn-signin:hover:not(:disabled) {
+  background: #f0f4ff;
+  border-color: #2a44e0;
+  box-shadow: 0 4px 12px rgba(28, 50, 210, 0.15);
   transform: translateY(-1px);
 }
-.btn-signin:active {
-  background: linear-gradient(135deg, #1522a6 0%, #2a50c0 100%);
-  box-shadow: 0 2px 8px rgba(28, 50, 210, 0.3);
+.btn-signin:active:not(:disabled) {
+  background: #e8edfc;
+  border-color: #1522a6;
+  box-shadow: 0 1px 4px rgba(28, 50, 210, 0.12);
   transform: translateY(0);
 }
 .btn-signin:focus-visible {
@@ -497,7 +502,7 @@ button:disabled {
   line-height: 140%;
   letter-spacing: 0.02em;
   color: #ffffff;
-  text-decoration: none;
+  cursor: pointer;
   box-sizing: border-box;
   box-shadow:
     0 2px 12px rgba(28, 50, 210, 0.35),
@@ -508,14 +513,14 @@ button:disabled {
     transform 0.2s,
     opacity 0.2s;
 }
-.btn-signup:hover {
+.btn-signup:hover:not(:disabled) {
   background: linear-gradient(135deg, #2a44e0 0%, #4d78e8 100%);
   box-shadow:
     0 6px 20px rgba(28, 50, 210, 0.4),
     0 0 0 1px rgba(91, 126, 232, 0.25) inset;
   transform: translateY(-1px);
 }
-.btn-signup:active {
+.btn-signup:active:not(:disabled) {
   background: linear-gradient(135deg, #1522a6 0%, #2a50c0 100%);
   box-shadow: 0 2px 8px rgba(28, 50, 210, 0.3);
   transform: translateY(0);
@@ -610,15 +615,20 @@ button:disabled {
     0 0 0 2px #fff,
     0 0 0 4px rgba(59, 79, 216, 0.45);
 }
-.btn-signin--disabled {
+.btn-signin--disabled,
+.btn-signin:disabled,
+.btn-signup:disabled {
   color: #9ca3af !important;
   border-color: #d1d5db !important;
   background: #f3f4f6 !important;
   box-shadow: none !important;
   cursor: not-allowed !important;
-  pointer-events: none !important;
   opacity: 0.75;
   transform: none !important;
+}
+
+.btn-signup:disabled {
+  border: 1px solid #d1d5db;
 }
 
 

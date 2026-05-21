@@ -2,15 +2,36 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
-import { locumApi } from '@/lib/api';
+import { landingApi, locumApi } from '@/lib/api';
+import { beforeClientNavigation } from '@/lib/topLoader';
+
+const LANDING_AVATAR_FALLBACKS = [
+    '/avatar-1.jpeg',
+    '/avatar-2.jpeg',
+    '/avatar-clinic.png',
+] as const;
+
+function footerAvatarSources(hostUrls: string[]): string[] {
+    const uniqueHosts = [...new Set(hostUrls)].slice(0, 3);
+    if (uniqueHosts.length >= 3) return uniqueHosts;
+    if (uniqueHosts.length === 0) return [...LANDING_AVATAR_FALLBACKS];
+    return [...uniqueHosts, ...LANDING_AVATAR_FALLBACKS].slice(0, 3);
+}
 export type HomeLandingViewProps = {
     interactive?: boolean;
-    hasSignedUp?: boolean;
     rootStyle?: React.CSSProperties;
 };
-export function HomeLandingView({ interactive = true, hasSignedUp = false, rootStyle, }: HomeLandingViewProps) {
+export function HomeLandingView({ interactive = true, rootStyle, }: HomeLandingViewProps) {
+    const router = useRouter();
     const [browseOpportunityCount, setBrowseOpportunityCount] = useState<number | null>(null);
+    const [recentHostAvatars, setRecentHostAvatars] = useState<string[]>([]);
+
+    const goToAuth = (href: string) => {
+        beforeClientNavigation(href);
+        router.push(href);
+    };
     useEffect(() => {
         let cancelled = false;
         locumApi
@@ -22,6 +43,16 @@ export function HomeLandingView({ interactive = true, hasSignedUp = false, rootS
             .catch(() => {
             if (!cancelled)
                 setBrowseOpportunityCount(null);
+        });
+        landingApi
+            .getRecentHostAvatars()
+            .then(({ avatars }) => {
+            if (!cancelled)
+                setRecentHostAvatars(avatars);
+        })
+            .catch(() => {
+            if (!cancelled)
+                setRecentHostAvatars([]);
         });
         return () => {
             cancelled = true;
@@ -45,19 +76,22 @@ export function HomeLandingView({ interactive = true, hasSignedUp = false, rootS
         <Logo size="md" />
 
         <div className="home-landing-nav__auth">
-          {interactive ? (<>
-              <Link href={hasSignedUp ? '/auth?mode=signin' : '#'} className={`btn-signin ${!hasSignedUp ? 'btn-signin--disabled' : ''}`} onClick={(e) => !hasSignedUp && e.preventDefault()}>
-                Sign in
-              </Link>
-              <Link href="/auth" className="btn-signup">
-                Sign Up
-              </Link>
-            </>) : (<>
-              <span className="btn-signin btn-signin--disabled">Sign in</span>
-              <span className="btn-signup" style={{ pointerEvents: 'none' }}>
-                Sign Up
-              </span>
-            </>)}
+          <button
+            type="button"
+            className={`btn-signin ${!interactive ? 'btn-signin--disabled' : ''}`}
+            disabled={!interactive}
+            onClick={() => goToAuth('/auth?mode=signin')}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            className="btn-signup"
+            disabled={!interactive}
+            onClick={() => goToAuth('/auth')}
+          >
+            Sign Up
+          </button>
         </div>
       </nav>
 
@@ -250,54 +284,32 @@ export function HomeLandingView({ interactive = true, hasSignedUp = false, rootS
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{
+              {footerAvatarSources(recentHostAvatars).map((src, index, list) => (<div
+                key={`${src}-${index}`}
+                style={{
             width: 56,
             height: 56,
             borderRadius: '50%',
             border: '3px solid #F7F8FA',
-            marginRight: -7,
+            marginRight: index < list.length - 1 ? -7 : 0,
             overflow: 'hidden',
             position: 'relative',
-            zIndex: 3,
+            zIndex: list.length - index,
             flexShrink: 0,
+            background: '#E5E7EB',
         }}>
-                <Image src="/avatar-1.jpeg" alt="" fill sizes="56px" style={{ objectFit: 'cover' }}/>
-              </div>
-              <div style={{
-            width: 56,
-            height: 56,
-            borderRadius: '50%',
-            border: '3px solid #F7F8FA',
-            marginRight: -7,
-            overflow: 'hidden',
-            position: 'relative',
-            zIndex: 2,
-            flexShrink: 0,
-        }}>
-                <Image src="/avatar-2.jpeg" alt="" fill sizes="56px" style={{ objectFit: 'cover' }}/>
-              </div>
-              <div style={{
-            width: 56,
-            height: 56,
-            borderRadius: '50%',
-            background: '#6B7280',
-            border: '3px solid #F7F8FA',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1,
-            position: 'relative',
-            flexShrink: 0,
-        }}>
-                <span style={{
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 400,
-            fontSize: 18,
-            color: '#FFFFFF',
-        }}>
-                  {opportunityCountLabel}
-                </span>
-              </div>
+                {src.startsWith('http') ? (
+                  <img
+                    src={src}
+                    alt=""
+                    width={56}
+                    height={56}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                ) : (
+                  <Image src={src} alt="" fill sizes="56px" style={{ objectFit: 'cover' }}/>
+                )}
+              </div>))}
             </div>
 
             <span style={{
@@ -307,6 +319,8 @@ export function HomeLandingView({ interactive = true, hasSignedUp = false, rootS
             color: '#606061',
             marginLeft: 5,
         }}>
+              <span style={{ fontWeight: 600, color: '#0B0F1F' }}>{opportunityCountLabel}</span>
+              {' '}
               doctors covered shifts this month
             </span>
           </div>

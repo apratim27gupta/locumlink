@@ -6,6 +6,11 @@ export function originalUploadFileName(upload: { fileName?: string }, file: File
     return file.name;
 }
 
+function looksLikeGeneratedStorageFileName(name: string): boolean {
+    const base = name.split('/').pop() ?? name;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]+$/i.test(base);
+}
+
 export function formatUploadedFileLabel(
     storagePath: string | null | undefined,
     originalName: string | null | undefined,
@@ -16,5 +21,8 @@ export function formatUploadedFileLabel(
         return label;
     if (!storagePath?.trim())
         return placeholder;
-    return storagePath.split('/').pop() ?? placeholder;
+    const fromPath = storagePath.split('/').pop() ?? '';
+    if (fromPath && !looksLikeGeneratedStorageFileName(fromPath))
+        return fromPath;
+    return placeholder;
 }

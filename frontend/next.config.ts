@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
             { source: '/api/upload/:path*', destination: `${apiBase}/api/upload/:path*` },
             { source: '/api/notifications/:path*', destination: `${apiBase}/api/notifications/:path*` },
             { source: '/api/health', destination: `${apiBase}/api/health` },
+            { source: '/api/public/:path*', destination: `${apiBase}/api/public/:path*` },
         ];
     },
     webpack: (config, { dev, isServer }) => {

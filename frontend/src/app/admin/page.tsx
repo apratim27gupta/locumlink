@@ -18,7 +18,9 @@ import { adminFetchJson } from '@/lib/adminApi';
 type Stats = {
   totalUsers: number;
   hostUsers: number;
+  verifiedHostUsers: number;
   locumUsers: number;
+  verifiedLocumUsers: number;
   pendingVerifications: number;
   activeJobPostings: number;
 };
@@ -114,7 +116,9 @@ export default function AdminOverviewPage() {
   const err = statsErr ?? activityErr;
   const pending = stats?.pendingVerifications ?? 0;
   const hosts = stats?.hostUsers ?? 0;
+  const verifiedHosts = stats?.verifiedHostUsers ?? 0;
   const locums = stats?.locumUsers ?? 0;
+  const verifiedLocums = stats?.verifiedLocumUsers ?? 0;
   const totalUsers = stats?.totalUsers ?? 0;
   const openJobs = stats?.activeJobPostings ?? 0;
   const totalJobs = stats?.totalJobPostings ?? 0;
@@ -140,18 +144,22 @@ export default function AdminOverviewPage() {
 
       <div className="metric-grid">
         <MetricCard
-          label="Total Hosts"
-          value={metric(hosts)}
-          subtext="Registered host accounts"
-          icon={<Users size={24} color="#4f46e5" />}
-        />
-        <MetricCard
-          label="Total Locums"
-          value={metric(locums)}
+          label="Verified Hosts"
+          value={loading ? '—' : `${verifiedHosts} / ${hosts}`}
           subtext={
             loading
-              ? 'Loading…'
-              : `${totalUsers} total users on platform`
+              ? undefined
+              : `${verifiedHosts} of ${hosts} hosts CPSNS verified`
+          }
+          icon={<ShieldCheck size={24} color="#4f46e5" />}
+        />
+        <MetricCard
+          label="Verified Locums"
+          value={loading ? '—' : `${verifiedLocums} / ${locums}`}
+          subtext={
+            loading
+              ? undefined
+              : `${verifiedLocums} of ${locums} locums CPSNS verified`
           }
           icon={<UserCheck size={24} color="#4f46e5" />}
         />

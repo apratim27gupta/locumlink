@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import AuthSplitLayout from '@/components/AuthSplitLayout';
 import Logo from '@/components/Logo';
@@ -80,6 +81,7 @@ function AdminLoginInner() {
   const showDenied = error === 'not_allowed';
 
   return (
+    <>
     <AuthSplitLayout variant="signup">
       <form
         onSubmit={(e) => void handleSubmit(e)}
@@ -181,6 +183,10 @@ function AdminLoginInner() {
         </button>
       </form>
     </AuthSplitLayout>
+    <Link href="/home" className="home-admin-login-btn">
+      Home
+    </Link>
+    </>
   );
 }
 
@@ -188,9 +194,14 @@ export default function AdminLoginPage() {
   return (
     <Suspense
       fallback={
-        <AuthSplitLayout variant="signup">
-          <div style={{ padding: 24, textAlign: 'center', color: '#6B7280' }}>Loading…</div>
-        </AuthSplitLayout>
+        <>
+          <AuthSplitLayout variant="signup">
+            <div style={{ padding: 24, textAlign: 'center', color: '#6B7280' }}>Loading…</div>
+          </AuthSplitLayout>
+          <Link href="/home" className="home-admin-login-btn">
+            Home
+          </Link>
+        </>
       }
     >
       <AdminLoginInner />

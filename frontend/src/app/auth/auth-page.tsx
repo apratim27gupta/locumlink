@@ -104,6 +104,8 @@ export default function AuthPage() {
             setBusyAction(null);
         }
     }
+    const roleLabel = (r: Role) => (r === 'clinic' ? 'Host' : 'Locum');
+
     const btnStyle: React.CSSProperties = {
         width: '100%',
         opacity: 1,
@@ -134,20 +136,19 @@ export default function AuthPage() {
         {mode === 'create' ? 'Create an account' : 'Sign in'}
       </h2>
 
-      {mode === 'create' && (<p style={{
-                width: 376,
-                height: 28,
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontStyle: 'normal',
-                fontSize: 20,
-                lineHeight: '140%',
-                letterSpacing: 0,
-                color: '#4A4A4A',
-                margin: 0,
-            }}>
-          I&apos;m a
-        </p>)}
+      <p style={{
+            width: 376,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 400,
+            fontStyle: 'normal',
+            fontSize: 20,
+            lineHeight: '140%',
+            letterSpacing: 0,
+            color: '#4A4A4A',
+            margin: 0,
+        }}>
+        {mode === 'create' ? 'I\u2019m a' : 'I\u2019m an'}
+      </p>
 
       <div style={{
             display: 'flex',
@@ -156,19 +157,20 @@ export default function AuthPage() {
             padding: 0,
             gap: 32,
             width: 376,
-            height: 398,
             boxSizing: 'border-box',
             opacity: 1,
         }}>
-        
-        {mode === 'create' && (<div style={{
+        <div style={{
                 display: 'flex',
                 width: '100%',
                 border: '1px solid #e2e5ee',
                 borderRadius: 6,
                 overflow: 'hidden',
-            }}>
-            {(['clinic', 'locum'] as Role[]).map((r) => (<button key={r} type="button" onClick={() => setRole(r)} suppressHydrationWarning style={{
+            }}
+            role="group"
+            aria-label={mode === 'create' ? 'Account type' : 'Sign in role'}
+        >
+            {(['clinic', 'locum'] as Role[]).map((r) => (<button key={r} type="button" onClick={() => setRole(r)} aria-pressed={role === r} suppressHydrationWarning style={{
                     flex: 1,
                     padding: '10px',
                     border: 'none',
@@ -180,9 +182,9 @@ export default function AuthPage() {
                     color: role === r ? '#fff' : '#5a6478',
                     transition: 'all .15s',
                 }}>
-                {r === 'clinic' ? 'Clinic' : 'Locum'}
+                {roleLabel(r)}
               </button>))}
-          </div>)}
+        </div>
 
         
         <div style={{ display: 'flex', gap: 24, width: '100%' }}>

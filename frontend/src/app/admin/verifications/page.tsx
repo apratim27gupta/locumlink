@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { adminFetchJson } from '@/lib/adminApi';
+import { adminVerificationStatusTag } from '@/lib/cpsnsVerify';
 
 type VerificationRow = {
   id: string;
@@ -111,12 +112,7 @@ export default function AdminVerificationsPage() {
       const data = await adminFetchJson<{ items: VerificationRow[] }>(
         '/api/admin/verifications',
       );
-      const pending = (data.items ?? []).filter(
-        (r) =>
-          r.cpsnsVerificationStatus === 'PENDING_REVIEW'
-          || r.cpsnsVerificationStatus === 'UNVERIFIED',
-      );
-      setRows(pending);
+      setRows(data.items ?? []);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to load');
       setRows([]);
@@ -211,6 +207,10 @@ export default function AdminVerificationsPage() {
               rows.map((r) => {
                 const days = waitDays(r.submittedAt);
                 const urgent = days >= 3;
+                const statusTag = adminVerificationStatusTag(
+                  r.cpsnsVerificationStatus,
+                  r.cpsns,
+                );
                 return (
                   <tr key={r.id}>
                     <td>
@@ -227,19 +227,11 @@ export default function AdminVerificationsPage() {
                       <span
                         className="tag"
                         style={{
-                          background:
-                            r.cpsnsVerificationStatus === 'PENDING_REVIEW'
-                              ? 'rgba(59, 79, 216, 0.12)'
-                              : 'rgba(234, 179, 8, 0.15)',
-                          color:
-                            r.cpsnsVerificationStatus === 'PENDING_REVIEW'
-                              ? '#1B31D2'
-                              : '#92400e',
+                          background: statusTag.background,
+                          color: statusTag.color,
                         }}
                       >
-                        {r.cpsnsVerificationStatus === 'PENDING_REVIEW'
-                          ? 'Awaiting review'
-                          : 'Not verified'}
+                        {statusTag.label}
                       </span>
                     </td>
                     <td className="text-muted">{fmtDate(r.submittedAt)}</td>

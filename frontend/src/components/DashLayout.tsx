@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Logo from '@/components/Logo';
 import { useAuth } from '@/providers/AuthProvider';
 import { computeAvatarInitials, initialsFromSupabaseUser, } from '@/lib/avatarInitials';
-import { getRole, getToken } from '@/lib/auth';
+import { clearProfileCompleteCookies, getRole, getToken } from '@/lib/auth';
 import { authApi, hostApi, locumApi, notificationsApi, uploadFile, type NotificationItem, } from '@/lib/api';
 import { getSupabase } from '@/lib/supabaseClient';
 import { useTrackLastPath } from '../hooks/useTrackLastPath';
@@ -77,6 +77,8 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null);
     const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
     const [avatarRemoveBusy, setAvatarRemoveBusy] = useState(false);
+    const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false);
+    const [deactivateBusy, setDeactivateBusy] = useState(false);
     const [authAvatarInitials, setAuthAvatarInitials] = useState<string | null>(null);
     const [apiFirstName, setApiFirstName] = useState<string | null>(null);
     const [apiLastName, setApiLastName] = useState<string | null>(null);
@@ -197,6 +199,28 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         logout();
         beforeClientNavigation('/home');
         router.replace('/home');
+    }
+    async function handleDeactivateAccount() {
+        if (!getToken() || deactivateBusy)
+            return;
+        setDeactivateBusy(true);
+        try {
+            await authApi.deactivateAccount();
+            setDeactivateConfirmOpen(false);
+            setAvatarMenuOpen(false);
+            clearProfileCompleteCookies();
+            logout();
+            beforeClientNavigation('/home');
+            router.replace('/home');
+        }
+        catch (err) {
+            window.alert(err instanceof Error
+                ? err.message
+                : 'Could not deactivate your account. Try again.');
+        }
+        finally {
+            setDeactivateBusy(false);
+        }
     }
     function handleNotifClick(notif: NotificationItem) {
         setBellOpen(false);
@@ -566,7 +590,37 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                   </svg>
                   {avatarRemoveBusy ? 'Removing…' : 'Remove profile photo'}
                 </button>) : null}
-                <button type="button" disabled={avatarRemoveBusy || avatarUploadBusy} onClick={() => {
+                <button type="button" disabled={avatarRemoveBusy || avatarUploadBusy || deactivateBusy} onClick={() => {
+                setAvatarMenuOpen(false);
+                setDeactivateConfirmOpen(true);
+            }} style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                background: 'transparent',
+                border: 'none',
+                borderRadius: 8,
+                padding: '10px 10px',
+                cursor: avatarRemoveBusy || avatarUploadBusy || deactivateBusy ? 'default' : 'pointer',
+                color: '#b45309',
+                fontSize: 'var(--font-body)',
+                fontWeight: 'var(--font-weight-bold)',
+                textAlign: 'left',
+                borderTop: '1px solid #F3F4F6',
+                opacity: avatarRemoveBusy || avatarUploadBusy || deactivateBusy ? 0.55 : 1,
+                fontFamily: 'inherit',
+            }} onMouseOver={(e) => {
+                if (!avatarRemoveBusy && !avatarUploadBusy && !deactivateBusy)
+                    e.currentTarget.style.background = '#FFFBEB';
+            }} onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                  </svg>
+                  Deactivate account
+                </button>
+                <button type="button" disabled={avatarRemoveBusy || avatarUploadBusy || deactivateBusy} onClick={() => {
                 setAvatarMenuOpen(false);
                 handleLogout();
             }} style={{
@@ -578,16 +632,16 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 border: 'none',
                 borderRadius: 8,
                 padding: '10px 10px',
-                cursor: avatarRemoveBusy || avatarUploadBusy ? 'default' : 'pointer',
+                cursor: avatarRemoveBusy || avatarUploadBusy || deactivateBusy ? 'default' : 'pointer',
                 color: '#dc2626',
                 fontSize: 'var(--font-body)',
                 fontWeight: 'var(--font-weight-bold)',
                 textAlign: 'left',
                 borderTop: '1px solid #F3F4F6',
-                opacity: avatarRemoveBusy || avatarUploadBusy ? 0.55 : 1,
+                opacity: avatarRemoveBusy || avatarUploadBusy || deactivateBusy ? 0.55 : 1,
                 fontFamily: 'inherit',
             }} onMouseOver={(e) => {
-                if (!avatarRemoveBusy && !avatarUploadBusy)
+                if (!avatarRemoveBusy && !avatarUploadBusy && !deactivateBusy)
                     e.currentTarget.style.background = '#FEF2F2';
             }} onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
@@ -599,6 +653,72 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 </button>
               </div>)}
           </div>
+
+          {deactivateConfirmOpen ? (<div role="dialog" aria-modal="true" aria-labelledby="deactivate-account-title" style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 200,
+            background: 'rgba(15, 23, 42, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+        }} onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !deactivateBusy)
+                setDeactivateConfirmOpen(false);
+        }}>
+              <div style={{
+                width: '100%',
+                maxWidth: 420,
+                background: '#fff',
+                borderRadius: 12,
+                padding: 24,
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.28)',
+            }}>
+                <h2 id="deactivate-account-title" style={{
+                margin: '0 0 8px',
+                fontSize: 20,
+                fontWeight: 700,
+                color: '#0f1523',
+            }}>
+                  Deactivate account?
+                </h2>
+                <p style={{
+                margin: '0 0 20px',
+                fontSize: 15,
+                lineHeight: 1.5,
+                color: 'rgba(11, 15, 31, 0.75)',
+            }}>
+                  Are you sure? Your profile data will be kept for 30 days. Sign in again within that time to restore everything. After 30 days, signing in or registering with the same email starts a new account.
+                </p>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <button type="button" disabled={deactivateBusy} onClick={() => setDeactivateConfirmOpen(false)} style={{
+                padding: '10px 16px',
+                borderRadius: 8,
+                border: '1px solid #e2e5ee',
+                background: '#fff',
+                cursor: deactivateBusy ? 'default' : 'pointer',
+                fontFamily: 'inherit',
+                fontWeight: 600,
+            }}>
+                    Cancel
+                  </button>
+                  <button type="button" disabled={deactivateBusy} onClick={() => void handleDeactivateAccount()} style={{
+                padding: '10px 16px',
+                borderRadius: 8,
+                border: 'none',
+                background: '#b45309',
+                color: '#fff',
+                cursor: deactivateBusy ? 'default' : 'pointer',
+                fontFamily: 'inherit',
+                fontWeight: 600,
+                opacity: deactivateBusy ? 0.7 : 1,
+            }}>
+                    {deactivateBusy ? 'Deactivating…' : 'Yes, deactivate'}
+                  </button>
+                </div>
+              </div>
+            </div>) : null}
         </div>
       </header>
 

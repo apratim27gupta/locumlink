@@ -16,7 +16,9 @@ export async function GET(req: Request) {
   const [
     totalUsers,
     hostUsers,
+    verifiedHostUsers,
     locumUsers,
+    verifiedLocumUsers,
     pendingLocumVerifications,
     pendingHostVerifications,
     activeJobPostings,
@@ -24,7 +26,13 @@ export async function GET(req: Request) {
   ] = await Promise.all([
     db.user.count(),
     db.user.count({ where: { role: 'HOST' } }),
+    db.hostProfile.count({
+      where: { cpsnsVerificationStatus: 'VERIFIED' },
+    }),
     db.user.count({ where: { role: 'LOCUM' } }),
+    db.locumProfile.count({
+      where: { cpsnsVerificationStatus: 'VERIFIED' },
+    }),
     db.locumProfile.count({
       where: {
         cpsnsVerificationStatus: { in: ['UNVERIFIED', 'PENDING_REVIEW'] },
@@ -50,7 +58,9 @@ export async function GET(req: Request) {
     stats: {
       totalUsers,
       hostUsers,
+      verifiedHostUsers,
       locumUsers,
+      verifiedLocumUsers,
       pendingVerifications: pendingLocumVerifications + pendingHostVerifications,
       activeJobPostings,
       totalJobPostings,

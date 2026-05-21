@@ -1024,7 +1024,7 @@ export default function LocumSetupPage() {
             }}>
                           {uploading === 'license'
                 ? 'Uploading…'
-                : formatUploadedFileLabel(form.licenseFileName, form.licenseOriginalName, 'Upload (optional)')}
+                : formatUploadedFileLabel(form.licenseFileName, form.licenseOriginalName, 'Upload document')}
                         </span>
                         <UploadCloudIcon />
                       </div>
@@ -1076,7 +1076,7 @@ export default function LocumSetupPage() {
             }}>
                           {uploading === 'resume'
                 ? 'Uploading…'
-                : formatUploadedFileLabel(form.resumeFileName, form.resumeOriginalName, 'Upload (optional)')}
+                : formatUploadedFileLabel(form.resumeFileName, form.resumeOriginalName, 'Upload document')}
                         </span>
                         <UploadCloudIcon />
                       </div>
@@ -1128,7 +1128,7 @@ export default function LocumSetupPage() {
             }}>
                           {uploading === 'extra'
                 ? 'Uploading…'
-                : formatUploadedFileLabel(form.extraFileName, form.extraOriginalName, 'Upload Document')}
+                : formatUploadedFileLabel(form.extraFileName, form.extraOriginalName, 'Upload document')}
                         </span>
                         <UploadCloudIcon />
                       </div>

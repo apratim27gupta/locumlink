@@ -6,6 +6,7 @@ import {
   } from '@nestjs/common';
   import {
     PostingStatus,
+    Role,
     UserStatus,
     VerificationStatus,
     type HostProfile as HostProfileRow,
@@ -17,8 +18,8 @@ import {
   import {
     isCpsnsVerificationApproved,
     normalizeCpsns,
-    cpsnsVerificationPatch,
-  } from '../cpsns/cpsns-verified.js';
+    credentialReviewPatchOnProfileSave,
+} from '../cpsns/cpsns-verified.js';
   
   export type HostProfileApi = {
     clinicName: string;
@@ -160,7 +161,12 @@ import {
         where: { userId },
         select: { cpsnsNumber: true, cpsnsVerificationStatus: true },
       });
-      const verificationPatch = cpsnsVerificationPatch(
+      const profileSubmittedForReview = Boolean(
+        dto.licenseFile
+        || dto.photoIdFile
+        || dto.clinicName?.trim(),
+      );
+      const verificationPatch = credentialReviewPatchOnProfileSave(
         existing
           ? {
               cpsnsNumber: existing.cpsnsNumber,
@@ -168,6 +174,7 @@ import {
             }
           : null,
         cpsnsDigits,
+        profileSubmittedForReview,
       );
       const profile = await this.prisma.hostProfile.upsert({
         where: { userId },
@@ -678,5 +685,94 @@ import {
       });
   
       return { success: true, application: updated };
+    }
+
+    async getRecentHostAvatarUrls(limit = 3): Promise<{ avatars: string[] }> {
+      const hosts = await this.prisma.user.findMany({
+        where: {
+          role: Role.HOST,
+          status: { in: [UserStatus.ACTIVE, UserStatus.PENDING] },
+          hostProfile: { isNot: null },
+        },
+        orderBy: { hostProfile: { updatedAt: 'desc' } },
+        take: 50,
+        select: {
+          id: true,
+          avatarStoragePath: true,
+          updatedAt: true,
+          hostProfile: {
+            select: {
+              photoIdFile: true,
+              updatedAt: true,
+            },
+          },
+        },
+      });
+
+      const isImagePath = (path: string) =>
+        /\.(jpe?g|png|webp|gif)$/i.test(path) || path.includes('/avatars/');
+
+      type Candidate = { userId: string; path: string; at: number };
+      const candidates: Candidate[] = [];
+      for (const host of hosts) {
+        const avatar = host.avatarStoragePath?.trim() ?? '';
+        const photoId = host.hostProfile?.photoIdFile?.trim() ?? '';
+        const profileAt = host.hostProfile?.updatedAt.getTime() ?? 0;
+        const userAt = host.updatedAt.getTime();
+        if (avatar) {
+          candidates.push({
+            userId: host.id,
+            path: avatar,
+            at: Math.max(userAt, profileAt),
+          });
+        } else if (photoId && isImagePath(photoId)) {
+          candidates.push({
+            userId: host.id,
+            path: photoId,
+            at: profileAt,
+          });
+        }
+      }
+
+      candidates.sort((a, b) => b.at - a.at);
+      const seenUsers = new Set<string>();
+      const seenPaths = new Set<string>();
+      const paths: string[] = [];
+      for (const c of candidates) {
+        if (seenUsers.has(c.userId) || seenPaths.has(c.path)) continue;
+        seenUsers.add(c.userId);
+        seenPaths.add(c.path);
+        paths.push(c.path);
+        if (paths.length >= limit) break;
+      }
+
+      if (paths.length < limit) {
+        const extra = await this.prisma.user.findMany({
+          where: {
+            role: Role.HOST,
+            status: { in: [UserStatus.ACTIVE, UserStatus.PENDING] },
+            avatarStoragePath: { not: null },
+            ...(seenUsers.size > 0 ? { id: { notIn: [...seenUsers] } } : {}),
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: limit * 2,
+          select: { id: true, avatarStoragePath: true },
+        });
+        for (const row of extra) {
+          const path = row.avatarStoragePath?.trim() ?? '';
+          if (!path || seenPaths.has(path) || seenUsers.has(row.id)) continue;
+          seenUsers.add(row.id);
+          seenPaths.add(path);
+          paths.push(path);
+          if (paths.length >= limit) break;
+        }
+      }
+
+      const avatars: string[] = [];
+      for (const path of paths) {
+        const url = await this.gcs.signedUrl(path);
+        if (url) avatars.push(url);
+      }
+      return { avatars };
     }
   }

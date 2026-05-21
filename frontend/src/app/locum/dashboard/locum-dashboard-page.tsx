@@ -11,6 +11,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import type { LocumProfile } from '@/types';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
+import { getLocumDashboardStatusBadge } from '@/lib/locumAccountNotice';
 import { locumProfileCompletionPct } from '@/lib/locumProfileCompletion';
 import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
 import { beforeClientNavigation } from '@/lib/topLoader';
@@ -198,6 +199,7 @@ export default function LocumDashboard(props: {
     })();
     const completionPct = locumProfileCompletionPct(profile);
     const cpsnsVerified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
+    const statusBadge = getLocumDashboardStatusBadge(profile);
     const ringPct = Math.min(100, Math.max(0, completionPct)) / 100;
     const ringDash = ringPct * PROFILE_RING_C;
     const today = new Date();
@@ -281,7 +283,7 @@ export default function LocumDashboard(props: {
         }}>
         <div style={{ flex: 1, flexShrink: 0, padding: '18px 18px', borderRight: '1px solid #e2e5ee' }}>
           <div style={{ fontSize: 'var(--font-small)', color: '#5a6478', marginBottom: 4 }}>
-            Total Accepted
+            Total Accepted Shifts
           </div>
           <div style={{
             fontSize: 'var(--font-heading)',
@@ -294,7 +296,7 @@ export default function LocumDashboard(props: {
         </div>
         <div style={{ flex: 1, flexShrink: 0, padding: '18px 18px' }}>
           <div style={{ fontSize: 'var(--font-small)', color: '#5a6478', marginBottom: 4 }}>
-            Completed Jobs
+            Completed Shifts
           </div>
           <div style={{
             fontSize: 'var(--font-heading)',
@@ -349,13 +351,32 @@ export default function LocumDashboard(props: {
                 ? 'Your profile is complete'
                 : 'Profile complete — CPSNS verification required to apply'}
             </div>
-            <div style={{ fontSize: 'var(--font-small)', color: '#5a6478' }}>
-              {completionPct}% Completed
-              {completionPct === 100 && cpsnsVerified
-            ? ' · CPSNS verified'
-            : completionPct === 100 && !cpsnsVerified
-                ? ' · Awaiting CPSNS verification'
-                : ''}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+              marginTop: 4,
+            }}>
+              <span style={{ fontSize: 'var(--font-small)', color: '#5a6478' }}>
+                {completionPct}% Completed
+              </span>
+              {statusBadge ? (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '2px 10px',
+                  borderRadius: 999,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  lineHeight: 1.4,
+                  background: statusBadge.background,
+                  color: statusBadge.color,
+                  border: `1px solid ${statusBadge.border}`,
+                }}>
+                  {statusBadge.label}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -403,8 +424,8 @@ export default function LocumDashboard(props: {
             {t === 'recent'
                 ? 'Recent Applications'
                 : t === 'upcoming'
-                    ? 'Upcoming Jobs'
-                    : 'Completed Jobs'}
+                    ? 'Upcoming Shifts'
+                    : 'Completed Shifts'}
           </button>))}
       </div>
 

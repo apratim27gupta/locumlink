@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getToken, getRole, isProfileComplete, getEmail } from '@/lib/auth';
+import { getToken, getRole, isProfileComplete } from '@/lib/auth';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { HomeLandingView } from '@/components/HomeLandingView';
 import { beforeClientNavigation } from '@/lib/topLoader';
@@ -13,10 +13,8 @@ export default function HomePage(props: {
     const router = useRouter();
     const [isClient, setIsClient] = useState(false);
     const [authChecked, setAuthChecked] = useState(false);
-    const [hasSignedUp, setHasSignedUp] = useState(false);
     useEffect(() => {
         setIsClient(true);
-        setHasSignedUp(Boolean(getEmail()));
         const token = getToken();
         if (!token) {
             setAuthChecked(true);
@@ -64,5 +62,5 @@ export default function HomePage(props: {
         }
         return null;
     }
-    return <HomeLandingView interactive hasSignedUp={hasSignedUp}/>;
+    return <HomeLandingView interactive />;
 }

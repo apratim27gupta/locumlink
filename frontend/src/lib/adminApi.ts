@@ -70,3 +70,18 @@ export async function adminDownloadUsersCsv(q: string): Promise<void> {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export async function adminDownloadAnalyticsReport(): Promise<void> {
+  const res = await fetch(`${adminApiBase()}/api/admin/analytics/export`, {
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const date = new Date().toISOString().slice(0, 10);
+  a.download = `locumlink-analytics-${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}

@@ -22,34 +22,54 @@ function BarWave() {
           to { opacity: 1; }
         }
       `}</style>
-      <div style={{
-        position: 'fixed', inset: 0, zIndex: 99999,
-        background: 'rgba(255,255,255,0.92)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        gap: 20, fontFamily: 'Inter, sans-serif',
-        animation: 'fadeIn 0.15s ease',
-      }}>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', height: 48 }}>
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 99999,
+          background: 'rgba(255,255,255,0.92)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 20,
+          fontFamily: 'Inter, sans-serif',
+          animation: 'fadeIn 0.15s ease',
+        }}
+      >
+        <div
+          style={{ display: 'flex', gap: 6, alignItems: 'center', height: 48 }}
+        >
           {bars.map((b, i) => (
-            <span key={i} style={{
-              width: 5, height: b.h, borderRadius: 3,
-              background: i % 2 === 0
-                ? 'linear-gradient(180deg,#1C32D2,#3A65DB)'
-                : 'linear-gradient(180deg,#3BC6C6,#2AA8A8)',
-              display: 'block',
-              animation: `bwv 0.9s ease-in-out ${b.delay} infinite`,
-              boxShadow: i % 2 === 0
-                ? '0 0 8px rgba(28,50,210,0.4)'
-                : '0 0 8px rgba(59,198,198,0.4)',
-            }}/>
+            <span
+              key={i}
+              style={{
+                width: 5,
+                height: b.h,
+                borderRadius: 3,
+                background:
+                  i % 2 === 0
+                    ? 'linear-gradient(180deg,#1C32D2,#3A65DB)'
+                    : 'linear-gradient(180deg,#3BC6C6,#2AA8A8)',
+                display: 'block',
+                animation: `bwv 0.9s ease-in-out ${b.delay} infinite`,
+                boxShadow:
+                  i % 2 === 0
+                    ? '0 0 8px rgba(28,50,210,0.4)'
+                    : '0 0 8px rgba(59,198,198,0.4)',
+              }}
+            />
           ))}
         </div>
-        <span style={{
-          fontSize: 13, color: '#9CA3AF', fontWeight: 500,
-          letterSpacing: '0.04em',
-        }}>
+        <span
+          style={{
+            fontSize: 13,
+            color: '#9CA3AF',
+            fontWeight: 500,
+            letterSpacing: '0.04em',
+          }}
+        >
           Loading…
         </span>
       </div>

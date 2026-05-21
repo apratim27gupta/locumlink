@@ -261,6 +261,7 @@ export default function HostProfilePage(props: {
     const [accommodation, setAccommodation] = useState(false);
     const [customAmenity, setCustomAmenity] = useState('');
     const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null);
+    const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
     const [saved, setSaved] = useState(false);
     const [saveError, setSaveError] = useState('');
     const [activeStep, setActiveStep] = useState(1);
@@ -360,6 +361,17 @@ export default function HostProfilePage(props: {
             window.removeEventListener('focus', refreshAvatar);
         };
     }, []);
+
+    useEffect(() => {
+        if (!avatarPreviewOpen)
+            return;
+        const onKeyDown = (e: globalThis.KeyboardEvent) => {
+            if (e.key === 'Escape')
+                setAvatarPreviewOpen(false);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [avatarPreviewOpen]);
 
     useEffect(() => {
         const onDocMouseDown = (e: MouseEvent) => {
@@ -482,6 +494,9 @@ export default function HostProfilePage(props: {
             cpsnsNumber: cpsns,
             speciality: specialties.join(', '),
             licenseFile,
+            licenseOriginalName: licenseFile
+                ? (licenseLabel.trim() || null)
+                : null,
             address1: addr1,
             address2: addr2,
             postalCode: postal,
@@ -801,6 +816,24 @@ export default function HostProfilePage(props: {
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <div
+                                role={avatarPhotoUrl ? 'button' : undefined}
+                                tabIndex={avatarPhotoUrl ? 0 : undefined}
+                                aria-label={avatarPhotoUrl ? 'View profile photo' : undefined}
+                                onClick={(e) => {
+                                    if (!avatarPhotoUrl)
+                                        return;
+                                    e.stopPropagation();
+                                    setAvatarPreviewOpen(true);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (!avatarPhotoUrl)
+                                        return;
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setAvatarPreviewOpen(true);
+                                    }
+                                }}
                                 style={{
                                     width: 24,
                                     height: 24,
@@ -810,6 +843,7 @@ export default function HostProfilePage(props: {
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
+                                    cursor: avatarPhotoUrl ? 'pointer' : 'default',
                                 }}
                             >
                                 {avatarPhotoUrl ? (
@@ -823,6 +857,7 @@ export default function HostProfilePage(props: {
                                             height: '100%',
                                             objectFit: 'cover',
                                             display: 'block',
+                                            pointerEvents: 'none',
                                         }}
                                     />
                                 ) : (
@@ -2117,6 +2152,62 @@ export default function HostProfilePage(props: {
                     </button>
                 </div>
             </div>
+            {avatarPreviewOpen && avatarPhotoUrl ? (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Profile photo preview"
+                    onClick={() => setAvatarPreviewOpen(false)}
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 300,
+                        background: 'rgba(0, 0, 0, 0.92)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 24,
+                        boxSizing: 'border-box',
+                    }}
+                >
+                    <button
+                        type="button"
+                        aria-label="Close photo preview"
+                        onClick={() => setAvatarPreviewOpen(false)}
+                        style={{
+                            position: 'absolute',
+                            top: 16,
+                            right: 16,
+                            width: 40,
+                            height: 40,
+                            borderRadius: '50%',
+                            border: 'none',
+                            background: 'rgba(255, 255, 255, 0.15)',
+                            color: '#fff',
+                            fontSize: 24,
+                            lineHeight: 1,
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                        }}
+                    >
+                        ×
+                    </button>
+                    <img
+                        src={avatarPhotoUrl}
+                        alt="Profile photo"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            maxWidth: 'min(92vw, 520px)',
+                            maxHeight: 'min(85vh, 720px)',
+                            width: 'auto',
+                            height: 'auto',
+                            objectFit: 'contain',
+                            borderRadius: 8,
+                            boxShadow: '0 24px 80px rgba(0, 0, 0, 0.45)',
+                        }}
+                    />
+                </div>
+            ) : null}
         </DashLayout>
     );
 }

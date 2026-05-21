@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedHostUserId } from '@/lib/auth-server';
 import { getDb } from '@/lib/db';
-import { cpsnsVerificationData, normalizeCpsns } from '@/lib/cpsnsVerify';
+import { credentialReviewDataOnProfileSave, normalizeCpsns } from '@/lib/cpsnsVerify';
 import type { HostProfile } from '@/types';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -98,7 +98,14 @@ export async function POST(req: Request) {
         where: { userId },
         select: { cpsnsNumber: true, cpsnsVerificationStatus: true },
     });
-    const verificationPatch = cpsnsVerificationData(existing, cpsnsDigits);
+    const profileSubmittedForReview = Boolean(
+        licenseFile?.trim() || clinicName?.trim(),
+    );
+    const verificationPatch = credentialReviewDataOnProfileSave(
+        existing,
+        cpsnsDigits,
+        profileSubmittedForReview,
+    );
     const data = {
         practiceName: clinicName ?? '',
         address: combinedAddress(a1, a2),
@@ -148,10 +155,22 @@ export async function PUT(req: Request) {
     });
     const cpsnsDigits =
         body.cpsnsNumber !== undefined ? normalizeCpsns(body.cpsnsNumber) : null;
+    const profileSubmittedForReview = Boolean(
+        body.licenseFile?.trim()
+        || body.clinicName?.trim()
+        || body.contactFirstName?.trim()
+        || body.contactLastName?.trim(),
+    );
     const verificationPatch =
         cpsnsDigits !== null
-            ? cpsnsVerificationData(existing, cpsnsDigits)
-            : null;
+            ? credentialReviewDataOnProfileSave(
+                existing,
+                cpsnsDigits,
+                profileSubmittedForReview,
+            )
+            : profileSubmittedForReview
+                ? credentialReviewDataOnProfileSave(existing, '', profileSubmittedForReview)
+                : null;
     const data = {
         ...(body.clinicName !== undefined && { practiceName: body.clinicName }),
         ...(body.address1 !== undefined && {

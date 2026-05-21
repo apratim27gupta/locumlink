@@ -442,6 +442,7 @@ export default function LocumBrowsePage(props: {
   const selectedJobPassed = job ? hasJobEndDatePassed(job) : false;
   const accountNotice = getLocumAccountNotice(profile);
   const canApply = locumCanApplyToJobs(profile);
+  const cpsnsVerified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
   async function handleApply(jobId: string) {
     if (applied.has(jobId)) return;
     const targetJob = jobs.find((j) => j.id === jobId);
@@ -1114,11 +1115,13 @@ export default function LocumBrowsePage(props: {
                   {(job.startDate || job.endDate) && (
                     <span
                       style={{
-                        background: '#F1F3F7',
+                        background: LOGO_TEAL_BG,
+                        border: `1px solid ${LOGO_TEAL_BORDER}`,
                         padding: '5px 10px',
                         borderRadius: 5,
                         fontSize: 'var(--font-small)',
-                        color: '#5a6478',
+                        fontWeight: 600,
+                        color: LOGO_TEAL,
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 6,
@@ -1162,11 +1165,12 @@ export default function LocumBrowsePage(props: {
                   {job.payPerDay && (
                     <span
                       style={{
-                        background: '#F0FDF4',
+                        background: LOGO_TEAL_BG,
+                        border: `1px solid ${LOGO_TEAL_BORDER}`,
                         padding: '5px 10px',
                         borderRadius: 5,
                         fontSize: 'var(--font-small)',
-                        color: '#166534',
+                        color: LOGO_TEAL,
                         fontWeight: 'var(--font-weight-bold)',
                       }}
                     >

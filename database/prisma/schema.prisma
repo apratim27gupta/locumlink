@@ -119,6 +119,7 @@ model User {
   // Suspension fields (L2-E7.4)
   suspensionNote     String?    @map("suspension_note")
   suspendedAt        DateTime?  @map("suspended_at")
+  deactivatedAt      DateTime?  @map("deactivated_at")
 
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt

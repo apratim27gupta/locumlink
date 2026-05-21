@@ -421,6 +421,18 @@
   border-color: #fca5a5;
 }
 
+.admin-portal .status-rejected {
+  background-color: #ffedd5;
+  color: #9a3412;
+  border-color: #fdba74;
+}
+
+.admin-portal .status-deactivated {
+  background-color: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
 .admin-portal .input-group {
   position: relative;
 }
@@ -638,19 +650,26 @@
 
 .admin-portal .chart-bars {
   width: 100%;
+  height: 160px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
 }
 
 .admin-portal .chart-bar-locums {
-  width: 100%;
+  width: 18px;
+  min-height: 2px;
+  flex-shrink: 0;
   background-color: #6366f1;
   border-radius: 4px 4px 0 0;
 }
 
 .admin-portal .chart-bar-hosts {
-  width: 100%;
+  width: 18px;
+  min-height: 2px;
+  flex-shrink: 0;
   background-color: #c7d2fe;
   border-radius: 4px 4px 0 0;
 }

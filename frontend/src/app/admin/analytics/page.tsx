@@ -3,23 +3,13 @@
 import { useEffect, useState } from 'react';
 import { Download, FileText, TrendingUp, Users } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
-import { adminFetchJson } from '@/lib/adminApi';
-
-type AnalyticsSummary = {
-  totalApplications: number;
-  fillRatePct: number;
-  activeUsers30d: number;
-  growth: { month: string; locums: number; hosts: number; total: number }[];
-  locations: { name: string; pct: number; count: number }[];
-  postingPerformance: {
-    filledWithin48hPct: number;
-    stillOpenPct: number;
-  };
-};
+import { adminDownloadAnalyticsReport, adminFetchJson } from '@/lib/adminApi';
+import type { AnalyticsSummary } from '@/lib/adminAnalyticsSummary';
 
 export default function AdminAnalyticsPage() {
   const [data, setData] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -50,6 +40,20 @@ export default function AdminAnalyticsPage() {
     ...growth.flatMap((g) => [g.locums, g.hosts, g.total]),
   );
 
+  async function handleExport() {
+    if (exporting || loading || !data)
+      return;
+    setExporting(true);
+    setErr(null);
+    try {
+      await adminDownloadAnalyticsReport();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <AdminLayout>
       <div className="header-with-actions">
@@ -60,9 +64,14 @@ export default function AdminAnalyticsPage() {
           </p>
         </div>
         <div className="header-actions">
-          <button type="button" className="btn btn-primary" disabled>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={loading || exporting || !data}
+            onClick={() => void handleExport()}
+          >
             <Download size={16} />
-            Export Report
+            {exporting ? 'Exporting…' : 'Export Report'}
           </button>
         </div>
       </div>
@@ -164,7 +173,7 @@ export default function AdminAnalyticsPage() {
             <>
               <div className="progress-container">
                 <div className="progress-header">
-                  <span className="progress-label">Non-active postings</span>
+                  <span className="progress-label">Placements within 48h</span>
                   <span className="progress-value">
                     {data?.postingPerformance.filledWithin48hPct ?? 0}%
                   </span>
@@ -177,10 +186,13 @@ export default function AdminAnalyticsPage() {
                     }}
                   />
                 </div>
+                <p className="text-sm text-muted" style={{ marginTop: 6 }}>
+                  Share of confirmed placements filled within 48 hours of applying.
+                </p>
               </div>
               <div className="progress-container">
                 <div className="progress-header">
-                  <span className="progress-label">Active postings</span>
+                  <span className="progress-label">Active job postings</span>
                   <span className="progress-value">
                     {data?.postingPerformance.stillOpenPct ?? 0}%
                   </span>
@@ -190,6 +202,24 @@ export default function AdminAnalyticsPage() {
                     className="progress-fill progress-amber"
                     style={{
                       width: `${data?.postingPerformance.stillOpenPct ?? 0}%`,
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="progress-container">
+                <div className="progress-header">
+                  <span className="progress-label">Closed / other postings</span>
+                  <span className="progress-value">
+                    {data?.postingPerformance.closedPostingsPct
+                      ?? (100 - (data?.postingPerformance.stillOpenPct ?? 0))}%
+                  </span>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill progress-blue"
+                    style={{
+                      width: `${data?.postingPerformance.closedPostingsPct
+                        ?? (100 - (data?.postingPerformance.stillOpenPct ?? 0))}%`,
                     }}
                   />
                 </div>

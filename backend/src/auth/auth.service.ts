@@ -1,12 +1,13 @@
 import {
     BadRequestException,
     ConflictException,
+    ForbiddenException,
     Injectable,
     UnauthorizedException,
   } from '@nestjs/common';
   import { ConfigService } from '@nestjs/config';
   import { JwtService } from '@nestjs/jwt';
-  import { Role, User } from '@prisma/client';
+  import { Role, User, UserStatus } from '@prisma/client';
   import { createClient } from '@supabase/supabase-js';
   import * as bcrypt from 'bcrypt';
   import { randomUUID } from 'node:crypto';
@@ -23,6 +24,17 @@ import {
   
   // Current privacy policy / terms version
   const CURRENT_CONSENT_VERSION = '1.0';
+  const DEACTIVATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+  function isWithinDeactivationRetention(deactivatedAt: Date | null | undefined): boolean {
+    if (!deactivatedAt) return false;
+    return Date.now() - deactivatedAt.getTime() < DEACTIVATION_RETENTION_MS;
+  }
+
+  function isDeactivationRetentionExpired(deactivatedAt: Date | null | undefined): boolean {
+    if (!deactivatedAt) return true;
+    return Date.now() - deactivatedAt.getTime() >= DEACTIVATION_RETENTION_MS;
+  }
   
   function isPlaceholderSupabaseKey(key: string | undefined): boolean {
     const s = key?.trim() ?? '';
@@ -47,15 +59,55 @@ import {
       dto: RegisterDto,
       meta: { ip?: string; userAgent?: string },
     ): Promise<AuthTokens> {
+      const email = dto.email.toLowerCase();
       const existing = await this.prisma.user.findUnique({
-        where: { email: dto.email.toLowerCase() },
+        where: { email },
       });
+      const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+
       if (existing) {
+        if (
+          existing.status === UserStatus.DEACTIVATED &&
+          isWithinDeactivationRetention(existing.deactivatedAt)
+        ) {
+          throw new ConflictException(
+            'This email belongs to a deactivated account. Sign in within 30 days to restore your profile.',
+          );
+        }
+        if (
+          existing.status === UserStatus.DEACTIVATED &&
+          isDeactivationRetentionExpired(existing.deactivatedAt)
+        ) {
+          await this.resetUserToFreshStart(existing.id);
+          const user = await this.prisma.user.update({
+            where: { id: existing.id },
+            data: {
+              passwordHash,
+              role: dto.role,
+              status: UserStatus.PENDING,
+              deactivatedAt: null,
+              consentGivenAt: dto.consentGiven === true ? new Date() : null,
+              consentVersion: dto.consentGiven === true
+                ? (dto.consentVersion ?? CURRENT_CONSENT_VERSION)
+                : null,
+            },
+          });
+          this.audit.log({
+            actorId: user.id,
+            subjectId: user.id,
+            action: 'CREATE',
+            entity: 'User',
+            entityId: user.id,
+            after: { email: user.email, role: user.role, reRegisteredAfterDeactivation: true },
+            outcome: 'SUCCESS',
+            actorRole: user.role,
+            ...meta,
+          });
+          return this.issueTokens(user);
+        }
         throw new ConflictException('Email already registered');
       }
-  
-      const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-  
+
       const user = await this.prisma.user.create({
         data: {
           email: dto.email.toLowerCase(),
@@ -93,10 +145,18 @@ import {
       dto: LoginDto,
       meta: { ip?: string; userAgent?: string },
     ): Promise<AuthTokens> {
-      const user = await this.validateCredentials(dto.email, dto.password);
-      await this.prisma.user.update({
+      let user = await this.validateCredentials(dto.email, dto.password);
+      const reactivated =
+        user.status === UserStatus.DEACTIVATED &&
+        isWithinDeactivationRetention(user.deactivatedAt);
+      user = await this.prisma.user.update({
         where: { id: user.id },
-        data: { lastLoginAt: new Date() },
+        data: {
+          lastLoginAt: new Date(),
+          ...(reactivated
+            ? { status: UserStatus.ACTIVE, deactivatedAt: null }
+            : {}),
+        },
       });
       this.audit.log({
         actorId: user.id,
@@ -105,6 +165,7 @@ import {
         entityId: user.id,
         outcome: 'SUCCESS',
         actorRole: user.role,
+        after: reactivated ? { reactivatedFromDeactivation: true } : undefined,
         ...meta,
       });
       return this.issueTokens(user);
@@ -117,7 +178,20 @@ import {
       if (!user) {
         throw new UnauthorizedException('Invalid credentials');
       }
-      if (user.status !== 'ACTIVE' && user.status !== 'PENDING') {
+      if (user.status === UserStatus.SUSPENDED) {
+        throw new UnauthorizedException(
+          'Your account is suspended. Contact support if you have questions.',
+        );
+      }
+      if (user.status === UserStatus.DEACTIVATED) {
+        if (isWithinDeactivationRetention(user.deactivatedAt)) {
+          // Password check below; login() reactivates the account.
+        } else {
+          throw new UnauthorizedException(
+            'Your account was deactivated over 30 days ago. Register again to create a new account.',
+          );
+        }
+      } else if (user.status !== UserStatus.ACTIVE && user.status !== UserStatus.PENDING) {
         throw new UnauthorizedException('Account suspended or deactivated');
       }
       const passwordMatch = await bcrypt.compare(password, user.passwordHash);
@@ -209,13 +283,43 @@ import {
     ): Promise<User> {
       const existing = await this.prisma.user.findUnique({ where: { email } });
       if (existing) {
+        if (existing.status === UserStatus.SUSPENDED) {
+          throw new ForbiddenException(
+            'Your account is suspended. Contact support if you have questions.',
+          );
+        }
+        if (existing.status === UserStatus.DEACTIVATED) {
+          if (isWithinDeactivationRetention(existing.deactivatedAt)) {
+            const data: Partial<
+              Pick<
+                User,
+                'role' | 'status' | 'emailVerified' | 'emailVerifiedAt' | 'lastLoginAt' | 'deactivatedAt'
+              >
+            > = {
+              status: UserStatus.ACTIVE,
+              deactivatedAt: null,
+              emailVerified: true,
+              emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
+              lastLoginAt: new Date(),
+            };
+            if (existing.role !== roleHint && existing.role !== Role.ADMIN) {
+              data.role = roleHint;
+            }
+            return this.prisma.user.update({
+              where: { id: existing.id },
+              data,
+            });
+          }
+          await this.resetUserToFreshStart(existing.id);
+        }
         const data: Partial<
           Pick<
             User,
-            'role' | 'status' | 'emailVerified' | 'emailVerifiedAt' | 'lastLoginAt'
+            'role' | 'status' | 'emailVerified' | 'emailVerifiedAt' | 'lastLoginAt' | 'deactivatedAt'
           >
         > = {
-          status: 'ACTIVE',
+          status: UserStatus.ACTIVE,
+          deactivatedAt: null,
           emailVerified: true,
           emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
           lastLoginAt: new Date(),
@@ -278,6 +382,71 @@ import {
       });
     }
   
+    async deactivateAccount(
+      userId: string,
+      meta: { ip?: string; userAgent?: string },
+    ): Promise<void> {
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        throw new UnauthorizedException('Session invalid');
+      }
+      if (user.role === Role.ADMIN) {
+        throw new ForbiddenException('Admin accounts cannot be self-deactivated.');
+      }
+      if (user.status === UserStatus.DEACTIVATED) {
+        return;
+      }
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          status: UserStatus.DEACTIVATED,
+          deactivatedAt: new Date(),
+          hashedRefreshToken: null,
+          lastAppPath: null,
+        },
+      });
+      this.audit.log({
+        actorId: userId,
+        subjectId: userId,
+        action: 'STATUS_CHANGE',
+        entity: 'User',
+        entityId: userId,
+        before: { status: user.status },
+        after: { status: UserStatus.DEACTIVATED, deactivatedAt: new Date().toISOString() },
+        outcome: 'SUCCESS',
+        actorRole: user.role,
+        ...meta,
+      });
+    }
+
+    private async resetUserToFreshStart(userId: string): Promise<void> {
+      const existing = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { avatarStoragePath: true },
+      });
+      const avatarPath = existing?.avatarStoragePath?.trim() ?? '';
+      if (avatarPath) {
+        await this.gcs.delete(avatarPath);
+      }
+      await this.prisma.$transaction([
+        this.prisma.notificationEvent.deleteMany({ where: { recipientId: userId } }),
+        this.prisma.locumProfile.deleteMany({ where: { userId } }),
+        this.prisma.hostProfile.deleteMany({ where: { userId } }),
+        this.prisma.user.update({
+          where: { id: userId },
+          data: {
+            status: UserStatus.PENDING,
+            deactivatedAt: null,
+            suspensionNote: null,
+            suspendedAt: null,
+            hashedRefreshToken: null,
+            lastAppPath: null,
+            avatarStoragePath: null,
+          },
+        }),
+      ]);
+    }
+
     async clearUserAvatar(userId: string): Promise<void> {
       const existing = await this.prisma.user.findUnique({
         where: { id: userId },

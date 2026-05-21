@@ -5,14 +5,23 @@ import { Ban, Download, Search, UserCheck, XCircle } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { adminFetchJson, adminDownloadUsersCsv } from '@/lib/adminApi';
 
+type CpsnsVerificationStatus =
+  | 'UNVERIFIED'
+  | 'PENDING_REVIEW'
+  | 'VERIFIED'
+  | 'REJECTED';
+
 type Row = {
   id: string;
   email: string;
   role: 'LOCUM' | 'HOST' | 'ADMIN';
   status: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'DEACTIVATED';
+  cpsnsVerificationStatus: CpsnsVerificationStatus | null;
   createdAt: string;
   lastLoginAt: string | null;
 };
+
+type DisplayStatus = { label: string; className: string };
 
 function roleLabel(role: Row['role']): string {
   if (role === 'HOST') return 'Host Physician';
@@ -20,18 +29,34 @@ function roleLabel(role: Row['role']): string {
   return 'Admin';
 }
 
-function statusClass(status: Row['status']): string {
-  if (status === 'ACTIVE') return 'status-active';
-  if (status === 'PENDING') return 'status-pending';
-  if (status === 'SUSPENDED' || status === 'DEACTIVATED') return 'status-suspended';
-  return 'status-pending';
+function displayStatus(row: Row): DisplayStatus {
+  if (row.status === 'SUSPENDED') {
+    return { label: 'Suspended', className: 'status-suspended' };
+  }
+  if (row.status === 'DEACTIVATED') {
+    return { label: 'Deactivated', className: 'status-deactivated' };
+  }
+  if (row.status === 'PENDING') {
+    return { label: 'Pending', className: 'status-pending' };
+  }
+  if (row.cpsnsVerificationStatus === 'VERIFIED') {
+    return { label: 'Verified', className: 'status-verified' };
+  }
+  if (row.cpsnsVerificationStatus === 'REJECTED') {
+    return { label: 'Rejected', className: 'status-rejected' };
+  }
+  return { label: 'Pending review', className: 'status-pending' };
 }
 
-function statusLabel(status: Row['status']): string {
-  if (status === 'ACTIVE') return 'Active';
-  if (status === 'PENDING') return 'Pending';
-  if (status === 'SUSPENDED') return 'Suspended';
-  return 'Deactivated';
+function matchesStatusFilter(row: Row, filter: string): boolean {
+  if (filter === 'all') return true;
+  const { label } = displayStatus(row);
+  if (filter === 'verified') return label === 'Verified';
+  if (filter === 'rejected') return label === 'Rejected';
+  if (filter === 'pending') return label === 'Pending' || label === 'Pending review';
+  if (filter === 'suspended') return label === 'Suspended';
+  if (filter === 'deactivated') return label === 'Deactivated';
+  return true;
 }
 
 function fmtDate(iso: string): string {
@@ -57,6 +82,7 @@ export default function AdminUsersPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<Row | null>(null);
   const [suspensionNote, setSuspensionNote] = useState('');
+  const [reinstateTarget, setReinstateTarget] = useState<Row | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -117,6 +143,21 @@ export default function AdminUsersPage() {
     setSuspensionNote('');
   }
 
+  function openReinstateModal(row: Row) {
+    setReinstateTarget(row);
+    setErr(null);
+  }
+
+  function closeReinstateModal() {
+    setReinstateTarget(null);
+  }
+
+  async function confirmReinstate() {
+    if (!reinstateTarget) return;
+    await patchUser(reinstateTarget.id, { status: 'ACTIVE' });
+    setReinstateTarget(null);
+  }
+
   async function confirmSuspend() {
     if (!suspendTarget) return;
     const note = suspensionNote.trim();
@@ -135,7 +176,7 @@ export default function AdminUsersPage() {
     if (t && !r.email.toLowerCase().includes(t)) return false;
     if (roleFilter === 'host' && r.role !== 'HOST') return false;
     if (roleFilter === 'locum' && r.role !== 'LOCUM') return false;
-    if (statusFilter !== 'all' && r.status.toLowerCase() !== statusFilter) return false;
+    if (!matchesStatusFilter(r, statusFilter)) return false;
     return true;
   });
 
@@ -186,8 +227,9 @@ export default function AdminUsersPage() {
           onChange={(e) => setStatusFilter(e.target.value)}
         >
           <option value="all">All Statuses</option>
-          <option value="active">Active</option>
-          <option value="pending">Pending</option>
+          <option value="verified">Verified</option>
+          <option value="rejected">Rejected</option>
+          <option value="pending">Pending review</option>
           <option value="suspended">Suspended</option>
           <option value="deactivated">Deactivated</option>
         </select>
@@ -227,9 +269,14 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="text-muted">{roleLabel(r.role)}</td>
                   <td>
-                    <span className={`status-badge ${statusClass(r.status)}`}>
-                      {statusLabel(r.status)}
-                    </span>
+                    {(() => {
+                      const badge = displayStatus(r);
+                      return (
+                        <span className={`status-badge ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="text-muted">{fmtDate(r.createdAt)}</td>
                   <td className="text-muted">
@@ -243,7 +290,7 @@ export default function AdminUsersPage() {
                           className="icon-btn icon-btn-success"
                           disabled={savingId === r.id}
                           title="Reinstate"
-                          onClick={() => patchUser(r.id, { status: 'ACTIVE' })}
+                          onClick={() => openReinstateModal(r)}
                         >
                           <UserCheck size={16} color="#059669" />
                         </button>
@@ -279,7 +326,7 @@ export default function AdminUsersPage() {
           <div className="modal" role="dialog" aria-modal="true">
             <div className="modal-header">
               <div>
-                <h2 className="modal-title">Suspend user</h2>
+                <h2 className="modal-title">Are you sure you want to suspend this user?</h2>
                 <p className="modal-subtitle">{suspendTarget.email}</p>
               </div>
               <button
@@ -295,7 +342,7 @@ export default function AdminUsersPage() {
             <div className="modal-body">
               <p className="text-sm text-muted" style={{ marginBottom: 16 }}>
                 This account will be blocked from signing in until you reinstate it.
-                A suspension note is required for the audit log.
+                Please provide a reason for suspension (required for the audit log).
               </p>
               <div className="form-group">
                 <label className="form-label" htmlFor="suspension-note">
@@ -334,6 +381,61 @@ export default function AdminUsersPage() {
                 >
                   <Ban size={18} />
                   {savingId === suspendTarget.id ? 'Suspending…' : 'Confirm suspend'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div
+        className={`modal-overlay${reinstateTarget ? ' active' : ''}`}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) closeReinstateModal();
+        }}
+        onKeyDown={() => {}}
+        role="presentation"
+      >
+        {reinstateTarget ? (
+          <div className="modal" role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <div>
+                <h2 className="modal-title">Reinstate user?</h2>
+                <p className="modal-subtitle">{reinstateTarget.email}</p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={closeReinstateModal}
+                aria-label="Close"
+                disabled={savingId === reinstateTarget.id}
+              >
+                <XCircle size={20} color="#64748b" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="text-sm text-muted" style={{ marginBottom: 20 }}>
+                This will restore sign-in access for this account.
+              </p>
+              <div className="grid-2">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: 12 }}
+                  disabled={savingId === reinstateTarget.id}
+                  onClick={closeReinstateModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-success"
+                  style={{ padding: 12 }}
+                  disabled={savingId === reinstateTarget.id}
+                  onClick={() => void confirmReinstate()}
+                >
+                  <UserCheck size={18} />
+                  {savingId === reinstateTarget.id ? 'Reinstating…' : 'Yes, reinstate'}
                 </button>
               </div>
             </div>

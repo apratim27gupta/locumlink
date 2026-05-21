@@ -50,3 +50,31 @@ export function cpsnsVerificationPatch(
     }
     return {};
 }
+
+/** Queue profile for admin credential review when setup/docs are saved (even without CPSNS yet). */
+export function credentialReviewPatchOnProfileSave(
+    existing: CpsnsProfileVerification | null,
+    cpsnsDigits: string,
+    profileSubmittedForReview: boolean,
+): Pick<
+    { cpsnsVerificationStatus: VerificationStatus; cpsnsVerifiedAt: Date | null },
+    'cpsnsVerificationStatus' | 'cpsnsVerifiedAt'
+> | Record<string, never> {
+    const cpsnsPatch = cpsnsVerificationPatch(existing, cpsnsDigits);
+    if (Object.keys(cpsnsPatch).length > 0) {
+        return cpsnsPatch;
+    }
+    if (!profileSubmittedForReview) {
+        return {};
+    }
+    if (!existing) {
+        return { cpsnsVerificationStatus: VerificationStatus.PENDING_REVIEW };
+    }
+    if (
+        existing.cpsnsVerificationStatus === VerificationStatus.UNVERIFIED
+        || existing.cpsnsVerificationStatus === VerificationStatus.REJECTED
+    ) {
+        return { cpsnsVerificationStatus: VerificationStatus.PENDING_REVIEW };
+    }
+    return {};
+}
