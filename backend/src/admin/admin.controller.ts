@@ -80,12 +80,16 @@ export class AdminController {
     @Param('profileId') profileId: string,
     @Query('profileType') profileType: string | undefined,
   ) {
-    if (profileType !== 'locum' && profileType !== 'host') {
-      throw new BadRequestException(
-        'profileType query must be locum or host',
-      );
+    const hint =
+      profileType === 'locum' || profileType === 'host' ? profileType : undefined;
+    const resolved = await this.admin.resolveVerificationProfileType(
+      profileId,
+      hint,
+    );
+    if (!resolved) {
+      throw new NotFoundException('Profile not found');
     }
-    const detail = await this.admin.getVerificationDetail(profileId, profileType);
+    const detail = await this.admin.getVerificationDetail(profileId, resolved);
     if (!detail) {
       throw new NotFoundException('Profile not found');
     }
@@ -98,10 +102,21 @@ export class AdminController {
     @Req() req: Request,
     @CurrentAdmin() admin: AdminJwtPayload,
     @Param('profileId') profileId: string,
-    @Query('profileType') profileType: string | undefined,
+    @Query('profileType') profileTypeQuery: string | undefined,
     @Body() dto: AdminUpdateVerificationDto,
   ) {
-    if (profileType === 'host') {
+    const hint =
+      profileTypeQuery === 'locum' || profileTypeQuery === 'host'
+        ? profileTypeQuery
+        : dto.profileType;
+    const resolved = await this.admin.resolveVerificationProfileType(
+      profileId,
+      hint,
+    );
+    if (!resolved) {
+      throw new NotFoundException('Profile not found');
+    }
+    if (resolved === 'host') {
       return this.admin.updateHostVerification(req, admin, profileId, dto);
     }
     return this.admin.updateLocumVerification(req, admin, profileId, dto);

@@ -10,4 +10,8 @@ export class AdminUpdateVerificationDto {
   @IsString()
   @MaxLength(1000)
   rejectionReason?: string;
+
+  @IsOptional()
+  @IsIn(['locum', 'host'])
+  profileType?: 'locum' | 'host';
 }

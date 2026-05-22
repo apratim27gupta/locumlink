@@ -404,6 +404,35 @@ export class AdminService {
     );
   }
 
+  async resolveVerificationProfileType(
+    profileId: string,
+    hint?: 'locum' | 'host',
+  ): Promise<'locum' | 'host' | null> {
+    const order: ('locum' | 'host')[] =
+      hint === 'host'
+        ? ['host', 'locum']
+        : hint === 'locum'
+          ? ['locum', 'host']
+          : ['locum', 'host'];
+
+    for (const kind of order) {
+      if (kind === 'host') {
+        const row = await this.prisma.hostProfile.findUnique({
+          where: { id: profileId },
+          select: { id: true },
+        });
+        if (row) return 'host';
+      } else {
+        const row = await this.prisma.locumProfile.findUnique({
+          where: { id: profileId },
+          select: { id: true },
+        });
+        if (row) return 'locum';
+      }
+    }
+    return null;
+  }
+
   async getVerificationDetail(
     profileId: string,
     profileType: 'locum' | 'host',
@@ -417,57 +446,73 @@ export class AdminService {
     }>;
     profileFields: Array<{ label: string; value: string }>;
   } | null> {
-    if (profileType === 'host') {
-      const profile = await this.prisma.hostProfile.findUnique({
-        where: { id: profileId },
-        include: { user: { select: { email: true } } },
-      });
-      if (!profile) return null;
+    const primary =
+      profileType === 'host'
+        ? await this.buildHostVerificationDetail(profileId)
+        : await this.buildLocumVerificationDetail(profileId);
+    if (primary) return primary;
 
-      const docCandidates = await Promise.all([
-        this.verificationDocument(
-          'license',
-          'CPSNS License',
-          profile.licenseFile,
-          profile.licenseOriginalName,
-        ),
-      ]);
-      const documents = docCandidates.filter(
-        (d): d is NonNullable<typeof d> => d !== null,
-      );
+    return profileType === 'host'
+      ? await this.buildLocumVerificationDetail(profileId)
+      : await this.buildHostVerificationDetail(profileId);
+  }
 
-      const profileFields = [
-        this.profileField('Email', profile.user.email),
-        this.profileField('Clinic / practice', profile.practiceName),
-        this.profileField(
-          'Contact',
-          [profile.contactFirstName, profile.contactLastName]
-            .filter(Boolean)
-            .join(' '),
-        ),
-        this.profileField('CPSNS', profile.cpsnsNumber),
-        this.profileField('Speciality', profile.speciality),
-        this.profileField('Address', profile.address1 ?? profile.address),
-        this.profileField('Address line 2', profile.address2),
-        this.profileField('City', profile.city),
-        this.profileField('Province', profile.province),
-        this.profileField('Postal code', profile.postalCode),
-        this.profileField('Practice type', profile.practiceType),
-        this.profileField('Physicians on site', profile.numPhysicians),
-        this.profileField('EMR', profile.emr),
-        this.profileField('Patient volume', profile.patientVol),
-        this.profileField('Services', profile.servicesOffered?.join(', ')),
-        this.profileField(
-          'Accommodation provided',
-          profile.accommodationProvided ? 'Yes' : 'No',
-        ),
-        this.profileField('Clinic description', profile.highlights),
-        this.profileField('Verification status', profile.cpsnsVerificationStatus),
-      ].filter((f): f is { label: string; value: string } => f !== null);
+  private async buildHostVerificationDetail(profileId: string) {
+    const profile = await this.prisma.hostProfile.findUnique({
+      where: { id: profileId },
+      include: { user: { select: { email: true } } },
+    });
+    if (!profile) return null;
 
-      return { profileType: 'host', documents, profileFields };
-    }
+    const docCandidates = await Promise.all([
+      this.verificationDocument(
+        'license',
+        'CPSNS License',
+        profile.licenseFile,
+        profile.licenseOriginalName,
+      ),
+    ]);
+    const documents = docCandidates.filter(
+      (d): d is NonNullable<typeof d> => d !== null,
+    );
 
+    const profileFields = [
+      this.profileField('Email', profile.user.email),
+      this.profileField('Clinic / practice', profile.practiceName),
+      this.profileField(
+        'Contact',
+        [profile.contactFirstName, profile.contactLastName]
+          .filter(Boolean)
+          .join(' '),
+      ),
+      this.profileField('CPSNS', profile.cpsnsNumber),
+      this.profileField('Speciality', profile.speciality),
+      this.profileField('Address', profile.address1 ?? profile.address),
+      this.profileField('Address line 2', profile.address2),
+      this.profileField('City', profile.city),
+      this.profileField('Province', profile.province),
+      this.profileField('Postal code', profile.postalCode),
+      this.profileField('Practice type', profile.practiceType),
+      this.profileField('Physicians on site', profile.numPhysicians),
+      this.profileField('EMR', profile.emr),
+      this.profileField('Patient volume', profile.patientVol),
+      this.profileField('Services', profile.servicesOffered?.join(', ')),
+      this.profileField(
+        'Accommodation provided',
+        profile.accommodationProvided ? 'Yes' : 'No',
+      ),
+      this.profileField('Clinic description', profile.highlights),
+      this.profileField('Verification status', profile.cpsnsVerificationStatus),
+    ].filter((f): f is { label: string; value: string } => f !== null);
+
+    return {
+      profileType: 'host' as const,
+      documents,
+      profileFields,
+    };
+  }
+
+  private async buildLocumVerificationDetail(profileId: string) {
     const profile = await this.prisma.locumProfile.findUnique({
       where: { id: profileId },
       include: { user: { select: { email: true } } },
@@ -516,7 +561,11 @@ export class AdminService {
       this.profileField('Verification status', profile.cpsnsVerificationStatus),
     ].filter((f): f is { label: string; value: string } => f !== null);
 
-    return { profileType: 'locum', documents, profileFields };
+    return {
+      profileType: 'locum' as const,
+      documents,
+      profileFields,
+    };
   }
 
   async updateLocumVerification(

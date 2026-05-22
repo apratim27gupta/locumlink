@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAdminSession } from '@/lib/admin-auth-server';
 import {
-  fetchHostVerificationDetail,
-  fetchLocumVerificationDetail,
+  fetchVerificationDetailById,
+  resolveVerificationProfileType,
 } from '@/lib/admin-verification-detail';
 
 export const dynamic = 'force-dynamic';
@@ -19,21 +19,15 @@ export async function GET(
   }
 
   const { id } = await params;
-  const profileType = new URL(req.url).searchParams.get('profileType');
-
-  if (profileType !== 'locum' && profileType !== 'host') {
-    return NextResponse.json(
-      { error: 'profileType query must be locum or host' },
-      { status: 400 },
-    );
-  }
+  const profileTypeParam = new URL(req.url).searchParams.get('profileType');
+  const preferred =
+    profileTypeParam === 'locum' || profileTypeParam === 'host'
+      ? profileTypeParam
+      : undefined;
 
   try {
     const db = getDb();
-    const detail =
-      profileType === 'host'
-        ? await fetchHostVerificationDetail(db, id)
-        : await fetchLocumVerificationDetail(db, id);
+    const detail = await fetchVerificationDetailById(db, id, preferred);
 
     if (!detail) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -98,10 +92,20 @@ export async function PATCH(
   const cpsnsVerifiedAt =
     cpsnsVerificationStatus === 'VERIFIED' ? new Date() : null;
 
-  if (profileType === 'host') {
+  const bodyHint =
+    profileType === 'locum' || profileType === 'host' ? profileType : undefined;
+  const queryHint = new URL(req.url).searchParams.get('profileType');
+  const hint =
+    queryHint === 'locum' || queryHint === 'host' ? queryHint : bodyHint;
+  const resolved = await resolveVerificationProfileType(db, id, hint);
+  if (!resolved) {
+    return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+  }
+
+  if (resolved === 'host') {
     const existing = await db.hostProfile.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json({ error: 'Host profile not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     const updated = await db.hostProfile.update({
@@ -139,7 +143,7 @@ export async function PATCH(
 
   const existing = await db.locumProfile.findUnique({ where: { id } });
   if (!existing) {
-    return NextResponse.json({ error: 'Locum profile not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
   }
 
   const updated = await db.locumProfile.update({

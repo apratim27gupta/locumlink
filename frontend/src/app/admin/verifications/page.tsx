@@ -155,14 +155,18 @@ export default function AdminVerificationsPage() {
     setBusyId(row.id);
     setErr(null);
     try {
-      await adminFetchJson(`/api/admin/verifications/${row.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          cpsnsVerificationStatus,
-          profileType: resolveProfileType(row),
-          ...(cpsnsVerificationStatus === 'REJECTED' ? { rejectionReason } : {}),
-        }),
-      });
+      const profileType = resolveProfileType(row);
+      await adminFetchJson(
+        `/api/admin/verifications/${row.id}?profileType=${profileType}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            cpsnsVerificationStatus,
+            profileType,
+            ...(cpsnsVerificationStatus === 'REJECTED' ? { rejectionReason } : {}),
+          }),
+        },
+      );
       closeReview();
       await load();
     } catch (e) {

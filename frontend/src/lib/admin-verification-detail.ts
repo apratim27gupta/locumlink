@@ -125,3 +125,53 @@ export async function fetchHostVerificationDetail(
     profileFields,
   };
 }
+
+export type AdminVerificationDetail = NonNullable<
+  Awaited<ReturnType<typeof fetchLocumVerificationDetail>>
+>;
+
+/** Which table owns this profile id (tries hint table first). */
+export async function resolveVerificationProfileType(
+  db: PrismaClient,
+  id: string,
+  hint?: 'locum' | 'host',
+): Promise<'locum' | 'host' | null> {
+  const order: ('locum' | 'host')[] =
+    hint === 'host'
+      ? ['host', 'locum']
+      : hint === 'locum'
+        ? ['locum', 'host']
+        : ['locum', 'host'];
+
+  for (const profileType of order) {
+    const row =
+      profileType === 'host'
+        ? await db.hostProfile.findUnique({ where: { id }, select: { id: true } })
+        : await db.locumProfile.findUnique({ where: { id }, select: { id: true } });
+    if (row) return profileType;
+  }
+  return null;
+}
+
+/** Resolve by profile id; tries preferred table first, then the other. */
+export async function fetchVerificationDetailById(
+  db: PrismaClient,
+  id: string,
+  preferred?: 'locum' | 'host',
+): Promise<AdminVerificationDetail | null> {
+  const order: ('locum' | 'host')[] =
+    preferred === 'host'
+      ? ['host', 'locum']
+      : preferred === 'locum'
+        ? ['locum', 'host']
+        : ['locum', 'host'];
+
+  for (const profileType of order) {
+    const detail =
+      profileType === 'host'
+        ? await fetchHostVerificationDetail(db, id)
+        : await fetchLocumVerificationDetail(db, id);
+    if (detail) return detail;
+  }
+  return null;
+}

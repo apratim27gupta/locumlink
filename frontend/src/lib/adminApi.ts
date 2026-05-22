@@ -31,6 +31,7 @@ async function parseError(res: Response): Promise<string> {
     if (j?.message !== undefined && typeof j.message === 'string') return j.message;
     if (Array.isArray(j?.message))
       return j.message.join(', ');
+    if (j?.error !== undefined && typeof j.error === 'string') return j.error;
   }
     catch {}
   try {
