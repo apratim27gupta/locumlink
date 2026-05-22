@@ -126,9 +126,9 @@ export async function fetchHostVerificationDetail(
   };
 }
 
-export type AdminVerificationDetail = NonNullable<
-  Awaited<ReturnType<typeof fetchLocumVerificationDetail>>
->;
+export type AdminVerificationDetail =
+  | NonNullable<Awaited<ReturnType<typeof fetchLocumVerificationDetail>>>
+  | NonNullable<Awaited<ReturnType<typeof fetchHostVerificationDetail>>>;
 
 /** Which table owns this profile id (tries hint table first). */
 export async function resolveVerificationProfileType(
