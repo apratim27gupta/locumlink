@@ -174,10 +174,7 @@ export default function AuthPage() {
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                                 transition: 'border-color .15s, opacity .15s',
                             }}>
-                            <Image src={src} alt={alt} width={24} height={24} />
-                            <span style={{ fontSize: 14, fontWeight: 500, color: BRAND.textPrimary, fontFamily: 'inherit' }}>
-                                {busyAction === provider ? 'Connecting…' : title}
-                            </span>
+                            <Image src={src} alt={alt} width={28} height={28} />
                         </button>
                     ))}
                 </div>
