@@ -418,7 +418,12 @@ import {
         ...meta,
       });
     }
-
+     async permanentDeleteAccount(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role === 'admin') throw new ForbiddenException('Admin accounts cannot be deleted.');
+    await this.prisma.user.delete({ where: { id: userId } });
+}
     private async resetUserToFreshStart(userId: string): Promise<void> {
       const existing = await this.prisma.user.findUnique({
         where: { id: userId },

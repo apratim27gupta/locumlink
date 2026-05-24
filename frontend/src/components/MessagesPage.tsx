@@ -28,6 +28,11 @@ const HOST_NAV = [
         href: '/host/resources',
         icon: <NavIcon name="resources"/>,
     },
+    {
+        label: 'Settings',
+        href: '/host/settings',
+        icon: <NavIcon name="settings"/>,
+    },
 ];
 const LOCUM_NAV = [
     {
@@ -54,6 +59,11 @@ const LOCUM_NAV = [
         label: 'Resources',
         href: '/locum/resources',
         icon: <NavIcon name="resources"/>,
+    },
+    {
+        label: 'Settings',
+        href: '/locum/settings',
+        icon: <NavIcon name="settings"/>,
     },
 ];
 const MESSAGES_LIST_WIDTH_KEY = 'll-messages-list-width';
@@ -841,7 +851,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
           </div>
 
           
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             {loadingConvs ? (<div style={{
                 padding: 24,
                 textAlign: 'center',
@@ -986,7 +996,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                             maxWidth: '100%',
                             overflow: 'hidden',
                         }}>
-                            <Image src="/brief-case.png" alt="" width={18} height={18} style={{
+                            <Image src="/brief-case.svg" alt="" width={18} height={18} style={{
                             flexShrink: 0,
                             display: 'block',
                         }}/>
@@ -1094,7 +1104,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                             maxWidth: '100%',
                             overflow: 'hidden',
                         }}>
-                              <Image src="/brief-case.png" alt="" width={24} height={24} style={{
+                              <Image src="/brief-case.svg" alt="" width={24} height={24} style={{
                             flexShrink: 0,
                             display: 'block',
                         }}/>
@@ -1114,7 +1124,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                       </div>);
                 })}
                 {conversations.length === 0 &&
-                filteredLocumAppRows.length === 0 && (<div style={{ padding: '48px 24px', textAlign: 'center' }}>
+                filteredLocumAppRows.length === 0 && (<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                       {urlPartnerId ? (<>
                           <div style={{
                         fontSize: 14,

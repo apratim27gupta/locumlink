@@ -43,6 +43,7 @@ const NAV = [
         href: '/locum/resources',
         icon: <NavIcon name="resources"/>,
     },
+    { label: 'Settings', href: '/locum/settings', icon: <NavIcon name="settings"/> },
 ];
 function fmtDate(iso: string | null): string {
     if (!iso)
@@ -397,7 +398,7 @@ export default function LocumDashboard(props: {
             color: '#0f1523',
             flexShrink: 0,
         }}>
-          <Image src="/edit-profile.png" alt="" width={16} height={16} style={{ flexShrink: 0, objectFit: 'contain' }}/>
+          <Image src="/edit-profile.svg" alt="" width={16} height={16} style={{ flexShrink: 0, objectFit: 'contain' }}/>
           Edit Profile
         </button>
       </div>
@@ -458,7 +459,7 @@ export default function LocumDashboard(props: {
                 justifyContent: 'center',
                 marginBottom: 12,
             }}>
-            <Image src="/no-applications.png" alt="" width={160} height={160} style={{ objectFit: 'contain' }}/>
+            <Image src="/no-applications.svg" alt="" width={160} height={160} style={{ objectFit: 'contain' }}/>
           </div>
           <div style={{
                 fontSize: 14,
@@ -565,7 +566,7 @@ export default function LocumDashboard(props: {
                             fontSize: 12,
                             color: '#5a6478',
                         }}>
-                    <Image src="/calender.png" alt="" width={14} height={14} style={{ flexShrink: 0, objectFit: 'contain' }}/>
+                    <Image src="/calender.svg" alt="" width={14} height={14} style={{ flexShrink: 0, objectFit: 'contain' }}/>
                     {fmtDate(jp.startDate)} – {fmtDate(jp.endDate)}
                   </span>)}
                 {(jp.startTime || jp.endTime) && (<span style={{
@@ -578,7 +579,7 @@ export default function LocumDashboard(props: {
                             fontSize: 12,
                             color: '#5a6478',
                         }}>
-                    <Image src="/clock.png" alt="" width={14} height={14} style={{ flexShrink: 0, objectFit: 'contain' }}/>
+                    <Image src="/clock.svg" alt="" width={14} height={14} style={{ flexShrink: 0, objectFit: 'contain' }}/>
                     {fmtTime(jp.startTime)} – {fmtTime(jp.endTime)}
                   </span>)}
                 <span style={{ fontSize: 12, color: '#8892a4', marginLeft: 'auto' }}>

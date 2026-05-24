@@ -94,6 +94,15 @@ export class AuthController {
         return { success: true };
     }
     @Post('me/deactivate')
+    @Delete('me/permanent-delete')
+@UseGuards(JwtAuthGuard)
+async permanentDeleteAccount(
+    @CurrentUser() user: User,
+) {
+    await this.authService.permanentDeleteAccount(user.id);
+    return { ok: true };
+}
+   
     @UseGuards(JwtAuthGuard)
     @HttpCode(HttpStatus.OK)
     async deactivateAccount(

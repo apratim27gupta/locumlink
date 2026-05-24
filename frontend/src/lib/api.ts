@@ -231,6 +231,16 @@ export const authApi = {
             throw new Error(text || `Could not remove profile photo (${res.status})`);
         }
     },
+    permanentDeleteAccount: async (): Promise<void> => {
+    const res = await trackedFetch(`${NEST_BASE}/api/auth/me/permanent-delete`, {
+        method: 'DELETE',
+        headers: nestHeaders(false),
+    });
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `Could not delete account (${res.status})`);
+    }
+},
     deactivateAccount: async (): Promise<void> => {
         const res = await trackedFetch(`${NEST_BASE}/api/auth/me/deactivate`, {
             method: 'POST',

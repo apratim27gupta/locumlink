@@ -55,6 +55,11 @@ const NAV = [
     href: '/locum/resources',
     icon: <NavIcon name="resources" />,
   },
+  {
+    label: 'Settings',
+    href: '/locum/settings',
+    icon: <NavIcon name="settings" />,
+  },
 ];
 const BROWSE_PROVINCE_NAMES = CANADIAN_PROVINCE_NAMES;
 const BROWSE_LIST_WIDTH_KEY = 'll-browse-list-width';
@@ -952,7 +957,7 @@ export default function LocumBrowsePage(props: {
                       }}
                     >
                       <Image
-                        src="/calender.png"
+                        src="/calender.svg"
                         alt=""
                         width={12}
                         height={12}
@@ -1128,7 +1133,7 @@ export default function LocumBrowsePage(props: {
                       }}
                     >
                       <Image
-                        src="/calender.png"
+                        src="/calender.svg"
                         alt=""
                         width={14}
                         height={14}
@@ -1153,7 +1158,7 @@ export default function LocumBrowsePage(props: {
                       }}
                     >
                       <Image
-                        src="/clock.png"
+                        src="/clock.svg"
                         alt=""
                         width={14}
                         height={14}

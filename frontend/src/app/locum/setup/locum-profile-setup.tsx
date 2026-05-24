@@ -30,7 +30,6 @@ const SPECIALIZATION_OPTIONS = sortStringsLocale([
     'Family Medicine',
     'Internal Medicine',
     'Emergency Medicine',
-    'General Practice',
     'Anaesthetics',
     'Paediatrics',
     'ENT',

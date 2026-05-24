@@ -24,6 +24,11 @@ const NAV = [
         href: '/host/resources',
         icon: <NavIcon name="resources"/>,
     },
+    {
+        label: 'Settings',
+        href: '/host/settings',
+        icon: <NavIcon name="settings"/>,
+    },
 ];
 const inp: React.CSSProperties = {
     width: '100%',
@@ -146,8 +151,7 @@ export default function HostPostJobPage(props: {
                 fontSize: 13,
                 marginBottom: 16,
             }}>
-            ✓ Job saved as Draft. It will go live once your CPSNS number is
-            verified.{' '}
+               Your CPSNS number is not verified hence, the post you created is saved under Draft Locum Shifts.{' '}
             <button type="button" onClick={() => {
                 beforeClientNavigation('/host/dashboard');
                 router.push('/host/dashboard');

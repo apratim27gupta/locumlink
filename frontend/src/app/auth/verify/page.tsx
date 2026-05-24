@@ -227,7 +227,7 @@ export default function VerifyPage(props: {
           Resend Code
         </button>)}
 
-      <p onClick={() => router.back()} style={{
+      <p onClick={() => router.push('/auth')} style={{
             textAlign: 'center',
             fontSize: 14,
             fontWeight: 500,

@@ -27,6 +27,11 @@ const NAV = [
         href: '/host/resources',
         icon: <NavIcon name="resources"/>,
     },
+    {
+        label: 'Settings',
+        href: '/host/settings',
+        icon: <NavIcon name="settings"/>,
+    },
 ] as const;
 const QUICK_MESSAGE_PANEL_STORAGE_KEY = 'l2-host-applicants-quick-message-panel-pos';
 const QUICK_MESSAGE_PANEL_WIDTH = 384;

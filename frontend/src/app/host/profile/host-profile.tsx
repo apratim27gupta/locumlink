@@ -31,6 +31,11 @@ const NAV = [
         href: '/host/resources',
         icon: <NavIcon name="resources"/>,
     },
+    {
+        label: 'Settings',
+        href: '/host/settings',
+        icon: <NavIcon name="settings"/>,
+    },
 ];
 
 const inp: React.CSSProperties = {

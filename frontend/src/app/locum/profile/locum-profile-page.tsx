@@ -33,6 +33,7 @@ const NAV = [
   { label: 'Profile',              href: '/locum/profile',    icon: <NavIcon name="profile" /> },
   { label: 'Messages',             href: '/locum/messages',   icon: <NavIcon name="messages" /> },
   { label: 'Resources',            href: '/locum/resources',  icon: <NavIcon name="resources" /> },
+  { label: 'Settings',             href: '/locum/settings',   icon: <NavIcon name="settings" /> },
 ];
 
 const SPECIALITY_OPTIONS = sortStringsLocale([
@@ -548,7 +549,7 @@ export default function LocumProfilePage(props: {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
           <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-            <Image src="/basic-information.png" alt="" width={24} height={24} style={{ objectFit: 'cover' }} />
+            <Image src="/basic-information.svg" alt="" width={24} height={24} style={{ objectFit: 'cover' }} />
           </div>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#0f1523' }}>Basic Information</span>
         </div>
@@ -860,7 +861,7 @@ onClick={(e) => e.stopPropagation()} placeholder="Your email address"
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
           <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-            <Image src="/relevant-docs.png" alt="" width={24} height={24} style={{ objectFit: 'contain' }} />
+            <Image src="/relevant-docs.svg" alt="" width={24} height={24} style={{ objectFit: 'contain' }} />
           </div>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#0f1523' }}>Relevant Documents</span>
         </div>
@@ -883,7 +884,7 @@ onClick={(e) => e.stopPropagation()} placeholder="Your email address"
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
-                <Image src="/document-link.png" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
+                <Image src="/document-link.svg" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
                 <span style={{ fontSize: 13, color: licenseFile ? '#3B4FD8' : '#8892a4' }}>
                   {uploading === 'license' ? 'Uploading…' : formatUploadedFileLabel(licenseFile, licenseLabel, 'CPSNS License')}
                 </span>
@@ -938,7 +939,7 @@ onClick={(e) => e.stopPropagation()} placeholder="Your email address"
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
-                <Image src="/document-link.png" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
+                <Image src="/document-link.svg" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
                 <span style={{ fontSize: 13, color: resumeFile ? '#3B4FD8' : '#8892a4' }}>
                   {uploading === 'resume' ? 'Uploading…' : formatUploadedFileLabel(resumeFile, resumeLabel, 'Resume')}
                 </span>
@@ -994,7 +995,7 @@ onClick={(e) => e.stopPropagation()} placeholder="Your email address"
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
-            <Image src="/document-link.png" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
+            <Image src="/document-link.svg" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
             <span style={{ fontSize: 13, color: extraFile ? '#3B4FD8' : '#8892a4' }}>
               {uploading === 'extra' ? 'Uploading…' : formatUploadedFileLabel(extraFile, extraLabel, 'Add')}
             </span>

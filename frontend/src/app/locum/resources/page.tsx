@@ -11,6 +11,7 @@ const NAV = [
     { label: 'Profile', href: '/locum/profile', icon: <NavIcon name="profile"/> },
     { label: 'Messages', href: '/locum/messages', icon: <NavIcon name="messages"/> },
     { label: 'Resources', href: '/locum/resources', icon: <NavIcon name="resources"/> },
+    { label: 'Settings', href: '/locum/settings', icon: <NavIcon name="settings"/> },
 ];
 
 const DOCUMENTS = [
