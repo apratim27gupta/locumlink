@@ -11,6 +11,7 @@ import { authApi, hostApi, locumApi, notificationsApi, uploadFile, type Notifica
 import { notifCategory } from '@/lib/relativeTime';
 import { getSupabase } from '@/lib/supabaseClient';
 import { useTrackLastPath } from '../hooks/useTrackLastPath';
+import { subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { beforeClientNavigation } from '@/lib/topLoader';
 interface NavItem {
     label: string;
@@ -26,6 +27,18 @@ interface Props {
     topbarAvatarText?: string;
     children: ReactNode;
 }
+const SIDEBAR_ACTIVE = '#38C6C6';
+
+function isAccountNavItem(item: NavItem) {
+    const { href, label } = item;
+    return (
+        label === 'Profile'
+        || label === 'Settings'
+        || href.endsWith('/profile')
+        || href.endsWith('/settings')
+    );
+}
+
 const ICON: Record<string, string> = {
     browse: 'M11 19C15.4183 19 19 15.4183 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11C3 15.4183 6.58172 19 11 19ZM21 21L16.65 16.65',
     postings: 'M4 6h16M4 10h16M4 14h10',
@@ -42,12 +55,15 @@ function NavIcon({ name }: {
       <path d={d}/>
     </svg>);
 }
-function NotifIcon({ type }: {
+function NotifIcon({ type, accent }: {
     type: NotificationItem['type'];
+    accent?: 'critical' | 'high' | 'medium';
 }) {
+    const stroke = accent === 'critical' ? '#DC2626' : accent === 'high' ? '#C2410C' : accent === 'medium' ? '#A16207' : '#0F2A7A';
+    const bg = accent === 'critical' ? '#FEE2E2' : accent === 'high' ? '#FFEDD5' : accent === 'medium' ? '#FEF9C3' : undefined;
     if (type === 'message') return (
-        <span style={{ width: 32, height: 32, borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0F2A7A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <span style={{ width: 32, height: 32, borderRadius: '50%', background: bg ?? '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
         </span>
@@ -74,8 +90,8 @@ function NotifIcon({ type }: {
         </span>
     );
     return (
-        <span style={{ width: 32, height: 32, borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0F2A7A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <span style={{ width: 32, height: 32, borderRadius: '50%', background: bg ?? '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
             </svg>
         </span>
@@ -97,7 +113,9 @@ function fmtNotifTime(iso: string): string {
 export default function DashLayout({ navItems, activeHref, topbarRight, topbarFirstName, topbarLastName, topbarAvatarText, children, }: Props) {
     const router = useRouter();
     const { logout, userId } = useAuth();
-    const activeNavIndex = Math.max(0, navItems.findIndex((n) => n.href === activeHref));
+    const sidebarNavItems = navItems.filter((n) => !isAccountNavItem(n));
+    const accountNavItems = navItems.filter(isAccountNavItem);
+    const activeNavIndex = sidebarNavItems.findIndex((n) => n.href === activeHref);
     const NAV_PADDING_TOP = 8;
     const NAV_INNER_TOP = 8;
     const NAV_LEFT_INSET = 10;
@@ -162,6 +180,11 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     useEffect(() => {
         void refreshDashProfileNames();
     }, [userId, refreshDashProfileNames]);
+    useEffect(() => {
+        return subscribeProfileUpdated(() => {
+            void refreshDashProfileNames();
+        });
+    }, [refreshDashProfileNames]);
     useEffect(() => {
         if (!avatarMenuOpen)
             return;
@@ -296,11 +319,21 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     }
     function handleNotifClick(notif: NotificationItem) {
         setBellOpen(false);
+        if (!notif.read) {
+            void notificationsApi.markRead(notif.id).then(() => {
+                setNotifications((prev) => prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n)));
+                setNotifTotal((t) => Math.max(0, t - 1));
+            }).catch(() => {});
+        }
+        if (notif.href.startsWith('mailto:')) {
+            window.location.href = notif.href;
+            return;
+        }
         beforeClientNavigation(notif.href);
         router.push(notif.href);
     }
-    const mergedFirst = topbarFirstName?.trim() || apiFirstName?.trim() || '';
-    const mergedLast = topbarLastName?.trim() || apiLastName?.trim() || '';
+    const mergedFirst = apiFirstName?.trim() || topbarFirstName?.trim() || '';
+    const mergedLast = apiLastName?.trim() || topbarLastName?.trim() || '';
     const initialsFromContactNames = computeAvatarInitials(mergedFirst || undefined, mergedLast || undefined, topbarAvatarText);
     const avatarText = initialsFromContactNames !== 'N'
         ? initialsFromContactNames
@@ -348,7 +381,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             border: 'none',
             cursor: 'pointer',
             padding: 4,
-            color: '#0F2A7A',
+            color: '#38C6C6',
             position: 'relative',
         }} title="Notifications">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
@@ -414,28 +447,46 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                   {(() => {
                     const prefs = (() => { try { const s = localStorage.getItem('notifPrefs'); return s ? JSON.parse(s) : null; } catch { return null; } })();
                     const visible = prefs ? notifications.filter(n => {
+                      if (n.priority === 'CRITICAL' || n.priority === 'HIGH' || n.priority === 'MEDIUM') return true;
                       const cat = n.category ?? notifCategory(n.type);
                       if (cat === 'cancellations') return true;
                       return prefs[cat] !== false;
                     }) : notifications;
                     if (visible.length === 0) return <div style={{ padding: '36px 20px', textAlign: 'center' }}><div style={{ fontSize: 28, marginBottom: 8 }}>🔔</div><div style={{ fontSize: 'var(--font-body)', color: '#9CA3AF' }}>No new notifications</div></div>;
-                    return visible.map((notif) => (<div key={notif.id} onClick={() => handleNotifClick(notif)} style={{
+                    return visible.map((notif) => {
+                    const isCritical = notif.priority === 'CRITICAL';
+                    const isHigh = notif.priority === 'HIGH';
+                    const isMedium = notif.priority === 'MEDIUM';
+                    const isElevated = isCritical || isHigh || isMedium;
+                    const isUnread = notif.read !== true;
+                    const rowBg = isCritical ? '#FEF2F2' : isHigh ? '#FFF7ED' : isMedium ? '#FEFCE8' : '#fff';
+                    const rowHover = isCritical ? '#FEE2E2' : isHigh ? '#FFEDD5' : isMedium ? '#FEF9C3' : '#F5F6FF';
+                    const borderColor = isCritical ? '#DC2626' : isHigh ? '#EA580C' : isMedium ? '#CA8A04' : 'transparent';
+                    const iconAccent = isCritical ? 'critical' as const : isHigh ? 'high' as const : isMedium ? 'medium' as const : undefined;
+                    return (<div key={notif.id} onClick={() => handleNotifClick(notif)} style={{
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: 10,
                     padding: '12px 16px',
                     cursor: 'pointer',
                     borderBottom: '1px solid #F9FAFB',
-                    background: '#fff',
+                    borderLeft: isElevated ? `3px solid ${borderColor}` : '3px solid transparent',
+                    background: rowBg,
                     transition: 'background 0.1s',
-                }} onMouseEnter={(e) => (e.currentTarget.style.background = '#F5F6FF')} onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}>
+                }} onMouseEnter={(e) => (e.currentTarget.style.background = rowHover)} onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}>
                         
                         <div style={{
                     width: 36,
                     height: 36,
                     borderRadius: '50%',
                     flexShrink: 0,
-                    background: notif.type === 'message'
+                    background: isCritical
+                        ? '#FEE2E2'
+                        : isHigh
+                            ? '#FFEDD5'
+                        : isMedium
+                            ? '#FEF9C3'
+                        : notif.type === 'message'
                         ? '#EEF0FB'
                         : notif.type === 'application'
                             ? '#F0FDF4'
@@ -444,29 +495,80 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     alignItems: 'center',
                     justifyContent: 'center',
                 }}>
-                          <NotifIcon type={notif.type}/>
+                          <NotifIcon type={notif.type} accent={iconAccent}/>
                         </div>
 
                         
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    flexWrap: 'wrap',
+                    marginBottom: 2,
+                }}>
+                            <span style={{
                     fontSize: 'var(--font-heading)',
                     fontWeight: 'var(--font-weight-bold)',
                     color: '#0f1523',
-                    marginBottom: 2,
                     lineHeight: 1.4,
                 }}>
-                            {notif.title}
+                              {notif.title}
+                            </span>
+                            {isCritical && (<span style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    color: '#0f1523',
+                    background: '#FCA5A5',
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                }}>
+                                Critical
+                              </span>)}
+                            {isHigh && (<span style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    color: '#0f1523',
+                    background: '#FDBA74',
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                }}>
+                                High
+                              </span>)}
+                            {isMedium && (<span style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    color: '#0f1523',
+                    background: '#FDE047',
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                }}>
+                                Medium
+                              </span>)}
                           </div>
                           <div style={{
                     fontSize: 'var(--font-small)',
-                    color: '#6B7280',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    color: isCritical ? '#7F1D1D' : isHigh ? '#9A3412' : isMedium ? '#854D0E' : '#6B7280',
+                    ...(isElevated
+                        ? { lineHeight: 1.45, whiteSpace: 'normal' as const }
+                        : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }),
                 }}>
                             {notif.body}
                           </div>
+                          {notif.actionLabel && (<div style={{
+                    fontSize: 'var(--font-small)',
+                    color: isCritical ? '#DC2626' : isHigh ? '#EA580C' : isMedium ? '#CA8A04' : '#3B4FD8',
+                    fontWeight: 600,
+                    marginTop: 6,
+                }}>
+                            {notif.actionLabel}
+                          </div>)}
                           <div style={{
                     fontSize: 'var(--font-small)',
                     color: '#9CA3AF',
@@ -477,15 +579,16 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                         </div>
 
                         
-                        <div style={{
+                        {isUnread && (<div style={{
                     width: 8,
                     height: 8,
                     borderRadius: '50%',
-                    background: '#3B4FD8',
+                    background: isCritical ? '#DC2626' : isHigh ? '#EA580C' : isMedium ? '#CA8A04' : '#3B4FD8',
                     flexShrink: 0,
                     marginTop: 4,
-                }}/>
-                      </div>));
+                }}/>)}
+                      </div>);
+                    });
                   })()} 
                 </div>
 
@@ -578,135 +681,241 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             }}/>) : (avatarText)}
             </div>
 
-            {avatarMenuOpen && (<div style={{
+            {avatarMenuOpen && (() => {
+                const avatarMenuRow: React.CSSProperties = {
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    minHeight: 40,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    border: 'none',
+                    fontFamily: 'inherit',
+                    fontSize: 'var(--font-body)',
+                    fontWeight: 600,
+                    lineHeight: 1.25,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                };
+                const avatarMenuIcon: React.CSSProperties = {
+                    width: 20,
+                    height: 20,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                };
+                const menuDisabled = avatarUploadBusy || avatarRemoveBusy || !getToken();
+                return (
+              <div style={{
                 position: 'absolute',
                 top: 40,
                 right: 0,
-                minWidth: 200,
+                width: 240,
                 background: '#fff',
                 border: '1px solid #e2e5ee',
                 borderRadius: 10,
                 boxShadow: '0 10px 26px rgba(15, 23, 42, 0.12)',
-                padding: 6,
+                padding: 8,
                 zIndex: 50,
+                boxSizing: 'border-box',
             }}>
-                <button type="button" disabled={avatarUploadBusy || avatarRemoveBusy || !getToken()} onClick={() => avatarFileInputRef.current?.click()} style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                background: 'transparent',
-                border: 'none',
-                borderRadius: 8,
-                padding: '10px 10px',
-                cursor: avatarUploadBusy || avatarRemoveBusy || !getToken() ? 'default' : 'pointer',
-                color: '#0f1523',
-                fontSize: 'var(--font-body)',
-                fontWeight: 'var(--font-weight-bold)',
-                textAlign: 'left',
-                opacity: avatarUploadBusy || avatarRemoveBusy || !getToken() ? 0.55 : 1,
-            }} onMouseOver={(e) => {
-                if (!avatarUploadBusy && !avatarRemoveBusy && getToken())
-                    e.currentTarget.style.background = '#F3F4F6';
-            }} onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                    <circle cx="12" cy="13" r="4"/>
-                  </svg>
-                  {avatarUploadBusy
-                ? 'Uploading…'
-                : avatarPhotoUrl
-                    ? 'Change profile photo'
-                    : 'Add profile photo'}
-                </button>
-                {avatarPhotoUrl ? (<button type="button" disabled={avatarUploadBusy || avatarRemoveBusy || !getToken()} onClick={() => {
-                        void (async () => {
-                            if (!getToken())
-                                return;
-                            setAvatarRemoveBusy(true);
-                            try {
-                                await authApi.clearAvatar();
-                                setAvatarPhotoUrl(null);
-                                try {
-                                    const me = await authApi.getMe();
-                                    setAvatarPhotoUrl(me.avatarUrl ?? null);
-                                }
-                                catch {
-                                    setAvatarPhotoUrl(null);
-                                }
-                                await refreshDashProfileNames();
-                                setAvatarMenuOpen(false);
-                            }
-                            catch (err) {
-                                window.alert(err instanceof Error
-                                    ? err.message
-                                    : 'Could not remove profile photo.');
-                            }
-                            finally {
-                                setAvatarRemoveBusy(false);
-                            }
-                        })();
-                    }} style={{
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'stretch',
+                    width: '100%',
+                    gap: 4,
+                }}>
+                  <div style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    background: avatarPhotoUrl ? 'transparent' : '#3B4FD8',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 18,
+                    fontWeight: 700,
+                    border: avatarPhotoUrl ? '1px solid #e2e5ee' : 'none',
+                    alignSelf: 'center',
+                    marginBottom: 4,
+                  }}>
+                    {avatarPhotoUrl ? (
+                      <img src={avatarPhotoUrl} alt="" width={56} height={56} style={{
                         width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }} />
+                    ) : (
+                      avatarText
+                    )}
+                  </div>
+                  {accountNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      id={
+                        item.label === 'Profile'
+                          ? 'nav-profile'
+                          : item.label === 'Settings'
+                            ? 'nav-settings'
+                            : undefined
+                      }
+                      href={item.href}
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                        setMobileNavOpen(false);
+                      }}
+                      style={{
+                        ...avatarMenuRow,
+                        textDecoration: 'none',
+                        color: activeHref === item.href ? '#3B4FD8' : '#0f1523',
+                        background: activeHref === item.href ? '#EEF0FB' : 'transparent',
+                      }}
+                      onMouseOver={(e) => {
+                        if (activeHref !== item.href)
+                          e.currentTarget.style.background = '#F3F4F6';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.background =
+                          activeHref === item.href ? '#EEF0FB' : 'transparent';
+                      }}
+                    >
+                      <span style={avatarMenuIcon}>{item.icon}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>{item.label}</span>
+                    </Link>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={menuDisabled}
+                    onClick={() => avatarFileInputRef.current?.click()}
+                    style={{
+                      ...avatarMenuRow,
+                      background: 'transparent',
+                      color: '#0f1523',
+                      opacity: menuDisabled ? 0.55 : 1,
+                      cursor: menuDisabled ? 'default' : 'pointer',
+                    }}
+                    onMouseOver={(e) => {
+                      if (!menuDisabled)
+                        e.currentTarget.style.background = '#F3F4F6';
+                    }}
+                    onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span style={avatarMenuIcon}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                      </svg>
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      {avatarUploadBusy
+                        ? 'Uploading…'
+                        : avatarPhotoUrl
+                          ? 'Change profile photo'
+                          : 'Add profile photo'}
+                    </span>
+                  </button>
+                  {avatarPhotoUrl ? (
+                    <button
+                      type="button"
+                      disabled={menuDisabled}
+                      onClick={() => {
+                        void (async () => {
+                          if (!getToken())
+                            return;
+                          setAvatarRemoveBusy(true);
+                          try {
+                            await authApi.clearAvatar();
+                            setAvatarPhotoUrl(null);
+                            try {
+                              const me = await authApi.getMe();
+                              setAvatarPhotoUrl(me.avatarUrl ?? null);
+                            }
+                            catch {
+                              setAvatarPhotoUrl(null);
+                            }
+                            await refreshDashProfileNames();
+                            setAvatarMenuOpen(false);
+                          }
+                          catch (err) {
+                            window.alert(err instanceof Error
+                              ? err.message
+                              : 'Could not remove profile photo.');
+                          }
+                          finally {
+                            setAvatarRemoveBusy(false);
+                          }
+                        })();
+                      }}
+                      style={{
+                        ...avatarMenuRow,
                         background: 'transparent',
-                        border: 'none',
-                        borderRadius: 8,
-                        padding: '10px 10px',
-                        cursor: avatarUploadBusy || avatarRemoveBusy || !getToken() ? 'default' : 'pointer',
                         color: '#92400E',
-                        fontSize: 'var(--font-body)',
-                        fontWeight: 'var(--font-weight-bold)',
-                        textAlign: 'left',
-                        borderTop: '1px solid #F3F4F6',
-                        opacity: avatarUploadBusy || avatarRemoveBusy || !getToken() ? 0.55 : 1,
-                        fontFamily: 'inherit',
-                    }} onMouseOver={(e) => {
-                        if (!avatarUploadBusy && !avatarRemoveBusy && getToken())
-                            e.currentTarget.style.background = '#FFFBEB';
-                    }} onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <path d="M3 6h18"/>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
-                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                    <path d="M10 11v6M14 11v6"/>
-                  </svg>
-                  {avatarRemoveBusy ? 'Removing…' : 'Remove profile photo'}
-                </button>) : null}
-                <button type="button" disabled={avatarRemoveBusy || avatarUploadBusy || deactivateBusy} onClick={() => {
-                setAvatarMenuOpen(false);
-                handleLogout();
-            }} style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                background: 'transparent',
-                border: 'none',
-                borderRadius: 8,
-                padding: '10px 10px',
-                cursor: avatarRemoveBusy || avatarUploadBusy || deactivateBusy ? 'default' : 'pointer',
-                color: '#dc2626',
-                fontSize: 'var(--font-body)',
-                fontWeight: 'var(--font-weight-bold)',
-                textAlign: 'left',
-                borderTop: '1px solid #F3F4F6',
-                opacity: avatarRemoveBusy || avatarUploadBusy || deactivateBusy ? 0.55 : 1,
-                fontFamily: 'inherit',
-            }} onMouseOver={(e) => {
-                if (!avatarRemoveBusy && !avatarUploadBusy && !deactivateBusy)
-                    e.currentTarget.style.background = '#FEF2F2';
-            }} onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                    <polyline points="16 17 21 12 16 7"/>
-                    <line x1="21" y1="12" x2="9" y2="12"/>
-                  </svg>
-                  Logout
-                </button>
-              </div>)}
+                        opacity: menuDisabled ? 0.55 : 1,
+                        cursor: menuDisabled ? 'default' : 'pointer',
+                      }}
+                      onMouseOver={(e) => {
+                        if (!menuDisabled)
+                          e.currentTarget.style.background = '#FFFBEB';
+                      }}
+                      onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <span style={avatarMenuIcon}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M3 6h18"/>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                          <path d="M10 11v6M14 11v6"/>
+                        </svg>
+                      </span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        {avatarRemoveBusy ? 'Removing…' : 'Remove profile photo'}
+                      </span>
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={avatarRemoveBusy || avatarUploadBusy || deactivateBusy}
+                    onClick={() => {
+                      setAvatarMenuOpen(false);
+                      handleLogout();
+                    }}
+                    style={{
+                      ...avatarMenuRow,
+                      background: 'transparent',
+                      color: '#dc2626',
+                      opacity: avatarRemoveBusy || avatarUploadBusy || deactivateBusy ? 0.55 : 1,
+                      cursor: avatarRemoveBusy || avatarUploadBusy || deactivateBusy ? 'default' : 'pointer',
+                      marginTop: 4,
+                      borderTop: '1px solid #F3F4F6',
+                      borderRadius: '0 0 8px 8px',
+                      paddingTop: 12,
+                    }}
+                    onMouseOver={(e) => {
+                      if (!avatarRemoveBusy && !avatarUploadBusy && !deactivateBusy)
+                        e.currentTarget.style.background = '#FEF2F2';
+                    }}
+                    onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span style={avatarMenuIcon}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                      </svg>
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>Logout</span>
+                  </button>
+                </div>
+              </div>
+                );
+            })()}
           </div>
         </div>
       </header>
@@ -730,56 +939,50 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             padding: '8px 12px 28px',
             gap: 14,
         }}>
-          <div style={{
-            position: 'absolute',
-            left: NAV_LEFT_INSET,
-            top: NAV_PADDING_TOP +
-                NAV_INNER_TOP +
-                activeNavIndex * (NAV_ITEM_H + NAV_GAP),
-            width: 6,
-            height: NAV_ITEM_H,
-            background: '#0F2A7A',
-            borderRadius: '0px 8px 8px 0px',
-            transition: 'top 0.2s ease',
-        }}/>
+          {activeNavIndex >= 0 && (
+            <div style={{
+              position: 'absolute',
+              left: NAV_LEFT_INSET,
+              top: NAV_PADDING_TOP +
+                  NAV_INNER_TOP +
+                  activeNavIndex * (NAV_ITEM_H + NAV_GAP),
+              width: 6,
+              height: NAV_ITEM_H,
+              background: SIDEBAR_ACTIVE,
+              borderRadius: '0px 8px 8px 0px',
+              transition: 'top 0.2s ease',
+            }}/>
+          )}
 
           <nav style={{ flex: 1, paddingTop: NAV_INNER_TOP }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {navItems.map(({ label, href, icon }) => {
+              {sidebarNavItems.map(({ label, href, icon }) => {
             const active = activeHref === href;
             const isBrowseOpportunities = href === '/locum/browse' || label === 'Browse Opportunities';
             const isLocumDashboard = href === '/locum/dashboard' || label === 'My Applications';
             const isHostPostings = href === '/host/dashboard' || label === 'My Postings';
-            const isProfile = href === '/locum/profile' || href === '/host/profile' || label === 'Profile';
             const isMessages = href === '/locum/messages' || href === '/host/messages' || label === 'Messages';
             const isResources = href === '/locum/resources' || href === '/host/resources' || label === 'Resources';
-            const isSettings = href === '/settings' || label === 'Settings';
             const sidebarIconName = isBrowseOpportunities
                 ? 'browse'
                 : isLocumDashboard || isHostPostings
                     ? 'postings'
-                    : isProfile
-                        ? 'profile'
-                        : isMessages
-                            ? 'messages'
-                            : isResources
-                                ? 'resources'
-                                : null;
+                    : isMessages
+                        ? 'messages'
+                        : isResources
+                            ? 'resources'
+                            : null;
             const navId = isBrowseOpportunities
                 ? 'nav-browse-opportunities'
                 : isHostPostings
                     ? 'nav-my-postings'
                     : isLocumDashboard
                         ? 'nav-my-applications'
-                        : isProfile
-                            ? 'nav-profile'
-                            : isMessages
-                                ? 'nav-messages'
-                                : isResources
-                                    ? 'nav-resources'
-                                    : isSettings
-                                        ? 'nav-settings'
-                                        : undefined;
+                        : isMessages
+                            ? 'nav-messages'
+                            : isResources
+                                ? 'nav-resources'
+                                : undefined;
             return (<Link key={href} href={href} style={{ textDecoration: 'none' }}>
                     <div id={navId} style={{
                     boxSizing: 'border-box',
@@ -792,11 +995,11 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     height: 44,
                     padding: '10px 12px 10px 8px',
                     background: active
-                        ? 'rgba(56,198,198,0.15)'
+                        ? 'rgba(56, 198, 198, 0.15)'
                         : 'transparent',
                     borderRadius: 10,
                     cursor: 'pointer',
-                    color: active ? '#0F2A7A' : 'rgba(255,255,255,0.85)',
+                    color: active ? SIDEBAR_ACTIVE : 'rgba(255,255,255,0.85)',
                     transition: 'background 0.15s, color 0.15s',
                 }}>
                       <span style={{
@@ -815,7 +1018,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     lineHeight: '20px',
                     textTransform: 'capitalize',
                     whiteSpace: 'nowrap',
-                    color: active ? '#0F2A7A' : 'rgba(255,255,255,0.85)',
+                    color: active ? SIDEBAR_ACTIVE : 'rgba(255,255,255,0.85)',
                     fontWeight: active ? 600 : 400,
                 }}>
                         {label}
@@ -827,7 +1030,9 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
           </nav>
         </aside>
 
-        <div style={{
+        <div
+            className="dash-content-column"
+            style={{
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
@@ -840,7 +1045,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             minHeight: 0,
             display: 'flex',
             flexDirection: 'column',
-            padding: '28px 28px 28px 28px',
+            padding: 28,
             overflowY: 'auto',
             overflowX: 'hidden',
             background: '#F7F8FA',

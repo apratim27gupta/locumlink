@@ -1,4 +1,7 @@
 import { PushService } from '../notifications/push.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
+import { formatAdminDoctorName } from '../notifications/admin-notification-copy.js';
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, } from '@nestjs/common';
 import {
     DocumentType,
@@ -16,6 +19,7 @@ import {
     mergeCredentialReviewPatchForAccountPending,
 } from '../cpsns/cpsns-verified.js';
 import type { SaveLocumProfileDto } from './locum.dto.js';
+import { isShiftWithin24Hours } from '../notifications/host-notification-copy.js';
 function mapSpecialty(raw?: string): Specialty {
     if (!raw?.trim())
         return Specialty.OTHER;
@@ -119,7 +123,12 @@ function parseSaveBody(body: Record<string, unknown>): SaveLocumProfileDto {
 }
 @Injectable()
 export class LocumService {
-    constructor(private readonly prisma: PrismaService, private readonly pushService: PushService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly pushService: PushService,
+        private readonly notifService: NotificationsService,
+        private readonly adminNotif: AdminNotificationsService,
+    ) { }
 
     private async assertLocumCanWrite(userId: string): Promise<void> {
         const user = await this.prisma.user.findUnique({
@@ -319,22 +328,17 @@ export class LocumService {
         // A-003: notify admins when credential uploaded for review
         if (profileSubmittedForReview) {
             try {
-                const admins = await this.prisma.user.findMany({
-                    where: { role: 'ADMIN' },
-                    select: { id: true },
+                const credentialType = dto.licenseFileName?.trim()
+                    ? 'license documents'
+                    : dto.resumeFileName?.trim()
+                        ? 'resume documents'
+                        : 'credentials';
+                await this.adminNotif.notifyCredentialUploaded({
+                    doctorName: formatAdminDoctorName(dto.firstName, dto.lastName, 'Locum physician'),
+                    credentialType,
+                    profileId: profile.id,
+                    profileType: 'LocumProfile',
                 });
-                const name = [dto.firstName, dto.lastName].filter(Boolean).join(' ').trim() || userId;
-                await Promise.allSettled(admins.map(admin =>
-                    this.notifService.create({
-                        recipientId: admin.id,
-                        eventType: 'A_003_CREDENTIAL_UPLOADED',
-                        title: `Dr ${name} uploaded credentials for review`,
-                        body: `New credential submission requires verification.`,
-                        href: '/admin/verifications',
-                        referenceId: profile.id,
-                        referenceType: 'LocumProfile',
-                    })
-                ));
             } catch {}
         }
 
@@ -425,22 +429,32 @@ export class LocumService {
         try {
             const jobWithHost = await this.prisma.jobPosting.findUnique({
                 where: { id: jobId },
-                select: { title: true, hostProfile: { select: { userId: true } } },
+                select: {
+                    title: true,
+                    startDate: true,
+                    hostProfile: {
+                        select: {
+                            userId: true,
+                            user: { select: { email: true } },
+                        },
+                    },
+                },
             });
-            if (jobWithHost?.hostProfile?.userId) {
+            const hostUser = jobWithHost?.hostProfile?.user;
+            if (hostUser?.email) {
                 const locum = await this.prisma.locumProfile.findUnique({
                     where: { userId },
                     select: { firstName: true, lastName: true },
                 });
-                const name = locum?.firstName ? `Dr ${locum.firstName} ${locum.lastName ?? ''}`.trim() : 'A locum';
-                await this.notifService.create({
+                await this.notifService.notifyHostLocumApplied({
                     recipientId: jobWithHost.hostProfile.userId,
-                    eventType: 'H_001_LOCUM_APPLIED',
-                    title: `New application for "${jobWithHost.title}"`,
-                    body: `${name} has applied to your posting. Review now.`,
-                    href: `/host/applicants/${jobId}`,
-                    referenceId: application.id,
-                    referenceType: 'Application',
+                    recipientEmail: hostUser.email,
+                    locumFirstName: locum?.firstName,
+                    locumLastName: locum?.lastName,
+                    jobId,
+                    jobTitle: jobWithHost.title,
+                    startDate: jobWithHost.startDate,
+                    applicationId: application.id,
                 });
             }
         } catch {}
@@ -480,6 +494,38 @@ export class LocumService {
         });
         return { applications };
     }
+    async getDashboardStats(userId: string) {
+        const locumProfile = await this.prisma.locumProfile.findUnique({
+            where: { userId },
+            select: { id: true },
+        });
+        if (!locumProfile) {
+            return { totalAcceptedShifts: 0, completedShifts: 0 };
+        }
+        const now = new Date();
+        const locumAcceptedWhere = {
+            locumProfileId: locumProfile.id,
+            OR: [
+                { locumResponse: 'ACCEPTED' as const },
+                { locumAcceptedAt: { not: null } },
+            ],
+        };
+        const [totalAcceptedShifts, completedShifts] = await Promise.all([
+            this.prisma.application.count({ where: locumAcceptedWhere }),
+            this.prisma.application.count({
+                where: {
+                    ...locumAcceptedWhere,
+                    jobPosting: {
+                        OR: [
+                            { endDate: { lt: now } },
+                            { status: 'COMPLETED' },
+                        ],
+                    },
+                },
+            }),
+        ]);
+        return { totalAcceptedShifts, completedShifts };
+    }
     async respondToConfirmedPlacement(userId: string, applicationId: string, response: 'accept' | 'decline') {
         if (response !== 'accept' && response !== 'decline')
             throw new BadRequestException('Choose accept or decline.');
@@ -512,25 +558,29 @@ export class LocumService {
             try {
                 const jobWithHost = await this.prisma.jobPosting.findUnique({
                     where: { id: app.jobPostingId },
-                    select: { title: true, startDate: true, hostProfile: { select: { userId: true } } },
+                    select: {
+                        startDate: true,
+                        hostProfile: {
+                            select: {
+                                userId: true,
+                                user: { select: { email: true } },
+                            },
+                        },
+                    },
                 });
                 const locumProfile = await this.prisma.locumProfile.findUnique({
                     where: { userId },
                     select: { firstName: true, lastName: true },
                 });
-                const name = locumProfile?.firstName ? `Dr ${locumProfile.firstName} ${locumProfile.lastName ?? ''}`.trim() : 'The locum';
-                const dateStr = jobWithHost?.startDate
-                    ? new Date(jobWithHost.startDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-                    : '';
-                if (jobWithHost?.hostProfile?.userId) {
-                    await this.notifService.create({
+                const hostEmail = jobWithHost?.hostProfile?.user?.email;
+                if (jobWithHost?.hostProfile?.userId && hostEmail) {
+                    await this.notifService.notifyHostLocumAccepted({
                         recipientId: jobWithHost.hostProfile.userId,
-                        eventType: 'H_002_LOCUM_ACCEPTED',
-                        title: `Confirmed! ${name} accepted your ${dateStr} shift`,
-                        body: `${name} has accepted your ${jobWithHost.title ?? 'locum'} shift. You can now coordinate details.`,
-                        href: '/host/dashboard',
-                        referenceId: applicationId,
-                        referenceType: 'Application',
+                        recipientEmail: hostEmail,
+                        locumFirstName: locumProfile?.firstName,
+                        locumLastName: locumProfile?.lastName,
+                        startDate: jobWithHost.startDate,
+                        applicationId,
                     });
                 }
             } catch {}
@@ -550,30 +600,53 @@ export class LocumService {
                 });
             }
         });
-        // H-003: Notify host that locum declined
+        // H-003 / H-009: Notify host that locum declined
         try {
             const jobWithHost = await this.prisma.jobPosting.findUnique({
                 where: { id: app.jobPostingId },
-                select: { title: true, startDate: true, hostProfile: { select: { userId: true } } },
+                select: {
+                    id: true,
+                    startDate: true,
+                    hostProfile: {
+                        select: {
+                            userId: true,
+                            practiceName: true,
+                            user: { select: { email: true } },
+                        },
+                    },
+                },
             });
             const locumProfile = await this.prisma.locumProfile.findUnique({
                 where: { userId },
                 select: { firstName: true, lastName: true },
             });
-            const name = locumProfile?.firstName ? `Dr ${locumProfile.firstName} ${locumProfile.lastName ?? ''}`.trim() : 'The locum';
-            const dateStr = jobWithHost?.startDate
-                ? new Date(jobWithHost.startDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-                : '';
-            if (jobWithHost?.hostProfile?.userId) {
-                await this.notifService.create({
-                    recipientId: jobWithHost.hostProfile.userId,
-                    eventType: 'H_003_LOCUM_DECLINED',
-                    title: `${name} declined your ${dateStr} opportunity`,
-                    body: `${name} has declined your ${jobWithHost?.title ?? 'locum'} opportunity. Browse other available locums.`,
-                    href: '/host/dashboard',
-                    referenceId: applicationId,
-                    referenceType: 'Application',
+            const host = jobWithHost?.hostProfile;
+            const hostEmail = host?.user?.email;
+            if (host?.userId && hostEmail && jobWithHost) {
+                await this.notifService.notifyHostLocumDeclined({
+                    recipientId: host.userId,
+                    recipientEmail: hostEmail,
+                    locumFirstName: locumProfile?.firstName,
+                    locumLastName: locumProfile?.lastName,
+                    startDate: jobWithHost.startDate,
+                    applicationId,
+                    jobId: jobWithHost.id,
                 });
+                if (isShiftWithin24Hours(jobWithHost.startDate)) {
+                    const locumName = [locumProfile?.firstName, locumProfile?.lastName]
+                        .filter(Boolean)
+                        .join(' ')
+                        .trim();
+                    await this.notifService.notifyHostShiftCancelled({
+                        recipientId: host.userId,
+                        recipientEmail: hostEmail,
+                        startDate: jobWithHost.startDate,
+                        clinicName: host.practiceName ?? 'your clinic',
+                        cancelledBy: locumName ? `Dr. ${locumName}` : 'Locum physician',
+                        reason: 'Locum declined the confirmed placement',
+                        jobId: jobWithHost.id,
+                    });
+                }
             }
         } catch {}
         return { success: true };

@@ -103,19 +103,23 @@ export class AdminService {
     totalUsers: number;
     hostUsers: number;
     locumUsers: number;
-    verifiedLocums: number;
+    verifiedHostUsers: number;
+    verifiedLocumUsers: number;
     pendingVerifications: number;
     activeJobPostings: number;
+    totalJobPostings: number;
     totalApplications: number;
     fillRate: number;
     avgTimesToPlacementHours: number | null;
   }> {
     const [
       roleGroups,
-      verifiedLocums,
+      verifiedHostUsers,
+      verifiedLocumUsers,
       pendingLocumVerifications,
       pendingHostVerifications,
       activeJobPostings,
+      totalJobPostings,
       totalApplications,
       confirmedApplications,
       placedApplications,
@@ -123,6 +127,9 @@ export class AdminService {
       this.prisma.user.groupBy({
         by: ['role'],
         _count: { id: true },
+      }),
+      this.prisma.hostProfile.count({
+        where: { cpsnsVerificationStatus: VerificationStatus.VERIFIED },
       }),
       this.prisma.locumProfile.count({
         where: { cpsnsVerificationStatus: VerificationStatus.VERIFIED },
@@ -136,6 +143,7 @@ export class AdminService {
       this.prisma.jobPosting.count({
         where: { status: PostingStatus.ACTIVE, isDeleted: false },
       }),
+      this.prisma.jobPosting.count({ where: { isDeleted: false } }),
       this.prisma.application.count(),
       this.prisma.application.count({
         where: { status: 'CONFIRMED' },
@@ -185,9 +193,11 @@ export class AdminService {
       totalUsers,
       hostUsers,
       locumUsers,
-      verifiedLocums,
+      verifiedHostUsers,
+      verifiedLocumUsers,
       pendingVerifications,
       activeJobPostings,
+      totalJobPostings,
       totalApplications,
       fillRate,
       avgTimesToPlacementHours,
@@ -371,19 +381,24 @@ export class AdminService {
         outcome: 'SUCCESS',
         actorRole: 'admin',
       });
-      // Notify user of account status change
+      // Notify user of account status change (L-011 locum / H-007 host)
       try {
-        if (dto.status === 'SUSPENDED') {
-          const eventType = updated.role === 'HOST' ? 'H_007_ACCOUNT_SUSPENDED' : 'L_011_ACCOUNT_SUSPENDED';
-          await this.notifService.create({
-            recipientId: updated.id,
-            eventType,
-            title: 'Your account has been suspended',
-            body: dto.suspensionNote ?? 'Your account has been suspended. Contact support for assistance.',
-            href: '/settings',
-            referenceId: updated.id,
-            referenceType: 'User',
-          });
+        if (dto.status === UserStatus.SUSPENDED) {
+          if (updated.role === Role.LOCUM) {
+            await this.notifService.notifyLocumAccountSuspended({
+              recipientId: updated.id,
+              recipientEmail: updated.email,
+              suspensionNote: dto.suspensionNote,
+              referenceId: updated.id,
+            });
+          } else if (updated.role === Role.HOST) {
+            await this.notifService.notifyHostAccountSuspended({
+              recipientId: updated.id,
+              recipientEmail: updated.email,
+              suspensionNote: dto.suspensionNote,
+              referenceId: updated.id,
+            });
+          }
         }
       } catch {}
       return {
@@ -712,24 +727,21 @@ export class AdminService {
     // L-009 / L-010: notify locum of verification result
     try {
       if (nextStatus === 'VERIFIED') {
-        await this.notifService.create({
+        await this.notifService.notifyLocumAccountVerified({
           recipientId: profile.userId,
-          eventType: 'L_009_ACCOUNT_VERIFIED',
-          title: 'Account Verified — Welcome to LocumLink!',
-          body: 'Your credentials have been verified. You can now apply for locum opportunities.',
-          href: '/locum/browse',
+          recipientEmail: profile.user.email,
+          firstName: updated.firstName,
+          lastName: updated.lastName,
           referenceId: profile.id,
-          referenceType: 'LocumProfile',
         });
       } else if (nextStatus === 'REJECTED') {
-        await this.notifService.create({
+        await this.notifService.notifyLocumVerificationRejected({
           recipientId: profile.userId,
-          eventType: 'L_010_ACCOUNT_REJECTED',
-          title: 'Action Required: Account Verification',
-          body: `Additional documentation required. Reason: ${rejectionReason ?? 'See admin panel'}.`,
-          href: '/locum/profile',
+          recipientEmail: profile.user.email,
+          firstName: updated.firstName,
+          lastName: updated.lastName,
+          rejectionReason,
           referenceId: profile.id,
-          referenceType: 'LocumProfile',
         });
       }
     } catch {}
@@ -811,24 +823,21 @@ export class AdminService {
     // H-005 / H-006: notify host of verification result
     try {
       if (nextStatus === 'VERIFIED') {
-        await this.notifService.create({
+        await this.notifService.notifyHostAccountVerified({
           recipientId: profile.userId,
-          eventType: 'H_005_ACCOUNT_VERIFIED',
-          title: 'Account Verified — Welcome to LocumLink!',
-          body: 'Your credentials have been verified. You can now post locum opportunities.',
-          href: '/host/dashboard',
+          recipientEmail: profile.user.email,
+          contactFirstName: updated.contactFirstName,
+          contactLastName: updated.contactLastName,
           referenceId: profile.id,
-          referenceType: 'HostProfile',
         });
       } else if (nextStatus === 'REJECTED') {
-        await this.notifService.create({
+        await this.notifService.notifyHostVerificationRejected({
           recipientId: profile.userId,
-          eventType: 'H_006_ACCOUNT_REJECTED',
-          title: 'Action Required: Account Verification',
-          body: `Additional documentation required. Reason: ${rejectionReason ?? 'See admin panel'}.`,
-          href: '/host/profile',
+          recipientEmail: profile.user.email,
+          contactFirstName: updated.contactFirstName,
+          contactLastName: updated.contactLastName,
+          rejectionReason,
           referenceId: profile.id,
-          referenceType: 'HostProfile',
         });
       }
     } catch {}

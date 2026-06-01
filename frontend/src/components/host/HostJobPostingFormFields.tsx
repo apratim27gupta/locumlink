@@ -9,7 +9,9 @@ import {
     hostJobFieldInp,
     hostJobFieldLbl,
     isoToMmDdYyyy,
+    clampIsoDateToMin,
     parseMmDdYyyyToIso,
+    todayIsoDateLocal,
 } from '@/lib/hostJobPostingForm';
 
 function CalendarIcon() {
@@ -71,13 +73,26 @@ const presetItemStyle: React.CSSProperties = {
     boxSizing: 'border-box',
 };
 
-export function MmDdYyyyDateField({ value, onChange, inputStyle, }: {
+export function MmDdYyyyDateField({ value, onChange, inputStyle, minIso = todayIsoDateLocal(), }: {
     value: string;
     onChange: (value: string) => void;
     inputStyle?: React.CSSProperties;
+    /** Earliest selectable date (YYYY-MM-DD). Defaults to today. */
+    minIso?: string;
 }) {
     const pickerRef = useRef<HTMLInputElement>(null);
     const isoValue = parseMmDdYyyyToIso(value);
+    function commitFormatted(formatted: string) {
+        const iso = parseMmDdYyyyToIso(formatted);
+        if (iso && minIso) {
+            const clamped = clampIsoDateToMin(iso, minIso);
+            if (clamped !== iso) {
+                onChange(isoToMmDdYyyy(clamped));
+                return;
+            }
+        }
+        onChange(formatted);
+    }
     function openCalendar() {
         const el = pickerRef.current;
         if (!el)
@@ -94,7 +109,7 @@ export function MmDdYyyyDateField({ value, onChange, inputStyle, }: {
       <input type="text" inputMode="numeric" autoComplete="off" placeholder="MM-DD-YYYY" pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}" title="MM-DD-YYYY" style={{
             ...base,
             paddingRight: 40,
-        }} value={value} onChange={(e) => onChange(formatMmDdYyyyInput(e.target.value))}/>
+        }} value={value} onChange={(e) => commitFormatted(formatMmDdYyyyInput(e.target.value))}/>
       <button type="button" aria-label="Open calendar" onClick={openCalendar} style={{
             position: 'absolute',
             right: 2,
@@ -112,9 +127,14 @@ export function MmDdYyyyDateField({ value, onChange, inputStyle, }: {
         }}>
         <CalendarIcon />
       </button>
-      <input ref={pickerRef} type="date" tabIndex={-1} aria-hidden value={isoValue} onChange={(e) => {
+      <input ref={pickerRef} type="date" tabIndex={-1} aria-hidden min={minIso} value={isoValue} onChange={(e) => {
             const iso = e.target.value;
-            onChange(iso ? isoToMmDdYyyy(iso) : '');
+            if (!iso) {
+                onChange('');
+                return;
+            }
+            const clamped = minIso ? clampIsoDateToMin(iso, minIso) : iso;
+            onChange(isoToMmDdYyyy(clamped));
         }} style={{
             position: 'absolute',
             width: 1,

@@ -1,14 +1,17 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { subscribeTopLoader } from '@/lib/topLoader';
+
+const LOADER_BAR_COLORS = ['#0F2A7A', '#1E3FAF', '#38C6C6'] as const;
 
 function BarWave() {
   const bars = [
-    { h: 16, delay: '0s' },
-    { h: 28, delay: '0.1s' },
-    { h: 40, delay: '0.2s' },
-    { h: 28, delay: '0.3s' },
-    { h: 16, delay: '0.4s' },
+    { h: 16, delay: '0s', color: LOADER_BAR_COLORS[0] },
+    { h: 28, delay: '0.1s', color: LOADER_BAR_COLORS[1] },
+    { h: 40, delay: '0.2s', color: LOADER_BAR_COLORS[2] },
+    { h: 28, delay: '0.3s', color: LOADER_BAR_COLORS[1] },
+    { h: 16, delay: '0.4s', color: LOADER_BAR_COLORS[0] },
   ];
   return (
     <>
@@ -23,6 +26,10 @@ function BarWave() {
         }
       `}</style>
       <div
+        className="page-loader-overlay"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
         style={{
           position: 'fixed',
           inset: 0,
@@ -48,16 +55,10 @@ function BarWave() {
                 width: 5,
                 height: b.h,
                 borderRadius: 3,
-                background:
-                  i % 2 === 0
-                    ? 'linear-gradient(180deg,#1C32D2,#3A65DB)'
-                    : 'linear-gradient(180deg,#3BC6C6,#2AA8A8)',
+                background: b.color,
                 display: 'block',
                 animation: `bwv 0.9s ease-in-out ${b.delay} infinite`,
-                boxShadow:
-                  i % 2 === 0
-                    ? '0 0 8px rgba(28,50,210,0.4)'
-                    : '0 0 8px rgba(59,198,198,0.4)',
+                boxShadow: `0 0 8px ${b.color}73`,
               }}
             />
           ))}
@@ -79,7 +80,13 @@ function BarWave() {
 
 export default function PageLoader() {
   const [active, setActive] = useState(false);
-  useEffect(() => subscribeTopLoader(setActive), []);
-  if (!active) return null;
-  return <BarWave />;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return subscribeTopLoader(setActive);
+  }, []);
+
+  if (!active || !mounted) return null;
+  return createPortal(<BarWave />, document.body);
 }

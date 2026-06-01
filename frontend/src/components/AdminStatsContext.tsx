@@ -11,17 +11,9 @@ import {
 } from 'react';
 import { usePathname } from 'next/navigation';
 import { adminFetchJson } from '@/lib/adminApi';
+import { normalizeAdminStats, type AdminStats } from '@/lib/adminStats';
 
-export type AdminStats = {
-  totalUsers: number;
-  hostUsers: number;
-  verifiedHostUsers: number;
-  locumUsers: number;
-  verifiedLocumUsers: number;
-  pendingVerifications: number;
-  activeJobPostings: number;
-  totalJobPostings: number;
-};
+export type { AdminStats };
 
 type AdminStatsContextValue = {
   stats: AdminStats | null;
@@ -47,11 +39,11 @@ export function AdminStatsProvider({ children }: { children: ReactNode }) {
     try {
       const data = await adminFetchJson<{
         admin?: { email?: string };
-        stats?: AdminStats;
+        stats?: unknown;
       }>('/api/admin/stats');
       if (data.admin?.email) setAdminEmail(data.admin.email);
       else setAdminEmail('');
-      setStats(data.stats ?? null);
+      setStats(normalizeAdminStats(data.stats));
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load admin stats';
       setError(

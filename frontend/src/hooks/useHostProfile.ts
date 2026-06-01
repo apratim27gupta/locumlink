@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import type { HostProfile } from '@/types';
 import { hostApi } from '@/lib/api';
 import { getToken } from '@/lib/auth';
+import { dispatchProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { useAuth } from '@/providers/AuthProvider';
 export function useHostProfile() {
     const { isLoading: authLoading, userId } = useAuth();
@@ -48,6 +49,7 @@ export function useHostProfile() {
         try {
             const saved = await hostApi.saveProfile(data);
             setProfile(saved);
+            dispatchProfileUpdated();
         }
         catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Save failed');

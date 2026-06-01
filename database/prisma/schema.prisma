@@ -454,14 +454,32 @@ model Otp {
 // Separate table for Admin authentication/authorization.
 // Do NOT mix admin accounts with the main User table.
 model Admin {
-  id        String     @id @default(cuid())
-  name      String
-  email     String     @unique
-  role      String     @default("admin")
-  createdAt DateTime   @default(now())
-  auditLogs AuditLog[]
+  id            String                   @id @default(cuid())
+  name          String
+  email         String                   @unique
+  role          String                   @default("admin")
+  createdAt     DateTime                 @default(now())
+  auditLogs     AuditLog[]
+  notifications AdminNotificationEvent[]
 
   @@map("admins")
+}
+
+model AdminNotificationEvent {
+  id             String    @id @default(cuid())
+  adminId        String    @map("admin_id")
+  admin          Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  eventType      String    @map("event_type")
+  referenceId    String?   @map("reference_id")
+  referenceType  String?   @map("reference_type")
+  payload        Json?
+  deliveryStatus String    @default("DELIVERED") @map("delivery_status")
+  deliveredAt    DateTime? @map("delivered_at")
+  sentAt         DateTime  @default(now()) @map("sent_at")
+
+  @@index([adminId])
+  @@map("admin_notification_events")
 }
 model PushSubscription {
   id        String   @id @default(cuid())

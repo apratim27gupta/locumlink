@@ -12,7 +12,7 @@
   "scripts": {
     "ports:free": "node scripts/kill-dev-ports.cjs",
     "sleep:ports": "node -e \"setTimeout(()=>process.exit(0),3000);\"",
-    "dev": "npm run ports:free && npm run sleep:ports && node scripts/prep-dev.cjs && concurrently -k -n backend,frontend -c cyan,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "npm run ports:free && npm run sleep:ports && node scripts/prep-dev.cjs && npx cross-env NODE_OPTIONS=--max-old-space-size=3072 concurrently -k -n backend,frontend -c cyan,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:quick": "npm run ports:free && npm run sleep:ports && npx prisma migrate deploy --schema=database/prisma/schema.prisma && concurrently -k -n backend,frontend -c cyan,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:check": "node scripts/dev-check.cjs",
     "build": "npm run build -w backend",

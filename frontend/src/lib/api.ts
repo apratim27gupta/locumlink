@@ -396,6 +396,23 @@ export const locumApi = {
         }
         return res.json();
     },
+    getDashboardStats: async (): Promise<{
+        totalAcceptedShifts: number;
+        completedShifts: number;
+    }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/locum/stats`, {
+            cache: 'no-store',
+            headers: nestHeaders(false),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Loading dashboard stats');
+        }
+        return res.json() as Promise<{
+            totalAcceptedShifts: number;
+            completedShifts: number;
+        }>;
+    },
     getMyApplications: async (): Promise<{
         applications: MyApplication[];
     }> => {
@@ -914,6 +931,7 @@ export const messageApi = {
         const res = await trackedFetch(`${NEST_BASE}/api/messages`, {
             method: 'POST',
             headers: nestHeaders(true),
+            skipTopLoader: true,
             body: JSON.stringify({
                 recipientId,
                 body,
@@ -935,6 +953,7 @@ export const messageApi = {
         const res = await trackedFetch(`${NEST_BASE}/api/messages/${encodeURIComponent(messageId)}`, {
             method: 'PATCH',
             headers: nestHeaders(true),
+            skipTopLoader: true,
             body: JSON.stringify({ body }),
         });
         if (!res.ok) {
@@ -951,6 +970,7 @@ export const messageApi = {
         const res = await trackedFetch(`${NEST_BASE}/api/messages/${encodeURIComponent(messageId)}`, {
             method: 'DELETE',
             headers: nestHeaders(false),
+            skipTopLoader: true,
         });
         if (!res.ok) {
             const text = await res.text();
@@ -961,6 +981,8 @@ export const messageApi = {
         }>;
     },
 };
+export type NotificationPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NORMAL' | 'LOW';
+
 export type NotificationItem = {
     id: string;
     type: 'message' | 'application' | 'shortlisted' | 'reminder' | 'account' | 'cancellation' | 'registration' | 'credential' | 'flagged';
@@ -968,7 +990,11 @@ export type NotificationItem = {
     title: string;
     body: string;
     href: string;
+    read?: boolean;
     createdAt: string;
+    priority?: NotificationPriority;
+    actionLabel?: string;
+    eventType?: string;
 };
 export type NotificationsResponse = {
     total: number;
@@ -1011,5 +1037,14 @@ export const notificationsApi = {
             method: 'DELETE', cache: 'no-store', headers: nestHeaders(true), skipTopLoader: true,
             body: JSON.stringify({ endpoint }),
         });
+    },
+    markRead: async (id: string): Promise<void> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/notifications/${encodeURIComponent(id)}/read`, {
+            method: 'PATCH',
+            cache: 'no-store',
+            headers: nestHeaders(true),
+            skipTopLoader: true,
+        });
+        if (!res.ok) throw new Error('Failed to mark notification read');
     },
 };

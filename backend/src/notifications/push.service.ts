@@ -7,11 +7,11 @@ export class PushService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   onModuleInit() {
-    webpush.setVapidDetails(
-      process.env.VAPID_EMAIL!,
-      process.env.VAPID_PUBLIC_KEY!,
-      process.env.VAPID_PRIVATE_KEY!,
-    );
+    const email = process.env.VAPID_EMAIL?.trim();
+    const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
+    const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
+    if (!email || !publicKey || !privateKey) return;
+    webpush.setVapidDetails(email, publicKey, privateKey);
   }
 
   async saveSubscription(userId: string, sub: { endpoint: string; keys: { p256dh: string; auth: string } }) {

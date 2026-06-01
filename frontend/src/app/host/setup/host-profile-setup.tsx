@@ -26,6 +26,7 @@ import {
   type CanadianCityRow,
 } from '@/lib/canadianCities';
 import BarWaveButton from '@/components/ui/BarWaveButton';
+import { dispatchProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { sortStringsLocale } from '@/lib/sortLocale';
 
@@ -226,6 +227,7 @@ export default function HostSetupPage(props: {
           if (saved.speciality) {
             setSpecialityTags(parseSpecialities(saved.speciality));
           }
+          completeProfile();
         }
       } catch {
         // No saved profile yet, start fresh
@@ -420,11 +422,12 @@ export default function HostSetupPage(props: {
     try {
       await hostApi.saveProfile(form);
       completeProfile();
+      dispatchProfileUpdated();
       if (typeof window !== 'undefined') {
-        window.location.assign('/host/profile');
+        window.location.assign('/host/dashboard');
       } else {
-        beforeClientNavigation('/host/profile');
-        router.replace('/host/profile');
+        beforeClientNavigation('/host/dashboard');
+        router.replace('/host/dashboard');
       }
     } catch (e: unknown) {
       setErr(
@@ -1387,7 +1390,7 @@ export default function HostSetupPage(props: {
             }}
           >
             {step === 1 && (
-              <NavButtons onNext={() => setStep(2)} disabled={!step1Valid} />
+              <NavButtons onNext={() => setStep(2)} disabled={!step1Valid} nextGradient />
             )}
             {step === 2 && (
               <NavButtons
@@ -1400,7 +1403,7 @@ export default function HostSetupPage(props: {
               <NavButtons
                 onBack={() => setStep(2)}
                 onNext={handleFinish}
-                nextLabel={busy ? 'Saving…' : 'Next'}
+                nextLabel={busy ? 'Saving…' : 'Done'}
                 disabled={busy}
                 nextGradient
               />
@@ -1425,16 +1428,21 @@ function NavButtons({
   disabled?: boolean;
   nextGradient?: boolean;
 }) {
+  const minH = nextGradient ? 52 : 44;
+  const pad = nextGradient ? '10px 12px' : '6px 8px';
+
   const nextBase: React.CSSProperties = {
-    flex: 2,
-    minHeight: nextGradient ? 48 : 44,
-    padding: nextGradient ? '10px 12px' : '6px 8px',
+    flex: '1 1 0',
+    minHeight: minH,
+    height: minH,
+    padding: pad,
     border: 'none',
     borderRadius: 8,
     fontWeight: 500,
     lineHeight: '140%',
     cursor: disabled ? 'not-allowed' : 'pointer',
     fontFamily: 'inherit',
+    boxSizing: 'border-box',
   };
 
   const nextStyle: React.CSSProperties = nextGradient
@@ -1453,30 +1461,30 @@ function NavButtons({
         color: disabled ? 'rgba(107, 114, 128, 0.7)' : '#fff',
       };
 
+  const backStyle: React.CSSProperties = {
+    flex: '1 1 0',
+    minHeight: minH,
+    height: minH,
+    padding: pad,
+    boxSizing: 'border-box',
+    background: '#fff',
+    color: '#5a6478',
+    border: '1px solid #D0D5DD',
+    borderRadius: 8,
+    fontSize: nextGradient ? 20 : 16,
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  };
+
   return (
-    <div style={{ display: 'flex', gap: 12, width: '100%' }}>
-      {onBack && (
-        <button
-          type="button"
-          onClick={onBack}
-          style={{
-            flex: 1,
-            minHeight: 44,
-            padding: '6px 8px',
-            background: '#fff',
-            color: '#5a6478',
-            border: '1px solid #D0D5DD',
-            borderRadius: 8,
-            fontSize: 16,
-            fontWeight: 500,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
+    <div style={{ display: 'flex', gap: 12, width: '100%', alignItems: 'stretch' }}>
+      {onBack ? (
+        <button type="button" onClick={onBack} style={backStyle}>
           Back
         </button>
-      )}
-      {onNext && (
+      ) : null}
+      {onNext ? (
         <BarWaveButton
           type="button"
           variant="primary"
@@ -1486,14 +1494,14 @@ function NavButtons({
           onClick={() => Promise.resolve(onNext())}
           style={{
             ...nextStyle,
-            flex: 2,
+            flex: '1 1 0',
             width: undefined,
             fontFamily: 'inherit',
           }}
         >
           {nextLabel}
         </BarWaveButton>
-      )}
+      ) : null}
     </div>
   );
 }

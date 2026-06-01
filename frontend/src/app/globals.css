@@ -320,30 +320,23 @@
 }
 
 
-.auth-bg {
+.auth-page {
   box-sizing: border-box;
   width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
   overflow: hidden;
-  background-color: #ffffff;
-  background-image: none;
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
+  background: #0f2a7a url('/auth-bg.png') center / cover no-repeat;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 40px clamp(2rem, 8vw, 120px);
+  justify-content: center;
+  padding: 40px clamp(1.5rem, 8vw, 5rem);
   font-family: var(--font-family-body);
 }
 
 @media (min-width: 768px) {
-  .auth-bg {
+  .auth-page {
     justify-content: flex-start;
-    padding-left: clamp(1.5rem, 8vw, 5rem);
-    padding-right: clamp(1.5rem, 8vw, 5rem);
-    gap: 2rem;
   }
 }
 
@@ -367,9 +360,31 @@
 
 
 .auth-bg__card--verify {
-  width: min(420px, calc(100vw - 2rem - 170px));
-  min-height: 360px;
+  width: min(380px, calc(100vw - 3rem));
+  min-height: 0;
   height: auto;
+  padding: 28px 32px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+
+.auth-verify-body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  box-sizing: border-box;
+}
+
+.auth-verify-otp-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  justify-content: center;
+  width: 100%;
+  flex-wrap: nowrap;
 }
 
 
@@ -479,11 +494,11 @@
 
 
 .auth-page-signin-link {
-  color: #636364;
+  color: #1e3faf;
   transition: color 0.15s ease;
 }
 .auth-page-signin-link:hover {
-  color: #3b4fd8;
+  color: #0f2a7a;
 }
 
 
@@ -776,7 +791,7 @@ body.app-body {
 
 /* ── Auth page mobile fix ────────────────────── */
 @media (max-width: 767px) {
-  .auth-bg {
+  .auth-page {
     padding-top: 32px !important;
     padding-left: 16px !important;
     padding-right: 16px !important;
@@ -797,7 +812,11 @@ body.app-body {
     box-sizing: border-box !important;
   }
   .auth-bg__card--signup,
-  .auth-bg__card--verify { width: 100% !important; }
+  .auth-bg__card--verify {
+    width: 100% !important;
+    max-width: 380px !important;
+    padding: 24px 20px 28px !important;
+  }
 }
 
 /* ── DashLayout sidebar mobile ───────────────── */
@@ -880,41 +899,6 @@ body.app-body {
   margin-bottom: 12px;
 }
 
-@media (max-width: 767px) {
-  .auth-bg {
-    justify-content: center;
-    padding: 24px 16px;
-  }
-  .auth-bg__card--signup,
-  .auth-bg__card--verify {
-  }
-}
-
-/* Auth right panel */
-.auth-bg__right {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding-left: 3rem;
-}
-.auth-bg__logo {
-  width: clamp(280px, 35vw, 480px);
-  height: auto;
-  object-fit: contain;
-}
-.auth-bg__tagline {
-  margin-top: 1rem;
-  color: rgba(255,255,255,0.55);
-  font-size: 1.1rem;
-  font-family: var(--font-family-body);
-  letter-spacing: 0.03em;
-}
-@media (max-width: 767px) {
-  .auth-bg__right { display: none; }
-}
-
 /* Landing page btn-signin override — match btn-landing-cta size */
 .home-landing-actions .btn-signin {
   padding: 16px 24px;
@@ -929,42 +913,6 @@ body.app-body {
   height: 59px;
   font-size: 20px;
   letter-spacing: 0.04em;
-}
-
-.auth-bg__right-panel {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-@media (max-width: 767px) {
-  .auth-bg__right-panel { display: none; }
-}
-
-.auth-bg__right-panel {
-  flex: 1;
-  align-self: stretch;
-  border-radius: 16px 0 0 16px;
-  background-image: url('/auth-bg.png');
-  background-size: cover;
-  background-position: center center;
-  margin-top: -40px;
-  margin-bottom: -40px;
-  margin-right: -5rem;
-}
-@media (max-width: 767px) {
-  .auth-bg__right-panel { display: none; }
-}
-
-.auth-bg__right-panel {
-  flex: 1;
-  height: 100vh;
-  background-image: url('/auth-bg.png');
-  background-size: cover;
-  background-position: center center;
-}
-@media (max-width: 767px) {
-  .auth-bg__right-panel { display: none; }
 }
 
 /* ══════════════════════════════════════════════
@@ -1066,9 +1014,10 @@ body.app-body {
     max-width: 100vw !important;
   }
 
-  /* ── 2. MAIN CONTENT: proper mobile padding ── */
-  .dash-sidebar ~ div main {
-    padding: 16px !important;
+  /* ── 2. MAIN CONTENT: same inset as desktop (from sidebar / header) ── */
+  .dash-content-column > main.dash-main-content,
+  .dash-sidebar ~ div main.dash-main-content {
+    padding: 16px 12px 28px !important;
     overflow-x: hidden !important;
     overflow-y: auto !important;
     box-sizing: border-box !important;
@@ -1092,7 +1041,7 @@ body.app-body {
 
   /* ── 5. PROFILE PAGES: vertical scroll sections  */
   /* Each section card stacks and scrolls naturally */
-  .dash-sidebar ~ div main > div > div {
+  .dash-sidebar ~ div main > div > div:not(.host-step-nav-outer):not(.host-step-nav-inner) {
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
@@ -1189,8 +1138,8 @@ body.app-body {
   }
 
   /* ── 11. FLEX ROWS: wrap on mobile ───────────── */
-  .dash-sidebar ~ div main div[style*="flex-direction: row"],
-  .dash-sidebar ~ div main div[style*="flexDirection: 'row'"] {
+  .dash-sidebar ~ div main div[style*="flex-direction: row"]:not(.host-step-nav-step),
+  .dash-sidebar ~ div main div[style*="flexDirection: 'row'"]:not(.host-step-nav-step) {
     flex-wrap: wrap !important;
   }
 
@@ -1301,11 +1250,51 @@ body.app-body {
   }
 }
 
+/* Locum profile section headers (desktop + default) */
+.locum-section-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.locum-section-header-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef0fb;
+  overflow: hidden;
+}
+
+.locum-section-header span {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f1523;
+  line-height: 1.2;
+}
+
+/* Locum profile icons — brand blue (#0F2A7A in SVG assets) */
+.profile-form-capitalize .locum-section-header-icon img,
+.profile-form-capitalize .locum-profile-icon {
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
 /* Desktop — hide back buttons */
 @media (min-width: 769px) {
   .browse-back-btn,
   .messages-back-btn {
     display: none !important;
+  }
+
+  .locum-step-nav .profile-step-label {
+    font-size: 15px !important;
+    line-height: 1.25 !important;
   }
 }
 
@@ -1364,14 +1353,44 @@ body.app-body {
     min-width: unset !important;
   }
 
-  /* Host: override hardcoded 1142px width */
-  .host-step-nav-outer {
+  /* Host: horizontal step scroll with visible scrollbar */
+  .dash-sidebar ~ div main .host-profile-inner .host-step-nav-outer {
+    display: block !important;
     width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin !important;
+    scrollbar-color: #9CA3AF #F3F4F6 !important;
   }
-  .host-step-nav-inner {
+  .dash-sidebar ~ div main .host-profile-inner .host-step-nav-outer::-webkit-scrollbar {
+    display: block !important;
+    height: 6px !important;
+  }
+  .dash-sidebar ~ div main .host-profile-inner .host-step-nav-outer::-webkit-scrollbar-track {
+    background: #F3F4F6 !important;
+    border-radius: 3px !important;
+  }
+  .dash-sidebar ~ div main .host-profile-inner .host-step-nav-outer::-webkit-scrollbar-thumb {
+    background: #9CA3AF !important;
+    border-radius: 3px !important;
+  }
+  .dash-sidebar ~ div main .host-profile-inner .host-step-nav-inner {
+    display: flex !important;
+    flex-wrap: nowrap !important;
     width: max-content !important;
+    min-width: max-content !important;
+    max-width: none !important;
+  }
+  .dash-sidebar ~ div main .host-profile-inner .host-step-nav-step {
+    flex: 0 0 auto !important;
+    flex-wrap: nowrap !important;
+    width: 168px !important;
+    min-width: 168px !important;
+    max-width: 168px !important;
   }
 }
 
@@ -1401,7 +1420,8 @@ body.app-body {
 @media (max-width: 768px) {
 
   /* ── DashLayout main padding ── */
-  .dash-main-content {
+  .dash-content-column > main.dash-main-content,
+  main.dash-main-content {
     padding: 16px 12px 28px !important;
   }
 
@@ -1535,14 +1555,10 @@ body.app-body {
     white-space: nowrap !important;
   }
 
-  /* ── Host step nav ── */
-  .host-step-nav-outer {
-    width: 100% !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-  }
-  .host-step-nav-inner {
-    width: max-content !important;
+  /* ── Host step nav (see profile steps block ~1290) ── */
+  .host-profile-inner {
+    overflow-x: hidden !important;
+    min-width: 0 !important;
   }
 
   /* ── Profile form cards ── */
@@ -1621,6 +1637,129 @@ body.app-body {
     justify-content: center !important;
   }
 
+  /* ── Host dashboard: undo global nowrap/scroll on top sections ── */
+  .host-dash-page .host-dash-top-section,
+  .host-dash-page .host-dash-stats-card,
+  .host-dash-page .host-dash-profile-banner,
+  .host-dash-page .host-dash-stats-inner,
+  .host-dash-page .host-dash-stat-line,
+  .host-dash-page .host-dash-profile-banner-title,
+  .host-dash-page .host-dash-profile-banner-subtitle {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    white-space: normal !important;
+  }
+
+  /* ── Host dashboard: header, stats, profile banner ── */
+  .host-dash-header-row {
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+  .host-dash-header-info {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+  }
+  .host-dash-header-info h1 {
+    word-break: break-word !important;
+  }
+  .host-dash-post-btn {
+    width: auto !important;
+    max-width: 124px !important;
+    height: 36px !important;
+    padding: 6px 10px !important;
+    gap: 6px !important;
+    flex-shrink: 0 !important;
+    align-self: flex-start !important;
+    margin-left: auto !important;
+  }
+  .host-dash-post-btn span {
+    font-size: 12px !important;
+  }
+  .host-dash-post-btn svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  .host-dash-stats-card {
+    padding: 14px 16px !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  .host-dash-stats-inner {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0 !important;
+  }
+  .host-dash-stat-item {
+    flex-direction: column !important;
+    flex: none !important;
+    width: 100% !important;
+  }
+  .host-dash-stats-divider {
+    width: 100% !important;
+    height: 1px !important;
+    margin: 10px 0 !important;
+    align-self: stretch !important;
+  }
+  .host-dash-stat-line {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 2px !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+  }
+  .host-dash-stat-sep {
+    display: none !important;
+  }
+  .host-dash-stat-value {
+    font-size: 16px !important;
+  }
+  .host-dash-profile-banner {
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 14px 16px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .host-dash-profile-banner-content {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  .host-dash-profile-banner-title {
+    font-size: 13px !important;
+    line-height: 1.25 !important;
+    word-break: break-word !important;
+  }
+  .host-dash-profile-banner-subtitle {
+    font-size: 12px !important;
+    line-height: 1.3 !important;
+    max-width: none !important;
+    word-break: break-word !important;
+  }
+  .host-dash-profile-banner-btn {
+    width: 100% !important;
+    max-width: none !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 6px 10px !important;
+    gap: 6px !important;
+    align-self: stretch !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+  }
+  .host-dash-profile-banner-btn span {
+    font-size: 13px !important;
+  }
+
   /* ── Settings toggles ── */
   .settings-row {
     align-items: flex-start !important;
@@ -1638,6 +1777,15 @@ body.app-body {
     flex: 1 !important;
     min-width: 0 !important;
   }
+  .dash-sidebar ~ div main .settings-row > button:not([role="switch"]) {
+    width: auto !important;
+    max-width: none !important;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    flex-shrink: 0 !important;
+    align-self: flex-start !important;
+    white-space: nowrap !important;
+  }
 
   /* ── Messages panels ── */
   .messages-list-panel {
@@ -1651,9 +1799,9 @@ body.app-body {
     display: none !important;
   }
 
-  /* ── Host profile ── */
+  /* ── Host profile: main padding only (same as other pages) ── */
   .host-profile-inner {
-    padding: 16px 12px 40px !important;
+    padding: 0 !important;
     max-width: 100% !important;
   }
 
@@ -1673,5 +1821,96 @@ body.app-body {
   .messages-back-btn {
     display: none !important;
   }
+}
+
+/* Dashboard pages: consistent inset from sidebar / header (main padding only) */
+.dash-content-column > main.dash-main-content,
+main.dash-main-content {
+  padding: 28px !important;
+  box-sizing: border-box !important;
+}
+
+.dash-page-shell,
+.host-dash-page,
+.host-profile-inner {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Host dashboard — desktop profile banner height */
+.host-dash-profile-banner {
+  min-height: 104px;
+}
+
+.host-dash-stat-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2em;
+}
+
+/* Host dashboard — horizontal job tabs (scroll without visible scrollbar) */
+.host-dash-tabs-row {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.host-dash-tabs-scroll {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.host-dash-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.host-dash-tab-btn {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  min-height: 48px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  flex-shrink: 0;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.host-dash-tab-btn:hover .host-dash-tab-label {
+  color: #0b0f1f;
+}
+
+.host-dash-tab-btn--active {
+  border-bottom-color: #0f2a7a;
+}
+
+.host-dash-tab-label {
+  font-family: Inter, sans-serif;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-heading);
+  line-height: 24px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #636364;
+}
+
+.host-dash-tab-btn--active .host-dash-tab-label {
+  color: #0b0f1f;
 }
 

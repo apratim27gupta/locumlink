@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
     return [
       { source: '/favicon.ico', destination: '/logo1.png' },
       { source: '/api/admin-auth/:path*', destination: `${apiBase}/api/admin-auth/:path*` },
+      { source: '/api/admin/stats', destination: `${apiBase}/api/admin/stats` },
       { source: '/api/auth/:path*',       destination: `${apiBase}/api/auth/:path*` },
       { source: '/api/host/:path*',       destination: `${apiBase}/api/host/:path*` },
       { source: '/api/locum/profile', destination: `${apiBase}/api/locum/profile` },

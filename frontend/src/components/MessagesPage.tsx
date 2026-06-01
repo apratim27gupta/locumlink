@@ -7,6 +7,7 @@ import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { hostApi, locumApi, messageApi, uploadFile, type ApplicationRecord, type Conversation, type MyApplication, type ThreadMessage, type ThreadPartner, } from '@/lib/api';
 import { getEmail, getToken } from '@/lib/auth';
+import { subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { useAuth } from '@/providers/AuthProvider';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
@@ -356,43 +357,40 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         setMyListPreviewName(null);
         setMyCpsnsVerified(false);
     }, [pathname]);
-    useEffect(() => {
+    const refreshMyListPreviewName = useCallback(async () => {
         if (authLoading || !getToken())
             return;
-        let cancelled = false;
-        void (async () => {
-            try {
-                if (role === 'host') {
-                    const p = await hostApi.getProfile();
-                    if (cancelled || !p)
-                        return;
-                    setMyCpsnsVerified(
-                        isCpsnsVerificationApproved(p.cpsnsVerificationStatus),
-                    );
-                    if (p.contactFirstName?.trim()) {
-                        setMyListPreviewName(`Dr ${p.contactFirstName} ${p.contactLastName ?? ''}`.trim());
-                    }
-                    else if (p.clinicName?.trim()) {
-                        setMyListPreviewName(p.clinicName.trim());
-                    }
+        try {
+            if (role === 'host') {
+                const p = await hostApi.getProfile();
+                if (!p)
+                    return;
+                setMyCpsnsVerified(
+                    isCpsnsVerificationApproved(p.cpsnsVerificationStatus),
+                );
+                if (p.contactFirstName?.trim()) {
+                    setMyListPreviewName(`Dr ${p.contactFirstName} ${p.contactLastName ?? ''}`.trim());
                 }
-                else {
-                    const { exists, profile } = await locumApi.getProfile();
-                    if (cancelled || !exists || !profile?.firstName?.trim())
-                        return;
-                    setMyCpsnsVerified(
-                        isCpsnsVerificationApproved(profile.cpsnsVerificationStatus),
-                    );
-                    setMyListPreviewName(`Dr ${profile.firstName} ${profile.lastName ?? ''}`.trim());
+                else if (p.clinicName?.trim()) {
+                    setMyListPreviewName(p.clinicName.trim());
                 }
             }
-            catch {
+            else {
+                const { exists, profile } = await locumApi.getProfile();
+                if (!exists || !profile?.firstName?.trim())
+                    return;
+                setMyCpsnsVerified(
+                    isCpsnsVerificationApproved(profile.cpsnsVerificationStatus),
+                );
+                setMyListPreviewName(`Dr ${profile.firstName} ${profile.lastName ?? ''}`.trim());
             }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [authLoading, role, userId, pathname]);
+        }
+        catch {
+        }
+    }, [authLoading, role]);
+    useEffect(() => {
+        void refreshMyListPreviewName();
+    }, [refreshMyListPreviewName, userId, pathname]);
     const [composeJobPostingId, setComposeJobPostingId] = useState<string | null>(null);
     const [threadHostApplication, setThreadHostApplication] = useState<{
         id: string;
@@ -494,6 +492,19 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             return;
         void loadThread(selectedPartnerId);
     }, [selectedPartnerId, loadThread, authLoading]);
+    useEffect(() => {
+        return subscribeProfileUpdated(() => {
+            void refreshMyListPreviewName();
+            void loadConversations({ skipTopLoader: true });
+            if (selectedPartnerId)
+                void loadThread(selectedPartnerId);
+        });
+    }, [
+        refreshMyListPreviewName,
+        loadConversations,
+        loadThread,
+        selectedPartnerId,
+    ]);
     useEffect(() => {
         stickToBottomRef.current = true;
     }, [selectedPartnerId]);
@@ -605,7 +616,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             setThread((prev) => [...prev, message as ThreadMessage]);
             threadSinceRef.current = message.sentAt;
             setPendingFiles([]);
-            void loadConversations();
+            void loadConversations({ skipTopLoader: true });
         }
         catch (e: unknown) {
             setMessageText(body);
@@ -648,7 +659,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         try {
             await hostApi.updateApplication(composeJobPostingId, threadHostApplication.id, 'CONFIRMED');
             setThreadHostApplication((prev) => prev ? { ...prev, status: 'CONFIRMED' } : null);
-            void loadConversations();
+            void loadConversations({ skipTopLoader: true });
         }
         catch (e: unknown) {
             window.alert(e instanceof Error ? e.message : 'Could not confirm this applicant.');
@@ -988,7 +999,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                             maxWidth: '100%',
                             overflow: 'hidden',
                         }}>
-                            <Image src="/brief-case.svg" alt="" width={18} height={18} style={{
+                            <Image src="/brief-case.svg" alt="" width={12} height={12} style={{
                             flexShrink: 0,
                             display: 'block',
                         }}/>
@@ -1096,7 +1107,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                             maxWidth: '100%',
                             overflow: 'hidden',
                         }}>
-                              <Image src="/brief-case.svg" alt="" width={24} height={24} style={{
+                              <Image src="/brief-case.svg" alt="" width={12} height={12} style={{
                             flexShrink: 0,
                             display: 'block',
                         }}/>
@@ -1277,7 +1288,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     
-                    {clinicName ? (<div style={{
+                    {role === 'locum' && clinicName ? (<div style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 4,
@@ -1842,7 +1853,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                 background: sending ||
                     (!messageText.trim() && pendingFiles.length === 0)
                     ? '#D1D5DB'
-                    : 'linear-gradient(270deg,#3A65DB 0%,#1B31D2 100%)',
+                    : 'linear-gradient(270deg, #3A65DB 0%, #0F2A7A 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: 8,

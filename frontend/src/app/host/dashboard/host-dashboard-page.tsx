@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { getToken } from '@/lib/auth';
+import { ensureProfileMarkedCompleteFromServer } from '@/lib/profileCompleteSync';
 import { useAuth } from '@/providers/AuthProvider';
 import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
@@ -17,6 +18,12 @@ import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { EmptyIllustration, PlusIcon, ReopenJobIcon, TrashIcon, UserEditIcon, } from './host-dashboard-icons';
 import { ProfileStatusGlyph } from '@/components/ProfileStatusGlyph';
 import { getHostProfileStatusCard } from '@/lib/hostAccountNotice';
+import { MmDdYyyyDateField } from '@/components/host/HostJobPostingFormFields';
+import {
+    maxIsoDate,
+    parseMmDdYyyyToIso,
+    todayIsoDateLocal,
+} from '@/lib/hostJobPostingForm';
 const HOST_DASH_NAV = [
     { label: 'My Postings', href: '/host/dashboard', icon: <NavIcon name="postings"/> },
     { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile"/> },
@@ -162,92 +169,6 @@ function isJobPastEndDate(job: Pick<Job, 'endDate'>): boolean {
     if (Number.isNaN(end.getTime()))
         return false;
     return end < new Date();
-}
-function parseMmDdYyyyToIso(input: string): string {
-    const t = input.trim();
-    if (!t)
-        return '';
-    const m = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-    if (!m)
-        return '';
-    const mm = Number(m[1]);
-    const dd = Number(m[2]);
-    const yyyy = Number(m[3]);
-    if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || yyyy < 1900 || yyyy > 2100)
-        return '';
-    const iso = `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
-    const d = new Date(`${iso}T12:00:00`);
-    return d.getFullYear() === yyyy && d.getMonth() + 1 === mm && d.getDate() === dd
-        ? iso
-        : '';
-}
-function isoToMmDdYyyy(iso: string): string {
-    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!m)
-        return '';
-    return `${m[2]}-${m[3]}-${m[1]}`;
-}
-function formatMmDdYyyyInput(raw: string): string {
-    const digits = raw.replace(/\D/g, '').slice(0, 8);
-    if (digits.length <= 2)
-        return digits;
-    if (digits.length <= 4)
-        return `${digits.slice(0, 2)}-${digits.slice(2)}`;
-    return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
-}
-function MmDdYyyyDateField({ value, onChange, inputStyle, }: {
-    value: string;
-    onChange: (value: string) => void;
-    inputStyle?: React.CSSProperties;
-}) {
-    const pickerRef = useRef<HTMLInputElement>(null);
-    const isoValue = parseMmDdYyyyToIso(value);
-    function openCalendar() {
-        const el = pickerRef.current;
-        if (!el)
-            return;
-        try {
-            el.showPicker();
-        }
-        catch {
-            el.click();
-        }
-    }
-    return (<div style={{ position: 'relative' }}>
-      <input type="text" inputMode="numeric" autoComplete="off" placeholder="MM-DD-YYYY" pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}" title="MM-DD-YYYY" style={{
-            ...inputStyle,
-            paddingRight: 40,
-        }} value={value} onChange={(e) => onChange(formatMmDdYyyyInput(e.target.value))}/>
-      <button type="button" aria-label="Open calendar" onClick={openCalendar} style={{
-            position: 'absolute',
-            right: 2,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 36,
-            height: 34,
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 0,
-        }}>
-        <CalendarIcon />
-      </button>
-      <input ref={pickerRef} type="date" tabIndex={-1} aria-hidden value={isoValue} onChange={(e) => {
-            const iso = e.target.value;
-            onChange(iso ? isoToMmDdYyyy(iso) : '');
-        }} style={{
-            position: 'absolute',
-            width: 1,
-            height: 1,
-            opacity: 0,
-            pointerEvents: 'none',
-            border: 'none',
-            padding: 0,
-        }}/>
-    </div>);
 }
 function getLocumDisplayName(app: ApplicationRecord): string {
     const { firstName, lastName, user } = app.locumProfile;
@@ -487,6 +408,11 @@ function ReOpenModal({ job, onConfirm, onCancel, }: {
         }
         if (en < st) {
             window.alert('End date must be on or after the start date.');
+            return;
+        }
+        const todayIso = todayIsoDateLocal();
+        if (startDate.trim() < todayIso || endDate.trim() < todayIso) {
+            window.alert('Dates cannot be in the past.');
             return;
         }
         const n = Number(extra);
@@ -1397,6 +1323,15 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             setSubmitError('End date must be a valid date in MM-DD-YYYY format.');
             return;
         }
+        const todayIso = todayIsoDateLocal();
+        if (startIso < todayIso) {
+            setSubmitError('Start date cannot be in the past.');
+            return;
+        }
+        if (endIso < todayIso) {
+            setSubmitError('End date cannot be in the past.');
+            return;
+        }
         if (new Date(endIso) < new Date(startIso)) {
             setSubmitError('End date must be on or after start date.');
             return;
@@ -1835,11 +1770,11 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             }}>
                   <div>
                     <label style={lbl}>Start Date *</label>
-                    <MmDdYyyyDateField value={startDateInput} onChange={setStartDateInput} inputStyle={fieldInp}/>
+                    <MmDdYyyyDateField value={startDateInput} onChange={setStartDateInput} inputStyle={fieldInp} minIso={jobDateMinIso}/>
                   </div>
                   <div>
                     <label style={lbl}>End Date *</label>
-                    <MmDdYyyyDateField value={endDateInput} onChange={setEndDateInput} inputStyle={fieldInp}/>
+                    <MmDdYyyyDateField value={endDateInput} onChange={setEndDateInput} inputStyle={fieldInp} minIso={jobEndMinIso}/>
                   </div>
                 </div>
                 <div style={{
@@ -2120,7 +2055,8 @@ export default function HostDashboard(props: {
     useNextPageClientProps(props);
     const router = useRouter();
     const pathname = usePathname();
-    const { profileComplete, isLoading: authLoading, userId } = useAuth();
+    const { profileComplete, completeProfile, isLoading: authLoading, userId } = useAuth();
+    const [profileGateResolved, setProfileGateResolved] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [activeTab, setActiveTab] = useState<'active' | 'ongoing' | 'recent' | 'draft' | 'deleted'>('active');
     const [showJobOverlay, setShowJobOverlay] = useState(false);
@@ -2206,11 +2142,27 @@ export default function HostDashboard(props: {
     useEffect(() => {
         if (!mounted || authLoading)
             return;
-        if (profileComplete === false) {
+        if (profileComplete) {
+            setProfileGateResolved(true);
+            return;
+        }
+        let cancelled = false;
+        void (async () => {
+            const synced = await ensureProfileMarkedCompleteFromServer();
+            if (cancelled)
+                return;
+            if (synced) {
+                completeProfile();
+                setProfileGateResolved(true);
+                return;
+            }
             beforeClientNavigation('/host/setup');
             router.replace('/host/setup');
-        }
-    }, [mounted, profileComplete, authLoading, router]);
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [mounted, profileComplete, authLoading, router, completeProfile]);
     useEffect(() => {
         if (!mounted || authLoading)
             return;
@@ -2284,7 +2236,7 @@ export default function HostDashboard(props: {
         setReopenTarget(null);
         void loadDashboardFromApi({ silent: true });
     }
-    if (!mounted || profileComplete === false || authLoading || initialDashboardLoad) {
+    if (!mounted || authLoading || !profileGateResolved || initialDashboardLoad) {
         return (<div style={{
                 height: '100vh',
                 display: 'flex',
@@ -2304,7 +2256,7 @@ export default function HostDashboard(props: {
             topbarFirstName={profile?.contactFirstName ?? undefined}
             topbarLastName={profile?.contactLastName ?? undefined}
         >
-          <div style={{
+          <div className="host-dash-page dash-page-shell" style={{
             maxWidth: 1180,
             display: 'flex',
             flexDirection: 'column',
@@ -2362,9 +2314,9 @@ export default function HostDashboard(props: {
             </button>
             </div>)}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-              <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="host-dash-top-section" style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+              <div className="host-dash-header-row" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div className="host-dash-header-info" style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0, flex: 1 }}>
                 <div style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -2404,7 +2356,7 @@ export default function HostDashboard(props: {
                   {clinicName}
                 </h1>
               </div>
-              <button onClick={() => { setShowJobOverlay(true); }} style={{
+              <button type="button" className="host-dash-post-btn" onClick={() => { setShowJobOverlay(true); }} style={{
                 all: 'unset',
                 cursor: 'pointer',
                 boxSizing: 'border-box',
@@ -2446,72 +2398,19 @@ export default function HostDashboard(props: {
                   {dataLoadError}
                 </div>)}
 
-              
-              <div style={{
-            background: '#fff',
-            border: '1px solid rgba(217,217,217,0.8)',
-            borderRadius: 10,
-            padding: 24,
-            boxSizing: 'border-box',
-        }}>
-                <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                  {statsDisplay.map((stat, i) => (<div key={stat.label} style={{
-                display: 'flex',
-                alignItems: 'stretch',
-                flex: 1,
-            }}>
-                      <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-                flex: 1,
-            }}>
-                        <span style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 'var(--font-weight-bold)',
-                fontSize: 'var(--font-heading)',
-                lineHeight: '140%',
-                color: '#4A4A4A',
-            }}>
-                          {stat.label}
-                        </span>
-                        <span style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 'var(--font-weight-bold)',
-                fontSize: 'var(--font-heading)',
-                lineHeight: '26px',
-                color: '#000',
-            }}>
-                          {loadingData ? '–' : stat.value}
-                        </span>
-                      </div>
-                      {i < statsDisplay.length - 1 && (<div style={{
-                    width: 1,
-                    alignSelf: 'stretch',
-                    background: '#D9D9D9',
-                    marginLeft: 12,
-                    marginRight: 12,
-                }}/>)}
-                    </div>))}
-                </div>
-              </div>
-            </div>
-
-            
-            <div style={{
+              <div className="host-dash-profile-banner" style={{
             background: 'rgba(209,213,219,0.3)',
             borderRadius: 10,
-            height: 104,
             padding: '0 27px',
             boxSizing: 'border-box',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
         }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div className="host-dash-profile-banner-content" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <ProfileStatusGlyph variant={profileStatusCard.glyphVariant} size={52} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-                  <span style={{
+                  <span className="host-dash-profile-banner-title" style={{
             fontFamily: 'Gilroy-Medium, Inter, sans-serif',
             fontWeight: 'var(--font-weight-bold)',
             fontSize: 'var(--font-heading)',
@@ -2520,7 +2419,7 @@ export default function HostDashboard(props: {
         }}>
                     {profileStatusCard.title}
                   </span>
-                  <span style={{
+                  <span className="host-dash-profile-banner-subtitle" style={{
             fontFamily: 'Gilroy-Medium, Inter, sans-serif',
             fontWeight: 'var(--font-weight-normal)',
             fontSize: 'var(--font-body)',
@@ -2533,7 +2432,7 @@ export default function HostDashboard(props: {
                   </span>
                 </div>
               </div>
-              <button onClick={() => {
+              <button type="button" className="host-dash-profile-banner-btn" onClick={() => {
             beforeClientNavigation('/host/profile');
             router.push('/host/profile');
         }} style={{
@@ -2565,49 +2464,82 @@ export default function HostDashboard(props: {
               </button>
             </div>
 
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            height: 52,
+              <div className="host-dash-stats-card" style={{
+            background: '#fff',
+            border: '1px solid rgba(217,217,217,0.8)',
+            borderRadius: 10,
+            padding: 24,
+            boxSizing: 'border-box',
         }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#3B4FD8 #E5E7EB', WebkitOverflowScrolling: 'touch', flexShrink: 1, minWidth: 0, paddingBottom: 4 }}>
+                <div className="host-dash-stats-inner" style={{ display: 'flex', alignItems: 'stretch' }}>
+                  {statsDisplay.map((stat, i) => (
+                    <div
+                      key={stat.label}
+                      className="host-dash-stat-item"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'stretch',
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      {i > 0 && (
+                        <div
+                          className="host-dash-stats-divider"
+                          aria-hidden
+                          style={{
+                            width: 1,
+                            alignSelf: 'stretch',
+                            background: '#D9D9D9',
+                            marginLeft: 12,
+                            marginRight: 12,
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                      <p
+                        className="host-dash-stat-line"
+                        style={{
+                          margin: 0,
+                          flex: 1,
+                          minWidth: 0,
+                          fontFamily: 'Inter, sans-serif',
+                          fontWeight: 'var(--font-weight-bold)',
+                          fontSize: 'var(--font-heading)',
+                          lineHeight: '140%',
+                          color: '#4A4A4A',
+                        }}
+                      >
+                        <span className="host-dash-stat-label">{stat.label}</span>
+                        <span className="host-dash-stat-sep" aria-hidden>:</span>
+                        <span className="host-dash-stat-value" style={{ color: '#000' }}>
+                          {loadingData ? '–' : stat.value}
+                        </span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div className="host-dash-tabs-row">
+                <div className="host-dash-tabs-scroll">
                   {TABS.map((tab) => {
             const isActive = activeTab === tab.id;
-            return (<button key={tab.id} onClick={() => setActiveTab(tab.id as typeof activeTab)} style={{
-                    all: 'unset',
-                    cursor: 'pointer',
-                    boxSizing: 'border-box',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 12,
-                    height: 52,
-                    borderBottom: isActive
-                        ? '2px solid #000'
-                        : '2px solid transparent',
-                }}>
-                        <span style={{
-                    fontFamily: 'Inter, sans-serif',
-                    fontWeight: 'var(--font-weight-bold)',
-                    fontSize: 'var(--font-heading)',
-                    lineHeight: '24px',
-                    letterSpacing: '0.02em',
-                    textTransform: 'uppercase',
-                    color: isActive ? '#000' : '#636364',
-                    whiteSpace: 'nowrap',
-                }}>
+            return (<button
+                    key={tab.id}
+                    type="button"
+                    className={`host-dash-tab-btn${isActive ? ' host-dash-tab-btn--active' : ''}`}
+                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                >
+                        <span className="host-dash-tab-label">
                           {tab.label}
                         </span>
                       </button>);
         })}
                 </div>
-
-
               </div>
-              <div style={{ width: 428, height: 1, background: '#A7A8AA' }}/>
 
               
               <div style={{

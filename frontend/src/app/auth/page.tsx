@@ -110,17 +110,19 @@ function AuthPageInner() {
                 {mode === 'create' ? 'Create an account' : 'Sign in'}
             </h2>
 
-            <p style={{
-                width: '100%', fontFamily: 'Inter, sans-serif', fontWeight: 400,
-                fontSize: 20, lineHeight: '140%', color: BRAND.textSecondary, margin: 0,
-            }}>
-                {mode === 'create' ? 'I\u2019m a' : 'I\u2019m an'}
-            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', marginBottom: 32 }}>
+                <p style={{
+                    width: '100%', fontFamily: 'Inter, sans-serif', fontWeight: 400,
+                    fontSize: 20, lineHeight: '140%', color: BRAND.textSecondary, margin: 0,
+                }}>
+                    {mode === 'create' ? 'I\u2019m a' : 'I\u2019m an'}
+                </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 32, width: '100%', boxSizing: 'border-box' }}>
-
-                <div style={{ display: 'flex', width: '100%', border: `1px solid ${BRAND.border}`, borderRadius: 6, overflow: 'hidden' }}
-                    role="group" aria-label={mode === 'create' ? 'Account type' : 'Sign in role'}>
+                <div
+                    style={{ display: 'flex', width: '100%', gap: 12 }}
+                    role="group"
+                    aria-label={mode === 'create' ? 'Account type' : 'Sign in role'}
+                >
                     {(['clinic', 'locum'] as Role[]).map((r) => (
                         <button key={r} type="button"
                             onClick={() => {
@@ -134,17 +136,23 @@ function AuthPageInner() {
                             aria-pressed={role === r}
                             suppressHydrationWarning
                             style={{
-                                flex: 1, padding: '10px', border: 'none', cursor: 'pointer',
+                                flex: 1, padding: '10px', cursor: 'pointer',
                                 fontSize: 14, fontFamily: 'inherit',
                                 fontWeight: role === r ? 600 : 400,
-                                background: role === r ? BRAND.primary : BRAND.bgGrey,
-                                color: role === r ? '#fff' : BRAND.textMuted,
+                                background: role === r ? '#fff' : BRAND.bgGrey,
+                                color: role === r ? BRAND.primary : BRAND.textMuted,
+                                border: role === r ? `1px solid ${BRAND.primary}` : `1px solid ${BRAND.border}`,
+                                borderRadius: 6,
+                                boxSizing: 'border-box',
                                 transition: 'all .15s',
                             }}>
                             {roleLabel(r)}
                         </button>
                     ))}
                 </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 32, width: '100%', boxSizing: 'border-box' }}>
 
                 {lockWarning && (
                     <div style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '8px 12px' }}>
@@ -219,7 +227,7 @@ function AuthPageInner() {
                     <>Already have an account?{' '}
                         <button type="button" className="auth-page-signin-link"
                             onClick={() => setMode('signin')}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, fontFamily: 'inherit', color: BRAND.textMuted }}>
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, fontFamily: 'inherit', color: BRAND.primaryHover }}>
                             Sign in
                         </button>
                     </>

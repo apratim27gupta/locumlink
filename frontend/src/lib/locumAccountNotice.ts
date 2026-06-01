@@ -63,6 +63,8 @@ export type LocumAccountNotice = {
     title: string;
     message: string;
     variant: 'rejected' | 'suspended';
+    /** Admin rejection reason (L-010), shown when present. */
+    detail?: string;
 };
 
 export function getLocumAccountNotice(
@@ -70,23 +72,20 @@ export function getLocumAccountNotice(
 ): LocumAccountNotice | null {
     if (!profile) return null;
     if (profile.accountStatus === 'SUSPENDED') {
-        const note = profile.suspensionNote?.trim();
         return {
             variant: 'suspended',
             title: 'Account suspended',
-            message:
-                note ||
-                'Your account has been suspended. Contact support for assistance.',
+            message: 'Your account has been suspended. Contact support immediately.',
         };
     }
     if (profile.cpsnsVerificationStatus === 'REJECTED') {
         const reason = profile.rejectionReason?.trim();
         return {
             variant: 'rejected',
-            title: 'Credential verification rejected',
+            title: 'Action Required: Account Verification',
             message:
-                reason ||
-                'Your CPSNS verification was rejected. Update your profile and resubmit for review.',
+                'Account verification incomplete. Additional documentation required.',
+            detail: reason || undefined,
         };
     }
     return null;

@@ -278,22 +278,41 @@ export class MessageService {
                     : 'Someone';
             const recipient = await this.prisma.user.findUnique({
                 where: { id: recipientId },
-                select: { role: true },
+                select: { role: true, email: true },
             });
+            const preview = trimmed.slice(0, 80) || 'Sent an attachment';
             const isRecipientHost = recipient?.role === 'HOST';
-            const eventType = isRecipientHost ? 'H_004_NEW_MESSAGE' : 'L_008_NEW_MESSAGE';
-            const href = isRecipientHost
-                ? `/host/messages?partnerId=${senderId}`
-                : `/locum/messages?partnerId=${senderId}`;
-            await this.notifService.create({
-                recipientId,
-                eventType,
-                title: `New message from ${senderName}`,
-                body: trimmed.slice(0, 80) || 'Sent an attachment',
-                href,
-                referenceId: message.id,
-                referenceType: 'Message',
-            });
+            if (isRecipientHost && recipient.email) {
+                let jobTitle = 'your posting';
+                if (jobPostingId) {
+                    const job = await this.prisma.jobPosting.findUnique({
+                        where: { id: jobPostingId },
+                        select: { title: true },
+                    });
+                    if (job?.title) jobTitle = job.title;
+                }
+                const locumName = message.sender?.locumProfile?.firstName
+                    ? `Dr. ${[message.sender.locumProfile.firstName, message.sender.locumProfile.lastName].filter(Boolean).join(' ').trim()}`
+                    : senderName;
+                await this.notifService.notifyHostNewMessage({
+                    recipientId,
+                    recipientEmail: recipient.email,
+                    senderId,
+                    locumName,
+                    jobTitle,
+                    preview,
+                    messageId: message.id,
+                });
+            } else if (recipient?.email) {
+                await this.notifService.notifyLocumNewMessage({
+                    recipientId,
+                    recipientEmail: recipient.email,
+                    senderId,
+                    senderName,
+                    preview,
+                    messageId: message.id,
+                });
+            }
         } catch {}
         return { message: signed };
     }

@@ -3,6 +3,25 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 
+const locumReminderInclude = {
+  locumProfile: {
+    select: {
+      firstName: true,
+      lastName: true,
+      user: { select: { id: true, email: true } },
+    },
+  },
+  jobPosting: {
+    select: {
+      id: true,
+      title: true,
+      startDate: true,
+      startTime: true,
+      hostProfile: { select: { practiceName: true } },
+    },
+  },
+} as const;
+
 @Injectable()
 export class SchedulerService {
   private readonly logger = new Logger(SchedulerService.name);
@@ -12,56 +31,55 @@ export class SchedulerService {
     private readonly notifService: NotificationsService,
   ) {}
 
-  // L-005: 48h before shift
+  // L-005 / L-007: shift reminders
   @Cron(CronExpression.EVERY_HOUR)
   async handleShiftReminders() {
     try {
       const now = new Date();
       const confirmedApps = await this.prisma.application.findMany({
         where: { status: 'CONFIRMED', jobPosting: { startDate: { not: null } } },
-        include: {
-          locumProfile: { select: { userId: true } },
-          jobPosting: { select: { id: true, title: true, startDate: true, startTime: true, hostProfile: { select: { practiceName: true, address: true } } } },
-        },
+        include: locumReminderInclude,
       });
 
       for (const app of confirmedApps) {
         if (!app.jobPosting.startDate) continue;
-        const diffH = (new Date(app.jobPosting.startDate).getTime() - now.getTime()) / 3600000;
-        const clinicName = app.jobPosting.hostProfile?.practiceName ?? 'the clinic';
-        const dateStr = new Date(app.jobPosting.startDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
-        const timeStr = app.jobPosting.startTime ?? '';
+        const locum = app.locumProfile;
+        const user = locum.user;
+        if (!user?.email) continue;
 
-        // L-005: 48h reminder
+        const diffH =
+          (new Date(app.jobPosting.startDate).getTime() - now.getTime()) / 3600000;
+        const clinicName = app.jobPosting.hostProfile?.practiceName ?? 'the clinic';
+        const base = {
+          recipientId: user.id,
+          recipientEmail: user.email,
+          firstName: locum.firstName,
+          lastName: locum.lastName,
+          clinicName,
+          applicationId: app.id,
+        };
+
         if (diffH >= 47 && diffH < 48) {
-          await this.notifService.create({
-            recipientId: app.locumProfile.userId,
-            eventType: 'L_005_SHIFT_REMINDER_48H',
-            title: `Upcoming Shift Reminder — ${dateStr}`,
-            body: `Your shift at ${clinicName} starts in 2 days on ${dateStr}${timeStr ? ' at ' + timeStr : ''}.`,
-            href: '/locum/dashboard',
-            referenceId: app.id,
-            referenceType: 'Application',
+          await this.notifService.notifyLocumShiftReminder48h({
+            ...base,
+            startDate: app.jobPosting.startDate,
+            startTime: app.jobPosting.startTime,
           });
         }
 
-        // L-007: 2h reminder
         if (diffH >= 1 && diffH < 2) {
-          await this.notifService.create({
-            recipientId: app.locumProfile.userId,
-            eventType: 'L_007_SHIFT_REMINDER_2H',
-            title: `Your shift starts in 2 hours at ${clinicName}`,
-            body: `Safe travels! Your shift at ${clinicName} starts at ${timeStr || 'the scheduled time'}.`,
-            href: '/locum/dashboard',
-            referenceId: app.id,
-            referenceType: 'Application',
+          await this.notifService.notifyLocumShiftReminder2h({
+            ...base,
+            startTime: app.jobPosting.startTime,
           });
         }
       }
-    } catch (err) { this.logger.error('Shift reminder cron failed', err); }
+    } catch (err) {
+      this.logger.error('Shift reminder cron failed', err);
+    }
   }
 
-  // L-006: Evening before shift (8 PM)
+  // L-006: evening before shift (8 PM)
   @Cron('0 20 * * *')
   async handleEveningReminders() {
     try {
@@ -72,32 +90,33 @@ export class SchedulerService {
 
       const confirmedApps = await this.prisma.application.findMany({
         where: { status: 'CONFIRMED', jobPosting: { startDate: { not: null } } },
-        include: {
-          locumProfile: { select: { userId: true } },
-          jobPosting: { select: { id: true, title: true, startDate: true, startTime: true, hostProfile: { select: { practiceName: true, address: true } } } },
-        },
+        include: locumReminderInclude,
       });
 
       for (const app of confirmedApps) {
         if (!app.jobPosting.startDate) continue;
-        if (new Date(app.jobPosting.startDate).toISOString().slice(0, 10) !== tomorrowStr) continue;
-        const clinicName = app.jobPosting.hostProfile?.practiceName ?? 'the clinic';
-        const timeStr = app.jobPosting.startTime ?? '';
+        if (new Date(app.jobPosting.startDate).toISOString().slice(0, 10) !== tomorrowStr) {
+          continue;
+        }
+        const user = app.locumProfile.user;
+        if (!user?.email) continue;
 
-        await this.notifService.create({
-          recipientId: app.locumProfile.userId,
-          eventType: 'L_006_SHIFT_REMINDER_EVENING',
-          title: `Tomorrow: Shift at ${clinicName}`,
-          body: `Your shift begins tomorrow${timeStr ? ' at ' + timeStr : ''}. Ensure you have all credentials ready.`,
-          href: '/locum/dashboard',
-          referenceId: app.id,
-          referenceType: 'Application',
+        await this.notifService.notifyLocumShiftReminderEvening({
+          recipientId: user.id,
+          recipientEmail: user.email,
+          firstName: app.locumProfile.firstName,
+          lastName: app.locumProfile.lastName,
+          clinicName: app.jobPosting.hostProfile?.practiceName ?? 'the clinic',
+          startTime: app.jobPosting.startTime,
+          applicationId: app.id,
         });
       }
-    } catch (err) { this.logger.error('Evening reminder cron failed', err); }
+    } catch (err) {
+      this.logger.error('Evening reminder cron failed', err);
+    }
   }
 
-  // H-008: Posting expiring in 48h
+  // H-008: Posting expiring in 48h (host)
   @Cron(CronExpression.EVERY_HOUR)
   async handleExpiryReminders() {
     try {
@@ -107,20 +126,32 @@ export class SchedulerService {
 
       const jobs = await this.prisma.jobPosting.findMany({
         where: { status: 'ACTIVE', isDeleted: false, expiresAt: { gte: in47h, lte: in48h } },
-        include: { hostProfile: { select: { userId: true } } },
+        include: {
+          hostProfile: {
+            select: {
+              userId: true,
+              contactFirstName: true,
+              contactLastName: true,
+              user: { select: { email: true } },
+            },
+          },
+        },
       });
 
       for (const job of jobs) {
-        await this.notifService.create({
-          recipientId: job.hostProfile.userId,
-          eventType: 'H_008_POSTING_EXPIRING',
-          title: `Reminder: Shift Coverage Needed`,
-          body: `Your opportunity "${job.title}" expires in 48 hours with no confirmed locum. Consider extending or reposting.`,
-          href: '/host/dashboard',
-          referenceId: job.id,
-          referenceType: 'JobPosting',
+        const host = job.hostProfile;
+        const email = host.user?.email;
+        if (!email) continue;
+        await this.notifService.notifyHostPostingExpiring({
+          recipientId: host.userId,
+          recipientEmail: email,
+          jobId: job.id,
+          jobTitle: job.title,
+          startDate: job.startDate,
         });
       }
-    } catch (err) { this.logger.error('Expiry reminder cron failed', err); }
+    } catch (err) {
+      this.logger.error('Expiry reminder cron failed', err);
+    }
   }
 }

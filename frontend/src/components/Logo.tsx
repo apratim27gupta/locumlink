@@ -16,7 +16,7 @@ export default function Logo({
 }: LogoProps) {
     const fs = sizes[size];
     const color = white ? '#fff' : '#0F2A7A';
-    const accent = white ? '#fff' : '#0F2A7A';
+    const accent = white ? '#fff' : '#38C6C6';
     const icon = imgPx[size];
     return (<div className="logo-root" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, minWidth: 0 }}>
       <Image src="/logo1.png" alt="" width={icon} height={icon} className="logo-icon" style={{ objectFit: 'contain', flexShrink: 0 }}/>

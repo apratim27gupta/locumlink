@@ -160,6 +160,25 @@ export function formatMmDdYyyyInput(raw: string): string {
     return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
 }
 
+/** Local calendar date as YYYY-MM-DD (for date input `min`). */
+export function todayIsoDateLocal(): string {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+export function maxIsoDate(a: string, b: string): string {
+    return a >= b ? a : b;
+}
+
+export function clampIsoDateToMin(iso: string, minIso: string): string {
+    if (!iso || !minIso)
+        return iso;
+    return iso < minIso ? minIso : iso;
+}
+
 export function buildKeyResponsibilitiesPayload(respBySection: Record<string, Set<string>>, respCustom: string): string[] {
     const lines: string[] = [];
     for (const section of RESPONSIBILITY_SECTIONS) {

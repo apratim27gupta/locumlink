@@ -217,11 +217,11 @@ function hasJobEndDatePassed(job: BrowseJob): boolean {
 type PostedTimeFilter = 'any' | '24h' | '7d' | '30d' | '90d';
 
 const POSTED_TIME_FILTER_OPTIONS: { id: PostedTimeFilter; label: string }[] = [
-  { id: 'any', label: 'All postings' },
-  { id: '24h', label: 'Past 24 hours' },
-  { id: '7d', label: 'Past week' },
-  { id: '30d', label: 'Past month' },
-  { id: '90d', label: 'Past 3 months' },
+  { id: 'any', label: 'All Postings' },
+  { id: '24h', label: 'Past 24 Hours' },
+  { id: '7d', label: 'Past Week' },
+  { id: '30d', label: 'Past Month' },
+  { id: '90d', label: 'Past 3 Months' },
 ];
 
 const POSTED_WINDOW_MS: Record<Exclude<PostedTimeFilter, 'any'>, number> = {
@@ -609,12 +609,12 @@ export default function LocumBrowsePage(props: {
                     }
                     style={{
                       padding: '7px 12px',
-                      border: `1px solid ${selected ? '#0f1523' : '#e2e5ee'}`,
+                      border: `1px solid ${selected ? '#3B4FD8' : '#e2e5ee'}`,
                       borderRadius: '6px 6px 0 0',
                       background: selected ? '#fff' : '#F1F3F7',
                       fontSize: 12,
                       fontWeight: selected ? 600 : 400,
-                      color: selected ? '#0f1523' : '#8892a4',
+                      color: selected ? '#3B4FD8' : '#8892a4',
                       cursor: 'pointer',
                       fontFamily: 'inherit',
                       whiteSpace: 'nowrap',
@@ -653,7 +653,7 @@ export default function LocumBrowsePage(props: {
                   setSearchDropOpen(next.length > 0);
                 }}
                 onKeyDown={handleBrowseSearchKeyDown}
-                placeholder="Search by city, province, or title…"
+                placeholder="Search by City, Province, or Title"
                 style={{
                   height: 34,
                   width: '100%',
@@ -746,7 +746,7 @@ export default function LocumBrowsePage(props: {
                         <span
                           style={{
                             flexShrink: 0,
-                            fontSize: 10,
+                            fontSize: 12,
                             fontWeight: 600,
                             color: '#3B4FD8',
                             background: 'rgba(59, 79, 216, 0.1)',
@@ -1560,7 +1560,12 @@ export default function LocumBrowsePage(props: {
                   <button
                     type="button"
                     onClick={() => handleApply(job.id)}
-                    disabled={!canApply || selectedJobPassed || isApplying(job.id)}
+                    disabled={
+                      !canApply ||
+                      selectedJobPassed ||
+                      isApplied(job.id) ||
+                      isApplying(job.id)
+                    }
                     style={{
                       height: 34,
                       padding: '0 14px',
@@ -1568,16 +1573,29 @@ export default function LocumBrowsePage(props: {
                       borderRadius: 6,
                       fontSize: 'var(--font-body)',
                       fontWeight: 'var(--font-weight-bold)',
-                      cursor: !canApply || selectedJobPassed
-                        ? 'not-allowed'
-                        : isApplying(job.id)
-                          ? 'wait'
-                          : 'pointer',
-                      background: !canApply || selectedJobPassed ? '#e5e7eb' : '#3B4FD8',
-                      color: !canApply || selectedJobPassed ? '#9ca3af' : '#fff',
+                      fontFamily: 'inherit',
+                      cursor:
+                        !canApply || selectedJobPassed
+                          ? 'not-allowed'
+                          : isApplying(job.id)
+                            ? 'wait'
+                            : isApplied(job.id)
+                              ? 'default'
+                              : 'pointer',
+                      background:
+                        !canApply || selectedJobPassed
+                          ? '#e5e7eb'
+                          : 'linear-gradient(135deg, #0F2A7A 0%, #1E3FAF 100%)',
+                      color:
+                        !canApply || selectedJobPassed ? '#9ca3af' : '#fff',
+                      boxShadow:
+                        !canApply || selectedJobPassed
+                          ? 'none'
+                          : '0 2px 10px rgba(15, 42, 122, 0.22)',
+                      opacity: isApplying(job.id) ? 0.88 : 1,
                     }}
                   >
-                    Apply
+                    {isApplying(job.id) ? 'Applying…' : 'Apply'}
                   </button>
                 </span>
               </div>

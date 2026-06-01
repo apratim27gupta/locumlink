@@ -1,5 +1,7 @@
 import { PushService } from "../notifications/push.service.js";
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
+import { formatAdminDoctorName } from '../notifications/admin-notification-copy.js';
 import {
     Injectable,
     NotFoundException,
@@ -60,6 +62,8 @@ import {
       private readonly prisma: PrismaService,
       private readonly gcs: GcsService,
       private readonly pushService: PushService,
+      private readonly notifService: NotificationsService,
+      private readonly adminNotif: AdminNotificationsService,
     ) {}
   
     private async assertHostCanWrite(userId: string): Promise<void> {
@@ -205,6 +209,27 @@ import {
         where: { id: userId },
         select: { status: true, suspensionNote: true, suspendedAt: true },
       });
+
+      if (profileSubmittedForReview) {
+        try {
+          const credentialType = dto.licenseFile?.trim()
+            ? 'license documents'
+            : dto.photoIdFile?.trim()
+              ? 'photo ID documents'
+              : 'credentials';
+          await this.adminNotif.notifyCredentialUploaded({
+            doctorName: formatAdminDoctorName(
+              dto.contactFirstName,
+              dto.contactLastName,
+              dto.clinicName?.trim() || 'Host physician',
+            ),
+            credentialType,
+            profileId: profile.id,
+            profileType: 'HostProfile',
+          });
+        } catch {}
+      }
+
       return { success: true, profile: this.mapProfileToApi(profile, user) };
     }
   
@@ -378,28 +403,41 @@ import {
         },
       });
   
-      // L-001: notify active locums of new matching opportunity
+      // L-001: notify verified locums of new opportunity
       if (job.status === 'ACTIVE') {
         try {
-          const activeLocums = await this.prisma.user.findMany({
-            where: { role: 'LOCUM', status: 'ACTIVE' },
-            select: { id: true },
+          const hostLoc = await this.prisma.hostProfile.findUnique({
+            where: { id: hostProfileId },
+            select: { city: true, province: true },
           });
-          const dateStr = job.startDate
-            ? new Date(job.startDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-            : '';
-          const payStr = job.payPerDay ? ` Rate: $${Number(job.payPerDay).toLocaleString()}/day.` : '';
-          await Promise.allSettled(activeLocums.map(locum =>
-            this.notifService.create({
-              recipientId: locum.id,
-              eventType: 'L_001_NEW_OPPORTUNITY',
-              title: `New Locum Opportunity${dateStr ? ' — ' + dateStr : ''}`,
-              body: `${job.title} has been posted.${payStr}`,
-              href: '/locum/browse',
-              referenceId: job.id,
-              referenceType: 'JobPosting',
-            })
-          ));
+          const activeLocums = await this.prisma.user.findMany({
+            where: {
+              role: 'LOCUM',
+              status: 'ACTIVE',
+              locumProfile: { cpsnsVerificationStatus: VerificationStatus.VERIFIED },
+            },
+            select: {
+              id: true,
+              email: true,
+              locumProfile: { select: { firstName: true, lastName: true } },
+            },
+          });
+          await Promise.allSettled(
+            activeLocums.map((locum) =>
+              this.notifService.notifyLocumNewOpportunity({
+                recipientId: locum.id,
+                recipientEmail: locum.email,
+                firstName: locum.locumProfile?.firstName,
+                lastName: locum.locumProfile?.lastName,
+                jobId: job.id,
+                jobTitle: job.title,
+                startDate: job.startDate,
+                payPerDay: job.payPerDay != null ? Number(job.payPerDay) : null,
+                city: hostLoc?.city,
+                province: hostLoc?.province,
+              }),
+            ),
+          );
         } catch {}
       }
       return {
@@ -538,30 +576,42 @@ import {
         where: { id: jobId },
         data: { isDeleted: true },
       });
-      // H-009: notify confirmed locums of cancellation
+      // L-012: notify confirmed locums of cancellation
       try {
         const confirmed = await this.prisma.application.findMany({
           where: { jobPostingId: jobId, status: 'CONFIRMED' },
-          select: { locumProfile: { select: { userId: true } } },
+          select: {
+            locumProfile: {
+              select: {
+                userId: true,
+                firstName: true,
+                lastName: true,
+                user: { select: { email: true } },
+              },
+            },
+          },
         });
         const hostProfile = await this.prisma.hostProfile.findUnique({
           where: { id: job.hostProfileId },
           select: { practiceName: true },
         });
-        const startStr = job.startDate
-          ? new Date(job.startDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-          : '';
-        await Promise.allSettled(confirmed.map(app =>
-          this.notifService.create({
-            recipientId: app.locumProfile.userId,
-            eventType: 'H_009_SHIFT_CANCELLED',
-            title: 'Last-Minute Cancellation Alert',
-            body: `Shift${startStr ? ' on ' + startStr : ''} at ${hostProfile?.practiceName ?? 'the clinic'} has been cancelled.`,
-            href: '/locum/dashboard',
-            referenceId: jobId,
-            referenceType: 'JobPosting',
-          })
-        ));
+        const clinicName = hostProfile?.practiceName ?? 'the clinic';
+        await Promise.allSettled(
+          confirmed.map((app) => {
+            const locum = app.locumProfile;
+            if (!locum?.userId || !locum.user.email) return Promise.resolve();
+            return this.notifService.notifyLocumShiftCancelled({
+              recipientId: locum.userId,
+              recipientEmail: locum.user.email,
+              firstName: locum.firstName,
+              lastName: locum.lastName,
+              clinicName,
+              jobTitle: job.title,
+              startDate: job.startDate,
+              jobId,
+            });
+          }),
+        );
       } catch {}
       return { success: true };
     }
@@ -758,52 +808,54 @@ import {
           const appWithDetails = await this.prisma.application.findUnique({
               where: { id: appId },
               select: {
-                  locumProfile: { select: { userId: true } },
+                  locumProfile: {
+                      select: {
+                          userId: true,
+                          firstName: true,
+                          lastName: true,
+                          user: { select: { email: true } },
+                      },
+                  },
                   jobPosting: { select: { title: true, startDate: true } },
               },
           });
-          const locumUserId = appWithDetails?.locumProfile?.userId;
+          const locum = appWithDetails?.locumProfile;
           const jobTitle = appWithDetails?.jobPosting?.title ?? 'the shift';
-          const jobDate = appWithDetails?.jobPosting?.startDate
-              ? new Date(appWithDetails.jobPosting.startDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-              : '';
-          if (locumUserId) {
+          const startDate = appWithDetails?.jobPosting?.startDate;
+          if (locum?.userId && locum.user.email) {
               if (status === 'CONFIRMED') {
-                  // L-002: Host confirms/books locum
                   const hostProfile = await this.prisma.hostProfile.findUnique({
                       where: { id: job.hostProfileId },
-                      select: { practiceName: true, address: true },
+                      select: { practiceName: true },
                   });
-                  await this.notifService.create({
-                      recipientId: locumUserId,
-                      eventType: 'L_002_HOST_CONFIRMED',
-                      title: `Confirmed! ${jobTitle}${jobDate ? ' on ' + jobDate : ''}`,
-                      body: `You've been confirmed for ${jobTitle} at ${hostProfile?.practiceName ?? 'the clinic'}.`,
-                      href: '/locum/dashboard',
-                      referenceId: appId,
-                      referenceType: 'Application',
+                  await this.notifService.notifyLocumHostConfirmed({
+                      recipientId: locum.userId,
+                      recipientEmail: locum.user.email,
+                      firstName: locum.firstName,
+                      lastName: locum.lastName,
+                      jobTitle,
+                      clinicName: hostProfile?.practiceName ?? 'the clinic',
+                      startDate,
+                      applicationId: appId,
                   });
               } else if (status === 'SHORTLISTED') {
-                  // L-003: Application accepted by host
-                  await this.notifService.create({
-                      recipientId: locumUserId,
-                      eventType: 'L_003_APPLICATION_ACCEPTED',
-                      title: 'Application Accepted — Action Required',
-                      body: `Your application for ${jobTitle} was accepted. Please confirm your availability.`,
-                      href: '/locum/dashboard',
-                      referenceId: appId,
-                      referenceType: 'Application',
+                  await this.notifService.notifyLocumApplicationAccepted({
+                      recipientId: locum.userId,
+                      recipientEmail: locum.user.email,
+                      firstName: locum.firstName,
+                      lastName: locum.lastName,
+                      jobTitle,
+                      startDate,
+                      applicationId: appId,
                   });
               } else if (status === 'REJECTED') {
-                  // L-004: Application declined by host
-                  await this.notifService.create({
-                      recipientId: locumUserId,
-                      eventType: 'L_004_APPLICATION_DECLINED',
-                      title: 'Application Update',
-                      body: `Your application for ${jobTitle} was not selected. Browse other opportunities.`,
-                      href: '/locum/browse',
-                      referenceId: appId,
-                      referenceType: 'Application',
+                  await this.notifService.notifyLocumApplicationDeclined({
+                      recipientId: locum.userId,
+                      recipientEmail: locum.user.email,
+                      firstName: locum.firstName,
+                      lastName: locum.lastName,
+                      jobTitle,
+                      applicationId: appId,
                   });
               }
           }

@@ -138,6 +138,10 @@ export default function LocumDashboard(props: {
     const [profile, setProfile] = useState<LocumProfile | null>(null);
     const [profileError, setProfileError] = useState<string | null>(null);
     const [applications, setApplications] = useState<MyApplication[]>([]);
+    const [shiftStats, setShiftStats] = useState<{
+        totalAcceptedShifts: number;
+        completedShifts: number;
+    } | null>(null);
     const [loading, setLoading] = useState(true);
     const [respondingAppId, setRespondingAppId] = useState<string | null>(null);
     const [respondError, setRespondError] = useState<string | null>(null);
@@ -148,11 +152,22 @@ export default function LocumDashboard(props: {
             setProfile(null);
             setProfileError(null);
             setApplications([]);
+            setShiftStats(null);
             setLoading(false);
             return;
         }
         let cancelled = false;
         setLoading(true);
+        locumApi
+            .getDashboardStats()
+            .then((stats) => {
+            if (!cancelled)
+                setShiftStats(stats);
+        })
+            .catch(() => {
+            if (!cancelled)
+                setShiftStats(null);
+        });
         locumApi
             .getProfile()
             .then((data) => {
@@ -225,19 +240,27 @@ export default function LocumDashboard(props: {
                 endDate < today;
         return false;
     });
-    const acceptedCount = applications.filter((a) => a.locumResponse === 'ACCEPTED').length;
-    const completedCount = applications.filter((a) => {
-        if (a.locumResponse !== 'ACCEPTED' || !a.jobPosting.endDate)
+    const locumAcceptedApplication = (a: MyApplication) => a.locumResponse === 'ACCEPTED' || !!a.locumAcceptedAt;
+    const acceptedFromApps = applications.filter(locumAcceptedApplication).length;
+    const completedFromApps = applications.filter((a) => {
+        if (!locumAcceptedApplication(a))
             return false;
-        return new Date(a.jobPosting.endDate) < today;
+        const endDate = a.jobPosting.endDate ? new Date(a.jobPosting.endDate) : null;
+        return !!endDate && endDate < today;
     }).length;
+    const acceptedCount = shiftStats?.totalAcceptedShifts ?? acceptedFromApps;
+    const completedCount = shiftStats?.completedShifts ?? completedFromApps;
     async function respondToPlacement(appId: string, response: 'accept' | 'decline') {
         setRespondError(null);
         setRespondingAppId(appId);
         try {
             await locumApi.respondToConfirmedPlacement(appId, response);
-            const { applications: apps } = await locumApi.getMyApplications();
+            const [{ applications: apps }, stats] = await Promise.all([
+                locumApi.getMyApplications(),
+                locumApi.getDashboardStats(),
+            ]);
             setApplications(apps);
+            setShiftStats(stats);
         }
         catch (e) {
             setRespondError(e instanceof Error ? e.message : 'Could not update application.');
@@ -271,44 +294,6 @@ export default function LocumDashboard(props: {
       {profileError ? (<div style={{ fontSize: 12, color: '#dc2626', marginBottom: 14 }}>
           {profileError}
         </div>) : null}
-
-      
-      <div style={{
-            display: 'flex',
-            border: '1px solid #e2e5ee',
-            borderRadius: 8,
-            overflow: 'hidden',
-            marginBottom: 16,
-            background: '#fff',
-            flexShrink: 0,
-        }}>
-        <div style={{ flex: 1, flexShrink: 0, padding: '18px 18px', borderRight: '1px solid #e2e5ee' }}>
-          <div style={{ fontSize: 'var(--font-small)', color: '#5a6478', marginBottom: 4 }}>
-            Total Accepted Shifts
-          </div>
-          <div style={{
-            fontSize: 'var(--font-heading)',
-            fontWeight: 'var(--font-weight-bold)',
-            color: '#0f1523',
-            lineHeight: 1,
-        }}>
-            {loading ? '–' : acceptedCount}
-          </div>
-        </div>
-        <div style={{ flex: 1, flexShrink: 0, padding: '18px 18px' }}>
-          <div style={{ fontSize: 'var(--font-small)', color: '#5a6478', marginBottom: 4 }}>
-            Completed Shifts
-          </div>
-          <div style={{
-            fontSize: 'var(--font-heading)',
-            fontWeight: 'var(--font-weight-bold)',
-            color: '#0f1523',
-            lineHeight: 1,
-        }}>
-            {loading ? '–' : completedCount}
-          </div>
-        </div>
-      </div>
 
       
       <div className="locum-profile-banner" style={{
@@ -406,6 +391,44 @@ export default function LocumDashboard(props: {
       
       <div style={{
             display: 'flex',
+            border: '1px solid #e2e5ee',
+            borderRadius: 8,
+            overflow: 'hidden',
+            marginBottom: 16,
+            background: '#fff',
+            flexShrink: 0,
+        }}>
+        <div style={{ flex: 1, flexShrink: 0, padding: '18px 18px', borderRight: '1px solid #e2e5ee' }}>
+          <p style={{
+            margin: 0,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 'var(--font-weight-bold)',
+            fontSize: 'var(--font-heading)',
+            lineHeight: '140%',
+            color: '#4A4A4A',
+        }}>
+            Total Accepted Shifts :{' '}
+            <span style={{ color: '#000' }}>{loading ? '–' : acceptedCount}</span>
+          </p>
+        </div>
+        <div style={{ flex: 1, flexShrink: 0, padding: '18px 18px' }}>
+          <p style={{
+            margin: 0,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 'var(--font-weight-bold)',
+            fontSize: 'var(--font-heading)',
+            lineHeight: '140%',
+            color: '#4A4A4A',
+        }}>
+            Completed Shifts :{' '}
+            <span style={{ color: '#000' }}>{loading ? '–' : completedCount}</span>
+          </p>
+        </div>
+      </div>
+
+      
+      <div style={{
+            display: 'flex',
             borderBottom: '1px solid #e2e5ee',
             marginBottom: 16,
             flexShrink: 0,
@@ -465,15 +488,19 @@ export default function LocumDashboard(props: {
                 fontSize: 14,
                 fontWeight: 500,
                 color: '#5a6478',
-                marginBottom: 4,
+                marginBottom: tab === 'upcoming' ? 20 : 4,
             }}>
-            No applications yet
-          </div>
-          <div style={{ fontSize: 12, color: '#8892a4', marginBottom: 20 }}>
             {tab === 'recent'
-                ? "You haven't applied to any jobs yet"
-                : `No ${tab} jobs`}
+                ? 'No applications yet'
+                : tab === 'upcoming'
+                    ? 'No Upcoming Shifts'
+                    : 'No Completed Shifts'}
           </div>
+          {tab === 'recent' ? (
+          <div style={{ fontSize: 12, color: '#8892a4', marginBottom: 20 }}>
+            You have not applied to any shifts yet
+          </div>
+          ) : null}
           {tab === 'recent' && (<button onClick={() => {
                     beforeClientNavigation('/locum/browse');
                     router.push('/locum/browse');

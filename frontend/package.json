@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "postinstall": "prisma generate --schema=../database/prisma/schema.prisma",
-    "dev": "node --max-old-space-size=1536 ../node_modules/next/dist/bin/next dev -p 3001",
+    "dev": "node --max-old-space-size=3072 ../node_modules/next/dist/bin/next dev --turbo -p 3001",
     "dev:vm": "node --max-old-space-size=1024 ../node_modules/next/dist/bin/next dev -p 3001",
     "dev:webpack": "node --max-old-space-size=1024 ../node_modules/next/dist/bin/next dev -p 3001",
     "dev:turbo": "node --max-old-space-size=1024 ../node_modules/next/dist/bin/next dev --turbo -p 3001",
@@ -25,6 +25,7 @@
     "driver.js": "^1.4.0",
     "emoji-picker-react": "^4.19.1",
     "jose": "^6.0.10",
+    "lucide-react": "^1.17.0",
     "next": "^15.1.0",
     "next-pwa": "^5.6.0",
     "pg": "^8.16.3",

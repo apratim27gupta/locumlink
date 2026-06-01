@@ -53,6 +53,12 @@ export class LocumController {
     req: JwtRequest) {
         return this.locumService.getMyApplications(req.user.id);
     }
+    @Get('stats')
+    getDashboardStats(
+    @Req()
+    req: JwtRequest) {
+        return this.locumService.getDashboardStats(req.user.id);
+    }
     @Patch('applications/:applicationId/respond')
     @HttpCode(HttpStatus.OK)
     respondToConfirmedPlacement(

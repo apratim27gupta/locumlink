@@ -17,6 +17,12 @@ import {
 } from '@/lib/cpsnsVerify';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { locumProfileCompletionPct } from '@/lib/locumProfileCompletion';
+import {
+    PROFILE_FORM_CAPITALIZE_CLASS,
+    PROFILE_FORM_CAPITALIZE_CSS,
+    profileTextCapitalize,
+} from '@/lib/profileFormTypography';
+import { dispatchProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { getEmail } from '@/lib/auth';
 import { sortStringsLocale } from '@/lib/sortLocale';
@@ -67,6 +73,7 @@ const lbl: React.CSSProperties = {
   letterSpacing: 0,
   color: '#374151',
   marginBottom: 5,
+  ...profileTextCapitalize,
 };
 
 const documentFormatHint: React.CSSProperties = {
@@ -74,6 +81,7 @@ const documentFormatHint: React.CSSProperties = {
   color: '#8892a4',
   margin: '6px 0 0',
   lineHeight: 1.4,
+  ...profileTextCapitalize,
 };
 
 /* ── city highlight helper (from host profile) ────────────────────────────── */
@@ -401,6 +409,7 @@ export default function LocumProfilePage(props: {
         resumeOriginalName: resumeLabel,
         extraOriginalName: extraLabel,
       }));
+      dispatchProfileUpdated();
       setSaved(true);
       window.setTimeout(() => {
         beforeClientNavigation('/locum/dashboard');
@@ -431,6 +440,8 @@ export default function LocumProfilePage(props: {
       topbarFirstName={firstName}
       topbarLastName={lastName}
     >
+      <style>{PROFILE_FORM_CAPITALIZE_CSS}</style>
+      <div className={PROFILE_FORM_CAPITALIZE_CLASS}>
       {/* ── page title ─────────────────────────────────────────────────── */}
       <h1
         style={{
@@ -490,7 +501,7 @@ export default function LocumProfilePage(props: {
                   {isDone ? '✓' : s.n}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, lineHeight: 1, color: '#0B0F1F' }}>
+                  <div className="profile-step-label" style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.25, color: '#0B0F1F', ...profileTextCapitalize }}>
                     {s.label}
                   </div>
                 </div>
@@ -549,8 +560,8 @@ export default function LocumProfilePage(props: {
         }}
       >
         <div className="locum-section-header">
-          <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-            <Image src="/basic-information.svg" alt="" width={24} height={24} style={{ objectFit: 'cover' }} />
+          <div className="locum-section-header-icon">
+            <Image src="/basic-information.svg" alt="" width={20} height={20} className="locum-profile-icon" style={{ objectFit: 'contain' }} />
           </div>
           <span>Basic Information</span>
         </div>
@@ -572,19 +583,19 @@ export default function LocumProfilePage(props: {
         {/* CPSNS + years */}
         <div className="locum-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
           <div>
-            <label style={lbl}>CPSNS Number</label>
+            <label style={{ ...lbl, textTransform: 'none' }}>CPSNS Number</label>
             <input
-              style={inp} inputMode="numeric" autoComplete="off" maxLength={9}
+              style={{ ...inp, textTransform: 'none' }} inputMode="numeric" autoComplete="off" maxLength={9}
               value={cpsns}
               onChange={(e) => setCpsns(sanitizeCpsnsInput(e.target.value))}
               onClick={(e) => e.stopPropagation()}
-              placeholder="License number"
+              placeholder="CPSNS Number"
             />
           </div>
           <div>
-            <label style={lbl}>Years of experience</label>
+            <label style={{ ...lbl, textTransform: 'none' }}>Years of Experience</label>
             <input
-              style={inp} type="number" inputMode="numeric" min={0} step={1}
+              style={{ ...inp, textTransform: 'none' }} type="number" inputMode="numeric" min={0} step={1}
               value={yearsOfExperience}
               onChange={(e) => {
                 const v = e.target.value;
@@ -594,7 +605,7 @@ export default function LocumProfilePage(props: {
                 setYearsOfExperience(Math.max(0, n));
               }}
               onClick={(e) => e.stopPropagation()}
-              placeholder="e.g. 5"
+              placeholder="Years of Experience"
             />
           </div>
         </div>
@@ -673,17 +684,11 @@ export default function LocumProfilePage(props: {
           borderRadius: 8, padding: 20, marginBottom: 16, cursor: 'pointer',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: '50%', overflow: 'hidden',
-            flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: '#EEF0FB',
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden style={{ color: '#0F2A7A' }}>
-              <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V21c0 .55-.45 1-1 1-9.94 0-18-8.06-18-18 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="currentColor" />
-            </svg>
+        <div className="locum-section-header">
+          <div className="locum-section-header-icon">
+            <Image src="/contact-details.svg" alt="" width={20} height={20} className="locum-profile-icon" style={{ objectFit: 'contain' }} />
           </div>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#0f1523' }}>Contact details</span>
+          <span>Contact details</span>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -700,7 +705,7 @@ export default function LocumProfilePage(props: {
             <input
               style={{ ...inp }}
 value={email} onChange={(e) => setEmail(e.target.value)}
-onClick={(e) => e.stopPropagation()} placeholder="Your email address"
+onClick={(e) => e.stopPropagation()} placeholder="Email"
             />
           </div>
         </div>
@@ -718,22 +723,11 @@ onClick={(e) => e.stopPropagation()} placeholder="Your email address"
           borderRadius: 8, padding: 20, marginBottom: 16, cursor: 'pointer',
         }}
       >
-        {/* Section header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: '#EEF0FB',
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden style={{ color: '#0F2A7A' }}>
-              <path
-                d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
-                stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-              />
-              <circle cx="12" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
+        <div className="locum-section-header">
+          <div className="locum-section-header-icon">
+            <Image src="/location.svg" alt="" width={20} height={20} className="locum-profile-icon" style={{ objectFit: 'contain' }} />
           </div>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#0f1523' }}>Location</span>
+          <span>Location</span>
         </div>
 
         {/* Address Line 1 + 2 */}
@@ -749,7 +743,7 @@ onClick={(e) => e.stopPropagation()} placeholder="Your email address"
             <label style={lbl}>Address Line 2</label>
             <input
               style={inp} value={addr2} onChange={(e) => setAddr2(e.target.value)}
-              onClick={(e) => e.stopPropagation()} placeholder="Address Line 2 (optional)"
+              onClick={(e) => e.stopPropagation()} placeholder="Address Line 2"
             />
           </div>
         </div>
@@ -863,11 +857,11 @@ onClick={(e) => e.stopPropagation()} placeholder="Your email address"
           borderRadius: 8, padding: 20, marginBottom: 16, cursor: 'pointer',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-            <Image src="/relevant-docs.svg" alt="" width={24} height={24} style={{ objectFit: 'contain' }} />
+        <div className="locum-section-header">
+          <div className="locum-section-header-icon">
+            <Image src="/relevant-docs.svg" alt="" width={20} height={20} className="locum-profile-icon" style={{ objectFit: 'contain' }} />
           </div>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#0f1523' }}>Relevant Documents</span>
+          <span>Relevant Documents</span>
         </div>
 
         {/* License + Resume */}
@@ -888,7 +882,7 @@ onClick={(e) => e.stopPropagation()} placeholder="Your email address"
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
-                <Image src="/document-link.svg" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
+                <Image src="/document-link.svg" alt="" width={24} height={24} className="locum-profile-icon" style={{ flexShrink: 0, objectFit: 'contain' }} />
                 <span style={{ fontSize: 13, color: licenseFile ? '#3B4FD8' : '#8892a4' }}>
                   {uploading === 'license' ? 'Uploading…' : formatUploadedFileLabel(licenseFile, licenseLabel, 'CPSNS License')}
                 </span>
@@ -943,7 +937,7 @@ onClick={(e) => e.stopPropagation()} placeholder="Your email address"
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
-                <Image src="/document-link.svg" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
+                <Image src="/document-link.svg" alt="" width={24} height={24} className="locum-profile-icon" style={{ flexShrink: 0, objectFit: 'contain' }} />
                 <span style={{ fontSize: 13, color: resumeFile ? '#3B4FD8' : '#8892a4' }}>
                   {uploading === 'resume' ? 'Uploading…' : formatUploadedFileLabel(resumeFile, resumeLabel, 'Resume')}
                 </span>
@@ -999,9 +993,9 @@ onClick={(e) => e.stopPropagation()} placeholder="Your email address"
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
-            <Image src="/document-link.svg" alt="" width={24} height={24} style={{ flexShrink: 0, objectFit: 'contain' }} />
+            <Image src="/document-link.svg" alt="" width={24} height={24} className="locum-profile-icon" style={{ flexShrink: 0, objectFit: 'contain' }} />
             <span style={{ fontSize: 13, color: extraFile ? '#3B4FD8' : '#8892a4' }}>
-              {uploading === 'extra' ? 'Uploading…' : formatUploadedFileLabel(extraFile, extraLabel, 'Add')}
+              {uploading === 'extra' ? 'Uploading…' : formatUploadedFileLabel(extraFile, extraLabel, 'Additional Documents')}
             </span>
             {extraFile && (
               <button
@@ -1054,14 +1048,22 @@ onClick={(e) => e.stopPropagation()} placeholder="Your email address"
         disabled={saving}
         style={{
           padding: '10px 28px',
-          background: saving ? '#8892a4' : '#3B4FD8',
-          color: '#fff', border: 'none', borderRadius: 6,
-          fontSize: 14, fontWeight: 500,
+          background: saving
+            ? '#8892a4'
+            : 'linear-gradient(270deg, #3A65DB 0%, #0F2A7A 100%)',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 6,
+          fontSize: 14,
+          fontWeight: 600,
           cursor: saving ? 'default' : 'pointer',
+          fontFamily: 'inherit',
+          boxShadow: saving ? 'none' : '0 2px 10px rgba(15, 42, 122, 0.22)',
         }}
       >
         {saving ? 'Saving…' : 'Done'}
       </button>
+      </div>
     </DashLayout>
   );
 }

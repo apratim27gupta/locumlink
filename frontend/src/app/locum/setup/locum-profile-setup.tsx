@@ -9,6 +9,7 @@ import { formatUploadedFileLabel, originalUploadFileName } from '@/lib/uploadDis
 import type { LocumProfile } from '@/types';
 import { sanitizeCpsnsInput, } from '@/lib/cpsnsVerify';
 import BarWaveButton from '@/components/ui/BarWaveButton';
+import { dispatchProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { sortStringsLocale } from '@/lib/sortLocale';
 const LOCUM_SETUP_MODAL = {
@@ -365,6 +366,7 @@ export default function LocumSetupPage() {
             return;
         }
         completeProfile();
+        dispatchProfileUpdated();
         beforeClientNavigation('/locum/dashboard');
         router.replace('/locum/dashboard');
         setBusy(false);
@@ -1192,7 +1194,7 @@ export default function LocumSetupPage() {
                     ? LOCUM_SETUP_MODAL.formToActionsGapStep2Px
                     : LOCUM_SETUP_MODAL.formToActionsGapStep3Px,
         }}>
-            {step === 1 && (<NavButtons onNext={() => setStep(2)} disabled={!step1Valid}/>)}
+            {step === 1 && (<NavButtons onNext={() => setStep(2)} disabled={!step1Valid} nextGradient/>)}
             {step === 2 && (<NavButtons onBack={() => setStep(1)} onNext={() => setStep(3)} disabled={!step2Valid} nextGradient/>)}
             {step === 3 && (<NavButtons onBack={() => setStep(2)} onNext={handleFinish} nextLabel={busy ? 'Saving…' : 'Done'} disabled={busy || !step3Valid} nextGradient/>)}
           </div>
@@ -1212,7 +1214,7 @@ function NavButtons({ onBack, onNext, nextLabel = 'Next', disabled = false, next
     disabled?: boolean;
     nextGradient?: boolean;
 }) {
-    const minH = nextGradient ? 48 : 44;
+    const minH = nextGradient ? 52 : 44;
     const pad = nextGradient ? '10px 12px' : '6px 8px';
     const nextBase: React.CSSProperties = {
         flex: '1 1 0',

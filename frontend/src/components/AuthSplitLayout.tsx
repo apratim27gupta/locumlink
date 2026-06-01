@@ -10,9 +10,8 @@ export default function AuthSplitLayout({ children, variant = 'signup' }: Props)
         ? 'auth-bg__card auth-bg__card--verify'
         : 'auth-bg__card auth-bg__card--signup';
     return (
-        <div className="auth-bg">
+        <div className="auth-page">
             <div className={cardClass}>{children}</div>
-            <div className="auth-bg__right-panel"></div>
         </div>
     );
 }

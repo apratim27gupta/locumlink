@@ -13,6 +13,11 @@ import { filterCanadianCities, CANADIAN_PROVINCE_NAMES, formatCanadianCityDispla
 import { sortByLabel, sortStringsLocale } from '@/lib/sortLocale';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { getHostProfileStatusCard } from '@/lib/hostAccountNotice';
+import {
+    PROFILE_FORM_CAPITALIZE_CLASS,
+    PROFILE_FORM_CAPITALIZE_CSS,
+    profileTextCapitalize,
+} from '@/lib/profileFormTypography';
 
 const NAV = [
     {
@@ -60,6 +65,7 @@ const lbl: React.CSSProperties = {
     letterSpacing: 0,
     color: '#374151',
     marginBottom: 5,
+    ...profileTextCapitalize,
 };
 
 const pageTitle: React.CSSProperties = {
@@ -69,6 +75,7 @@ const pageTitle: React.CSSProperties = {
     lineHeight: '120%',
     color: '#0f1523',
     margin: 0,
+    ...profileTextCapitalize,
 };
 
 const cardHeaderTitle: React.CSSProperties = {
@@ -77,6 +84,7 @@ const cardHeaderTitle: React.CSSProperties = {
     fontWeight: 600,
     lineHeight: 1,
     color: '#0f1523',
+    ...profileTextCapitalize,
 };
 
 const subsectionHeading: React.CSSProperties = {
@@ -86,6 +94,7 @@ const subsectionHeading: React.CSSProperties = {
     lineHeight: '140%',
     color: '#0f1523',
     margin: '0 0 12px',
+    ...profileTextCapitalize,
 };
 
 const fieldInput: React.CSSProperties = {
@@ -110,9 +119,27 @@ const textareaField: React.CSSProperties = {
 const stepNavLabel: React.CSSProperties = {
     fontFamily: 'Inter, sans-serif',
     fontWeight: 500,
-    fontSize: 13,
-    lineHeight: '124%',
+    fontSize: 16,
+    lineHeight: '140%',
     color: '#0B0F1F',
+    ...profileTextCapitalize,
+};
+
+const stepSectionIconColor = '#1E3FAF';
+
+const formRowTwoCol: React.CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 16,
+    width: '100%',
+    alignItems: 'start',
+};
+
+const formFieldCol: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    minWidth: 0,
 };
 
 const AMENITY_OPTIONS = sortStringsLocale([
@@ -556,35 +583,60 @@ export default function HostProfilePage(props: {
             <>
 
       <style>{`
+        ${PROFILE_FORM_CAPITALIZE_CSS}
         @media (max-width: 768px) {
           .host-profile-inner {
-            padding: 16px 14px 60px !important;
+            padding: 0 !important;
           }
           .host-step-nav-outer {
+            width: 100% !important;
+            max-width: 100% !important;
             height: auto !important;
             overflow-x: auto !important;
             overflow-y: hidden !important;
             -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
+            scrollbar-width: thin !important;
+            scrollbar-color: #9CA3AF #F3F4F6 !important;
           }
-          .host-step-nav-outer::-webkit-scrollbar { display: none; }
+          .host-step-nav-outer::-webkit-scrollbar {
+            display: block !important;
+            height: 6px !important;
+          }
+          .host-step-nav-outer::-webkit-scrollbar-track {
+            background: #F3F4F6 !important;
+            border-radius: 3px !important;
+          }
+          .host-step-nav-outer::-webkit-scrollbar-thumb {
+            background: #9CA3AF !important;
+            border-radius: 3px !important;
+          }
           .host-step-nav-inner {
-            gap: 4px !important;
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            width: max-content !important;
+            gap: 8px !important;
           }
-          .host-step-nav-inner > div[role="button"] {
-            width: 160px !important;
-            min-width: 140px !important;
+          .host-step-nav-step {
+            flex: 0 0 auto !important;
+            flex-wrap: nowrap !important;
+            width: 168px !important;
+            min-width: 168px !important;
+            max-width: 168px !important;
           }
           .host-profile-inner > div[style] {
             width: 100% !important;
           }
+          .host-profile-form-row-2 {
+            grid-template-columns: 1fr !important;
+          }
         }
       `}</style>
             <div
-                className="host-profile-inner"
+                className={`host-profile-inner dash-page-shell ${PROFILE_FORM_CAPITALIZE_CLASS}`}
                 style={{
-                    padding: '28px 36px 60px',
+                    padding: 0,
                     maxWidth: 1180,
+                    width: '100%',
                     fontFamily: 'Inter, sans-serif',
                     boxSizing: 'border-box',
                     position: 'relative',
@@ -680,9 +732,7 @@ export default function HostProfilePage(props: {
                         background: 'transparent',
                         position: 'relative',
                         marginBottom: 24,
-                        scrollbarWidth: 'none',
-                        msOverflowStyle: 'none',
-                    } as React.CSSProperties}
+                    }}
                 >
                     <div
                         className="host-step-nav-inner"
@@ -712,6 +762,7 @@ export default function HostProfilePage(props: {
                             return (
                                 <div
                                     key={s.n}
+                                    className="host-step-nav-step"
                                     role="button"
                                     tabIndex={0}
                                     aria-current={isActive ? 'step' : undefined}
@@ -768,7 +819,7 @@ export default function HostProfilePage(props: {
                                             alignItems: 'flex-start',
                                         }}
                                     >
-                                        <div style={labelStyle}>{s.label}</div>
+                                        <div className="profile-step-label" style={labelStyle}>{s.label}</div>
                                     </div>
                                     <svg
                                         width="12"
@@ -895,7 +946,7 @@ export default function HostProfilePage(props: {
                                         height="24"
                                         viewBox="0 0 24 24"
                                         fill="none"
-                                        style={{ color: '#0f1523' }}
+                                        style={{ color: stepSectionIconColor }}
                                         aria-hidden
                                     >
                                         <circle
@@ -958,7 +1009,7 @@ export default function HostProfilePage(props: {
 
                             {/* CPSNS Number */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                <label style={lbl}>CPSNS Number *</label>
+                                <label style={lbl}>CPSNS Number</label>
                                 <input
                                     style={fieldInput}
                                     inputMode="numeric"
@@ -1149,7 +1200,7 @@ export default function HostProfilePage(props: {
 
                             {/* Speciality */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                <label style={lbl}>Speciality *</label>
+                                <label style={lbl}>Speciality</label>
                                 <div style={{ position: 'relative' }}>
                                     <button
                                         id="specialty-dropdown-btn"
@@ -1196,7 +1247,7 @@ export default function HostProfilePage(props: {
                                             viewBox="0 0 24 24"
                                             fill="none"
                                             aria-hidden
-                                            style={{ flexShrink: 0, color: '#0f1523' }}
+                                            style={{ flexShrink: 0, color: stepSectionIconColor }}
                                         >
                                             <path
                                                 d="M6 9l6 6 6-6"
@@ -1389,7 +1440,7 @@ export default function HostProfilePage(props: {
                                 height="24"
                                 viewBox="0 0 24 24"
                                 fill="none"
-                                style={{ flexShrink: 0, color: '#0f1523' }}
+                                style={{ flexShrink: 0, color: stepSectionIconColor }}
                                 aria-hidden
                             >
                                 <path
@@ -1418,15 +1469,7 @@ export default function HostProfilePage(props: {
                             }}
                         >
                             {/* Clinic name */}
-                            <div
-                                style={{
-                                    width: 524,
-                                    maxWidth: '100%',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: 8,
-                                }}
-                            >
+                            <div style={formFieldCol}>
                                 <label style={lbl}>Clinic name</label>
                                 <input
                                     style={fieldInput}
@@ -1437,23 +1480,8 @@ export default function HostProfilePage(props: {
                             </div>
 
                             {/* Address row */}
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    flexDirection: 'row',
-                                    gap: 80,
-                                    width: '100%',
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        width: 524,
-                                        maxWidth: '100%',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: 8,
-                                    }}
-                                >
+                            <div className="host-profile-form-row-2" style={formRowTwoCol}>
+                                <div style={formFieldCol}>
                                     <label style={lbl}>Address Line 1</label>
                                     <input
                                         style={fieldInput}
@@ -1462,15 +1490,7 @@ export default function HostProfilePage(props: {
                                         placeholder="Address Line 1"
                                     />
                                 </div>
-                                <div
-                                    style={{
-                                        width: 524,
-                                        maxWidth: '100%',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: 8,
-                                    }}
-                                >
+                                <div style={formFieldCol}>
                                     <label style={lbl}>Address Line 2</label>
                                     <input
                                         style={fieldInput}
@@ -1482,24 +1502,8 @@ export default function HostProfilePage(props: {
                             </div>
 
                             {/* City / Province */}
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    flexDirection: 'row',
-                                    gap: 80,
-                                    width: '100%',
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        flex: 1,
-                                        minWidth: 0,
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: 8,
-                                        position: 'relative',
-                                    }}
-                                >
+                            <div className="host-profile-form-row-2" style={formRowTwoCol}>
+                                <div style={{ ...formFieldCol, position: 'relative' }}>
                                     <label htmlFor="host-profile-city" style={lbl}>
                                         City
                                     </label>
@@ -1616,15 +1620,7 @@ export default function HostProfilePage(props: {
                                     )}
                                 </div>
 
-                                <div
-                                    style={{
-                                        flex: '1 1 220px',
-                                        minWidth: 0,
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: 8,
-                                    }}
-                                >
+                                <div style={formFieldCol}>
                                     <label style={lbl}>Province</label>
                                     <input
                                         style={fieldInput}
@@ -1636,23 +1632,8 @@ export default function HostProfilePage(props: {
                             </div>
 
                             {/* Postal code */}
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    flexDirection: 'row',
-                                    gap: 80,
-                                    width: '100%',
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        width: 524,
-                                        maxWidth: '100%',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: 8,
-                                    }}
-                                >
+                            <div className="host-profile-form-row-2" style={formRowTwoCol}>
+                                <div style={formFieldCol}>
                                     <label style={lbl}>Postal Code</label>
                                     <input
                                         style={fieldInput}
@@ -1661,6 +1642,7 @@ export default function HostProfilePage(props: {
                                         placeholder="Postal code"
                                     />
                                 </div>
+                                <div aria-hidden />
                             </div>
                         </div>
                     </div>
@@ -1681,7 +1663,7 @@ export default function HostProfilePage(props: {
                                 height="24"
                                 viewBox="0 0 24 24"
                                 fill="none"
-                                style={{ flexShrink: 0, color: '#0f1523' }}
+                                style={{ flexShrink: 0, color: stepSectionIconColor }}
                                 aria-hidden
                             >
                                 <path
@@ -1956,7 +1938,7 @@ export default function HostProfilePage(props: {
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 aria-hidden
-                                style={{ flexShrink: 0, color: '#0f1523' }}
+                                style={{ flexShrink: 0, color: stepSectionIconColor }}
                             >
                                 <path
                                     d="M4.5 16.5c-1.1 0-2-.9-2-2v-2.2c0-.9.5-1.8 1.3-2.1l1.8-.8a6 6 0 0 1 7.8 0l1.8.8c.8.4 1.3 1.2 1.3 2.1v2.2c0 1.1-.9 2-2 2h-11Z"
@@ -2256,22 +2238,34 @@ if (typeof document !== 'undefined') {
     s.textContent = `
       @media (max-width: 768px) {
         .host-profile-inner {
-          padding: 16px 14px 60px !important;
+          padding: 0 !important;
         }
         .host-step-nav-outer {
+          width: 100% !important;
+          max-width: 100% !important;
           height: auto !important;
           overflow-x: auto !important;
           overflow-y: hidden !important;
           -webkit-overflow-scrolling: touch;
-          scrollbar-width: none;
+          scrollbar-width: thin !important;
+          scrollbar-color: #9CA3AF #F3F4F6 !important;
         }
-        .host-step-nav-outer::-webkit-scrollbar { display: none; }
+        .host-step-nav-outer::-webkit-scrollbar {
+          display: block !important;
+          height: 6px !important;
+        }
         .host-step-nav-inner {
-          gap: 4px !important;
+          display: flex !important;
+          flex-wrap: nowrap !important;
+          width: max-content !important;
+          gap: 8px !important;
         }
-        .host-step-nav-inner > div[role="button"] {
-          width: 160px !important;
-          min-width: 140px !important;
+        .host-step-nav-step {
+          flex: 0 0 auto !important;
+          flex-wrap: nowrap !important;
+          width: 168px !important;
+          min-width: 168px !important;
+          max-width: 168px !important;
         }
       }
     `;

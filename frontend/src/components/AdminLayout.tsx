@@ -12,9 +12,11 @@ import {
 } from 'lucide-react';
 import { adminApiBase } from '@/lib/adminApi';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { notificationsApi, type NotificationItem } from '@/lib/api';
-import { getToken } from '@/lib/auth';
-import { notifCategory } from '@/lib/relativeTime';
+import {
+  adminGetNotifications,
+  adminMarkNotificationRead,
+  type AdminNotificationItem,
+} from '@/lib/adminApi';
 import { useAdminStats } from '@/components/AdminStatsContext';
 import Logo from '@/components/Logo';
 import '@/styles/admin-portal.css';
@@ -26,6 +28,17 @@ type NavItem = {
   icon: ReactNode;
   badge?: number;
 };
+
+function fmtAdminNotifTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = Math.floor((now.getTime() - d.getTime()) / 60000);
+  if (diff < 1) return 'Just now';
+  if (diff < 60) return `${diff}m ago`;
+  const hrs = Math.floor(diff / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 function adminInitials(email: string): string {
   const local = email.split('@')[0] ?? 'AD';
@@ -91,15 +104,14 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
     ? `Admin (${adminEmail.split('@')[0]})`
     : 'Admin User';
 
-  const [adminNotifs, setAdminNotifs] = useState<NotificationItem[]>([]);
+  const [adminNotifs, setAdminNotifs] = useState<AdminNotificationItem[]>([]);
   const [adminNotifTotal, setAdminNotifTotal] = useState(0);
   const [adminBellOpen, setAdminBellOpen] = useState(false);
   const adminBellRef = useRef<HTMLDivElement>(null);
   const prevAdminTotal = useRef(0);
   const fetchAdminNotifs = useCallback(async () => {
-    if (!getToken()) return;
     try {
-      const data = await notificationsApi.get({ skipTopLoader: true });
+      const data = await adminGetNotifications();
       setAdminNotifs(data.notifications);
       setAdminNotifTotal(data.total);
     } catch {}
@@ -181,31 +193,186 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
               <span style={{ fontSize: 13, fontWeight: 600, color: '#0F2A7A', fontFamily: 'Inter, sans-serif', letterSpacing: '0.02em' }}>Admin Portal</span>
             </div>
             <div ref={adminBellRef} style={{ position: 'relative' }}>
-              <button onClick={() => setAdminBellOpen(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#0F2A7A', position: 'relative' }} title="Notifications">
+              <button
+                type="button"
+                onClick={() => setAdminBellOpen((v) => !v)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 4,
+                  color: '#38C6C6',
+                  position: 'relative',
+                }}
+                title="Notifications"
+                aria-label="Notifications"
+              >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                   <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                   <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
                 </svg>
-                {adminNotifTotal > 0 && <span style={{ position: 'absolute', top: 0, right: 0, background: '#DC2626', color: '#fff', borderRadius: '50%', width: 16, height: 16, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #fff' }}>{adminNotifTotal > 9 ? '9+' : adminNotifTotal}</span>}
+                {adminNotifTotal > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      right: 0,
+                      background: '#DC2626',
+                      color: '#fff',
+                      borderRadius: '50%',
+                      width: 16,
+                      height: 16,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '1.5px solid #fff',
+                    }}
+                  >
+                    {adminNotifTotal > 9 ? '9+' : adminNotifTotal}
+                  </span>
+                )}
               </button>
               {adminBellOpen && (
-                <div style={{ position: 'absolute', top: 40, right: 0, width: 340, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 100, overflow: 'hidden' }}>
-                  <div style={{ padding: '14px 16px', borderBottom: '1px solid #F3F4F6', fontWeight: 700, fontSize: 14 }}>Notifications {adminNotifTotal > 0 && <span style={{ color: '#6B7280', fontWeight: 400 }}>· {adminNotifTotal} unread</span>}</div>
-                  <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 40,
+                    right: 0,
+                    width: 360,
+                    maxHeight: 440,
+                    background: '#fff',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: 12,
+                    boxShadow: '0 12px 40px rgba(0,0,0,0.14)',
+                    zIndex: 100,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '14px 16px 10px',
+                      borderBottom: '1px solid #F3F4F6',
+                      fontWeight: 700,
+                      fontSize: 14,
+                      color: '#0f1523',
+                    }}
+                  >
+                    Notifications
+                    {adminNotifTotal > 0 && (
+                      <span style={{ color: '#6B7280', fontWeight: 400 }}>
+                        {' '}
+                        · {adminNotifTotal} unread
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ overflowY: 'auto', flex: 1 }}>
                     {adminNotifs.length === 0 ? (
                       <div style={{ padding: '36px 20px', textAlign: 'center' }}>
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#B8C4D6" strokeWidth="1.5" strokeLinecap="round" style={{marginBottom:8}}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38C6C6" strokeWidth="1.5" strokeLinecap="round" style={{ marginBottom: 8 }}>
+                          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        </svg>
                         <div style={{ fontSize: 14, color: '#9CA3AF' }}>No new notifications</div>
                       </div>
-                    ) : adminNotifs.map(notif => (
-                      <div key={notif.id} style={{ padding: '12px 16px', borderBottom: '1px solid #F9FAFB', cursor: 'pointer', display: 'flex', gap: 10 }}
-                        onClick={() => { setAdminBellOpen(false); window.location.href = notif.href; }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: '#0B0F1F' }}>{notif.title}</div>
-                          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{notif.body}</div>
-                        </div>
-                      </div>
-                    ))}
+                    ) : (
+                      adminNotifs.map((notif) => {
+                        const isCritical = notif.priority === 'CRITICAL';
+                        const isHigh = notif.priority === 'HIGH';
+                        const isMedium = notif.priority === 'MEDIUM';
+                        const isElevated = isCritical || isHigh || isMedium;
+                        const isUnread = !notif.read;
+                        const rowBg = isCritical ? '#FEF2F2' : isHigh ? '#FFF7ED' : isMedium ? '#FEFCE8' : '#fff';
+                        const borderColor = isCritical ? '#DC2626' : isHigh ? '#EA580C' : isMedium ? '#CA8A04' : 'transparent';
+                        return (
+                          <div
+                            key={notif.id}
+                            role="button"
+                            tabIndex={0}
+                            style={{
+                              padding: '12px 16px',
+                              borderBottom: '1px solid #F9FAFB',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              gap: 10,
+                              alignItems: 'flex-start',
+                              background: rowBg,
+                              borderLeft: isElevated ? `3px solid ${borderColor}` : '3px solid transparent',
+                            }}
+                            onClick={() => {
+                              setAdminBellOpen(false);
+                              if (!notif.read) {
+                                void adminMarkNotificationRead(notif.id).then(() => {
+                                  setAdminNotifs((prev) =>
+                                    prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n)),
+                                  );
+                                  setAdminNotifTotal((t) => Math.max(0, t - 1));
+                                });
+                              }
+                              window.location.href = notif.href;
+                            }}
+                          >
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 2 }}>
+                                <span style={{ fontSize: 13, fontWeight: 600, color: '#0B0F1F', lineHeight: 1.4 }}>
+                                  {notif.title}
+                                </span>
+                                {isCritical && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, background: '#FCA5A5', padding: '2px 6px', borderRadius: 4 }}>
+                                    Critical
+                                  </span>
+                                )}
+                                {isHigh && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, background: '#FDBA74', padding: '2px 6px', borderRadius: 4 }}>
+                                    High
+                                  </span>
+                                )}
+                                {isMedium && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, background: '#FDE047', padding: '2px 6px', borderRadius: 4 }}>
+                                    Medium
+                                  </span>
+                                )}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: 12,
+                                  color: isCritical ? '#7F1D1D' : isHigh ? '#9A3412' : isMedium ? '#854D0E' : '#6B7280',
+                                  lineHeight: 1.45,
+                                  whiteSpace: isElevated ? 'normal' : 'nowrap',
+                                  overflow: isElevated ? undefined : 'hidden',
+                                  textOverflow: isElevated ? undefined : 'ellipsis',
+                                }}
+                              >
+                                {notif.body}
+                              </div>
+                              {notif.actionLabel && (
+                                <div style={{ fontSize: 12, fontWeight: 600, color: borderColor || '#38C6C6', marginTop: 6 }}>
+                                  {notif.actionLabel}
+                                </div>
+                              )}
+                              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
+                                {fmtAdminNotifTime(notif.createdAt)}
+                              </div>
+                            </div>
+                            {isUnread && (
+                              <div
+                                style={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: '50%',
+                                  background: borderColor || '#38C6C6',
+                                  flexShrink: 0,
+                                  marginTop: 4,
+                                }}
+                              />
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               )}

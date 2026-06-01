@@ -3,7 +3,8 @@ import { createContext, useContext, useEffect, useState, ReactNode, } from 'reac
 import { getAppOrigin } from '@/lib/appOrigin';
 import { authApi } from '@/lib/api';
 import { formatSupabaseNetworkError, getSupabase } from '@/lib/supabaseClient';
-import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, clearProfileCompleteCookies, popLastPath, clearLastPath, type Role, } from '@/lib/auth';
+import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, popLastPath, clearLastPath, type Role, } from '@/lib/auth';
+import { checkProfileExistsOnServer, ensureProfileMarkedCompleteFromServer, } from '@/lib/profileCompleteSync';
 interface AuthCtx {
     userId: string | null;
     role: Role | null;
@@ -20,7 +21,6 @@ interface AuthCtx {
     completeOAuthSignIn: () => Promise<{ role: Role; redirectTo: string }>;
 }
 const Ctx = createContext<AuthCtx | null>(null);
-const NEST_BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 async function syncNestAccessToken(): Promise<boolean> {
     const role = getRole() ?? 'locum';
     try {
@@ -28,37 +28,6 @@ async function syncNestAccessToken(): Promise<boolean> {
         saveToken(out.accessToken);
         syncCookies();
         return true;
-    }
-    catch {
-        return false;
-    }
-}
-async function checkProfileExistsOnServer(role: Role, token: string): Promise<boolean> {
-    try {
-        if (role === 'clinic') {
-            const res = await fetch(`${NEST_BASE}/api/host/profile`, {
-                cache: 'no-store',
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!res.ok)
-                return false;
-            const d = (await res.json()) as {
-                exists: boolean;
-            };
-            return d.exists === true;
-        }
-        else {
-            const res = await fetch(`${NEST_BASE}/api/locum/profile`, {
-                cache: 'no-store',
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!res.ok)
-                return false;
-            const d = (await res.json()) as {
-                exists: boolean;
-            };
-            return d.exists === true;
-        }
     }
     catch {
         return false;
@@ -83,6 +52,10 @@ export function AuthProvider({ children }: {
         const complete = isProfileComplete();
         setProfileComplete(complete);
         syncProfileCompleteCookies();
+        void ensureProfileMarkedCompleteFromServer().then((synced) => {
+            if (synced)
+                setProfileComplete(true);
+        });
         let subscription: {
             unsubscribe: () => void;
         } | undefined;
@@ -127,7 +100,6 @@ export function AuthProvider({ children }: {
                 }
                 else if (!session) {
                     setUserId(null);
-                    clearProfileCompleteCookies();
                 }
             });
             subscription = sub;

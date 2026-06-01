@@ -148,98 +148,109 @@ export default function VerifyPage(props: {
         }}>
         Verify your email
       </h2>
-      <p style={{ fontSize: 16, color: '#0A0A0A', marginBottom: 24 }}>
+      <p style={{ fontSize: 16, color: '#0A0A0A', marginBottom: 24, lineHeight: 1.45 }}>
         Enter OTP sent to <strong style={{ color: '#0f1523' }}>{masked}</strong>
       </p>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {digits.map((d, i) => (<input key={i} ref={(el) => {
-                refs.current[i] = el;
-            }} type="text" inputMode="numeric" maxLength={1} value={d} onFocus={(e) => e.target.select()} onChange={(e) => handleChange(e.target.value, i)} onKeyDown={(e) => handleKey(e, i)} style={{
-                width: 44,
-                height: 52,
-                textAlign: 'center',
-                fontSize: 22,
-                fontWeight: 700,
-                border: `2px solid ${d ? '#3B4FD8' : '#d0d4e4'}`,
-                borderRadius: 6,
-                background: d ? '#eef0fb' : '#fff',
-                color: '#0f1523',
-                outline: 'none',
-                fontFamily: 'inherit',
-                transition: 'border-color .15s',
-            }}/>))}
+      <div className="auth-verify-body">
+        <div className="auth-verify-otp-row">
+          {digits.map((d, i) => (<input key={i} ref={(el) => {
+                  refs.current[i] = el;
+              }} type="text" inputMode="numeric" maxLength={1} value={d} onFocus={(e) => e.target.select()} onChange={(e) => handleChange(e.target.value, i)} onKeyDown={(e) => handleKey(e, i)} style={{
+                  width: 44,
+                  height: 52,
+                  textAlign: 'center',
+                  fontSize: 22,
+                  fontWeight: 700,
+                  border: `2px solid ${d ? '#3B4FD8' : '#d0d4e4'}`,
+                  borderRadius: 6,
+                  background: d ? '#eef0fb' : '#fff',
+                  color: '#0f1523',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  transition: 'border-color .15s',
+                  boxSizing: 'border-box',
+              }}/>))}
+        </div>
+
+        {error && (<p style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>
+            {error}
+          </p>)}
+
+        <button onClick={() => void handleVerify()} disabled={busy || !otpComplete} style={{
+              width: '100%',
+              padding: '11px',
+              border: 'none',
+              borderRadius: 6,
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: busy || !otpComplete ? 'default' : 'pointer',
+              background: busy || !otpComplete ? '#8892a4' : '#3B4FD8',
+              color: '#fff',
+              fontFamily: 'inherit',
+              marginBottom: 12,
+              outline: 'none',
+              WebkitTapHighlightColor: 'transparent',
+              boxSizing: 'border-box',
+          }}>
+          {busy ? 'Verifying…' : 'Verify'}
+        </button>
+
+        {resendCooldown > 0 ? (<p style={{
+                  textAlign: 'center',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  lineHeight: 1.35,
+                  color: '#4A4A4A',
+                  margin: '0 0 10px',
+                  padding: '11px 12px',
+                  boxSizing: 'border-box',
+              }}>
+            You can resend the code in {resendCooldown}{' '}
+            {resendCooldown === 1 ? 'second' : 'seconds'}.
+          </p>) : (<button type="button" onClick={handleResend} disabled={resendBusy} style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'center',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  marginBottom: 10,
+                  padding: '11px 12px',
+                  border: '1px solid rgba(59, 79, 216, 0.35)',
+                  borderRadius: 6,
+                  background: '#fff',
+                  fontFamily: 'inherit',
+                  color: '#3B4FD8',
+                  cursor: resendBusy ? 'wait' : 'pointer',
+                  outline: 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                  boxSizing: 'border-box',
+                  lineHeight: 1.2,
+              }}>
+            Resend Code
+          </button>)}
+
+        <button type="button" onClick={() => router.push('/auth')} style={{
+              display: 'block',
+              width: '100%',
+              textAlign: 'center',
+              fontSize: 14,
+              fontWeight: 500,
+              color: '#3B4FD8',
+              cursor: 'pointer',
+              margin: 0,
+              padding: '11px 12px',
+              border: '1px solid rgba(59, 79, 216, 0.35)',
+              borderRadius: 6,
+              background: '#fff',
+              fontFamily: 'inherit',
+              outline: 'none',
+              WebkitTapHighlightColor: 'transparent',
+              boxSizing: 'border-box',
+              lineHeight: 1.2,
+          }}>
+          Edit Email
+        </button>
       </div>
-
-      {error && (<p style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>
-          {error}
-        </p>)}
-
-      <button onClick={() => void handleVerify()} disabled={busy || !otpComplete} style={{
-            width: '100%',
-            padding: '11px',
-            border: 'none',
-            borderRadius: 6,
-            fontSize: 14,
-            fontWeight: 500,
-            cursor: busy || !otpComplete ? 'default' : 'pointer',
-            background: busy || !otpComplete ? '#8892a4' : '#3B4FD8',
-            color: '#fff',
-            fontFamily: 'inherit',
-            marginBottom: 12,
-            outline: 'none',
-            WebkitTapHighlightColor: 'transparent',
-        }}>
-        {busy ? 'Verifying…' : 'Verify'}
-      </button>
-
-      
-      {resendCooldown > 0 ? (<p style={{
-                textAlign: 'center',
-                fontSize: 14,
-                fontWeight: 500,
-                lineHeight: 1.35,
-                color: '#4A4A4A',
-                margin: '0 0 12px',
-                padding: '11px 12px',
-            }}>
-          You can resend the code in {resendCooldown}{' '}
-          {resendCooldown === 1 ? 'second' : 'seconds'}.
-        </p>) : (<button type="button" onClick={handleResend} disabled={resendBusy} style={{
-                display: 'block',
-                width: '100%',
-                textAlign: 'center',
-                fontSize: 14,
-                fontWeight: 500,
-                marginBottom: 10,
-                padding: '11px 12px',
-                border: '1px solid rgba(59, 79, 216, 0.35)',
-                borderRadius: 6,
-                background: '#fff',
-                fontFamily: 'inherit',
-                color: '#3B4FD8',
-                cursor: resendBusy ? 'wait' : 'pointer',
-                outline: 'none',
-                WebkitTapHighlightColor: 'transparent',
-                boxSizing: 'border-box',
-                lineHeight: 1.2,
-            }}>
-          Resend Code
-        </button>)}
-
-      <p onClick={() => router.push('/auth')} style={{
-            textAlign: 'center',
-            fontSize: 14,
-            fontWeight: 500,
-            color: '#5a6478',
-            cursor: 'pointer',
-            margin: 0,
-            padding: '8px 10px',
-            borderRadius: 6,
-            userSelect: 'none',
-            WebkitTapHighlightColor: 'transparent',
-        }}>
-        ← Edit email
-      </p>
     </AuthSplitLayout>);
 }

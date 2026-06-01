@@ -72,6 +72,32 @@ export async function adminDownloadUsersCsv(q: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+export type AdminNotificationItem = {
+  id: string;
+  type: 'registration' | 'credential' | 'flagged';
+  title: string;
+  body: string;
+  href: string;
+  read: boolean;
+  createdAt: string;
+  priority?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NORMAL';
+  actionLabel?: string;
+  eventType?: string;
+};
+
+export async function adminGetNotifications(): Promise<{
+  total: number;
+  notifications: AdminNotificationItem[];
+}> {
+  return adminFetchJson('/api/admin/notifications');
+}
+
+export async function adminMarkNotificationRead(id: string): Promise<void> {
+  await adminFetchJson(`/api/admin/notifications/${encodeURIComponent(id)}/read`, {
+    method: 'PATCH',
+  });
+}
+
 export async function adminDownloadAnalyticsReport(): Promise<void> {
   const res = await fetch(`${adminApiBase()}/api/admin/analytics/export`, {
     credentials: 'include',
