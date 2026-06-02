@@ -22,7 +22,9 @@ export function formatPayPerDay(pay: number | null | undefined): string {
   return ` Rate: $${Number(pay).toLocaleString()}/day.`;
 }
 
-export function formatVerificationRejectionReason(reason?: string | null): string {
+export function formatVerificationRejectionReason(
+  reason?: string | null,
+): string {
   const trimmed = reason?.trim();
   return trimmed && trimmed.length > 0
     ? trimmed
@@ -35,14 +37,15 @@ export function formatSuspensionReason(note?: string | null): string {
 }
 
 export function contactSupportMailtoHref(): string {
-  const email =
-    process.env.SUPPORT_EMAIL?.trim() || 'support@locumlink.ca';
+  const email = process.env.SUPPORT_EMAIL?.trim() || 'support@locumlink.ca';
   const subject = encodeURIComponent('Account suspension — support request');
   return `mailto:${email}?subject=${subject}`;
 }
 
 export function locumBrowseHref(jobId?: string): string {
-  return jobId ? `/locum/browse?job=${encodeURIComponent(jobId)}` : '/locum/browse';
+  return jobId
+    ? `/locum/browse?job=${encodeURIComponent(jobId)}`
+    : '/locum/browse';
 }
 
 export function locumMessagesHref(partnerId: string): string {

@@ -37,7 +37,10 @@ export class SchedulerService {
     try {
       const now = new Date();
       const confirmedApps = await this.prisma.application.findMany({
-        where: { status: 'CONFIRMED', jobPosting: { startDate: { not: null } } },
+        where: {
+          status: 'CONFIRMED',
+          jobPosting: { startDate: { not: null } },
+        },
         include: locumReminderInclude,
       });
 
@@ -48,8 +51,10 @@ export class SchedulerService {
         if (!user?.email) continue;
 
         const diffH =
-          (new Date(app.jobPosting.startDate).getTime() - now.getTime()) / 3600000;
-        const clinicName = app.jobPosting.hostProfile?.practiceName ?? 'the clinic';
+          (new Date(app.jobPosting.startDate).getTime() - now.getTime()) /
+          3600000;
+        const clinicName =
+          app.jobPosting.hostProfile?.practiceName ?? 'the clinic';
         const base = {
           recipientId: user.id,
           recipientEmail: user.email,
@@ -89,13 +94,19 @@ export class SchedulerService {
       const tomorrowStr = tomorrow.toISOString().slice(0, 10);
 
       const confirmedApps = await this.prisma.application.findMany({
-        where: { status: 'CONFIRMED', jobPosting: { startDate: { not: null } } },
+        where: {
+          status: 'CONFIRMED',
+          jobPosting: { startDate: { not: null } },
+        },
         include: locumReminderInclude,
       });
 
       for (const app of confirmedApps) {
         if (!app.jobPosting.startDate) continue;
-        if (new Date(app.jobPosting.startDate).toISOString().slice(0, 10) !== tomorrowStr) {
+        if (
+          new Date(app.jobPosting.startDate).toISOString().slice(0, 10) !==
+          tomorrowStr
+        ) {
           continue;
         }
         const user = app.locumProfile.user;
@@ -125,7 +136,11 @@ export class SchedulerService {
       const in48h = new Date(now.getTime() + 48 * 3600000);
 
       const jobs = await this.prisma.jobPosting.findMany({
-        where: { status: 'ACTIVE', isDeleted: false, expiresAt: { gte: in47h, lte: in48h } },
+        where: {
+          status: 'ACTIVE',
+          isDeleted: false,
+          expiresAt: { gte: in47h, lte: in48h },
+        },
         include: {
           hostProfile: {
             select: {

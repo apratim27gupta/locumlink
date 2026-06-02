@@ -5,10 +5,9 @@ import { MessageController } from './message.controller.js';
 import { MessageService } from './message.service.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 @Module({
-    imports: [PrismaModule, GcsModule, NotificationsModule],
-    controllers: [MessageController],
-    providers: [MessageService],
-    exports: [MessageService],
+  imports: [PrismaModule, GcsModule, NotificationsModule],
+  controllers: [MessageController],
+  providers: [MessageService],
+  exports: [MessageService],
 })
-export class MessageModule {
-}
+export class MessageModule {}

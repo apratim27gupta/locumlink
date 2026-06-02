@@ -8,7 +8,7 @@ import { useHostProfile } from '@/hooks/useHostProfile';
 import type { HostProfile } from '@/types';
 import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
-import { isCpsnsNineDigitsFormat, isCpsnsVerificationApproved, sanitizeCpsnsInput, } from '@/lib/cpsnsVerify';
+import { hasCpsnsNumber, isCpsnsVerificationApproved, sanitizeCpsnsInput, } from '@/lib/cpsnsVerify';
 import { filterCanadianCities, CANADIAN_PROVINCE_NAMES, formatCanadianCityDisplay, type CanadianCityRow, } from '@/lib/canadianCities';
 import { sortByLabel, sortStringsLocale } from '@/lib/sortLocale';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
@@ -476,7 +476,7 @@ export default function HostProfilePage(props: {
         !!(
             derivedContactFirst &&
             derivedContactLast &&
-            isCpsnsNineDigitsFormat(cpsns) &&
+            hasCpsnsNumber(cpsns) &&
             specialties.length
         ),
         !!(clinicName && addr1 && postal && city && province),
@@ -1014,7 +1014,6 @@ export default function HostProfilePage(props: {
                                     style={fieldInput}
                                     inputMode="numeric"
                                     autoComplete="off"
-                                    maxLength={9}
                                     value={cpsns}
                                     onChange={(e) => setCpsns(sanitizeCpsnsInput(e.target.value))}
                                     placeholder="CPSNS Number"

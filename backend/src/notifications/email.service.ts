@@ -7,7 +7,11 @@ export class EmailService {
 
   constructor(private readonly config: ConfigService) {}
 
-  async send(params: { to: string; subject: string; text: string }): Promise<void> {
+  async send(params: {
+    to: string;
+    subject: string;
+    text: string;
+  }): Promise<void> {
     const apiKey = this.config.get<string>('RESEND_API_KEY')?.trim();
     const from = this.config.get<string>('NOTIFICATIONS_FROM_EMAIL')?.trim();
     if (!apiKey || !from) {

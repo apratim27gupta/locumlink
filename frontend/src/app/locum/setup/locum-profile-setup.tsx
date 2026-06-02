@@ -7,7 +7,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { locumApi, uploadFile } from '@/lib/api';
 import { formatUploadedFileLabel, originalUploadFileName } from '@/lib/uploadDisplayName';
 import type { LocumProfile } from '@/types';
-import { sanitizeCpsnsInput, } from '@/lib/cpsnsVerify';
+import { sanitizeCpsnsInput } from '@/lib/cpsnsVerify';
 import BarWaveButton from '@/components/ui/BarWaveButton';
 import { dispatchProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { beforeClientNavigation } from '@/lib/topLoader';

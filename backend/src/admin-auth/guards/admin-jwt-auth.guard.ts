@@ -1,4 +1,8 @@
-import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ADMIN_JWT_STRATEGY } from '../admin-auth.constants.js';
 
@@ -15,4 +19,3 @@ export class AdminJwtAuthGuard extends AuthGuard(ADMIN_JWT_STRATEGY) {
     return context.switchToHttp().getRequest();
   }
 }
-

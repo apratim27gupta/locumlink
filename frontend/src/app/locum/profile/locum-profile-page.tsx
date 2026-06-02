@@ -11,7 +11,7 @@ import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { LocumProfile } from '@/types';
 import {
   type CpsnsVerificationStatus,
-  isCpsnsNineDigitsFormat,
+  hasCpsnsNumber,
   isCpsnsVerificationApproved,
   sanitizeCpsnsInput,
 } from '@/lib/cpsnsVerify';
@@ -321,7 +321,7 @@ export default function LocumProfilePage(props: {
   }, []);
 
   /* ── step completion flags ────────────────────────────────────────────── */
-  const step1Done = !!(firstName && lastName && isCpsnsNineDigitsFormat(cpsns) && summary && specialityTags.length);
+  const step1Done = !!(firstName && lastName && hasCpsnsNumber(cpsns) && summary && specialityTags.length);
   const step2Done = !!phone.trim();
   const step3Done = !!(addr1.trim() && city.trim() && province.trim() && postal.trim());
   const step4Done = !!(licenseFile && resumeFile);
@@ -585,7 +585,7 @@ export default function LocumProfilePage(props: {
           <div>
             <label style={{ ...lbl, textTransform: 'none' }}>CPSNS Number</label>
             <input
-              style={{ ...inp, textTransform: 'none' }} inputMode="numeric" autoComplete="off" maxLength={9}
+              style={{ ...inp, textTransform: 'none' }} inputMode="numeric" autoComplete="off"
               value={cpsns}
               onChange={(e) => setCpsns(sanitizeCpsnsInput(e.target.value))}
               onClick={(e) => e.stopPropagation()}

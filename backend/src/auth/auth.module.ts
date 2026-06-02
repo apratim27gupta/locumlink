@@ -12,36 +12,29 @@ import { LocalStrategy } from './strategies/local.strategy.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
 @Module({
-    imports: [
-        PrismaModule,
-        NotificationsModule,
-        PassportModule.register({ defaultStrategy: 'jwt' }),
-        JwtModule.registerAsync({
-            imports: [ConfigModule],
-            inject: [ConfigService],
-            useFactory: (config: ConfigService) => ({
-                secret: config.getOrThrow<string>('JWT_SECRET'),
-                signOptions: {
-                    expiresIn: config.get<string>('JWT_EXPIRES_IN', '7d') as StringValue,
-                },
-            }),
-        }),
-    ],
-    controllers: [AuthController],
-    providers: [
-        AuthService,
-        JwtStrategy,
-        LocalStrategy,
-        JwtAuthGuard,
-        RolesGuard,
-    ],
-    exports: [
-        AuthService,
-        JwtModule,
-        PassportModule,
-        JwtAuthGuard,
-        RolesGuard,
-    ],
+  imports: [
+    PrismaModule,
+    NotificationsModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.getOrThrow<string>('JWT_SECRET'),
+        signOptions: {
+          expiresIn: config.get<string>('JWT_EXPIRES_IN', '7d') as StringValue,
+        },
+      }),
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    LocalStrategy,
+    JwtAuthGuard,
+    RolesGuard,
+  ],
+  exports: [AuthService, JwtModule, PassportModule, JwtAuthGuard, RolesGuard],
 })
-export class AuthModule {
-}
+export class AuthModule {}

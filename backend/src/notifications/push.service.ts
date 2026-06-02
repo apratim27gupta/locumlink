@@ -14,11 +14,19 @@ export class PushService implements OnModuleInit {
     webpush.setVapidDetails(email, publicKey, privateKey);
   }
 
-  async saveSubscription(userId: string, sub: { endpoint: string; keys: { p256dh: string; auth: string } }) {
+  async saveSubscription(
+    userId: string,
+    sub: { endpoint: string; keys: { p256dh: string; auth: string } },
+  ) {
     await this.prisma.pushSubscription.upsert({
       where: { endpoint: sub.endpoint },
       update: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
-      create: { userId, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+      create: {
+        userId,
+        endpoint: sub.endpoint,
+        p256dh: sub.keys.p256dh,
+        auth: sub.keys.auth,
+      },
     });
   }
 
@@ -26,18 +34,28 @@ export class PushService implements OnModuleInit {
     await this.prisma.pushSubscription.deleteMany({ where: { endpoint } });
   }
 
-  async sendToUser(userId: string, payload: { title: string; body: string; url?: string }) {
-    const subs = await this.prisma.pushSubscription.findMany({ where: { userId } });
+  async sendToUser(
+    userId: string,
+    payload: { title: string; body: string; url?: string },
+  ) {
+    const subs = await this.prisma.pushSubscription.findMany({
+      where: { userId },
+    });
     await Promise.allSettled(
-      subs.map(async sub => {
+      subs.map(async (sub) => {
         try {
           await webpush.sendNotification(
-            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            {
+              endpoint: sub.endpoint,
+              keys: { p256dh: sub.p256dh, auth: sub.auth },
+            },
             JSON.stringify(payload),
           );
         } catch (err: any) {
           if (err.statusCode === 410) {
-            await this.prisma.pushSubscription.delete({ where: { endpoint: sub.endpoint } });
+            await this.prisma.pushSubscription.delete({
+              where: { endpoint: sub.endpoint },
+            });
           }
         }
       }),

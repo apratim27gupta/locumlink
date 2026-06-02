@@ -1,5 +1,5 @@
 import { IsIn } from 'class-validator';
 export class SyncSupabaseDto {
-    @IsIn(['locum', 'clinic'])
-    role: 'locum' | 'clinic';
+  @IsIn(['locum', 'clinic'])
+  role: 'locum' | 'clinic';
 }

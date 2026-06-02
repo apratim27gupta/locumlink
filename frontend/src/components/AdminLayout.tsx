@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { adminApiBase } from '@/lib/adminApi';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
+import { onPwaRefresh } from '@/lib/pwaEvents';
 import {
   adminGetNotifications,
   adminMarkNotificationRead,
@@ -117,10 +119,10 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
   useEffect(() => { void fetchAdminNotifs(); }, [fetchAdminNotifs]);
-  useEffect(() => {
-    const id = setInterval(() => void fetchAdminNotifs(), 12000);
-    return () => clearInterval(id);
-  }, [fetchAdminNotifs]);
+  useVisibilityPolling(() => {
+    void fetchAdminNotifs();
+  }, 12_000);
+  useEffect(() => onPwaRefresh(() => { void fetchAdminNotifs(); }), [fetchAdminNotifs]);
   useEffect(() => {
     if (adminNotifTotal > prevAdminTotal.current && prevAdminTotal.current !== 0) {
       const ctx = new AudioContext();
@@ -185,14 +187,14 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+        <div className="admin-content-column">
           <div style={{ height: 64, borderBottom: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 28px', background: '#ffffff', gap: 16, boxShadow: '0 1px 4px rgba(15,42,122,0.06)', flexShrink: 0, position: 'sticky', top: 0, zIndex: 30 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <Logo size="md" />
               <div style={{ width: 1, height: 24, background: '#E5E7EB' }} />
               <span style={{ fontSize: 13, fontWeight: 600, color: '#0F2A7A', fontFamily: 'Inter, sans-serif', letterSpacing: '0.02em' }}>Admin Portal</span>
             </div>
-            <div ref={adminBellRef} style={{ position: 'relative' }}>
+            <div ref={adminBellRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               <button
                 type="button"
                 onClick={() => setAdminBellOpen((v) => !v)}
@@ -203,6 +205,10 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
                   padding: 4,
                   color: '#38C6C6',
                   position: 'relative',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  lineHeight: 0,
                 }}
                 title="Notifications"
                 aria-label="Notifications"
@@ -227,6 +233,7 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      lineHeight: 1,
                       border: '1.5px solid #fff',
                     }}
                   >
@@ -238,7 +245,7 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
                 <div
                   style={{
                     position: 'absolute',
-                    top: 40,
+                    top: 36,
                     right: 0,
                     width: 360,
                     maxHeight: 440,

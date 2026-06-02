@@ -18,33 +18,35 @@ import { AdminAuthModule } from './admin-auth/admin-auth.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { SchedulerModule } from './scheduler/scheduler.module.js';
 @Module({
-    imports: [
-        ConfigModule.forRoot({
-            isGlobal: true,
-            envFilePath: process.env.NODE_ENV === 'production' ? [] : backendDevelopmentEnvPaths(),
-            validate,
-        }),
-        GcsModule,
-        AuditModule,
-        PrismaModule,
-        AuthModule,
-        HealthModule,
-        HostModule,
-        LocumModule,
-        MessageModule,
-        NotificationsModule,
-        UploadModule,
-        GcsModule,
-        AdminAuthModule,
-        AdminModule,
-        SchedulerModule,
-    ],
-    providers: [
-        {
-            provide: APP_GUARD,
-            useClass: JwtAuthGuard,
-        },
-    ],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath:
+        process.env.NODE_ENV === 'production'
+          ? []
+          : backendDevelopmentEnvPaths(),
+      validate,
+    }),
+    GcsModule,
+    AuditModule,
+    PrismaModule,
+    AuthModule,
+    HealthModule,
+    HostModule,
+    LocumModule,
+    MessageModule,
+    NotificationsModule,
+    UploadModule,
+    GcsModule,
+    AdminAuthModule,
+    AdminModule,
+    SchedulerModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+  ],
 })
-export class AppModule {
-}
+export class AppModule {}

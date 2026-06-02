@@ -12,6 +12,8 @@ import {
 import { usePathname } from 'next/navigation';
 import { adminFetchJson } from '@/lib/adminApi';
 import { normalizeAdminStats, type AdminStats } from '@/lib/adminStats';
+import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
+import { onPwaRefresh } from '@/lib/pwaEvents';
 
 export type { AdminStats };
 
@@ -63,6 +65,17 @@ export function AdminStatsProvider({ children }: { children: ReactNode }) {
       return;
     }
     void refresh();
+  }, [refresh, isLogin]);
+
+  useVisibilityPolling(() => {
+    void refresh();
+  }, 30_000, !isLogin);
+
+  useEffect(() => {
+    if (isLogin) return;
+    return onPwaRefresh(() => {
+      void refresh();
+    });
   }, [refresh, isLogin]);
 
   const value = useMemo(

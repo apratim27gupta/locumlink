@@ -151,7 +151,7 @@ export default function HostPostJobPage(props: {
                 fontSize: 13,
                 marginBottom: 16,
             }}>
-               Your CPSNS number is not verified hence, the post you created is saved under Draft Locum Shifts.{' '}
+            Shift is saved under &quot;Draft Locum Shifts&quot;. Please post again after profile is verified. Thanks.{' '}
             <button type="button" onClick={() => {
                 beforeClientNavigation('/host/dashboard');
                 router.push('/host/dashboard');

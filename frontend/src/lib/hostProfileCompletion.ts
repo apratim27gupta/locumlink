@@ -1,5 +1,5 @@
 import type { HostProfile } from '@/types';
-import { isCpsnsNineDigitsFormat } from '@/lib/cpsnsVerify';
+import { hasCpsnsNumber } from '@/lib/cpsnsVerify';
 type Fields = Partial<HostProfile> | null | undefined;
 export function hostProfileCompletionPct(fields: Fields): number {
     if (!fields) return 0;
@@ -12,7 +12,7 @@ export function hostProfileCompletionPct(fields: Fields): number {
         // Step 1 - Basic Info (4 fields)
         !!fields.contactFirstName,
         !!fields.contactLastName,
-        isCpsnsNineDigitsFormat(fields.cpsnsNumber),
+        hasCpsnsNumber(fields.cpsnsNumber),
         specs.length > 0,
         // Step 2 - Clinic Info (5 fields)
         !!fields.clinicName,

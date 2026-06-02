@@ -69,12 +69,31 @@ export type NotifEventType =
   | 'A_003_CREDENTIAL_UPLOADED'
   | 'A_004_ACCOUNT_FLAGGED';
 
-export type NotificationPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NORMAL' | 'LOW';
+export type NotificationPriority =
+  | 'CRITICAL'
+  | 'HIGH'
+  | 'MEDIUM'
+  | 'NORMAL'
+  | 'LOW';
 
 export type NotificationItem = {
   id: string;
-  type: 'message' | 'application' | 'shortlisted' | 'reminder' | 'account' | 'cancellation' | 'registration' | 'credential' | 'flagged';
-  category?: 'messages' | 'applications' | 'reminders' | 'account' | 'cancellations';
+  type:
+    | 'message'
+    | 'application'
+    | 'shortlisted'
+    | 'reminder'
+    | 'account'
+    | 'cancellation'
+    | 'registration'
+    | 'credential'
+    | 'flagged';
+  category?:
+    | 'messages'
+    | 'applications'
+    | 'reminders'
+    | 'account'
+    | 'cancellations';
   title: string;
   body: string;
   href: string;
@@ -87,13 +106,25 @@ export type NotificationItem = {
 
 function eventTypeToCategory(eventType: string): NotificationItem['type'] {
   if (eventType.includes('MESSAGE')) return 'message';
-  if (eventType.includes('APPLIED') || eventType.includes('ACCEPTED') || eventType.includes('DECLINED') || eventType.includes('CONFIRMED')) return 'application';
-  if (eventType.includes('REMINDER') || eventType.includes('EXPIRING')) return 'reminder';
+  if (
+    eventType.includes('APPLIED') ||
+    eventType.includes('ACCEPTED') ||
+    eventType.includes('DECLINED') ||
+    eventType.includes('CONFIRMED')
+  )
+    return 'application';
+  if (eventType.includes('REMINDER') || eventType.includes('EXPIRING'))
+    return 'reminder';
   if (eventType.includes('CANCELLED')) return 'cancellation';
   if (eventType.includes('REGISTRATION')) return 'registration';
   if (eventType.includes('CREDENTIAL')) return 'credential';
   if (eventType.includes('FLAGGED')) return 'flagged';
-  if (eventType.includes('VERIFIED') || eventType.includes('REJECTED') || eventType.includes('SUSPENDED')) return 'account';
+  if (
+    eventType.includes('VERIFIED') ||
+    eventType.includes('REJECTED') ||
+    eventType.includes('SUSPENDED')
+  )
+    return 'account';
   return 'application';
 }
 
@@ -171,7 +202,9 @@ export class NotificationsService {
     const doctorName = formatLocumDoctorName(params.firstName, params.lastName);
     const dateStr = formatJobDate(params.startDate);
     const payStr = formatPayPerDay(params.payPerDay);
-    const locationStr = [params.city, params.province].filter(Boolean).join(', ');
+    const locationStr = [params.city, params.province]
+      .filter(Boolean)
+      .join(', ');
     const copy = buildL001NewOpportunity({
       doctorName,
       jobTitle: params.jobTitle,
@@ -548,7 +581,10 @@ export class NotificationsService {
     startDate?: Date | string | null;
     applicationId: string;
   }): Promise<void> {
-    const locumName = formatLocumDoctorName(params.locumFirstName, params.locumLastName);
+    const locumName = formatLocumDoctorName(
+      params.locumFirstName,
+      params.locumLastName,
+    );
     const copy = buildH001LocumApplied({
       locumName,
       jobTitle: params.jobTitle,
@@ -579,7 +615,10 @@ export class NotificationsService {
     startDate?: Date | string | null;
     applicationId: string;
   }): Promise<void> {
-    const locumName = formatLocumDoctorName(params.locumFirstName, params.locumLastName);
+    const locumName = formatLocumDoctorName(
+      params.locumFirstName,
+      params.locumLastName,
+    );
     const copy = buildH002LocumAccepted({
       locumName,
       dateStr: formatJobDate(params.startDate),
@@ -589,7 +628,7 @@ export class NotificationsService {
       eventType: 'H_002_LOCUM_ACCEPTED',
       title: copy.inAppTitle,
       body: copy.inAppBody,
-      href: '/host/dashboard',
+      href: '/host/dashboard?postJob=1',
       priority: copy.priority,
       actionLabel: copy.actionLabel,
       referenceId: params.applicationId,
@@ -610,7 +649,10 @@ export class NotificationsService {
     applicationId: string;
     jobId: string;
   }): Promise<void> {
-    const locumName = formatLocumDoctorName(params.locumFirstName, params.locumLastName);
+    const locumName = formatLocumDoctorName(
+      params.locumFirstName,
+      params.locumLastName,
+    );
     const copy = buildH003LocumDeclined({
       locumName,
       dateStr: formatJobDate(params.startDate),
@@ -620,7 +662,7 @@ export class NotificationsService {
       eventType: 'H_003_LOCUM_DECLINED',
       title: copy.inAppTitle,
       body: copy.inAppBody,
-      href: '/host/post-job',
+      href: '/host/dashboard?postJob=1',
       priority: copy.priority,
       actionLabel: copy.actionLabel,
       referenceId: params.applicationId,
@@ -652,7 +694,7 @@ export class NotificationsService {
       eventType: 'H_009_SHIFT_CANCELLED',
       title: copy.inAppTitle,
       body: copy.inAppBody,
-      href: '/host/post-job',
+      href: '/host/dashboard?postJob=1',
       priority: copy.priority,
       actionLabel: copy.actionLabel,
       referenceId: params.jobId,
@@ -701,7 +743,10 @@ export class NotificationsService {
     contactLastName?: string | null;
     referenceId?: string;
   }): Promise<void> {
-    const hostName = formatHostDoctorName(params.contactFirstName, params.contactLastName);
+    const hostName = formatHostDoctorName(
+      params.contactFirstName,
+      params.contactLastName,
+    );
     const copy = H005_HOST_ACCOUNT_VERIFIED;
     await this.create({
       recipientId: params.recipientId,
@@ -728,7 +773,10 @@ export class NotificationsService {
     rejectionReason?: string | null;
     referenceId?: string;
   }): Promise<void> {
-    const hostName = formatHostDoctorName(params.contactFirstName, params.contactLastName);
+    const hostName = formatHostDoctorName(
+      params.contactFirstName,
+      params.contactLastName,
+    );
     const reason = formatHostRejectionReason(params.rejectionReason);
     const copy = H006_HOST_VERIFICATION_REJECTED;
     await this.create({
@@ -800,7 +848,10 @@ export class NotificationsService {
     });
   }
 
-  async getNotifications(userId: string, _role: string): Promise<{
+  async getNotifications(
+    userId: string,
+    _role: string,
+  ): Promise<{
     total: number;
     notifications: NotificationItem[];
   }> {

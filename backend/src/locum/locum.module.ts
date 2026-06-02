@@ -4,9 +4,8 @@ import { NotificationsModule } from '../notifications/notifications.module.js';
 import { LocumController } from './locum.controller.js';
 import { LocumService } from './locum.service.js';
 @Module({
-    imports: [AuthModule, NotificationsModule],
-    controllers: [LocumController],
-    providers: [LocumService],
+  imports: [AuthModule, NotificationsModule],
+  controllers: [LocumController],
+  providers: [LocumService],
 })
-export class LocumModule {
-}
+export class LocumModule {}

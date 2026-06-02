@@ -1,5 +1,10 @@
 import type { ArgumentsHost } from '@nestjs/common';
-import { Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { AdminAuthService } from '../admin-auth.service.js';
 
@@ -19,15 +24,12 @@ export class RedirectAdminOAuthToLoginFilter implements ExceptionFilter {
     let reason: string;
     if (typeof responseBody === 'string') {
       reason = responseBody;
-    }
-    else {
+    } else {
       const msg = (responseBody as { message?: unknown }).message;
       if (Array.isArray(msg))
         reason = msg.filter((m) => typeof m === 'string').join(', ');
-      else if (typeof msg === 'string')
-        reason = msg;
-      else
-        reason = exception.message ?? 'OAuth failed';
+      else if (typeof msg === 'string') reason = msg;
+      else reason = exception.message ?? 'OAuth failed';
     }
     reason = reason.slice(0, 480);
 
@@ -36,7 +38,8 @@ export class RedirectAdminOAuthToLoginFilter implements ExceptionFilter {
       return;
     }
 
-    const errorParam = status === HttpStatus.FORBIDDEN ? 'not_allowed' : 'oauth';
+    const errorParam =
+      status === HttpStatus.FORBIDDEN ? 'not_allowed' : 'oauth';
     const redirect = this.adminAuth.buildAdminLoginUrl(errorParam, reason);
     res.redirect(HttpStatus.FOUND, redirect);
   }

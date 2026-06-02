@@ -1,8 +1,15 @@
-import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { ADMIN_AUTH_COOKIE, ADMIN_AUTH_COOKIE_OPTS } from './admin-auth.constants.js';
+import {
+  ADMIN_AUTH_COOKIE,
+  ADMIN_AUTH_COOKIE_OPTS,
+} from './admin-auth.constants.js';
 import type { Response } from 'express';
 import type { AdminJwtPayload } from './admin-auth.types.js';
 
@@ -13,8 +20,6 @@ export class AdminAuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
   ) {}
-
-
 
   getAllowedAdminEmail(): string {
     return '';
@@ -32,7 +37,9 @@ export class AdminAuthService {
     return admin;
   }
 
-  async loginWithEmail(rawEmail: string): Promise<{ adminId: string; email: string }> {
+  async loginWithEmail(
+    rawEmail: string,
+  ): Promise<{ adminId: string; email: string }> {
     const email = rawEmail.trim().toLowerCase();
     if (!email || !email.includes('@'))
       throw new UnauthorizedException('Enter a valid email address');
@@ -51,8 +58,15 @@ export class AdminAuthService {
     });
   }
 
-  async signAdminJwt(params: { adminId: string; email: string }): Promise<string> {
-    const payload: AdminJwtPayload = { sub: params.adminId, email: params.email, role: 'admin' };
+  async signAdminJwt(params: {
+    adminId: string;
+    email: string;
+  }): Promise<string> {
+    const payload: AdminJwtPayload = {
+      sub: params.adminId,
+      email: params.email,
+      role: 'admin',
+    };
     return this.jwt.signAsync(payload);
   }
 
@@ -60,8 +74,7 @@ export class AdminAuthService {
   parseAdminJwtCookieMaxAgeMs(): number {
     const raw = this.config.get<string>('ADMIN_JWT_EXPIRES_IN', '7d');
     const match = /^(\d+)([smhd])$/.exec(raw.trim());
-    if (!match)
-      return 7 * 24 * 60 * 60 * 1000;
+    if (!match) return 7 * 24 * 60 * 60 * 1000;
     const n = parseInt(match[1], 10);
     const unit = match[2];
     const mult =
@@ -76,15 +89,17 @@ export class AdminAuthService {
   }
 
   getFrontendRedirectUrl() {
-    return this.config.get<string>('ADMIN_FRONTEND_REDIRECT_URL', 'http://localhost:3001/admin');
+    return this.config.get<string>(
+      'ADMIN_FRONTEND_REDIRECT_URL',
+      'http://localhost:3001/admin',
+    );
   }
 
   /** Origin derived from ADMIN_FRONTEND_REDIRECT_URL so login links stay in sync. */
   getFrontendOrigin(): string {
     try {
       return new URL(this.getFrontendRedirectUrl()).origin;
-    }
-    catch {
+    } catch {
       return 'http://localhost:3001';
     }
   }
@@ -92,8 +107,7 @@ export class AdminAuthService {
   buildAdminLoginUrl(error: 'oauth' | 'not_allowed', reason: string): string {
     const u = new URL(`${this.getFrontendOrigin()}/admin/login`);
     u.searchParams.set('error', error);
-    if (reason)
-      u.searchParams.set('reason', reason);
+    if (reason) u.searchParams.set('reason', reason);
     return u.toString();
   }
 

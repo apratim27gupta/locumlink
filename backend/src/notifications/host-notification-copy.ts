@@ -1,6 +1,11 @@
 import { formatJobDate } from './notification-copy.js';
 
-export type HostCopyPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NORMAL' | 'LOW';
+export type HostCopyPriority =
+  | 'CRITICAL'
+  | 'HIGH'
+  | 'MEDIUM'
+  | 'NORMAL'
+  | 'LOW';
 
 export function formatHostDoctorName(
   firstName?: string | null,
@@ -22,8 +27,8 @@ export function buildH001LocumApplied(params: {
 }) {
   const when = params.dateStr ? ` on ${params.dateStr}` : '';
   const emailSubject = params.dateStr
-      ? `New Application for Your ${params.dateStr} Locum Shift`
-      : 'New Application for Your Locum Shift';
+    ? `New Application for Your ${params.dateStr} Locum Shift`
+    : 'New Application for Your Locum Shift';
   return {
     inAppTitle: emailSubject,
     inAppBody: `${params.locumName} has applied for your ${params.jobTitle} opportunity${when}. Review application now.`,
@@ -95,13 +100,14 @@ export const H005_HOST_ACCOUNT_VERIFIED = {
     `Congratulations ${hostName}! Your credentials have been verified. You can begin posting locum opportunities to connect with qualified physicians in Nova Scotia.`,
   priority: 'HIGH' as HostCopyPriority,
   actionLabel: 'Post Your First Opportunity',
-  postJobHref: '/host/post-job',
+  postJobHref: '/host/dashboard?postJob=1',
 };
 
 /** H-006 — Host verification rejected */
 export const H006_HOST_VERIFICATION_REJECTED = {
   inAppTitle: 'Action Required: Account Verification',
-  inAppBody: 'Account verification incomplete. Additional documentation required.',
+  inAppBody:
+    'Account verification incomplete. Additional documentation required.',
   emailSubject: 'Action Required: Account Verification',
   emailBody: (hostName: string, reason: string) =>
     `Hello ${hostName}, We need additional information to complete your account verification. Reason: ${reason}. Please upload the required documents to proceed.`,
@@ -165,7 +171,9 @@ export function formatHostRejectionReason(reason?: string | null): string {
     : 'Additional documentation is required';
 }
 
-export function isShiftWithin24Hours(startDate: Date | string | null | undefined): boolean {
+export function isShiftWithin24Hours(
+  startDate: Date | string | null | undefined,
+): boolean {
   if (!startDate) return false;
   const diffMs = new Date(startDate).getTime() - Date.now();
   return diffMs > 0 && diffMs <= 24 * 60 * 60 * 1000;

@@ -8,12 +8,19 @@ export function normalizeCpsns(input: string | null | undefined): string {
     return String(input ?? '').replace(/\D/g, '');
 }
 
+/** @deprecated Use hasCpsnsNumber */
 export function isCpsnsNineDigitsFormat(input: string | null | undefined): boolean {
-    return normalizeCpsns(input).length === 9;
+    return hasCpsnsNumber(input);
+}
+
+export function hasCpsnsNumber(input: string | null | undefined): boolean {
+    const raw = (input ?? '').trim();
+    if (!raw || raw === '—' || /^pending-/i.test(raw)) return false;
+    return normalizeCpsns(input).length > 0;
 }
 
 export function sanitizeCpsnsInput(raw: string): string {
-    return normalizeCpsns(raw).slice(0, 9);
+    return normalizeCpsns(raw);
 }
 
 /** True only after an admin approves CPSNS in the verifications queue. */
@@ -28,7 +35,7 @@ export function cpsnsVerificationData(
     existing: { cpsnsNumber: string | null; cpsnsVerificationStatus: CpsnsVerificationStatus } | null,
     cpsnsDigits: string,
 ): { cpsnsVerificationStatus: CpsnsVerificationStatus; cpsnsVerifiedAt: Date | null } | null {
-    if (cpsnsDigits.length !== 9) return null;
+    if (!cpsnsDigits) return null;
     if (!existing) {
         return { cpsnsVerificationStatus: 'PENDING_REVIEW', cpsnsVerifiedAt: null };
     }
@@ -75,7 +82,7 @@ export function isEligibleForCredentialQueueLocum(profile: {
     lastName?: string | null;
 }): boolean {
     if (!isInCredentialQueue(profile.cpsnsVerificationStatus)) return false;
-    const hasCpsns = isCpsnsNineDigitsFormat(profile.cpsnsId);
+    const hasCpsns = hasCpsnsNumber(profile.cpsnsId);
     const hasProfile = Boolean(
         profile.licenseFileName?.trim()
         || profile.resumeFileName?.trim()
@@ -93,7 +100,7 @@ export function isEligibleForCredentialQueueHost(profile: {
     photoIdFile?: string | null;
 }): boolean {
     if (!isInCredentialQueue(profile.cpsnsVerificationStatus)) return false;
-    const hasCpsns = isCpsnsNineDigitsFormat(profile.cpsnsNumber);
+    const hasCpsns = hasCpsnsNumber(profile.cpsnsNumber);
     const hasClinicProfile = Boolean(profile.practiceName?.trim());
     const hasDocs = Boolean(
         profile.licenseFile?.trim() || profile.photoIdFile?.trim(),
@@ -125,20 +132,16 @@ export function credentialReviewDataOnProfileSave(
 }
 
 function hasSubmittedCpsnsValue(cpsns: string | null | undefined): boolean {
-    const raw = (cpsns ?? '').trim();
-    if (!raw || raw === '—')
-        return false;
-    return !/^pending-/i.test(raw);
+    return hasCpsnsNumber(cpsns);
 }
 
-/** Nine-digit CPSNS when present; empty when missing or placeholder. */
+/** CPSNS digits when present; empty when missing or placeholder. */
 export function adminCpsnsNumberOrEmpty(
     cpsns: string | null | undefined,
 ): string {
     if (!hasSubmittedCpsnsValue(cpsns))
         return '';
-    const digits = normalizeCpsns(cpsns);
-    return isCpsnsNineDigitsFormat(digits) ? digits : '';
+    return normalizeCpsns(cpsns);
 }
 
 /** Admin tables: show CPSNS digits or "Not provided". */
@@ -165,14 +168,7 @@ export function adminVerificationStatusTag(
             color: '#92400e',
         };
     }
-    if (hasSubmittedCpsnsValue(cpsns) && !isCpsnsNineDigitsFormat(cpsns)) {
-        return {
-            label: 'Not verified',
-            background: 'rgba(234, 179, 8, 0.15)',
-            color: '#92400e',
-        };
-    }
-    if (isCpsnsNineDigitsFormat(cpsns)) {
+    if (hasSubmittedCpsnsValue(cpsns)) {
         return {
             label: 'Awaiting review',
             background: 'rgba(59, 79, 216, 0.12)',

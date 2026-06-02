@@ -17,7 +17,7 @@ import { getToken } from '@/lib/auth';
 import { hostApi } from '@/lib/api';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { HostProfile } from '@/types';
-import { sanitizeCpsnsInput } from '@/lib/cpsnsVerify';
+import { normalizeCpsns } from '@/lib/cpsnsVerify';
 import {
   CANADIAN_CITY_ROWS,
   CANADIAN_PROVINCE_NAMES,
@@ -140,8 +140,6 @@ const hostSetupModalCardBase: React.CSSProperties = {
   flexDirection: 'column',
   fontFamily: "'Inter', var(--font-family-body, DM Sans, sans-serif)",
 };
-
-const VALID_CPSNS_LENGTHS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 type ProvinceOption = {
   code: string;
@@ -302,8 +300,8 @@ export default function HostSetupPage(props: {
   }
 
   function navigateToHome() {
-    beforeClientNavigation('/home');
-    router.push('/home?skipSetup=1');
+    beforeClientNavigation('/');
+    router.push('/?skipSetup=1');
   }
 
   const step1Valid = useMemo(
@@ -760,7 +758,6 @@ export default function HostSetupPage(props: {
                       </div>
                     </div>
 
-                    {/* CPSNS — max 9 digits, any length 0–9 is valid to proceed */}
                     <div>
                       <label style={lbl}>CPSNS Number</label>
                       <input
@@ -769,10 +766,9 @@ export default function HostSetupPage(props: {
                         placeholder="License number"
                         inputMode="numeric"
                         autoComplete="off"
-                        maxLength={9}
                         value={form.cpsnsNumber}
                         onChange={(e) =>
-                          set('cpsnsNumber', sanitizeCpsnsInput(e.target.value))
+                          set('cpsnsNumber', normalizeCpsns(e.target.value))
                         }
                       />
                     </div>

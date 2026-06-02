@@ -7,4 +7,3 @@ export const CurrentAdmin = createParamDecorator(
     return req.user;
   },
 );
-

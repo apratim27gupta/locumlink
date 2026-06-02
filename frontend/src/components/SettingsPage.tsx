@@ -58,8 +58,8 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
 
   function handleLogout() {
     logout();
-    beforeClientNavigation('/home');
-    router.replace('/home');
+    // Hard redirect prevents middleware "next=/host/setup" bounce after logout.
+    window.location.replace('/');
   }
 
   async function handleTemporaryDeactivate() {
@@ -68,8 +68,7 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
       await authApi.deactivateAccount();
       clearProfileCompleteCookies();
       logout();
-      beforeClientNavigation('/home');
-      router.replace('/home');
+      window.location.replace('/');
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Could not deactivate. Try again.');
     } finally {
@@ -83,8 +82,7 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
       await (authApi as any).permanentDeleteAccount();
       clearProfileCompleteCookies();
       logout();
-      beforeClientNavigation('/home');
-      router.replace('/home');
+      window.location.replace('/');
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Could not delete account. Try again.');
     } finally {

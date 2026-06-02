@@ -3,4 +3,3 @@ export type AdminJwtPayload = {
   email: string;
   role: 'admin';
 };
-

@@ -284,7 +284,7 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            padding: 0,
+            paddingTop: 10,
             gap: 24,
             marginTop: 'auto',
         }}>

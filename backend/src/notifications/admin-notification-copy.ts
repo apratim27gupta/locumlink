@@ -78,6 +78,8 @@ export function formatClinicLocation(
   city?: string | null,
   province?: string | null,
 ): string {
-  const parts = [clinic, [city, province].filter(Boolean).join(', ')].filter(Boolean);
+  const parts = [clinic, [city, province].filter(Boolean).join(', ')].filter(
+    Boolean,
+  );
   return parts.join(', ') || 'Location pending';
 }

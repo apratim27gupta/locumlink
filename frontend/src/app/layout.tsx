@@ -30,12 +30,15 @@ export const metadata: Metadata = {
         'mobile-web-app-capable': 'yes',
     },
     icons: {
-        icon: [{ url: '/logo.png', sizes: '192x192', type: 'image/png' }],
-        apple: [{ url: '/apple.png', sizes: '180x180', type: 'image/png' }],
+        icon: [
+            { url: '/logo.png', sizes: '192x192', type: 'image/png' },
+            { url: '/logo.png', sizes: '512x512', type: 'image/png' },
+        ],
+        apple: [{ url: '/logo.png', sizes: '180x180', type: 'image/png' }],
     },
 };
 export const viewport: Viewport = {
-    themeColor: '#1a56db',
+    themeColor: '#38C6C6',
     width: 'device-width',
     initialScale: 1,
     maximumScale: 1,
@@ -56,7 +59,6 @@ export default function RootLayout({ children, }: {
                     <Providers>{children}</Providers>
                 </div>
 <GoogleAnalytics gaId="G-JLBQZSQFW3" />
-            <script dangerouslySetInnerHTML={{ __html: `if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js")); }` }} />
             </body>
         </html>
     );

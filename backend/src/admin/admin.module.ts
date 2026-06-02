@@ -11,4 +11,3 @@ import { AdminService } from './admin.service.js';
   providers: [AdminService],
 })
 export class AdminModule {}
-

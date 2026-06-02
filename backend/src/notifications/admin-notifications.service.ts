@@ -14,7 +14,11 @@ export type AdminNotifEventType =
   | 'A_003_CREDENTIAL_UPLOADED'
   | 'A_004_ACCOUNT_FLAGGED';
 
-export type AdminNotificationPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NORMAL';
+export type AdminNotificationPriority =
+  | 'CRITICAL'
+  | 'HIGH'
+  | 'MEDIUM'
+  | 'NORMAL';
 
 export type AdminNotificationItem = {
   id: string;

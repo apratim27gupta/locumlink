@@ -2,6 +2,7 @@
 import EmojiPicker from 'emoji-picker-react';
 import { useEffect, useState, useRef, useCallback, useMemo, Suspense, type MouseEvent as ReactMouseEvent, } from 'react';
 import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
+import { onPwaRefresh } from '@/lib/pwaEvents';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
@@ -565,6 +566,12 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     useVisibilityPolling(() => {
         void pollMessages();
     }, 10_000, Boolean(selectedPartnerId) && !authLoading && Boolean(getToken()));
+    useEffect(() => {
+        if (!selectedPartnerId || !getToken()) return;
+        return onPwaRefresh(() => {
+            void pollMessages();
+        });
+    }, [selectedPartnerId, pollMessages]);
     useEffect(() => {
         if (role !== 'host' || !selectedPartnerId || !composeJobPostingId) {
             setThreadHostApplication(null);

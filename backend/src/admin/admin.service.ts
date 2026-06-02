@@ -24,6 +24,11 @@ import {
   isEligibleForCredentialQueueHost,
   isEligibleForCredentialQueueLocum,
 } from '../cpsns/cpsns-verified.js';
+import {
+  analyticsSummaryToCsv,
+  buildAnalyticsSummary,
+  type AnalyticsSummary,
+} from './admin-analytics.util.js';
 
 const VERIFICATION_PENDING_FILTER: VerificationStatus[] = [
   VerificationStatus.UNVERIFIED,
@@ -72,7 +77,10 @@ export class AdminService {
     private readonly notifService: NotificationsService,
   ) {}
 
-  private profileField(label: string, value: unknown): { label: string; value: string } | null {
+  private profileField(
+    label: string,
+    value: unknown,
+  ): { label: string; value: string } | null {
     if (value === null || value === undefined) return null;
     const s = String(value).trim();
     if (!s) return null;
@@ -92,8 +100,7 @@ export class AdminService {
   } | null> {
     const path = storagePath?.trim();
     if (!path) return null;
-    const fileName =
-      displayName?.trim() || path.split('/').pop() || label;
+    const fileName = displayName?.trim() || path.split('/').pop() || label;
     const signedUrl = await this.gcs.signedUrl(path);
     if (!signedUrl) return null;
     return { id, label, fileName, signedUrl };
@@ -202,6 +209,22 @@ export class AdminService {
       fillRate,
       avgTimesToPlacementHours,
     };
+  }
+
+  async analyticsSummary(): Promise<AnalyticsSummary> {
+    return buildAnalyticsSummary(this.prisma);
+  }
+
+  async exportAnalyticsCsv(admin: AdminJwtPayload): Promise<string> {
+    const summary = await buildAnalyticsSummary(this.prisma);
+    this.audit.log({
+      adminActorId: admin.sub,
+      action: AuditAction.EXPORT,
+      entity: 'AnalyticsReport',
+      endpoint: '/api/admin/analytics/export',
+      actorRole: 'admin',
+    });
+    return analyticsSummaryToCsv(summary);
   }
 
   async listUsers(params: { q?: string; page: number; pageSize: number }) {
@@ -456,8 +479,7 @@ export class AdminService {
       id: p.id,
       userId: p.userId,
       email: p.user.email,
-      name:
-        [p.firstName, p.lastName].filter(Boolean).join(' ').trim() || '—',
+      name: [p.firstName, p.lastName].filter(Boolean).join(' ').trim() || '—',
       cpsns: p.cpsnsId,
       submittedAt: p.updatedAt.toISOString(),
       cpsnsVerificationStatus: p.cpsnsVerificationStatus,
@@ -472,7 +494,10 @@ export class AdminService {
       userId: p.userId,
       email: p.user.email,
       name:
-        [p.contactFirstName, p.contactLastName].filter(Boolean).join(' ').trim() ||
+        [p.contactFirstName, p.contactLastName]
+          .filter(Boolean)
+          .join(' ')
+          .trim() ||
         p.practiceName ||
         '—',
       cpsns: p.cpsnsNumber ?? '—',
@@ -634,7 +659,10 @@ export class AdminService {
       this.profileField('First name', profile.firstName),
       this.profileField('Last name', profile.lastName),
       this.profileField('CPSNS', profile.cpsnsId),
-      this.profileField('Specialty', profile.specializationText ?? profile.specialty),
+      this.profileField(
+        'Specialty',
+        profile.specializationText ?? profile.specialty,
+      ),
       this.profileField('Years of experience', profile.yearsOfExperience),
       this.profileField(
         'Address',
@@ -850,7 +878,9 @@ export class AdminService {
         [profile.contactFirstName, profile.contactLastName]
           .filter(Boolean)
           .join(' ')
-          .trim() || profile.practiceName || '—',
+          .trim() ||
+        profile.practiceName ||
+        '—',
       cpsns: updated.cpsnsNumber ?? '—',
       submittedAt: updated.updatedAt.toISOString(),
       cpsnsVerificationStatus: updated.cpsnsVerificationStatus,

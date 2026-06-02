@@ -81,7 +81,9 @@ export class AdminController {
     @Query('profileType') profileType: string | undefined,
   ) {
     const hint =
-      profileType === 'locum' || profileType === 'host' ? profileType : undefined;
+      profileType === 'locum' || profileType === 'host'
+        ? profileType
+        : undefined;
     const resolved = await this.admin.resolveVerificationProfileType(
       profileId,
       hint,
@@ -134,9 +136,31 @@ export class AdminController {
       }),
     };
   }
+
+  @Get('analytics/summary')
+  async analyticsSummary() {
+    return this.admin.analyticsSummary();
+  }
+
+  @Get('analytics/export')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  async exportAnalytics(
+    @CurrentAdmin() admin: AdminJwtPayload,
+    @Res() res: Response,
+  ) {
+    const date = new Date().toISOString().slice(0, 10);
+    const csv = await this.admin.exportAnalyticsCsv(admin);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="locumlink-analytics-${date}.csv"`,
+    );
+    return res.status(200).send(`\uFEFF${csv}`);
+  }
 }
 
-function parseVerificationTab(raw?: string): 'PENDING_TAB' | 'VERIFIED' | 'REJECTED' {
+function parseVerificationTab(
+  raw?: string,
+): 'PENDING_TAB' | 'VERIFIED' | 'REJECTED' {
   const s = raw?.trim();
   if (s === 'VERIFIED') return 'VERIFIED';
   if (s === 'REJECTED') return 'REJECTED';

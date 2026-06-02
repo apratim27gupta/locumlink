@@ -21,6 +21,8 @@ const nextConfig: NextConfig = {
       { source: '/favicon.ico', destination: '/logo1.png' },
       { source: '/api/admin-auth/:path*', destination: `${apiBase}/api/admin-auth/:path*` },
       { source: '/api/admin/stats', destination: `${apiBase}/api/admin/stats` },
+      { source: '/api/admin/analytics/summary', destination: `${apiBase}/api/admin/analytics/summary` },
+      { source: '/api/admin/analytics/export', destination: `${apiBase}/api/admin/analytics/export` },
       { source: '/api/auth/:path*',       destination: `${apiBase}/api/auth/:path*` },
       { source: '/api/host/:path*',       destination: `${apiBase}/api/host/:path*` },
       { source: '/api/locum/profile', destination: `${apiBase}/api/locum/profile` },
@@ -47,6 +49,15 @@ export default withPWA({
   dest: 'public',
   register: true,
   skipWaiting: true,
+  customWorkerDir: 'worker',
   disable: process.env.NODE_ENV === 'development',
   fallbacks: { document: '/offline' },
+  workboxOptions: {
+    runtimeCaching: [
+      {
+        urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/api/'),
+        handler: 'NetworkOnly',
+      },
+    ],
+  },
 })(nextConfig);

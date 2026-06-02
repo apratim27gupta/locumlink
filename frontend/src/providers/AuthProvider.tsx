@@ -249,6 +249,7 @@ export function AuthProvider({ children }: {
     }
     function logout(): void {
         clearAuth();
+        clearLastPath();
         void getSupabase().auth.signOut();
         setUserId(null);
         setRoleState(null);

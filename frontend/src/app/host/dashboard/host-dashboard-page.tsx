@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef, useLayoutEffect, type MouseEvent as ReactMouseEvent, } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { getToken } from '@/lib/auth';
 import { ensureProfileMarkedCompleteFromServer } from '@/lib/profileCompleteSync';
@@ -701,10 +701,12 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
               <span style={{
                         display: 'inline-flex',
                         alignItems: 'center',
+                        justifyContent: 'center',
                         padding: '4px 10px',
                         borderRadius: 8,
                         fontSize: 13,
                         fontWeight: 600,
+                        minWidth: 40,
                         background: app.locumResponse === 'ACCEPTED' ? '#D1FAE5' : app.locumResponse === 'REJECTED' ? '#FEE2E2' : '#F3F4F6',
                         color: app.locumResponse === 'ACCEPTED' ? '#065F46' : app.locumResponse === 'REJECTED' ? '#991B1B' : '#6B7280',
                     }}>
@@ -1061,7 +1063,7 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
 }
 function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false, }: {
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (createdJob: Job) => void;
     onDraftSaved?: (job: Job) => void | Promise<void>;
     verified?: boolean;
 }) {
@@ -1071,6 +1073,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     const [step, setStep] = useState(1);
     const [jobTitle, setJobTitle] = useState('');
     const [jobDescription, setJobDescription] = useState('');
+    const [location, setLocation] = useState('');
     const [respBySection, setRespBySection] = useState<Record<string, Set<string>>>(() => emptyResponsibilitySelection());
     const lastAutoRespJobTitleRef = useRef<string | null>(null);
     const [respCustom, setRespCustom] = useState('');
@@ -1090,6 +1093,11 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     const [saveDraftPromptOpen, setSaveDraftPromptOpen] = useState(false);
     const [submitError, setSubmitError] = useState('');
     const postedRef = useRef(false);
+    const jobDateMinIso = todayIsoDateLocal();
+    const startIsoForEndMin = parseMmDdYyyyToIso(startDateInput);
+    const jobEndMinIso = startIsoForEndMin
+        ? maxIsoDate(jobDateMinIso, startIsoForEndMin)
+        : jobDateMinIso;
     const jobTitleWrapRef = useRef<HTMLDivElement>(null);
     const jobTitleMenuRef = useRef<HTMLDivElement>(null);
     const [jobTitleListOpen, setJobTitleListOpen] = useState(false);
@@ -1234,6 +1242,8 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     function hasDraftContent(): boolean {
         if (jobTitle.trim() || jobDescription.trim() || respCustom.trim())
             return true;
+        if (location.trim())
+            return true;
         if (startDateInput.trim() || endDateInput.trim() || ratePerDay.trim() || yearsExp.trim())
             return true;
         if (travelReq)
@@ -1256,6 +1266,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             title: jobTitle.trim() || 'Draft locum shift',
             description: jobDescription.trim() || undefined,
             keyResponsibilities: keyResponsibilities.length ? keyResponsibilities : undefined,
+            location: location.trim() || undefined,
             startDate: startIso || undefined,
             endDate: endIso || undefined,
             startTime: startTime || undefined,
@@ -1361,6 +1372,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 title: jobTitle.trim(),
                 description: jobDescription.trim() || undefined,
                 keyResponsibilities: buildKeyResponsibilitiesPayload(),
+                location: location.trim() || undefined,
                 startDate: startIso || undefined,
                 endDate: endIso || undefined,
                 startTime: startTime || undefined,
@@ -1372,9 +1384,9 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 scheduleFlexible: false,
                 status: verified ? 'ACTIVE' : 'DRAFT',
             };
-            await hostApi.createJob(payload);
+            const { job } = await hostApi.createJob(payload);
             postedRef.current = true;
-            onSuccess();
+            onSuccess(job);
         }
         catch (e: unknown) {
             if (e instanceof ApiHttpError && e.status === 401) {
@@ -1718,6 +1730,15 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                             resize: 'vertical',
                         } as React.CSSProperties} value={respCustom} onChange={(e) => setRespCustom(e.target.value)} placeholder="Other responsibilities (one per line)"/>
                     </div>
+                    <div>
+                      <label style={lbl}>Location</label>
+                      <input
+                        style={fieldInp}
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                        placeholder="Clinic address or city"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2054,13 +2075,15 @@ export default function HostDashboard(props: {
 }) {
     useNextPageClientProps(props);
     const router = useRouter();
+    const searchParams = useSearchParams();
     const pathname = usePathname();
     const { profileComplete, completeProfile, isLoading: authLoading, userId } = useAuth();
     const [profileGateResolved, setProfileGateResolved] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const openedFromQueryRef = useRef(false);
     const [activeTab, setActiveTab] = useState<'active' | 'ongoing' | 'recent' | 'draft' | 'deleted'>('active');
     const [showJobOverlay, setShowJobOverlay] = useState(false);
-    const [showJobPostedConfirmation, setShowJobPostedConfirmation] = useState(false);
+    const [jobPostConfirmation, setJobPostConfirmation] = useState<null | 'posted' | 'draft'>(null);
     const [jobs, setJobs] = useState<Job[]>([]);
     const [deletedJobs, setDeletedJobs] = useState<Job[]>([]);
     const [loadingData, setLoadingData] = useState(false);
@@ -2140,6 +2163,16 @@ export default function HostDashboard(props: {
         setMounted(true);
     }, []);
     useEffect(() => {
+        if (!mounted) return;
+        if (openedFromQueryRef.current) return;
+        if (searchParams?.get('postJob') !== '1') return;
+        openedFromQueryRef.current = true;
+        setShowJobOverlay(true);
+        // Clean URL without adding history
+        beforeClientNavigation('/host/dashboard');
+        router.replace('/host/dashboard');
+    }, [mounted, searchParams, router]);
+    useEffect(() => {
         if (!mounted || authLoading)
             return;
         if (profileComplete) {
@@ -2176,11 +2209,11 @@ export default function HostDashboard(props: {
         void loadDashboardFromApi();
     }, [mounted, authLoading, userId, loadDashboardFromApi, router]);
     useEffect(() => {
-        if (!showJobPostedConfirmation)
+        if (!jobPostConfirmation)
             return;
-        const t = window.setTimeout(() => setShowJobPostedConfirmation(false), 12000);
+        const t = window.setTimeout(() => setJobPostConfirmation(null), 12000);
         return () => window.clearTimeout(t);
-    }, [showJobPostedConfirmation]);
+    }, [jobPostConfirmation]);
     const today = new Date();
     const jobStatus = (j: Job) => String(j.status ?? '').toUpperCase();
     const draftJobs = jobs.filter((j) => jobStatus(j) === 'DRAFT');
@@ -2263,28 +2296,32 @@ export default function HostDashboard(props: {
             gap: 24,
         }}>
           
-            {showJobPostedConfirmation && (<div role="status" aria-live="polite" style={{
+            {jobPostConfirmation && (<div role="status" aria-live="polite" style={{
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: 14,
                     padding: '16px 18px',
                     borderRadius: 10,
-                    background: '#ECFDF5',
-                    border: '1px solid #A7F3D0',
-                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.12)',
+                    background: jobPostConfirmation === 'draft' ? '#FFFBEB' : '#ECFDF5',
+                    border: jobPostConfirmation === 'draft'
+                        ? '1px solid #FDE68A'
+                        : '1px solid #A7F3D0',
+                    boxShadow: jobPostConfirmation === 'draft'
+                        ? '0 4px 14px rgba(245, 158, 11, 0.12)'
+                        : '0 4px 14px rgba(16, 185, 129, 0.12)',
                 }}>
               <div style={{
                         flexShrink: 0,
                         width: 36,
                         height: 36,
                         borderRadius: '50%',
-                        background: '#D1FAE5',
+                        background: jobPostConfirmation === 'draft' ? '#FEF3C7' : '#D1FAE5',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: 18,
                         lineHeight: 1,
-                        color: '#047857',
+                        color: jobPostConfirmation === 'draft' ? '#92400E' : '#047857',
                     }} aria-hidden>
                 ✓
               </div>
@@ -2294,12 +2331,14 @@ export default function HostDashboard(props: {
                         fontFamily: 'Inter, sans-serif',
                         fontWeight: 700,
                         fontSize: 'var(--font-heading)',
-                        color: '#065F46',
+                        color: jobPostConfirmation === 'draft' ? '#92400E' : '#065F46',
                         lineHeight: 1.35,
                     }}>
-                You have posted your locum shifts successfully.
+                {jobPostConfirmation === 'draft'
+                    ? 'Shift is saved under "Draft Locum Shifts". Please post again after profile is verified. Thanks.'
+                    : 'You have posted your locum shifts successfully.'}
               </div>
-              <button type="button" onClick={() => setShowJobPostedConfirmation(false)} aria-label="Dismiss confirmation" style={{
+              <button type="button" onClick={() => setJobPostConfirmation(null)} aria-label="Dismiss confirmation" style={{
                         flexShrink: 0,
                         border: 'none',
                         background: 'transparent',
@@ -2307,7 +2346,7 @@ export default function HostDashboard(props: {
                         padding: '4px 8px',
                         fontSize: 22,
                         lineHeight: 1,
-                        color: '#065F46',
+                        color: jobPostConfirmation === 'draft' ? '#92400E' : '#065F46',
                         opacity: 0.75,
                     }}>
               ×
@@ -2428,7 +2467,59 @@ export default function HostDashboard(props: {
             whiteSpace: 'normal',
             maxWidth: 520,
         }}>
-                    {profileStatusCard.subtitle}
+                    {(() => {
+                      const variant = profileStatusCard.glyphVariant;
+                      const isUnderVerification = variant === 'underReview';
+                      const isVerified = variant === 'verified';
+                      if (!isUnderVerification && !isVerified) return profileStatusCard.subtitle;
+
+                      const pill =
+                        isUnderVerification ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '3px 10px',
+                              borderRadius: 999,
+                              background: '#FEF2F2',
+                              border: '1px solid #FECACA',
+                              color: '#DC2626',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              lineHeight: '16px',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            Under verification
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '3px 10px',
+                              borderRadius: 999,
+                              background: '#DBEAFE',
+                              border: '1px solid #93C5FD',
+                              color: '#1E40AF',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              lineHeight: '16px',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            CPSNS verified
+                          </span>
+                        );
+
+                      return (
+                        <>
+                          {profilePct}% completed · {pill}
+                        </>
+                      );
+                    })()}
                   </span>
                 </div>
               </div>
@@ -2599,7 +2690,7 @@ export default function HostDashboard(props: {
                         type="button"
                         onClick={() => {
                           if (!verified) {
-                            window.alert('Your CPSNS number is not verified. Please complete verification before posting a shift.');
+                            window.alert('Shift is saved under "Draft Locum Shifts". Please post again after profile is verified. Thanks.');
                             return;
                           }
                           setShowJobOverlay(true);
@@ -2639,7 +2730,7 @@ export default function HostDashboard(props: {
                     router.push(href);
                 }} onPublish={async (j) => {
                     if (!verified) {
-                      window.alert('Your CPSNS number is not verified. Please complete verification before posting a shift.');
+                      window.alert('Shift is saved under "Draft Locum Shifts". Please post again after profile is verified. Thanks.');
                       return;
                     }
                     try {
@@ -2666,9 +2757,15 @@ export default function HostDashboard(props: {
                 catch {
                     /* keep optimistic draft row */
                 }
-            }} onSuccess={() => {
+            }} onSuccess={(createdJob) => {
                 setShowJobOverlay(false);
-                setShowJobPostedConfirmation(true);
+                if (String(createdJob.status ?? '').toUpperCase() === 'DRAFT') {
+                  setJobPostConfirmation('draft');
+                  setActiveTab('draft');
+                } else {
+                  setJobPostConfirmation('posted');
+                  setActiveTab('active');
+                }
                 void loadDashboardFromApi({ silent: true });
             }}/>)}
 

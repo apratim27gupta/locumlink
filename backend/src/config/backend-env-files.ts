@@ -5,10 +5,8 @@ import { resolve } from 'node:path';
 export function resolveBackendRootDir(): string {
   const cwd = process.cwd();
   const nestedBackend = resolve(cwd, 'backend');
-  if (existsSync(resolve(nestedBackend, 'package.json')))
-    return nestedBackend;
-  if (existsSync(resolve(cwd, 'package.json')))
-    return cwd;
+  if (existsSync(resolve(nestedBackend, 'package.json'))) return nestedBackend;
+  if (existsSync(resolve(cwd, 'package.json'))) return cwd;
   return cwd;
 }
 
@@ -28,9 +26,16 @@ export function backendDevelopmentEnvPaths(): string[] {
       ? process.env.NODE_ENV.trim()
       : 'development';
   const root = resolveBackendRootDir();
-  return [
+  const parent = resolve(root, '..');
+  const candidates = [
+    // Repo root env (Prisma CLI + shared scripts typically load this)
+    resolve(parent, '.env'),
+    resolve(parent, `.env.${nodeEnv}`),
+    resolve(parent, '.env.local'),
+    // Backend-specific env overlays
     resolve(root, '.env'),
     resolve(root, `.env.${nodeEnv}`),
     resolve(root, '.env.local'),
-  ].filter((p) => existsSync(p));
+  ];
+  return candidates.filter((p) => existsSync(p));
 }

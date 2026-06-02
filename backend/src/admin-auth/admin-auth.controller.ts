@@ -1,11 +1,23 @@
-import { Body, Controller, Get, Post, Req, Res, UseFilters, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  Res,
+  UseFilters,
+  UseGuards,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import type { AdminJwtPayload } from './admin-auth.types.js';
 import { Public } from '../auth/decorators/public.decorator.js';
 import { AdminAuthService } from './admin-auth.service.js';
-import { ADMIN_GOOGLE_STRATEGY, resolveAdminGoogleCallbackUrl } from './admin-auth.constants.js';
+import {
+  ADMIN_GOOGLE_STRATEGY,
+  resolveAdminGoogleCallbackUrl,
+} from './admin-auth.constants.js';
 import { AdminJwtAuthGuard } from './guards/admin-jwt-auth.guard.js';
 import { AdminGoogleEnabledGuard } from './guards/admin-google-enabled.guard.js';
 import { RedirectAdminOAuthToLoginFilter } from './filters/redirect-admin-oauth-login.filter.js';
@@ -20,10 +32,7 @@ export class AdminAuthController {
   ) {}
 
   @Post('login')
-  async emailLogin(
-    @Body() body: { email?: string },
-    @Res() res: Response,
-  ) {
+  async emailLogin(@Body() body: { email?: string }, @Res() res: Response) {
     const u = await this.adminAuth.loginWithEmail(body.email ?? '');
     const token = await this.adminAuth.signAdminJwt({
       adminId: u.adminId,

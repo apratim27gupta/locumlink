@@ -50,8 +50,8 @@ export function getHostProfileStatusCard(
     if (isHostVerificationPending(profile?.cpsnsVerificationStatus)) {
         const queueLabel =
             profile?.cpsnsVerificationStatus === 'PENDING_REVIEW'
-                ? 'Under review on admin panel'
-                : 'In credential verification queue';
+                ? 'Under verification'
+                : 'Under verification';
         return {
             title: 'Your account is under verification',
             subtitle: allDone

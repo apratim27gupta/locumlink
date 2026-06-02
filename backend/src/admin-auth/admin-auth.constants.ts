@@ -49,4 +49,3 @@ export function resolveAdminGoogleCallbackUrl(config: ConfigService): string {
     return explicit;
   }
 }
-

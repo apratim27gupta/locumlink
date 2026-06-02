@@ -2,12 +2,21 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Profile, Strategy } from 'passport-google-oauth20';
-import { ADMIN_GOOGLE_STRATEGY, resolveAdminGoogleCallbackUrl } from '../admin-auth.constants.js';
+import {
+  ADMIN_GOOGLE_STRATEGY,
+  resolveAdminGoogleCallbackUrl,
+} from '../admin-auth.constants.js';
 import { AdminAuthService } from '../admin-auth.service.js';
 
 @Injectable()
-export class AdminGoogleStrategy extends PassportStrategy(Strategy, ADMIN_GOOGLE_STRATEGY) {
-  constructor(config: ConfigService, private readonly adminAuth: AdminAuthService) {
+export class AdminGoogleStrategy extends PassportStrategy(
+  Strategy,
+  ADMIN_GOOGLE_STRATEGY,
+) {
+  constructor(
+    config: ConfigService,
+    private readonly adminAuth: AdminAuthService,
+  ) {
     const id = config.get<string>('GOOGLE_ADMIN_CLIENT_ID', '').trim();
     const secret = config.get<string>('GOOGLE_ADMIN_CLIENT_SECRET', '').trim();
     const callbackURL = resolveAdminGoogleCallbackUrl(config);

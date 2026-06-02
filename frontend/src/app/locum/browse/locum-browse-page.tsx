@@ -1354,7 +1354,7 @@ export default function LocumBrowsePage(props: {
                           >
                             <div
                               style={{
-                                fontSize: 'var(--font-small)',
+                                fontSize: 'var(--font-body)',
                                 fontWeight: 'var(--font-weight-bold)',
                                 color: '#374151',
                                 marginBottom: 4,
@@ -1388,7 +1388,7 @@ export default function LocumBrowsePage(props: {
                           <div>
                             <div
                               style={{
-                                fontSize: 'var(--font-small)',
+                                fontSize: 'var(--font-body)',
                                 fontWeight: 'var(--font-weight-bold)',
                                 color: '#374151',
                                 marginBottom: 4,

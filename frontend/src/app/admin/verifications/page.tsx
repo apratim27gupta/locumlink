@@ -210,7 +210,7 @@ export default function AdminVerificationsPage() {
               <th>Status</th>
               <th>Submitted</th>
               <th>Documents</th>
-              <th>Wait Time</th>
+              <th className="wait-time-col">Wait Time</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -263,12 +263,12 @@ export default function AdminVerificationsPage() {
                       <span className="tag">CPSNS License</span>
                       <span className="tag">Profile</span>
                     </td>
-                    <td>
+                    <td className="wait-time-col">
                       <span
-                        className={`text-sm flex items-center gap-1${urgent ? ' font-medium' : ''}`}
-                        style={{ color: urgent ? '#dc2626' : '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}
+                        className={`wait-time-value text-sm${urgent ? ' font-medium' : ''}`}
+                        style={{ color: urgent ? '#dc2626' : '#64748b' }}
                       >
-                        <Clock size={16} />
+                        <Clock size={16} aria-hidden />
                         {days === 0 ? '< 1 day' : `${days} day${days === 1 ? '' : 's'}`}
                       </span>
                     </td>

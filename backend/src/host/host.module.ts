@@ -6,9 +6,8 @@ import { HostController } from './host.controller.js';
 import { HostPublicController } from './host-public.controller.js';
 import { HostService } from './host.service.js';
 @Module({
-    imports: [AuthModule, GcsModule, NotificationsModule],
-    controllers: [HostController, HostPublicController],
-    providers: [HostService],
+  imports: [AuthModule, GcsModule, NotificationsModule],
+  controllers: [HostController, HostPublicController],
+  providers: [HostService],
 })
-export class HostModule {
-}
+export class HostModule {}

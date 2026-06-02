@@ -15,7 +15,17 @@ import { PrismaModule } from '../prisma/prisma.module.js';
     PassportModule.register({ defaultStrategy: 'jwt' }),
   ],
   controllers: [NotificationsController],
-  providers: [NotificationsService, AdminNotificationsService, PushService, EmailService],
-  exports: [NotificationsService, AdminNotificationsService, PushService, EmailService],
+  providers: [
+    NotificationsService,
+    AdminNotificationsService,
+    PushService,
+    EmailService,
+  ],
+  exports: [
+    NotificationsService,
+    AdminNotificationsService,
+    PushService,
+    EmailService,
+  ],
 })
 export class NotificationsModule {}

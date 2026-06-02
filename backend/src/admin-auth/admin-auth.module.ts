@@ -19,8 +19,12 @@ import { RedirectAdminOAuthToLoginFilter } from './filters/redirect-admin-oauth-
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('ADMIN_JWT_SECRET') ?? config.getOrThrow<string>('JWT_SECRET'),
-        signOptions: { expiresIn: config.get<string>('ADMIN_JWT_EXPIRES_IN', '7d') as any },
+        secret:
+          config.get<string>('ADMIN_JWT_SECRET') ??
+          config.getOrThrow<string>('JWT_SECRET'),
+        signOptions: {
+          expiresIn: config.get<string>('ADMIN_JWT_EXPIRES_IN', '7d') as any,
+        },
       }),
     }),
   ],
@@ -35,4 +39,3 @@ import { RedirectAdminOAuthToLoginFilter } from './filters/redirect-admin-oauth-
   exports: [AdminAuthService],
 })
 export class AdminAuthModule {}
-

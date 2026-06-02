@@ -116,7 +116,7 @@ export async function POST(req: Request) {
         highlights: sanitizeClinicDescription(clinicDesc),
         contactFirstName: contactFirstName?.trim() || null,
         contactLastName: contactLastName?.trim() || null,
-        cpsnsNumber: cpsnsDigits.length === 9 ? cpsnsDigits : null,
+        cpsnsNumber: cpsnsDigits || null,
         speciality: speciality?.trim() || null,
         licenseFile: licenseFile ?? null,
         licenseOriginalName: licenseOriginalName?.trim() || null,
@@ -192,7 +192,7 @@ export async function PUT(req: Request) {
             contactLastName: body.contactLastName?.trim() || null,
         }),
         ...(body.cpsnsNumber !== undefined && {
-            cpsnsNumber: cpsnsDigits && cpsnsDigits.length === 9 ? cpsnsDigits : null,
+            cpsnsNumber: cpsnsDigits || null,
         }),
         ...(body.speciality !== undefined && {
             speciality: body.speciality?.trim() || null,

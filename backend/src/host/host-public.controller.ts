@@ -4,11 +4,11 @@ import { HostService } from './host.service.js';
 
 @Controller('public')
 export class HostPublicController {
-    constructor(private readonly hostService: HostService) { }
+  constructor(private readonly hostService: HostService) {}
 
-    @Public()
-    @Get('recent-host-avatars')
-    getRecentHostAvatars() {
-        return this.hostService.getRecentHostAvatarUrls();
-    }
+  @Public()
+  @Get('recent-host-avatars')
+  getRecentHostAvatars() {
+    return this.hostService.getRecentHostAvatarUrls();
+  }
 }

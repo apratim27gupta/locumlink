@@ -27,6 +27,8 @@ const backendRoutes = [
   { method: 'GET', path: '/api/admin/users', expect: [401] },
   { method: 'GET', path: '/api/admin/verifications', expect: [401] },
   { method: 'GET', path: '/api/admin/audit-logs', expect: [401] },
+  { method: 'GET', path: '/api/admin/analytics/summary', expect: [401] },
+  { method: 'GET', path: '/api/admin/analytics/export', expect: [401] },
 ];
 
 /** Frontend Next.js handlers (not proxied to Nest) */

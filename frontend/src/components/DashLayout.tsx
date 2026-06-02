@@ -1,6 +1,7 @@
 'use client';
 import { ReactNode, useEffect, useRef, useState, useCallback } from 'react';
 import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
+import { onPwaRefresh } from '@/lib/pwaEvents';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
@@ -134,6 +135,8 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     const [apiFirstName, setApiFirstName] = useState<string | null>(null);
     const [apiLastName, setApiLastName] = useState<string | null>(null);
     const [bellOpen, setBellOpen] = useState(false);
+    const [showAllNotifications, setShowAllNotifications] = useState(false);
+    const [selectedNotif, setSelectedNotif] = useState<NotificationItem | null>(null);
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [notifTotal, setNotifTotal] = useState(0);
     const bellRef = useRef<HTMLDivElement>(null);
@@ -211,6 +214,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             if (bellRef.current?.contains(e.target as Node))
                 return;
             setBellOpen(false);
+            setShowAllNotifications(false);
         }
         document.addEventListener('mousedown', onMouseDown);
         return () => document.removeEventListener('mousedown', onMouseDown);
@@ -272,6 +276,12 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         void fetchNotifications();
     }, 12_000, Boolean(getToken()));
     useEffect(() => {
+        if (!getToken()) return;
+        return onPwaRefresh(() => {
+            void fetchNotifications();
+        });
+    }, [fetchNotifications]);
+    useEffect(() => {
         if (!getToken())
             return;
         let cancelled = false;
@@ -292,8 +302,8 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     }, [userId]);
     function handleLogout() {
         logout();
-        beforeClientNavigation('/home');
-        router.replace('/home');
+        // Hard redirect prevents middleware "next=/host/setup" bounce after logout.
+        window.location.replace('/');
     }
     async function handleDeactivateAccount() {
         if (!getToken() || deactivateBusy)
@@ -305,8 +315,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             setAvatarMenuOpen(false);
             clearProfileCompleteCookies();
             logout();
-            beforeClientNavigation('/home');
-            router.replace('/home');
+            window.location.replace('/');
         }
         catch (err) {
             window.alert(err instanceof Error
@@ -318,19 +327,17 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         }
     }
     function handleNotifClick(notif: NotificationItem) {
-        setBellOpen(false);
-        if (!notif.read) {
-            void notificationsApi.markRead(notif.id).then(() => {
-                setNotifications((prev) => prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n)));
-                setNotifTotal((t) => Math.max(0, t - 1));
-            }).catch(() => {});
-        }
-        if (notif.href.startsWith('mailto:')) {
-            window.location.href = notif.href;
-            return;
-        }
-        beforeClientNavigation(notif.href);
-        router.push(notif.href);
+        setSelectedNotif(notif);
+
+        // Mark as seen + remove from dropdown list immediately.
+        setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
+        if (!notif.read) setNotifTotal((t) => Math.max(0, t - 1));
+
+        void notificationsApi
+            .markRead(notif.id)
+            .catch(() => {
+                // Best-effort: if this fails, keep UI responsive; next refresh will re-sync.
+            });
     }
     const mergedFirst = apiFirstName?.trim() || topbarFirstName?.trim() || '';
     const mergedLast = apiLastName?.trim() || topbarLastName?.trim() || '';
@@ -416,7 +423,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 top: 36,
                 right: 0,
                 width: 340,
-                maxHeight: 440,
+                maxHeight: showAllNotifications ? 640 : 440,
                 background: '#fff',
                 border: '1px solid #E5E7EB',
                 borderRadius: 12,
@@ -453,7 +460,8 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                       return prefs[cat] !== false;
                     }) : notifications;
                     if (visible.length === 0) return <div style={{ padding: '36px 20px', textAlign: 'center' }}><div style={{ fontSize: 28, marginBottom: 8 }}>🔔</div><div style={{ fontSize: 'var(--font-body)', color: '#9CA3AF' }}>No new notifications</div></div>;
-                    return visible.map((notif) => {
+                    const list = showAllNotifications ? visible : visible.slice(0, 3);
+                    return list.map((notif) => {
                     const isCritical = notif.priority === 'CRITICAL';
                     const isHigh = notif.priority === 'HIGH';
                     const isMedium = notif.priority === 'MEDIUM';
@@ -515,42 +523,6 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 }}>
                               {notif.title}
                             </span>
-                            {isCritical && (<span style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                    color: '#0f1523',
-                    background: '#FCA5A5',
-                    padding: '2px 6px',
-                    borderRadius: 4,
-                }}>
-                                Critical
-                              </span>)}
-                            {isHigh && (<span style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                    color: '#0f1523',
-                    background: '#FDBA74',
-                    padding: '2px 6px',
-                    borderRadius: 4,
-                }}>
-                                High
-                              </span>)}
-                            {isMedium && (<span style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                    color: '#0f1523',
-                    background: '#FDE047',
-                    padding: '2px 6px',
-                    borderRadius: 4,
-                }}>
-                                Medium
-                              </span>)}
                           </div>
                           <div style={{
                     fontSize: 'var(--font-small)',
@@ -593,19 +565,24 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 </div>
 
                 
-                {notifications.length > 0 && (<div style={{
+                {(() => {
+                  const prefs = (() => { try { const s = localStorage.getItem('notifPrefs'); return s ? JSON.parse(s) : null; } catch { return null; } })();
+                  const visible = prefs ? notifications.filter(n => {
+                    if (n.priority === 'CRITICAL' || n.priority === 'HIGH' || n.priority === 'MEDIUM') return true;
+                    const cat = n.category ?? notifCategory(n.type);
+                    if (cat === 'cancellations') return true;
+                    return prefs[cat] !== false;
+                  }) : notifications;
+                  const hasMoreThanThree = visible.length > 3;
+                  if (!hasMoreThanThree) return null;
+                  return (
+                    <div style={{
                     padding: '10px 16px',
                     borderTop: '1px solid #F3F4F6',
                     textAlign: 'center',
                 }}>
                     <button onClick={() => {
-                    setBellOpen(false);
-                    const role = getRole();
-                    const href = role === 'clinic'
-                        ? '/host/messages'
-                        : '/locum/messages';
-                    beforeClientNavigation(href);
-                    router.push(href);
+                    setShowAllNotifications(true);
                 }} style={{
                     background: 'none',
                     border: 'none',
@@ -615,11 +592,85 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     cursor: 'pointer',
                     fontFamily: 'inherit',
                 }}>
-                      View all messages →
+                      Show all notifications →
                     </button>
-                  </div>)}
+                  </div>
+                  );
+                })()}
               </div>)}
           </div>
+          {selectedNotif && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setSelectedNotif(null);
+              }}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(15, 23, 42, 0.45)',
+                zIndex: 1000,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 18,
+              }}
+            >
+              <div
+                style={{
+                  width: '100%',
+                  maxWidth: 420,
+                  background: '#fff',
+                  borderRadius: 14,
+                  border: '1px solid #E5E7EB',
+                  boxShadow: '0 18px 60px rgba(0,0,0,0.22)',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    padding: '14px 16px 10px',
+                    borderBottom: '1px solid #F3F4F6',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0B0F1F', lineHeight: 1.3 }}>
+                      {selectedNotif.title}
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 12, color: '#9CA3AF' }}>
+                      {fmtNotifTime(selectedNotif.createdAt)}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Close notification"
+                    onClick={() => setSelectedNotif(null)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      padding: '2px 6px',
+                      fontSize: 22,
+                      lineHeight: 1,
+                      color: '#6B7280',
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+                <div style={{ padding: '14px 16px 16px' }}>
+                  <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                    {selectedNotif.body}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           
           <div ref={avatarMenuRef} style={{ position: 'relative' }}>
