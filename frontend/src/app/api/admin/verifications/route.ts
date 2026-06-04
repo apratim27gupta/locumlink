@@ -2,15 +2,24 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAdminSession } from '@/lib/admin-auth-server';
 import {
-  adminCpsnsNumberOrEmpty,
+  credentialQueueSubmittedAt,
   credentialReviewDataOnProfileSave,
+  cpsnsDigitsForReview,
+  formatAdminCpsnsDisplay,
   isEligibleForCredentialQueueHost,
   isEligibleForCredentialQueueLocum,
-  normalizeCpsns,
+  mergeCredentialSubmittedAtPatch,
 } from '@/lib/cpsnsVerify';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+function sortQueueItems<T extends { submittedAt: string }>(items: T[]): T[] {
+  return [...items].sort(
+    (a, b) =>
+      new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime(),
+  );
+}
 
 export async function GET(req: Request) {
   const session = await getAdminSession(req);
@@ -37,12 +46,12 @@ export async function GET(req: Request) {
 
   const locumProfiles = await Promise.all(
     locumProfilesRaw.map(async (p) => {
-      const digits = normalizeCpsns(p.cpsnsId);
+      const digits = cpsnsDigitsForReview(p.cpsnsId);
       const profileSubmittedForReview = Boolean(
-        p.licenseFileName?.trim()
-        || p.resumeFileName?.trim()
-        || p.firstName?.trim()
-        || p.lastName?.trim(),
+        p.licenseFileName?.trim() ||
+        p.resumeFileName?.trim() ||
+        p.firstName?.trim() ||
+        p.lastName?.trim(),
       );
       const patch = credentialReviewDataOnProfileSave(
         {
@@ -60,20 +69,19 @@ export async function GET(req: Request) {
       }
       return db.locumProfile.update({
         where: { id: p.id },
-        data: patch,
+        data: mergeCredentialSubmittedAtPatch(p.cpsnsVerificationStatus, patch),
         include: { user: { select: { email: true, createdAt: true } } },
       });
     }),
   );
 
-  // Promote stale UNVERIFIED hosts with a valid CPSNS into the review queue.
   const hostProfiles = await Promise.all(
     hostProfilesRaw.map(async (p) => {
-      const digits = normalizeCpsns(p.cpsnsNumber);
+      const digits = cpsnsDigitsForReview(p.cpsnsNumber);
       const profileSubmittedForReview = Boolean(
-        p.licenseFile?.trim()
-        || p.photoIdFile?.trim()
-        || p.practiceName?.trim(),
+        p.licenseFile?.trim() ||
+        p.photoIdFile?.trim() ||
+        p.practiceName?.trim(),
       );
       const patch = credentialReviewDataOnProfileSave(
         {
@@ -91,7 +99,7 @@ export async function GET(req: Request) {
       }
       return db.hostProfile.update({
         where: { id: p.id },
-        data: patch,
+        data: mergeCredentialSubmittedAtPatch(p.cpsnsVerificationStatus, patch),
         include: { user: { select: { email: true, createdAt: true } } },
       });
     }),
@@ -100,15 +108,15 @@ export async function GET(req: Request) {
   const locumItems = locumProfiles
     .filter((p) => isEligibleForCredentialQueueLocum(p))
     .map((p) => ({
-    id: p.id,
-    profileType: 'locum' as const,
-    userId: p.userId,
-    email: p.user.email,
-    name: [p.firstName, p.lastName].filter(Boolean).join(' ') || p.user.email,
-    cpsns: adminCpsnsNumberOrEmpty(p.cpsnsId),
-    submittedAt: p.updatedAt.toISOString(),
-    cpsnsVerificationStatus: p.cpsnsVerificationStatus,
-  }));
+      id: p.id,
+      profileType: 'locum' as const,
+      userId: p.userId,
+      email: p.user.email,
+      name: [p.firstName, p.lastName].filter(Boolean).join(' ') || p.user.email,
+      cpsns: formatAdminCpsnsDisplay(p.cpsnsId),
+      submittedAt: credentialQueueSubmittedAt(p),
+      cpsnsVerificationStatus: p.cpsnsVerificationStatus,
+    }));
 
   const hostItems = hostProfiles
     .filter((p) => isEligibleForCredentialQueueHost(p))
@@ -118,10 +126,12 @@ export async function GET(req: Request) {
       userId: p.userId,
       email: p.user.email,
       name: p.practiceName || p.user.email,
-      cpsns: adminCpsnsNumberOrEmpty(p.cpsnsNumber),
-      submittedAt: p.updatedAt.toISOString(),
+      cpsns: formatAdminCpsnsDisplay(p.cpsnsNumber),
+      submittedAt: credentialQueueSubmittedAt(p),
       cpsnsVerificationStatus: p.cpsnsVerificationStatus,
     }));
 
-  return NextResponse.json({ items: [...locumItems, ...hostItems] });
+  return NextResponse.json({
+    items: sortQueueItems([...locumItems, ...hostItems]),
+  });
 }

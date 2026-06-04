@@ -23,13 +23,17 @@ import {
   getLocumAccountNotice,
   locumCanApplyToJobs,
 } from '@/lib/locumAccountNotice';
-import { isLocalPostingEndDatePassed } from '@/lib/localDateTime';
+import {
+  formatLocalCalendarDateForDisplay,
+  isLocalPostingEndDatePassed,
+} from '@/lib/localDateTime';
 import { relativeHoursOrDaysAgo, toLocalDateTime, toLocalTime } from '@/lib/relativeTime';
 import {
   CANADIAN_PROVINCE_NAMES,
   filterCanadianCities,
 } from '@/lib/canadianCities';
 import { groupKeyResponsibilitiesForDisplay } from '@/lib/hostJobPostingForm';
+import { formatHostDoctorDisplayName } from '@/lib/hostDisplayName';
 const NAV = [
   {
     label: 'Browse Opportunities',
@@ -191,12 +195,7 @@ function buildBrowseSearchSuggestions(
   return out;
 }
 function fmtDate(iso: string | null): string {
-  if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-  });
+  return formatLocalCalendarDateForDisplay(iso);
 }
 function fmtTime(t: string | null): string {
   if (!t) return '';
@@ -204,6 +203,14 @@ function fmtTime(t: string | null): string {
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
   return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+function hasMinYearsExperience(
+  value: number | null | undefined,
+): value is number {
+  return value != null && value > 0;
+}
+function formatMinYearsExperienceValue(value: number): string {
+  return `${value}+`;
 }
 function daysAgo(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -1108,54 +1115,50 @@ export default function LocumBrowsePage(props: {
                     applications.
                   </p>
                 ) : null}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    marginBottom: 3,
-                  }}
-                >
-                  <span
-                    style={
-                      {
-                        fontFamily: 'Inter, sans-serif',
-                        fontWeight: 'var(--font-weight-bold)',
-                        fontStyle: 'normal',
-                        fontSize: 'var(--font-heading)',
-                        lineHeight: '100%',
-                        letterSpacing: 0,
-                        verticalAlign: 'middle',
-                        color: '#0f1523',
-                        leadingTrim: 'none',
-                      } as CSSProperties
-                    }
-                  >
-                    {job.hostProfile.practiceName}
-                  </span>
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden
-                    style={{ flexShrink: 0, verticalAlign: 'middle' }}
-                  >
-                    <path
-                      d="M12 3.25 19 5.9v5.25c0 4.45-2.82 7.95-7 9.6-4.18-1.65-7-5.15-7-9.6V5.9l7-2.65Z"
-                      stroke="#0F2A7A"
-                      strokeWidth="1.8"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M8.6 12.1 10.9 14.4 15.7 9.6"
-                      stroke="#0F2A7A"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
+                {(() => {
+                  const hostDoctorName = formatHostDoctorDisplayName(
+                    job.hostProfile.contactFirstName,
+                    job.hostProfile.contactLastName,
+                  );
+                  const hostCpsnsVerified = isCpsnsVerificationApproved(
+                    job.hostProfile.cpsnsVerificationStatus,
+                  );
+                  return (
+                    <div style={{ marginBottom: 6 }}>
+                      <div
+                        style={{
+                          fontFamily: 'Inter, sans-serif',
+                          fontWeight: 'var(--font-weight-bold)',
+                          fontSize: '1.125rem',
+                          lineHeight: '120%',
+                          color: '#0f1523',
+                          marginBottom: hostDoctorName ? 4 : 0,
+                        }}
+                      >
+                        {job.hostProfile.practiceName}
+                      </div>
+                      {hostDoctorName ? (
+                        <NameWithVerifiedShield
+                          verified={hostCpsnsVerified}
+                          shieldSize={18}
+                          gap={6}
+                        >
+                          <span
+                            style={{
+                              fontFamily: 'Inter, sans-serif',
+                              fontWeight: 600,
+                              fontSize: 'var(--font-heading)',
+                              lineHeight: '120%',
+                              color: '#5a6478',
+                            }}
+                          >
+                            {hostDoctorName}
+                          </span>
+                        </NameWithVerifiedShield>
+                      ) : null}
+                    </div>
+                  );
+                })()}
                 <h2
                   style={{
                     fontSize: 'var(--font-heading)',
@@ -1263,6 +1266,22 @@ export default function LocumBrowsePage(props: {
                       ${Number(job.payPerDay).toLocaleString()}/day
                     </span>
                   )}
+                  {hasMinYearsExperience(job.minYearsExperience) && (
+                    <span
+                      style={{
+                        background: LOGO_TEAL_BG,
+                        border: `1px solid ${LOGO_TEAL_BORDER}`,
+                        padding: '5px 10px',
+                        borderRadius: 5,
+                        fontSize: 'var(--font-small)',
+                        fontWeight: 600,
+                        color: LOGO_TEAL,
+                      }}
+                    >
+                      Years of Experience{' '}
+                      {formatMinYearsExperienceValue(job.minYearsExperience)}
+                    </span>
+                  )}
                   {job.isRural && (
                     <span
                       style={{
@@ -1318,7 +1337,7 @@ export default function LocumBrowsePage(props: {
                 )}
 
                 {(job.requiredCredentials.length > 0 ||
-                  job.minYearsExperience) && (
+                  hasMinYearsExperience(job.minYearsExperience)) && (
                   <>
                     <h4
                       style={{
@@ -1362,7 +1381,7 @@ export default function LocumBrowsePage(props: {
                         </div>
                       </div>
                     )}
-                    {job.minYearsExperience && (
+                    {hasMinYearsExperience(job.minYearsExperience) && (
                       <div style={{ marginBottom: 14 }}>
                         <div
                           style={{
@@ -1372,10 +1391,10 @@ export default function LocumBrowsePage(props: {
                             marginBottom: 4,
                           }}
                         >
-                          Preferred Experience
+                          Years of Experience
                         </div>
                         <div style={{ fontSize: 'var(--font-body)', color: '#5a6478' }}>
-                          {job.minYearsExperience}+ Years
+                          {formatMinYearsExperienceValue(job.minYearsExperience)}
                         </div>
                       </div>
                     )}

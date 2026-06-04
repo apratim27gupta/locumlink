@@ -13,6 +13,8 @@ import { filterCanadianCities, CANADIAN_PROVINCE_NAMES, formatCanadianCityDispla
 import { sortByLabel, sortStringsLocale } from '@/lib/sortLocale';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { getHostProfileStatusCard } from '@/lib/hostAccountNotice';
+import VerificationStatusPill from '@/components/VerificationStatusPill';
+import { getHostVerificationStatusBadge } from '@/lib/profileVerificationBadge';
 import {
     PROFILE_FORM_CAPITALIZE_CLASS,
     PROFILE_FORM_CAPITALIZE_CSS,
@@ -700,18 +702,35 @@ export default function HostProfilePage(props: {
                                 >
                                     {completionTitle}
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <div
-                                        style={{
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    {(() => {
+                                        const variant = completionGlyphVariant;
+                                        const isUnderVerification = variant === 'underReview';
+                                        const isVerified = variant === 'verified';
+                                        const subtitleStyle = {
                                             fontFamily: 'Inter, sans-serif',
                                             fontWeight: 400,
                                             fontSize: 13,
                                             lineHeight: '140%',
                                             color: '#6B7280',
-                                        }}
-                                    >
-                                        {completionSubtitle}
-                                    </div>
+                                        } as const;
+                                        if (!isUnderVerification && !isVerified) {
+                                            return (
+                                                <div style={subtitleStyle}>
+                                                    {completionSubtitle}
+                                                </div>
+                                            );
+                                        }
+                                        const badge = getHostVerificationStatusBadge(profile);
+                                        return (
+                                            <>
+                                                <div style={subtitleStyle}>
+                                                    {progressPct}% completed
+                                                </div>
+                                                {badge ? <VerificationStatusPill {...badge} /> : null}
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         </div>
@@ -1638,7 +1657,7 @@ export default function HostProfilePage(props: {
                                         style={fieldInput}
                                         value={postal}
                                         onChange={(e) => setPostal(e.target.value)}
-                                        placeholder="Postal code"
+                                        placeholder="Postal Code"
                                     />
                                 </div>
                                 <div aria-hidden />

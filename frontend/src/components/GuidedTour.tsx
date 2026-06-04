@@ -4,17 +4,30 @@ import { usePathname } from 'next/navigation';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import { useFirstVisit } from '@/hooks/useFirstVisit';
-import { tourSteps } from '@/config/tourSteps';
-function resolveTourSteps() {
-    return tourSteps.filter((s) => typeof s.element === 'string' &&
-        s.element.length > 0 &&
-        document.querySelector(s.element));
+import { getTourConfig } from '@/config/tourSteps';
+import type { DriveStep } from 'driver.js';
+
+const TOUR_POLL_MS = 200;
+const TOUR_WAIT_MS = 20000;
+
+function resolveTourSteps(steps: DriveStep[]) {
+    return steps.filter(
+        (s) =>
+            typeof s.element === 'string'
+            && s.element.length > 0
+            && document.querySelector(s.element),
+    );
 }
+
 export default function GuidedTour() {
-    const { isFirstVisit, markAsSeen } = useFirstVisit();
     const pathname = usePathname();
+    const tourConfig = getTourConfig(pathname);
+    const { isFirstVisit, markAsSeen } = useFirstVisit(
+        tourConfig?.storageKey ?? 'hasSeenTour',
+    );
     const launchedRef = useRef(false);
     const driverRef = useRef<ReturnType<typeof driver> | null>(null);
+
     useEffect(() => {
         const style = document.createElement('style');
         style.id = 'guided-tour-custom';
@@ -88,41 +101,62 @@ export default function GuidedTour() {
         }
         return () => { document.getElementById('guided-tour-custom')?.remove(); };
     }, []);
+
     useEffect(() => {
-        if (!isFirstVisit || launchedRef.current)
-            return;
-        const resolved = resolveTourSteps();
-        if (resolved.length === 0)
-            return;
-        launchedRef.current = true;
-        try {
-            const driverObj = driver({
-                showProgress: true,
-                allowClose: true,
-                onDestroyed: () => {
-                    driverRef.current = null;
-                    markAsSeen();
-                },
-                steps: resolved,
-            });
-            driverRef.current = driverObj;
-            driverObj.drive();
+        if (!tourConfig || !isFirstVisit || launchedRef.current) return;
+        if (!tourConfig.entryPaths.includes(pathname)) return;
+
+        let cancelled = false;
+        const startedAt = Date.now();
+
+        function launchTour(resolved: DriveStep[]) {
+            if (cancelled || launchedRef.current || resolved.length === 0) return;
+
+            launchedRef.current = true;
+            try {
+                const driverObj = driver({
+                    showProgress: true,
+                    allowClose: true,
+                    onDestroyed: () => {
+                        driverRef.current = null;
+                        markAsSeen();
+                    },
+                    steps: resolved,
+                });
+                driverRef.current = driverObj;
+                driverObj.drive();
+            } catch {
+                launchedRef.current = false;
+            }
         }
-        catch {
-            launchedRef.current = false;
-            return;
+
+        function pollForElements() {
+            if (cancelled || launchedRef.current) return;
+
+            const resolved = resolveTourSteps(tourConfig.steps);
+            if (resolved.length > 0) {
+                launchTour(resolved);
+                return;
+            }
+
+            if (Date.now() - startedAt >= TOUR_WAIT_MS) return;
+            window.setTimeout(pollForElements, TOUR_POLL_MS);
         }
+
+        pollForElements();
+
         return () => {
+            cancelled = true;
             if (driverRef.current) {
                 try {
                     driverRef.current.destroy();
-                }
-                catch {
+                } catch {
+                    /* ignore */
                 }
                 driverRef.current = null;
             }
-            launchedRef.current = false;
         };
-    }, [isFirstVisit, markAsSeen, pathname]);
+    }, [tourConfig, isFirstVisit, markAsSeen, pathname]);
+
     return null;
 }

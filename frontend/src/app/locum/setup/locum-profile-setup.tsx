@@ -979,7 +979,7 @@ export default function LocumSetupPage() {
                 width: '100%',
             }}>
                           <label style={lbl}>Postal Code</label>
-                          <input className="locum-setup-input" style={inpStep2} placeholder="Postal code" value={form.postalCode} onChange={(e) => set('postalCode', e.target.value.toUpperCase())}/>
+                          <input className="locum-setup-input" style={inpStep2} placeholder="Postal Code" value={form.postalCode} onChange={(e) => set('postalCode', e.target.value.toUpperCase())}/>
                         </div>
                       </div>
                     </div>

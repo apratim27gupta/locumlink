@@ -8,6 +8,10 @@ export function normalizeCpsns(input: string | null | undefined): string {
     return String(input ?? '').replace(/\D/g, '');
 }
 
+export function isInternalCpsnsPlaceholder(raw: string): boolean {
+    return /^pending(?:[-_]|$)/i.test(raw.trim());
+}
+
 /** @deprecated Use hasCpsnsNumber */
 export function isCpsnsNineDigitsFormat(input: string | null | undefined): boolean {
     return hasCpsnsNumber(input);
@@ -15,7 +19,7 @@ export function isCpsnsNineDigitsFormat(input: string | null | undefined): boole
 
 export function hasCpsnsNumber(input: string | null | undefined): boolean {
     const raw = (input ?? '').trim();
-    if (!raw || raw === '—' || /^pending-/i.test(raw)) return false;
+    if (!raw || raw === '—' || isInternalCpsnsPlaceholder(raw)) return false;
     return normalizeCpsns(input).length > 0;
 }
 
@@ -108,6 +112,27 @@ export function isEligibleForCredentialQueueHost(profile: {
     return hasCpsns || hasClinicProfile || hasDocs;
 }
 
+/** Stamp when a profile newly enters the admin credential review queue. */
+export function mergeCredentialSubmittedAtPatch<
+    T extends { cpsnsVerificationStatus?: CpsnsVerificationStatus },
+>(
+    previousStatus: CpsnsVerificationStatus | null | undefined,
+    patch: T,
+): T & { credentialSubmittedAt?: Date } {
+    const next = patch.cpsnsVerificationStatus;
+    if (!next || next !== 'PENDING_REVIEW') return patch;
+    if (previousStatus === 'PENDING_REVIEW') return patch;
+    return { ...patch, credentialSubmittedAt: new Date() };
+}
+
+export function credentialQueueSubmittedAt(profile: {
+    credentialSubmittedAt?: Date | string | null;
+    updatedAt: Date | string;
+}): string {
+    const raw = profile.credentialSubmittedAt ?? profile.updatedAt;
+    return new Date(raw).toISOString();
+}
+
 /** Promote to review queue when profile/docs were saved (mirrors backend save). */
 export function credentialReviewDataOnProfileSave(
     existing: { cpsnsNumber: string | null; cpsnsVerificationStatus: CpsnsVerificationStatus } | null,
@@ -133,6 +158,14 @@ export function credentialReviewDataOnProfileSave(
 
 function hasSubmittedCpsnsValue(cpsns: string | null | undefined): boolean {
     return hasCpsnsNumber(cpsns);
+}
+
+/** Digits-only CPSNS for API payloads; empty when missing or internal placeholder. */
+export function cpsnsDigitsForReview(
+    stored: string | null | undefined,
+): string {
+    if (isInternalCpsnsPlaceholder(String(stored ?? '').trim())) return '';
+    return normalizeCpsns(stored);
 }
 
 /** CPSNS digits when present; empty when missing or placeholder. */

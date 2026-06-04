@@ -1,6 +1,7 @@
 import { sortByLabel, sortStringsLocale } from '@/lib/sortLocale';
 import {
     calendarDatePartFromInput,
+    formatLocalCalendarDateForDisplay,
     isLocalPostingEndDatePassed,
     localCalendarDateToIso,
     toTimezoneAwareIso,
@@ -130,10 +131,12 @@ export function fmtIsoToMmDdYyyy(iso: string | null | undefined): string {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime()))
         return '';
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const yyyy = String(d.getFullYear());
-    return `${mm}-${dd}-${yyyy}`;
+    return isoToMmDdYyyy(localCalendarDateToIso(d));
+}
+
+/** Job schedule dates for cards/lists (no UTC off-by-one on YYYY-MM-DD). */
+export function fmtJobCalendarDate(iso: string | null | undefined): string {
+    return formatLocalCalendarDateForDisplay(iso);
 }
 
 /** True after the calendar end day has fully passed (user's local timezone). */
@@ -195,6 +198,8 @@ export {
     toTimezoneAwareIso,
     calendarDatePartFromInput,
     compareLocalCalendarDates,
+    formatLocalCalendarDateForDisplay,
+    localDateFromCalendarInput,
     type JobScheduleValidationResult,
 } from '@/lib/localDateTime';
 

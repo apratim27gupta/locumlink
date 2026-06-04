@@ -151,6 +151,7 @@ model LocumProfile {
   ruralExperienced    Boolean            @default(false)
   cpsnsVerificationStatus VerificationStatus @default(UNVERIFIED) @map("cpsns_verification_status")
   cpsnsVerifiedAt         DateTime?          @map("cpsns_verified_at")
+  credentialSubmittedAt   DateTime?          @map("credential_submitted_at")
 
   // Rejection fields (L2-E7.3 / AD-02)
   rejectionReason     String?            @map("rejection_reason") @db.Text
@@ -202,6 +203,7 @@ model HostProfile {
   cpsnsNumber             String?
   cpsnsVerificationStatus VerificationStatus @default(UNVERIFIED) @map("cpsns_verification_status")
   cpsnsVerifiedAt         DateTime?          @map("cpsns_verified_at")
+  credentialSubmittedAt   DateTime?          @map("credential_submitted_at")
   rejectionReason         String?            @map("rejection_reason") @db.Text
   rejectedAt              DateTime?          @map("rejected_at")
   speciality              String?            @db.Text

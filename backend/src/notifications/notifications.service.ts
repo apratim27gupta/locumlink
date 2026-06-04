@@ -24,7 +24,10 @@ import {
   L010_LOCUM_VERIFICATION_REJECTED,
   L011_LOCUM_ACCOUNT_SUSPENDED,
 } from './notification-copy.js';
-import { resolveNotificationActionFields } from './notification-defaults.js';
+import {
+  resolveNotificationActionFields,
+  resolveNotificationTitle,
+} from './notification-defaults.js';
 import {
   buildH001LocumApplied,
   buildH002LocumAccepted,
@@ -624,7 +627,7 @@ export class NotificationsService {
       eventType: 'H_002_LOCUM_ACCEPTED',
       title: copy.inAppTitle,
       body: copy.inAppBody,
-      href: '/host/dashboard?postJob=1',
+      href: '/host/dashboard',
       priority: copy.priority,
       actionLabel: copy.actionLabel,
       referenceId: params.applicationId,
@@ -658,7 +661,7 @@ export class NotificationsService {
       eventType: 'H_003_LOCUM_DECLINED',
       title: copy.inAppTitle,
       body: copy.inAppBody,
-      href: '/host/dashboard?postJob=1',
+      href: '/host/dashboard',
       priority: copy.priority,
       actionLabel: copy.actionLabel,
       referenceId: params.applicationId,
@@ -870,7 +873,7 @@ export class NotificationsService {
       return {
         id: e.id,
         type: eventTypeToCategory(e.eventType),
-        title: payload.title ?? e.eventType,
+        title: resolveNotificationTitle(e.eventType, payload.title),
         body: payload.body ?? '',
         href: resolved.href,
         read: e.deliveryStatus === 'READ',

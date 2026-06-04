@@ -18,6 +18,8 @@ import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { EmptyIllustration, PlusIcon, ReopenJobIcon, TrashIcon, UserEditIcon, } from './host-dashboard-icons';
 import { ProfileStatusGlyph } from '@/components/ProfileStatusGlyph';
 import { getHostProfileStatusCard } from '@/lib/hostAccountNotice';
+import VerificationStatusPill from '@/components/VerificationStatusPill';
+import { getHostVerificationStatusBadge } from '@/lib/profileVerificationBadge';
 import { MmDdYyyyDateField } from '@/components/host/HostJobPostingFormFields';
 import {
     maxIsoDate,
@@ -28,6 +30,8 @@ import {
     getJobScheduleValidationError,
     buildJobScheduleApiFields,
     calendarDatePartFromInput,
+    fmtJobCalendarDate,
+    localCalendarDateToIso,
     toTimezoneAwareIso,
     compareLocalCalendarDates,
 } from '@/lib/hostJobPostingForm';
@@ -150,13 +154,7 @@ const lbl: React.CSSProperties = {
     marginBottom: 6,
 };
 function fmtDate(iso: string | null | undefined): string {
-    if (!iso)
-        return '';
-    return new Date(iso).toLocaleDateString('en-US', {
-        month: 'short',
-        day: '2-digit',
-        year: 'numeric',
-    });
+    return fmtJobCalendarDate(iso);
 }
 function isoToDateInputLocal(iso: string | null | undefined): string {
     if (!iso)
@@ -169,10 +167,7 @@ function isoToDateInputLocal(iso: string | null | undefined): string {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime()))
         return '';
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+    return localCalendarDateToIso(d);
 }
 function isJobPastEndDate(job: Pick<Job, 'endDate'>): boolean {
     return isPostingEndDatePassed(job.endDate ?? null);
@@ -2317,27 +2312,24 @@ export default function HostDashboard(props: {
         setReopenTarget(null);
         void loadDashboardFromApi({ silent: true });
     }
-    if (!mounted || authLoading || !profileGateResolved || initialDashboardLoad) {
-        return (<div style={{
-                height: '100vh',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontFamily: 'Inter, sans-serif',
-                background: '#fff',
-                color: '#64748b',
-                fontSize: 14,
-            }}>
-        Loading dashboard…
-      </div>);
-    }
+    const showShellLoading = !mounted || authLoading || !profileGateResolved || initialDashboardLoad;
     return (<DashLayout
             navItems={HOST_DASH_NAV}
             activeHref={pathname ?? '/host/dashboard'}
             topbarFirstName={profile?.contactFirstName ?? undefined}
             topbarLastName={profile?.contactLastName ?? undefined}
         >
-          <div className="host-dash-page dash-page-shell" style={{
+          {showShellLoading ? (<div style={{
+                minHeight: 320,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontFamily: 'Inter, sans-serif',
+                color: '#64748b',
+                fontSize: 14,
+            }}>
+        Loading dashboard…
+      </div>) : (<><div className="host-dash-page dash-page-shell" style={{
             maxWidth: 1180,
             display: 'flex',
             flexDirection: 'column',
@@ -2521,50 +2513,10 @@ export default function HostDashboard(props: {
                       const isVerified = variant === 'verified';
                       if (!isUnderVerification && !isVerified) return profileStatusCard.subtitle;
 
-                      const pill =
-                        isUnderVerification ? (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: '3px 10px',
-                              borderRadius: 999,
-                              background: '#FEF2F2',
-                              border: '1px solid #FECACA',
-                              color: '#DC2626',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              lineHeight: '16px',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            Under verification
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: '3px 10px',
-                              borderRadius: 999,
-                              background: '#DBEAFE',
-                              border: '1px solid #93C5FD',
-                              color: '#1E40AF',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              lineHeight: '16px',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            CPSNS verified
-                          </span>
-                        );
-
+                      const badge = getHostVerificationStatusBadge(profile);
                       return (
                         <>
-                          {profilePct}% completed · {pill}
+                          {profilePct}% completed · {badge ? <VerificationStatusPill {...badge} /> : null}
                         </>
                       );
                     })()}
@@ -2817,5 +2769,6 @@ export default function HostDashboard(props: {
 
       
       {reopenTarget && (<ReOpenModal key={reopenTarget.id} job={reopenTarget} onConfirm={handleReopen} onCancel={() => setReopenTarget(null)}/>)}
+      </>)}
     </DashLayout>);
 }

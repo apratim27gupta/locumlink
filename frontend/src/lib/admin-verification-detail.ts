@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { signGcsPath } from '@/lib/gcs-sign-server';
+import { formatAdminCpsnsDisplay } from '@/lib/cpsnsVerify';
 
 export type AdminVerificationDocument = {
   id: string;
@@ -12,6 +13,10 @@ export type AdminProfileField = {
   label: string;
   value: string;
 };
+
+function cpsnsProfileField(value: string | null | undefined): AdminProfileField {
+  return { label: 'CPSNS', value: formatAdminCpsnsDisplay(value) };
+}
 
 async function buildDocument(
   id: string,
@@ -60,7 +65,7 @@ export async function fetchLocumVerificationDetail(
     field('Email', profile.user.email),
     field('First name', profile.firstName),
     field('Last name', profile.lastName),
-    field('CPSNS', profile.cpsnsId),
+    cpsnsProfileField(profile.cpsnsId),
     field('Specialty', profile.specializationText ?? profile.specialty),
     field('Years of experience', profile.yearsOfExperience),
     field('Address', [profile.address1, profile.address2].filter(Boolean).join(', ')),
@@ -108,7 +113,7 @@ export async function fetchHostVerificationDetail(
     field('Email', profile.user.email),
     field('Clinic / practice', profile.practiceName),
     field('Contact', [profile.contactFirstName, profile.contactLastName].filter(Boolean).join(' ')),
-    field('CPSNS', profile.cpsnsNumber),
+    cpsnsProfileField(profile.cpsnsNumber),
     field('Speciality', profile.speciality),
     field('Address', profile.address1 ?? profile.address),
     field('Address line 2', profile.address2),

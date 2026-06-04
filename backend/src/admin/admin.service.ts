@@ -21,8 +21,11 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import type { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
 import {
+  credentialQueueSubmittedAt,
+  formatAdminCpsnsDisplay,
   isEligibleForCredentialQueueHost,
   isEligibleForCredentialQueueLocum,
+  mergeCredentialSubmittedAtPatch,
 } from '../cpsns/cpsns-verified.js';
 import {
   analyticsSummaryToCsv,
@@ -76,6 +79,12 @@ export class AdminService {
     private readonly pushService: PushService,
     private readonly notifService: NotificationsService,
   ) {}
+
+  private cpsnsProfileField(
+    value: string | null | undefined,
+  ): { label: string; value: string } {
+    return { label: 'CPSNS', value: formatAdminCpsnsDisplay(value) };
+  }
 
   private profileField(
     label: string,
@@ -480,8 +489,8 @@ export class AdminService {
       userId: p.userId,
       email: p.user.email,
       name: [p.firstName, p.lastName].filter(Boolean).join(' ').trim() || '—',
-      cpsns: p.cpsnsId,
-      submittedAt: p.updatedAt.toISOString(),
+      cpsns: formatAdminCpsnsDisplay(p.cpsnsId),
+      submittedAt: credentialQueueSubmittedAt(p).toISOString(),
       cpsnsVerificationStatus: p.cpsnsVerificationStatus,
       rejectionReason: p.rejectionReason ?? null,
       rejectedAt: p.rejectedAt ? p.rejectedAt.toISOString() : null,
@@ -500,8 +509,8 @@ export class AdminService {
           .trim() ||
         p.practiceName ||
         '—',
-      cpsns: p.cpsnsNumber ?? '—',
-      submittedAt: p.updatedAt.toISOString(),
+      cpsns: formatAdminCpsnsDisplay(p.cpsnsNumber),
+      submittedAt: credentialQueueSubmittedAt(p).toISOString(),
       cpsnsVerificationStatus: p.cpsnsVerificationStatus,
       rejectionReason: p.rejectionReason ?? null,
       rejectedAt: p.rejectedAt ? p.rejectedAt.toISOString() : null,
@@ -677,7 +686,7 @@ export class AdminService {
           .filter(Boolean)
           .join(' '),
       ),
-      this.profileField('CPSNS', profile.cpsnsNumber),
+      this.cpsnsProfileField(profile.cpsnsNumber),
       this.profileField('Speciality', profile.speciality),
       this.profileField('Address', profile.address1 ?? profile.address),
       this.profileField('Address line 2', profile.address2),
@@ -739,7 +748,7 @@ export class AdminService {
       this.profileField('Email', profile.user.email),
       this.profileField('First name', profile.firstName),
       this.profileField('Last name', profile.lastName),
-      this.profileField('CPSNS', profile.cpsnsId),
+      this.cpsnsProfileField(profile.cpsnsId),
       this.profileField(
         'Specialty',
         profile.specializationText ?? profile.specialty,
@@ -860,7 +869,7 @@ export class AdminService {
       userId: updated.userId,
       email: profile.user.email,
       name,
-      cpsns: updated.cpsnsId,
+      cpsns: formatAdminCpsnsDisplay(updated.cpsnsId),
       submittedAt: updated.updatedAt.toISOString(),
       cpsnsVerificationStatus: updated.cpsnsVerificationStatus,
       rejectionReason: updated.rejectionReason ?? null,
@@ -962,7 +971,7 @@ export class AdminService {
           .trim() ||
         profile.practiceName ||
         '—',
-      cpsns: updated.cpsnsNumber ?? '—',
+      cpsns: formatAdminCpsnsDisplay(updated.cpsnsNumber),
       submittedAt: updated.updatedAt.toISOString(),
       cpsnsVerificationStatus: updated.cpsnsVerificationStatus,
       rejectionReason: updated.rejectionReason ?? null,

@@ -121,7 +121,7 @@ export function buildL003ApplicationAccepted(params: {
     inAppTitle: 'Application Accepted — Action Required',
     inAppBody: `Your application for ${params.jobTitle}${when} was accepted. Please confirm your availability.`,
     emailSubject: 'Application Accepted — Confirm Your Availability',
-    emailBody: `Hello ${params.doctorName}, Your application for ${params.jobTitle}${when} has been accepted by the host. Please log in to LocumLink L2 to confirm your availability.`,
+    emailBody: `Hello ${params.doctorName}, Your application for ${params.jobTitle}${when} has been accepted by the host. Please log in to Locum Link to confirm your availability.`,
     priority: 'HIGH' as LocumCopyPriority,
     actionLabel: 'Confirm Availability',
   };
@@ -135,8 +135,8 @@ export function buildL004ApplicationDeclined(params: {
   return {
     inAppTitle: 'Application Update',
     inAppBody: `Your application for ${params.jobTitle} was not selected. Browse other opportunities.`,
-    emailSubject: 'Application Update — LocumLink L2',
-    emailBody: `Hello ${params.doctorName}, Thank you for your interest. Your application for ${params.jobTitle} was not selected at this time. Log in to LocumLink L2 to browse other opportunities across Nova Scotia.`,
+    emailSubject: 'Application Update — Locum Link',
+    emailBody: `Hello ${params.doctorName}, Thank you for your interest. Your application for ${params.jobTitle} was not selected at this time. Log in to Locum Link to browse other opportunities across Nova Scotia.`,
     priority: 'NORMAL' as LocumCopyPriority,
     actionLabel: 'Browse Opportunities',
   };
@@ -218,7 +218,7 @@ export function buildL008NewMessage(params: {
 
 /** L-009 — Locum account verified */
 const L009_BODY =
-  'Welcome to LocumLink L2! Your account is verified. Start browsing opportunities.';
+  'Welcome to Locum Link! Your account is verified. Start browsing opportunities.';
 
 export const L009_LOCUM_ACCOUNT_VERIFIED = {
   inAppTitle: 'Account Verified - Start Finding Shifts!',
@@ -269,7 +269,7 @@ export function buildL012ShiftCancelled(params: {
     inAppTitle: 'Shift Cancelled',
     inAppBody: `Your confirmed shift${when} at ${params.clinicName} (${params.jobTitle}) has been cancelled by the host.`,
     emailSubject: 'Shift Cancellation Notice',
-    emailBody: `Hello ${params.doctorName}, Your confirmed shift${when} at ${params.clinicName} for ${params.jobTitle} has been cancelled by the host. Log in to LocumLink L2 to browse other opportunities.`,
+    emailBody: `Hello ${params.doctorName}, Your confirmed shift${when} at ${params.clinicName} for ${params.jobTitle} has been cancelled by the host. Log in to Locum Link to browse other opportunities.`,
     priority: 'HIGH' as LocumCopyPriority,
     actionLabel: 'Browse Opportunities',
   };

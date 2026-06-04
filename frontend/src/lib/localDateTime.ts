@@ -86,6 +86,54 @@ export function compareLocalCalendarDates(a: string, b: string): number {
     return a.localeCompare(b);
 }
 
+const DEFAULT_DISPLAY_DATE_OPTS: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+};
+
+/**
+ * Format a calendar date for UI without UTC shift.
+ * `new Date('2026-06-04')` is UTC midnight and can show as the previous local day.
+ */
+export function formatLocalCalendarDateForDisplay(
+    input: string | Date | null | undefined,
+    locale: string | Intl.LocalesArgument = 'en-US',
+    options: Intl.DateTimeFormatOptions = DEFAULT_DISPLAY_DATE_OPTS,
+): string {
+    if (input == null || input === '')
+        return '';
+    if (input instanceof Date) {
+        if (Number.isNaN(input.getTime()))
+            return '';
+        const day = startOfLocalCalendarDay(localCalendarDateToIso(input));
+        return day ? day.toLocaleDateString(locale, options) : '';
+    }
+    const cal = calendarDatePartFromInput(input);
+    if (cal) {
+        const day = startOfLocalCalendarDay(cal);
+        if (day)
+            return day.toLocaleDateString(locale, options);
+    }
+    const d = new Date(input);
+    if (Number.isNaN(d.getTime()))
+        return '';
+    return d.toLocaleDateString(locale, options);
+}
+
+/** Start of the local calendar day from API date fields (YYYY-MM-DD or ISO). */
+export function localDateFromCalendarInput(
+    input: string | null | undefined,
+): Date | null {
+    if (input == null || input === '')
+        return null;
+    const cal = calendarDatePartFromInput(input);
+    if (cal)
+        return startOfLocalCalendarDay(cal);
+    const d = new Date(input);
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export type LocalTimeSnapshot = {
     nowMs: number;
     timezone: string;

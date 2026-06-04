@@ -26,6 +26,7 @@ import {
   didCpsnsDocumentChange,
   didCpsnsNumberChange,
   mergeCredentialReviewPatchForAccountPending,
+  mergeCredentialSubmittedAtPatch,
 } from '../cpsns/cpsns-verified.js';
 import {
   assertJobScheduleAcceptable,
@@ -195,25 +196,28 @@ export class HostService {
     const profileSubmittedForReview = Boolean(
       dto.licenseFile || dto.photoIdFile || dto.clinicName?.trim(),
     );
-    const verificationPatch = mergeCredentialReviewPatchForAccountPending(
-      existing
-        ? {
-            cpsnsNumber: existing.cpsnsNumber,
-            cpsnsVerificationStatus: existing.cpsnsVerificationStatus,
-          }
-        : null,
-      credentialReviewPatchOnProfileSave(
+    const verificationPatch = mergeCredentialSubmittedAtPatch(
+      existing?.cpsnsVerificationStatus,
+      mergeCredentialReviewPatchForAccountPending(
         existing
           ? {
               cpsnsNumber: existing.cpsnsNumber,
               cpsnsVerificationStatus: existing.cpsnsVerificationStatus,
             }
           : null,
-        cpsnsDigits,
+        credentialReviewPatchOnProfileSave(
+          existing
+            ? {
+                cpsnsNumber: existing.cpsnsNumber,
+                cpsnsVerificationStatus: existing.cpsnsVerificationStatus,
+              }
+            : null,
+          cpsnsDigits,
+          profileSubmittedForReview,
+        ),
         profileSubmittedForReview,
+        account?.status === UserStatus.PENDING,
       ),
-      profileSubmittedForReview,
-      account?.status === UserStatus.PENDING,
     );
     const profile = await this.prisma.hostProfile.upsert({
       where: { userId },

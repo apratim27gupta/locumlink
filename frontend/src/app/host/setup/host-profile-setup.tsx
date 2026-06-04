@@ -1337,7 +1337,7 @@ export default function HostSetupPage(props: {
                         <label style={lbl}>Postal Code</label>
                         <input
                           style={inpStep2}
-                          placeholder="B0A 1A0 (Nova Scotia)"
+                          placeholder="Postal Code"
                           value={form.postalCode}
                           onChange={(e) =>
                             set('postalCode', e.target.value.toUpperCase())

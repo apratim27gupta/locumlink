@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAdminSession } from '@/lib/admin-auth-server';
+import { formatAdminCpsnsDisplay } from '@/lib/cpsnsVerify';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -68,7 +69,7 @@ export async function GET(req: Request) {
         : u.hostProfile?.practiceName ?? '';
     const cpsnsOrCity =
       u.role === 'LOCUM'
-        ? u.locumProfile?.cpsnsId ?? ''
+        ? formatAdminCpsnsDisplay(u.locumProfile?.cpsnsId)
         : `${u.hostProfile?.city ?? ''}, ${u.hostProfile?.province ?? ''}`.replace(/^, |, $/, '');
     const verification =
       u.role === 'LOCUM' ? (u.locumProfile?.cpsnsVerificationStatus ?? '') : 'N/A';

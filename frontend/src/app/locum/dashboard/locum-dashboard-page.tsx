@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
-import { ProfileStatusGlyph } from '@/components/ProfileStatusGlyph';
+import LocumProfileStatusBanner from '@/components/LocumProfileStatusBanner';
 import { locumApi, type MyApplication } from '@/lib/api';
 import { getToken } from '@/lib/auth';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
@@ -11,12 +11,15 @@ import { useAuth } from '@/providers/AuthProvider';
 import type { LocumProfile } from '@/types';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
-import { getLocumDashboardStatusBadge } from '@/lib/locumAccountNotice';
 import { locumProfileCompletionPct } from '@/lib/locumProfileCompletion';
+import {
+    formatLocalCalendarDateForDisplay,
+    localCalendarDateToIso,
+    localDateFromCalendarInput,
+    startOfLocalCalendarDay,
+} from '@/lib/localDateTime';
 import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
 import { beforeClientNavigation } from '@/lib/topLoader';
-const PROFILE_RING_R = 22;
-const PROFILE_RING_C = 2 * Math.PI * PROFILE_RING_R;
 const NAV = [
     {
         label: 'Browse Opportunities',
@@ -46,13 +49,7 @@ const NAV = [
     { label: 'Settings', href: '/locum/settings', icon: <NavIcon name="settings"/> },
 ];
 function fmtDate(iso: string | null): string {
-    if (!iso)
-        return '';
-    return new Date(iso).toLocaleDateString('en-US', {
-        month: 'short',
-        day: '2-digit',
-        year: 'numeric',
-    });
+    return formatLocalCalendarDateForDisplay(iso);
 }
 function fmtTime(t: string | null): string {
     if (!t)
@@ -144,6 +141,7 @@ export default function LocumDashboard(props: {
     } | null>(null);
     const [loading, setLoading] = useState(true);
     const [respondingAppId, setRespondingAppId] = useState<string | null>(null);
+    const [rejectConfirmAppId, setRejectConfirmAppId] = useState<string | null>(null);
     const [respondError, setRespondError] = useState<string | null>(null);
     useEffect(() => {
         if (authLoading)
@@ -215,29 +213,27 @@ export default function LocumDashboard(props: {
     })();
     const completionPct = locumProfileCompletionPct(profile);
     const cpsnsVerified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
-    const statusBadge = getLocumDashboardStatusBadge(profile);
-    const ringPct = Math.min(100, Math.max(0, completionPct)) / 100;
-    const ringDash = ringPct * PROFILE_RING_C;
-    const today = new Date();
+    const todayStart =
+        startOfLocalCalendarDay(localCalendarDateToIso()) ?? new Date();
     const tabApps = applications.filter((app) => {
-        const startDate = app.jobPosting.startDate
-            ? new Date(app.jobPosting.startDate)
-            : null;
-        const endDate = app.jobPosting.endDate
-            ? new Date(app.jobPosting.endDate)
-            : null;
+        const startDate = localDateFromCalendarInput(
+            app.jobPosting.startDate ?? null,
+        );
+        const endDate = localDateFromCalendarInput(
+            app.jobPosting.endDate ?? null,
+        );
         if (tab === 'recent')
             return app.status === 'APPLIED' || app.status === 'SHORTLISTED' || app.status === 'CONFIRMED' || app.locumResponse === 'ACCEPTED' || app.locumResponse === 'REJECTED';
         if (tab === 'upcoming')
             return app.status === 'CONFIRMED' &&
                 !!app.locumAcceptedAt &&
                 startDate &&
-                startDate > today;
+                startDate.getTime() > todayStart.getTime();
         if (tab === 'completed')
             return app.status === 'CONFIRMED' &&
                 !!app.locumAcceptedAt &&
                 endDate &&
-                endDate < today;
+                endDate.getTime() < todayStart.getTime();
         return false;
     });
     const locumAcceptedApplication = (a: MyApplication) => a.locumResponse === 'ACCEPTED' || !!a.locumAcceptedAt;
@@ -245,8 +241,10 @@ export default function LocumDashboard(props: {
     const completedFromApps = applications.filter((a) => {
         if (!locumAcceptedApplication(a))
             return false;
-        const endDate = a.jobPosting.endDate ? new Date(a.jobPosting.endDate) : null;
-        return !!endDate && endDate < today;
+        const endDate = localDateFromCalendarInput(
+            a.jobPosting.endDate ?? null,
+        );
+        return !!endDate && endDate.getTime() < todayStart.getTime();
     }).length;
     const acceptedCount = shiftStats?.totalAcceptedShifts ?? acceptedFromApps;
     const completedCount = shiftStats?.completedShifts ?? completedFromApps;
@@ -296,97 +294,11 @@ export default function LocumDashboard(props: {
         </div>) : null}
 
       
-      <div className="locum-profile-banner" style={{
-            background: '#F4F6FB',
-            border: '1.5px solid #3B4FD8',
-            borderRadius: 10,
-            padding: '0 20px',
-            height: 80,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 18,
-            boxSizing: 'border-box',
-            flexShrink: 0,
-        }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{
-            position: 'relative',
-            width: 52,
-            height: 52,
-            flexShrink: 0,
-        }}>
-            <svg width="52" height="52" viewBox="0 0 52 52">
-              <circle cx="26" cy="26" r={PROFILE_RING_R} fill="none" stroke="#E5E7EB" strokeWidth="4"/>
-              <circle cx="26" cy="26" r={PROFILE_RING_R} fill="none" stroke="#22C55E" strokeWidth="4" strokeDasharray={`${ringDash} ${PROFILE_RING_C}`} strokeLinecap="round" transform="rotate(-90 26 26)"/>
-            </svg>
-            <div style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%,-50%)',
-        }}>
-              <ProfileStatusGlyph variant={cpsnsVerified ? 'verified' : 'incomplete'} size={28}/>
-            </div>
-          </div>
-          <div>
-            <div className="locum-profile-banner-text" style={{ fontSize: 'var(--font-heading)', fontWeight: 'var(--font-weight-bold)', color: '#0f1523' }}>
-              {completionPct < 100
-            ? 'Set up your profile to start finding opportunities'
-            : cpsnsVerified
-                ? 'Your profile is complete'
-                : 'Profile complete — CPSNS verification required to apply'}
-            </div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 8,
-              marginTop: 4,
-            }}>
-              <span style={{ fontSize: 'var(--font-small)', color: '#5a6478' }}>
-                {completionPct}% Completed
-              </span>
-              {statusBadge ? (
-                <span style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  padding: '2px 10px',
-                  borderRadius: 999,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  lineHeight: 1.4,
-                  background: statusBadge.background,
-                  color: statusBadge.color,
-                  border: `1px solid ${statusBadge.border}`,
-                }}>
-                  {statusBadge.label}
-                </span>
-              ) : null}
-            </div>
-          </div>
-        </div>
-        <button onClick={() => {
-            beforeClientNavigation('/locum/profile');
-            router.push('/locum/profile');
-        }} className="locum-profile-banner-btn" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '8px 14px',
-            background: '#fff',
-            border: '1px solid #D0D5DD',
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 500,
-            cursor: 'pointer',
-            color: '#0f1523',
-            flexShrink: 0,
-        }}>
-          <Image src="/edit-profile.svg" alt="" width={16} height={16} style={{ flexShrink: 0, objectFit: 'contain' }}/>
-          Edit Profile
-        </button>
-      </div>
+      <LocumProfileStatusBanner
+        profile={profile}
+        completionPct={completionPct}
+        showEditButton
+      />
 
       
       <div style={{
@@ -658,7 +570,7 @@ export default function LocumDashboard(props: {
                         }}>
                       {responding ? 'Saving…' : 'Accept'}
                     </button>
-                    <button type="button" disabled={responding} onClick={() => void respondToPlacement(app.id, 'decline')} style={{
+                    <button type="button" disabled={responding} onClick={() => setRejectConfirmAppId(app.id)} style={{
                             padding: '9px 18px',
                             borderRadius: 8,
                             border: '1px solid #FCA5A5',
@@ -676,5 +588,105 @@ export default function LocumDashboard(props: {
             </div>);
             })}
       </div>
+
+      {rejectConfirmAppId ? (
+        <div
+          role="presentation"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.45)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setRejectConfirmAppId(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="locum-reject-confirm-title"
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              padding: '24px 28px',
+              maxWidth: 400,
+              width: '100%',
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
+              fontFamily: 'Inter, sans-serif',
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="locum-reject-confirm-title"
+              style={{
+                margin: '0 0 10px 0',
+                fontSize: 18,
+                fontWeight: 600,
+                color: '#0B0F1F',
+              }}
+            >
+              Are you sure?
+            </h3>
+            <p
+              style={{
+                margin: '0 0 24px 0',
+                fontSize: 14,
+                color: '#6B7280',
+                lineHeight: 1.5,
+              }}
+            >
+              You are about to reject a placement the host already confirmed. This
+              cannot be undone from your side.
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                type="button"
+                onClick={() => setRejectConfirmAppId(null)}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  border: '1px solid #D0D5DD',
+                  borderRadius: 8,
+                  background: '#fff',
+                  color: '#374151',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const appId = rejectConfirmAppId;
+                  setRejectConfirmAppId(null);
+                  void respondToPlacement(appId, 'decline');
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  border: 'none',
+                  borderRadius: 8,
+                  background: '#DC2626',
+                  color: '#fff',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </DashLayout>);
 }

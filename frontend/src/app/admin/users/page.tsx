@@ -140,6 +140,7 @@ export default function AdminUsersPage() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileErr, setProfileErr] = useState<string | null>(null);
   const [showProfileFields, setShowProfileFields] = useState(true);
+  const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -198,6 +199,7 @@ export default function AdminUsersPage() {
   function closeSuspendModal() {
     setSuspendTarget(null);
     setSuspensionNote('');
+    setShowSuspendConfirm(false);
   }
 
   function openReinstateModal(row: Row) {
@@ -249,13 +251,26 @@ export default function AdminUsersPage() {
     setReinstateTarget(null);
   }
 
-  async function confirmSuspend() {
+  function requestSuspend() {
     if (!suspendTarget) return;
     const note = suspensionNote.trim();
     if (!note) {
       setErr('Enter a suspension note before suspending this user.');
       return;
     }
+    setErr(null);
+    setShowSuspendConfirm(true);
+  }
+
+  async function confirmSuspend() {
+    if (!suspendTarget) return;
+    const note = suspensionNote.trim();
+    if (!note) {
+      setErr('Enter a suspension note before suspending this user.');
+      setShowSuspendConfirm(false);
+      return;
+    }
+    setShowSuspendConfirm(false);
     await patchUser(suspendTarget.id, {
       status: 'SUSPENDED',
       suspensionNote: note,
@@ -424,7 +439,7 @@ export default function AdminUsersPage() {
           <div className="modal" role="dialog" aria-modal="true">
             <div className="modal-header">
               <div>
-                <h2 className="modal-title">Are you sure you want to suspend this user?</h2>
+                <h2 className="modal-title">Suspend user</h2>
                 <p className="modal-subtitle">{suspendTarget.email}</p>
               </div>
               <button
@@ -475,10 +490,69 @@ export default function AdminUsersPage() {
                     color: '#dc2626',
                   }}
                   disabled={savingId === suspendTarget.id || !suspensionNote.trim()}
-                  onClick={() => void confirmSuspend()}
+                  onClick={() => requestSuspend()}
                 >
                   <Ban size={18} />
-                  {savingId === suspendTarget.id ? 'Suspending…' : 'Confirm suspend'}
+                  Suspend
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div
+        className={`modal-overlay${showSuspendConfirm ? ' active' : ''}`}
+        style={showSuspendConfirm ? { zIndex: 1100 } : undefined}
+        onClick={(e) => {
+          if (e.target === e.currentTarget && !savingId) setShowSuspendConfirm(false);
+        }}
+        onKeyDown={() => {}}
+        role="presentation"
+      >
+        {showSuspendConfirm && suspendTarget ? (
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-suspend-confirm-title"
+            style={{ maxWidth: 420 }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="modal-body">
+              <h2
+                id="admin-suspend-confirm-title"
+                className="modal-title"
+                style={{ marginBottom: 8 }}
+              >
+                Are you sure you want to suspend?
+              </h2>
+              <p className="text-sm text-muted" style={{ marginBottom: 20, lineHeight: 1.5 }}>
+                {suspendTarget.email} will be blocked from signing in until you reinstate
+                the account.
+              </p>
+              <div className="grid-2">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: 12 }}
+                  disabled={savingId === suspendTarget.id}
+                  onClick={() => setShowSuspendConfirm(false)}
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{
+                    padding: 12,
+                    borderColor: '#fecaca',
+                    color: '#dc2626',
+                  }}
+                  disabled={savingId === suspendTarget.id}
+                  onClick={() => void confirmSuspend()}
+                >
+                  {savingId === suspendTarget.id ? 'Suspending…' : 'Yes'}
                 </button>
               </div>
             </div>

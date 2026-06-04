@@ -97,10 +97,10 @@ export function buildH004NewMessage(params: {
 
 /** H-005 — Host account verified */
 export const H005_HOST_ACCOUNT_VERIFIED = {
-  inAppTitle: 'Account Verified - Welcome to LocumLink L2!',
+  inAppTitle: 'Account Verified - Welcome to Locum Link!',
   inAppBody:
-    'Welcome to LocumLink L2! Your account has been verified. You can now post locum opportunities.',
-  emailSubject: 'Account Verified - Welcome to LocumLink L2!',
+    'Welcome to Locum Link! Your account has been verified. You can now post locum opportunities.',
+  emailSubject: 'Account Verified - Welcome to Locum Link!',
   emailBody: (hostName: string) =>
     `Congratulations ${hostName}! Your credentials have been verified. You can begin posting locum opportunities to connect with qualified physicians in Nova Scotia.`,
   priority: 'HIGH' as HostCopyPriority,
@@ -127,7 +127,7 @@ export const H007_HOST_ACCOUNT_SUSPENDED = {
   inAppBody: 'Your account has been suspended. Contact support for assistance.',
   emailSubject: 'Important: Account Suspension Notice',
   emailBody: (reason: string) =>
-    `Your LocumLink L2 account has been suspended due to ${reason}. Please contact our support team to resolve this issue.`,
+    `Your Locum Link account has been suspended due to ${reason}. Please contact our support team to resolve this issue.`,
   priority: 'CRITICAL' as HostCopyPriority,
   actionLabel: 'Contact Support',
 };

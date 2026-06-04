@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback, type KeyboardEvent, useMemo }
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
-import { ProfileStatusGlyph, type ProfileStatusGlyphVariant } from '@/components/ProfileStatusGlyph';
+import LocumProfileStatusBanner from '@/components/LocumProfileStatusBanner';
 import { locumApi, uploadFile } from '@/lib/api';
 import { buildLocumSavePayload } from '@/lib/locumProfilePayload';
 import { formatUploadedFileLabel, originalUploadFileName } from '@/lib/uploadDisplayName';
@@ -48,9 +48,7 @@ const SPECIALITY_OPTIONS = sortStringsLocale([
   'Emergency Medicine', 'Anaesthetics', 'Paediatrics',
 ]);
 
-type VerificationStatus = 'pending' | 'under-review' | 'verified';
-
-/* ── shared inline styles ─────────────────────────────────────────────────── */
+type StepStatus = 'complete' | 'active' | 'incomplete' | 'upcoming';
 const inp: React.CSSProperties = {
   width: '100%',
   padding: '8px 10px',
@@ -111,8 +109,6 @@ function highlightCityName(text: string, query: string): React.ReactNode {
 }
 
 /* ── step status helpers ──────────────────────────────────────────────────── */
-type StepStatus = 'complete' | 'active' | 'incomplete' | 'upcoming';
-
 function stepBorderColor(s: StepStatus) {
   if (s === 'complete')   return '#16a34a';
   if (s === 'active')     return '#3B4FD8';
@@ -120,45 +116,6 @@ function stepBorderColor(s: StepStatus) {
   return '#e2e5ee';
 }
 
-/* ── verification banner ──────────────────────────────────────────────────── */
-function VerificationBanner({ status }: { status: VerificationStatus }) {
-  const config = {
-    pending: {
-      glyph: 'pendingStaff' as ProfileStatusGlyphVariant,
-      title: 'Profile submitted — pending review',
-      sub: 'We will notify you once your profile has been reviewed.',
-      bg: '#FFFBEB', border: '#FDE68A', titleColor: '#92400E', subColor: '#B45309',
-    },
-    'under-review': {
-      glyph: 'underReview' as ProfileStatusGlyphVariant,
-      title: 'CPSNS not verified yet',
-      sub: 'Your profile is complete. An administrator will verify your CPSNS number and license before you can apply to jobs.',
-      bg: '#EFF6FF', border: '#BFDBFE', titleColor: '#1E40AF', subColor: '#3B82F6',
-    },
-    verified: {
-      glyph: 'verified' as ProfileStatusGlyphVariant,
-      title: 'Profile verified',
-      sub: 'You are verified and can now apply to locum opportunities.',
-      bg: '#F3F4F6', border: '#E5E7EB', titleColor: '#0f1523', subColor: '#6B7280',
-    },
-  }[status];
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      background: config.bg, border: `1px solid ${config.border}`,
-      borderRadius: 8, padding: '12px 16px', marginBottom: 20,
-    }}>
-      <ProfileStatusGlyph variant={config.glyph} size={36} />
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: config.titleColor }}>{config.title}</div>
-        <div style={{ fontSize: 12, color: config.subColor }}>{config.sub}</div>
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════════════════ */
 export default function LocumProfilePage(props: {
   params?: Promise<Record<string, string | string[] | undefined>>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -180,6 +137,7 @@ export default function LocumProfilePage(props: {
   const [lastName,         setLastName]         = useState('');
   const [cpsns,            setCpsns]            = useState('');
   const [cpsnsVerificationStatus, setCpsnsVerificationStatus] = useState<CpsnsVerificationStatus | undefined>();
+  const [accountStatus, setAccountStatus] = useState<LocumProfile['accountStatus']>();
   const [yearsOfExperience,setYearsOfExperience]= useState<number | ''>('');
   const [summary,          setSummary]          = useState('');
   const [specialityTags,   setSpecialityTags]   = useState<string[]>([]);
@@ -283,8 +241,9 @@ export default function LocumProfilePage(props: {
         const p = typed.profile;
         setFirstName(p.firstName ?? '');
         setLastName(p.lastName ?? '');
-        setCpsns(p.cpsnsNumber?.startsWith('pending-') ? '' : (p.cpsnsNumber ?? ''));
+        setCpsns(hasCpsnsNumber(p.cpsnsNumber) ? (p.cpsnsNumber ?? '') : '');
         setCpsnsVerificationStatus(p.cpsnsVerificationStatus);
+        setAccountStatus(p.accountStatus);
         setYearsOfExperience(
           typeof (p as { yearsOfExperience?: unknown }).yearsOfExperience === 'number'
             ? ((p as { yearsOfExperience: number }).yearsOfExperience ?? 0)
@@ -348,21 +307,18 @@ export default function LocumProfilePage(props: {
   }), [firstName, lastName, cpsns, yearsOfExperience, summary, specialityTags,
        phone, addr1, addr2, postal, city, province, licenseFile, resumeFile, extraFile]);
 
+  const profileForBanner = useMemo((): LocumProfile => ({
+    ...profileDraft,
+    cpsnsVerificationStatus,
+    accountStatus,
+  }), [profileDraft, cpsnsVerificationStatus, accountStatus]);
+
   const progressPct = locumProfileCompletionPct(profileDraft);
-  const allStepsDone = progressPct === 100;
   const cpsnsVerified = isCpsnsVerificationApproved(cpsnsVerificationStatus);
   const welcomeDoctorLabel =
     firstName || lastName
       ? `Dr ${firstName.trim()} ${lastName.trim()}`.trim()
       : '';
-  const profileVerificationStatus: VerificationStatus = !allStepsDone
-    ? 'pending'
-    : isCpsnsVerificationApproved(cpsnsVerificationStatus)
-      ? 'verified'
-      : cpsnsVerificationStatus === 'REJECTED'
-        ? 'under-review'
-        : 'under-review';
-
   /* ── step status / navigation ─────────────────────────────────────────── */
   function getStatus(n: number): StepStatus {
     const idx = n - 1;
@@ -463,8 +419,10 @@ export default function LocumProfilePage(props: {
         </NameWithVerifiedShield>
       </h1>
 
-      {/* ── verification banner ────────────────────────────────────────── */}
-      {allStepsDone && <VerificationBanner status={profileVerificationStatus} />}
+      <LocumProfileStatusBanner
+        profile={profileForBanner}
+        completionPct={progressPct}
+      />
 
       {/* ── step progress bar ──────────────────────────────────────────── */}
       <div style={{
@@ -839,7 +797,7 @@ onClick={(e) => e.stopPropagation()} placeholder="Email"
             <label style={lbl}>Postal Code</label>
             <input
               style={inp} value={postal} onChange={(e) => setPostal(e.target.value)}
-              onClick={(e) => e.stopPropagation()} placeholder="Postal code"
+              onClick={(e) => e.stopPropagation()} placeholder="Postal Code"
             />
           </div>
           <div aria-hidden />

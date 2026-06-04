@@ -10,7 +10,7 @@ function contactSupportMailtoHref(): string {
 const EVENT_DEFAULTS: Record<string, { href: string; actionLabel: string }> = {
   H_001_LOCUM_APPLIED: { href: '/host/dashboard', actionLabel: 'Review Application' },
   H_002_LOCUM_ACCEPTED: { href: '/host/dashboard', actionLabel: 'View Shift Details' },
-  H_003_LOCUM_DECLINED: { href: '/host/dashboard?postJob=1', actionLabel: 'Repost Opportunity' },
+  H_003_LOCUM_DECLINED: { href: '/host/dashboard', actionLabel: 'Repost Opportunity' },
   H_004_NEW_MESSAGE: { href: '/host/messages', actionLabel: 'Read Message' },
   H_005_ACCOUNT_VERIFIED: { href: '/host/dashboard?postJob=1', actionLabel: 'Post Your First Opportunity' },
   H_006_ACCOUNT_REJECTED: { href: '/host/profile', actionLabel: 'Complete Verification' },
@@ -31,6 +31,42 @@ const EVENT_DEFAULTS: Record<string, { href: string; actionLabel: string }> = {
   L_012_SHIFT_CANCELLED: { href: '/locum/browse', actionLabel: 'Browse Opportunities' },
 };
 
+const EVENT_TITLES: Record<string, string> = {
+  H_001_LOCUM_APPLIED: 'New Application',
+  H_002_LOCUM_ACCEPTED: 'Shift Confirmed',
+  H_003_LOCUM_DECLINED: 'Application Update',
+  H_004_NEW_MESSAGE: 'New Message',
+  H_005_ACCOUNT_VERIFIED: 'Account Verified - Welcome to Locum Link!',
+  H_006_ACCOUNT_REJECTED: 'Action Required: Account Verification',
+  H_007_ACCOUNT_SUSPENDED: 'Important: Account Suspension Notice',
+  H_008_POSTING_EXPIRING: 'Shift Coverage Reminder',
+  H_009_SHIFT_CANCELLED: 'Last-Minute Cancellation Alert',
+  L_001_NEW_OPPORTUNITY: 'New Locum Opportunity Available',
+  L_002_HOST_CONFIRMED: 'Shift Confirmed',
+  L_003_APPLICATION_ACCEPTED: 'Application Accepted — Action Required',
+  L_004_APPLICATION_DECLINED: 'Application Update',
+  L_005_SHIFT_REMINDER_48H: 'Upcoming Shift Reminder',
+  L_006_SHIFT_REMINDER_EVENING: "Tomorrow's Shift Reminder",
+  L_007_SHIFT_REMINDER_2H: 'Shift Starting Soon',
+  L_008_NEW_MESSAGE: 'New Message',
+  L_009_ACCOUNT_VERIFIED: 'Account Verified - Start Finding Shifts!',
+  L_010_ACCOUNT_REJECTED: 'Action Required: Account Verification',
+  L_011_ACCOUNT_SUSPENDED: 'Account suspended',
+  L_012_SHIFT_CANCELLED: 'Shift Cancelled',
+};
+
+function isInternalNotificationCode(text: string): boolean {
+  return /^[HLA]_\d{3}_/i.test(text.trim());
+}
+
+export function resolveNotificationTitle(notif: NotificationItem): string {
+  const raw = notif.title?.trim();
+  if (raw && !isInternalNotificationCode(raw)) return raw;
+  const eventType = notif.eventType?.trim() ?? '';
+  if (eventType && EVENT_TITLES[eventType]) return EVENT_TITLES[eventType];
+  return 'Notification';
+}
+
 export function resolveNotificationAction(notif: NotificationItem): {
   href: string | null;
   actionLabel: string | null;
@@ -39,9 +75,11 @@ export function resolveNotificationAction(notif: NotificationItem): {
   const defaults = eventType ? EVENT_DEFAULTS[eventType] : undefined;
   const rawHref = notif.href?.trim();
   const href =
-    rawHref && rawHref !== '/'
-      ? rawHref
-      : defaults?.href ?? null;
+    eventType === 'H_002_LOCUM_ACCEPTED' || eventType === 'H_003_LOCUM_DECLINED'
+      ? defaults?.href ?? '/host/dashboard'
+      : rawHref && rawHref !== '/'
+        ? rawHref
+        : defaults?.href ?? null;
   const actionLabel =
     notif.actionLabel?.trim() || defaults?.actionLabel || null;
   return { href, actionLabel };

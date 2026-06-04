@@ -15,7 +15,7 @@ import { getSupabase } from '@/lib/supabaseClient';
 import { useTrackLastPath } from '../hooks/useTrackLastPath';
 import { subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { beforeClientNavigation } from '@/lib/topLoader';
-import { isExternalNotificationHref, resolveNotificationAction } from '@/lib/notificationActions';
+import { isExternalNotificationHref, resolveNotificationAction, resolveNotificationTitle } from '@/lib/notificationActions';
 interface NavItem {
     label: string;
     href: string;
@@ -574,7 +574,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     color: '#0f1523',
                     lineHeight: 1.4,
                 }}>
-                              {notif.title}
+                              {resolveNotificationTitle(notif)}
                             </span>
                           </div>
                           <div style={{
@@ -694,7 +694,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 }
             })();
         }}/>
-            <div role="button" tabIndex={0} onClick={() => setAvatarMenuOpen((v) => !v)} onKeyDown={(e) => {
+            <div id="nav-account-menu" role="button" tabIndex={0} onClick={() => setAvatarMenuOpen((v) => !v)} onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ')
                 setAvatarMenuOpen((v) => !v);
         }} aria-label="Account menu" aria-expanded={avatarMenuOpen} style={{
@@ -1139,7 +1139,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             >
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: '#0B0F1F', lineHeight: 1.3 }}>
-                  {selectedNotif.title}
+                  {resolveNotificationTitle(selectedNotif)}
                 </div>
                 <div style={{ marginTop: 6, fontSize: 12, color: '#9CA3AF' }}>
                   {fmtNotifTime(selectedNotif.createdAt)}

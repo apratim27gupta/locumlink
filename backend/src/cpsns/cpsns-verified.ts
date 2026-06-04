@@ -23,10 +23,29 @@ export function didCpsnsDocumentChange(
   return (existing?.trim() ?? '') !== n;
 }
 
+export function isInternalCpsnsPlaceholder(raw: string): boolean {
+  return /^pending(?:[-_]|$)/i.test(raw.trim());
+}
+
 export function hasCpsnsNumber(input: string | null | undefined): boolean {
   const raw = String(input ?? '').trim();
-  if (!raw || /^pending-/i.test(raw)) return false;
+  if (!raw || raw === '—' || isInternalCpsnsPlaceholder(raw)) return false;
   return normalizeCpsns(input).length > 0;
+}
+
+/** CPSNS digits when present; empty when missing or placeholder. */
+export function adminCpsnsNumberOrEmpty(
+  cpsns: string | null | undefined,
+): string {
+  if (!hasCpsnsNumber(cpsns)) return '';
+  return normalizeCpsns(cpsns);
+}
+
+/** Admin tables: show CPSNS digits or "Not provided". */
+export function formatAdminCpsnsDisplay(
+  cpsns: string | null | undefined,
+): string {
+  return adminCpsnsNumberOrEmpty(cpsns) || 'Not provided';
 }
 
 /** @deprecated Use hasCpsnsNumber */
@@ -179,6 +198,26 @@ export function mergeCredentialReviewPatchForAccountPending(
     cpsnsVerificationStatus: VerificationStatus.PENDING_REVIEW,
     cpsnsVerifiedAt: null,
   };
+}
+
+/** Stamp when a profile newly enters the admin credential review queue. */
+export function mergeCredentialSubmittedAtPatch<
+  T extends { cpsnsVerificationStatus?: VerificationStatus },
+>(
+  previousStatus: VerificationStatus | null | undefined,
+  patch: T,
+): T & { credentialSubmittedAt?: Date } {
+  const next = patch.cpsnsVerificationStatus;
+  if (!next || next !== VerificationStatus.PENDING_REVIEW) return patch;
+  if (previousStatus === VerificationStatus.PENDING_REVIEW) return patch;
+  return { ...patch, credentialSubmittedAt: new Date() };
+}
+
+export function credentialQueueSubmittedAt(profile: {
+  credentialSubmittedAt?: Date | null;
+  updatedAt: Date;
+}): Date {
+  return profile.credentialSubmittedAt ?? profile.updatedAt;
 }
 
 export function isEligibleForCredentialQueueHost(profile: {

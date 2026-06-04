@@ -18,15 +18,16 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
+  adminCpsnsNumberOrEmpty,
   isCpsnsVerificationApproved,
   normalizeCpsns,
   credentialReviewPatchOnProfileSave,
   didCpsnsDocumentChange,
   didCpsnsNumberChange,
   mergeCredentialReviewPatchForAccountPending,
+  mergeCredentialSubmittedAtPatch,
 } from '../cpsns/cpsns-verified.js';
 import type { SaveLocumProfileDto } from './locum.dto.js';
-import { isShiftWithin24Hours } from '../notifications/host-notification-copy.js';
 function mapSpecialty(raw?: string): Specialty {
   if (!raw?.trim()) return Specialty.OTHER;
   const key = raw
@@ -156,7 +157,7 @@ export class LocumService {
     return {
       firstName: profile.firstName ?? undefined,
       lastName: profile.lastName ?? undefined,
-      cpsnsNumber: profile.cpsnsId,
+      cpsnsNumber: adminCpsnsNumberOrEmpty(profile.cpsnsId) || undefined,
       yearsOfExperience: profile.yearsOfExperience ?? null,
       professionalSummary: profile.summary ?? undefined,
       specialization: spec,
@@ -223,25 +224,28 @@ export class LocumService {
       dto.firstName?.trim() ||
       dto.lastName?.trim(),
     );
-    const verificationPatch = mergeCredentialReviewPatchForAccountPending(
-      existing
-        ? {
-            cpsnsNumber: existing.cpsnsId,
-            cpsnsVerificationStatus: existing.cpsnsVerificationStatus,
-          }
-        : null,
-      credentialReviewPatchOnProfileSave(
+    const verificationPatch = mergeCredentialSubmittedAtPatch(
+      existing?.cpsnsVerificationStatus,
+      mergeCredentialReviewPatchForAccountPending(
         existing
           ? {
               cpsnsNumber: existing.cpsnsId,
               cpsnsVerificationStatus: existing.cpsnsVerificationStatus,
             }
           : null,
-        cpsnsDigits,
+        credentialReviewPatchOnProfileSave(
+          existing
+            ? {
+                cpsnsNumber: existing.cpsnsId,
+                cpsnsVerificationStatus: existing.cpsnsVerificationStatus,
+              }
+            : null,
+          cpsnsDigits,
+          profileSubmittedForReview,
+        ),
         profileSubmittedForReview,
+        account?.status === UserStatus.PENDING,
       ),
-      profileSubmittedForReview,
-      account?.status === UserStatus.PENDING,
     );
     const profile = await this.prisma.locumProfile.upsert({
       where: { userId },
@@ -409,6 +413,9 @@ export class LocumService {
         hostProfile: {
           select: {
             practiceName: true,
+            contactFirstName: true,
+            contactLastName: true,
+            cpsnsVerificationStatus: true,
             city: true,
             province: true,
             postalCode: true,
@@ -649,7 +656,7 @@ export class LocumService {
         });
       }
     });
-    // H-003 / H-009: Notify host that locum declined
+    // H-003: Notify host that locum declined the confirmed placement
     try {
       const jobWithHost = await this.prisma.jobPosting.findUnique({
         where: { id: app.jobPostingId },
@@ -681,21 +688,6 @@ export class LocumService {
           applicationId,
           jobId: jobWithHost.id,
         });
-        if (isShiftWithin24Hours(jobWithHost.startDate)) {
-          const locumName = [locumProfile?.firstName, locumProfile?.lastName]
-            .filter(Boolean)
-            .join(' ')
-            .trim();
-          await this.notifService.notifyHostShiftCancelled({
-            recipientId: host.userId,
-            recipientEmail: hostEmail,
-            startDate: jobWithHost.startDate,
-            clinicName: host.practiceName ?? 'your clinic',
-            cancelledBy: locumName ? `Dr. ${locumName}` : 'Locum physician',
-            reason: 'Locum declined the confirmed placement',
-            jobId: jobWithHost.id,
-          });
-        }
       }
     } catch {}
     return { success: true };

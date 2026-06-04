@@ -118,14 +118,15 @@ export default function AdminVerificationsPage() {
   const [notes, setNotes] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey>('waitTime');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortKey(key);
-      setSortDir(key === 'waitTime' ? 'desc' : 'asc');
+      setSortDir('asc');
     }
   }
 
@@ -154,6 +155,7 @@ export default function AdminVerificationsPage() {
     setReviewDetail(null);
     setShowProfileData(false);
     setDetailErr(null);
+    setShowRejectConfirm(false);
   }
 
   function viewDocument(doc: VerificationDocument) {
@@ -223,6 +225,22 @@ export default function AdminVerificationsPage() {
     }
   }
 
+  function requestReject() {
+    if (!review) return;
+    if (!notes.trim()) {
+      setErr('Enter a rejection reason before rejecting.');
+      return;
+    }
+    setErr(null);
+    setShowRejectConfirm(true);
+  }
+
+  async function confirmReject() {
+    if (!review) return;
+    setShowRejectConfirm(false);
+    await patchStatus(review, 'REJECTED');
+  }
+
   const displayedRows = useMemo(() => {
     const filtered = rows.filter((r) => matchesStatusFilter(r, statusFilter));
     return [...filtered].sort((a, b) => {
@@ -233,11 +251,8 @@ export default function AdminVerificationsPage() {
           cmp = statusDisplayLabel(a).localeCompare(statusDisplayLabel(b));
         }
       } else {
-        cmp = waitDays(a.submittedAt) - waitDays(b.submittedAt);
-        if (cmp === 0) {
-          cmp =
-            new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime();
-        }
+        cmp =
+          new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime();
       }
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -283,7 +298,7 @@ export default function AdminVerificationsPage() {
           onChange={(e) => setSortKey(e.target.value as SortKey)}
           aria-label="Sort by"
         >
-          <option value="waitTime">Sort by wait time</option>
+          <option value="waitTime">Sort by queue order</option>
           <option value="status">Sort by status</option>
         </select>
         <select
@@ -587,7 +602,7 @@ export default function AdminVerificationsPage() {
                         ? 'Enter a rejection reason in the notes field'
                         : undefined
                     }
-                    onClick={() => patchStatus(review, 'REJECTED')}
+                    onClick={() => requestReject()}
                   >
                     <XCircle size={20} />
                     Reject
@@ -605,6 +620,64 @@ export default function AdminVerificationsPage() {
                     onChange={(e) => setNotes(e.target.value)}
                   />
                 </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div
+        className={`modal-overlay${showRejectConfirm ? ' active' : ''}`}
+        style={showRejectConfirm ? { zIndex: 1100 } : undefined}
+        onClick={(e) => {
+          if (e.target === e.currentTarget && !busyId) setShowRejectConfirm(false);
+        }}
+        onKeyDown={() => {}}
+        role="presentation"
+      >
+        {showRejectConfirm && review ? (
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-reject-confirm-title"
+            style={{ maxWidth: 420 }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="modal-body">
+              <h2
+                id="admin-reject-confirm-title"
+                className="modal-title"
+                style={{ marginBottom: 8 }}
+              >
+                Are you sure you want to reject?
+              </h2>
+              <p className="text-sm text-muted" style={{ marginBottom: 20, lineHeight: 1.5 }}>
+                {review.name} will be notified with the rejection reason you entered.
+              </p>
+              <div className="grid-2">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: 12 }}
+                  disabled={busyId === review.id}
+                  onClick={() => setShowRejectConfirm(false)}
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{
+                    padding: 12,
+                    borderColor: '#fecaca',
+                    color: '#dc2626',
+                  }}
+                  disabled={busyId === review.id}
+                  onClick={() => void confirmReject()}
+                >
+                  {busyId === review.id ? 'Rejecting…' : 'Yes'}
+                </button>
               </div>
             </div>
           </div>

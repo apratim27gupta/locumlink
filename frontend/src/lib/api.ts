@@ -268,6 +268,9 @@ export const authApi = {
 };
 export type BrowseJobHostProfile = {
     practiceName: string;
+    contactFirstName?: string | null;
+    contactLastName?: string | null;
+    cpsnsVerificationStatus?: import('@/lib/cpsnsVerify').CpsnsVerificationStatus | null;
     city: string;
     province: string;
     postalCode?: string;
