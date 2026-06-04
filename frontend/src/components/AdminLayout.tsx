@@ -115,12 +115,17 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
     useState<AdminNotificationItem | null>(null);
   const adminBellRef = useRef<HTMLDivElement>(null);
   const prevAdminTotal = useRef(0);
+  const [adminNotifErr, setAdminNotifErr] = useState<string | null>(null);
   const fetchAdminNotifs = useCallback(async () => {
     try {
       const data = await adminGetNotifications();
       setAdminNotifs(data.notifications);
       setAdminNotifTotal(data.total);
-    } catch {}
+      setAdminNotifErr(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not load notifications';
+      setAdminNotifErr(msg);
+    }
   }, []);
   useEffect(() => { void fetchAdminNotifs(); }, [fetchAdminNotifs]);
   useVisibilityPolling(() => {
@@ -180,26 +185,29 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
           <div className="admin-topbar-divider" />
           <span className="admin-topbar-title">Admin Portal</span>
         </div>
-        <div ref={adminBellRef} className="admin-topbar-actions">
-          <button
-            type="button"
-            onClick={() => setAdminBellOpen((v) => !v)}
-            className="admin-bell-btn"
-            title="Notifications"
-            aria-label="Notifications"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </svg>
-            {adminNotifTotal > 0 && (
-              <span className="admin-bell-badge">
-                {adminNotifTotal > 9 ? '9+' : adminNotifTotal}
-              </span>
-            )}
-          </button>
-          {adminBellOpen && (
-            <div className="admin-bell-dropdown">
+        <div className="admin-topbar-actions">
+          <div ref={adminBellRef} className="admin-bell-menu">
+            <button
+              type="button"
+              onClick={() => setAdminBellOpen((v) => !v)}
+              className="admin-bell-btn"
+              title="Notifications"
+              aria-label="Notifications"
+              aria-expanded={adminBellOpen}
+              aria-haspopup="true"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              {adminNotifTotal > 0 && (
+                <span className="admin-bell-badge">
+                  {adminNotifTotal > 9 ? '9+' : adminNotifTotal}
+                </span>
+              )}
+            </button>
+            {adminBellOpen && (
+              <div className="admin-bell-dropdown" role="menu">
               <div className="admin-bell-dropdown-header">
                 Notifications
                 {adminNotifTotal > 0 && (
@@ -210,13 +218,17 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
                 )}
               </div>
               <div className="admin-bell-dropdown-list">
-                {adminNotifs.length === 0 ? (
+                {adminNotifErr ? (
+                  <div className="admin-bell-empty">
+                    <div>{adminNotifErr}</div>
+                  </div>
+                ) : adminNotifs.length === 0 ? (
                   <div className="admin-bell-empty">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38C6C6" strokeWidth="1.5" strokeLinecap="round">
                       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                       <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
                     </svg>
-                    <div>No new notifications</div>
+                    <div>No notifications yet</div>
                   </div>
                 ) : (
                   adminNotifs.map((notif) => {
@@ -261,7 +273,8 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
                 )}
               </div>
             </div>
-          )}
+            )}
+          </div>
         </div>
       </header>
 

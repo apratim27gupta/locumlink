@@ -21,6 +21,15 @@ const nextConfig: NextConfig = {
       { source: '/favicon.ico', destination: '/logo1.png' },
       { source: '/api/admin-auth/:path*', destination: `${apiBase}/api/admin-auth/:path*` },
       { source: '/api/admin/stats', destination: `${apiBase}/api/admin/stats` },
+      { source: '/api/admin/notifications', destination: `${apiBase}/api/admin/notifications` },
+      {
+        source: '/api/admin/notifications/:id/read',
+        destination: `${apiBase}/api/admin/notifications/:id/read`,
+      },
+      {
+        source: '/api/admin/users/:id/profile',
+        destination: `${apiBase}/api/admin/users/:id/profile`,
+      },
       { source: '/api/admin/analytics/summary', destination: `${apiBase}/api/admin/analytics/summary` },
       { source: '/api/admin/analytics/export', destination: `${apiBase}/api/admin/analytics/export` },
       { source: '/api/auth/:path*',       destination: `${apiBase}/api/auth/:path*` },

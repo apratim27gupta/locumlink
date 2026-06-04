@@ -1,11 +1,11 @@
-import { VerificationStatus } from '@prisma/client';
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
+/** Admin may only approve or reject (matches Prisma VerificationStatus enum values). */
+const ADMIN_VERIFICATION_DECISIONS = ['VERIFIED', 'REJECTED'] as const;
+
 export class AdminUpdateVerificationDto {
-  @IsIn([VerificationStatus.VERIFIED, VerificationStatus.REJECTED])
-  cpsnsVerificationStatus!:
-    | VerificationStatus.VERIFIED
-    | VerificationStatus.REJECTED;
+  @IsIn(ADMIN_VERIFICATION_DECISIONS)
+  cpsnsVerificationStatus!: (typeof ADMIN_VERIFICATION_DECISIONS)[number];
 
   // PRD L2-E7.3 / AD-02: mandatory reason on rejection
   @IsOptional()

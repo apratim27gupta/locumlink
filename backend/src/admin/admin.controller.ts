@@ -21,6 +21,7 @@ import { Public } from '../auth/decorators/public.decorator.js';
 import { AdminJwtAuthGuard } from '../admin-auth/guards/admin-jwt-auth.guard.js';
 import { CurrentAdmin } from '../admin-auth/decorators/current-admin.decorator.js';
 import type { AdminJwtPayload } from '../admin-auth/admin-auth.types.js';
+import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
 import { AdminService } from './admin.service.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
@@ -29,7 +30,10 @@ import { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.
 @UseGuards(AdminJwtAuthGuard)
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly adminNotifications: AdminNotificationsService,
+  ) {}
 
   @Get('stats')
   async stats(@CurrentAdmin() admin: AdminJwtPayload) {
@@ -56,6 +60,15 @@ export class AdminController {
   async exportUsers(@Query('q') q: string | undefined, @Res() res: Response) {
     const csv = await this.admin.exportUsersCsv(q);
     return res.status(200).send(`\uFEFF${csv}`);
+  }
+
+  @Get('users/:id/profile')
+  async getUserProfile(@Param('id') id: string) {
+    const detail = await this.admin.getUserProfileByUserId(id);
+    if (!detail) {
+      throw new NotFoundException('User not found');
+    }
+    return detail;
   }
 
   @Patch('users/:id')
@@ -135,6 +148,20 @@ export class AdminController {
         take: Math.min(Math.max(take, 1), 500),
       }),
     };
+  }
+
+  @Get('notifications')
+  async notifications(@CurrentAdmin() admin: AdminJwtPayload) {
+    return this.adminNotifications.getNotifications(admin.sub);
+  }
+
+  @Patch('notifications/:id/read')
+  async markNotificationRead(
+    @CurrentAdmin() admin: AdminJwtPayload,
+    @Param('id') id: string,
+  ) {
+    await this.adminNotifications.markRead(admin.sub, id);
+    return { ok: true };
   }
 
   @Get('analytics/summary')

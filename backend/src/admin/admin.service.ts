@@ -568,6 +568,81 @@ export class AdminService {
       : await this.buildHostVerificationDetail(profileId);
   }
 
+  /** Profile + signed documents for admin user management (lookup by User.id). */
+  async getUserProfileByUserId(userId: string): Promise<{
+    profileType: 'locum' | 'host';
+    documents: Array<{
+      id: string;
+      label: string;
+      fileName: string;
+      signedUrl: string;
+    }>;
+    profileFields: Array<{ label: string; value: string }>;
+    userId: string;
+    email: string;
+    role: 'LOCUM' | 'HOST';
+    hasProfile: boolean;
+  } | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        locumProfile: { select: { id: true } },
+        hostProfile: { select: { id: true } },
+      },
+    });
+    if (!user || user.role === Role.ADMIN) return null;
+
+    if (user.role === Role.HOST && user.hostProfile) {
+      const detail = await this.buildHostVerificationDetail(user.hostProfile.id);
+      if (detail) {
+        return {
+          ...detail,
+          userId: user.id,
+          email: user.email,
+          role: 'HOST',
+          hasProfile: true,
+        };
+      }
+    }
+
+    if (user.role === Role.LOCUM && user.locumProfile) {
+      const detail = await this.buildLocumVerificationDetail(user.locumProfile.id);
+      if (detail) {
+        return {
+          ...detail,
+          userId: user.id,
+          email: user.email,
+          role: 'LOCUM',
+          hasProfile: true,
+        };
+      }
+    }
+
+    const profileType = user.role === Role.HOST ? ('host' as const) : ('locum' as const);
+    const profileFields = [
+      this.profileField('Email', user.email),
+      this.profileField('Account status', user.status),
+      this.profileField(
+        'Role',
+        user.role === Role.HOST ? 'Host Physician' : 'Locum Physician',
+      ),
+    ].filter((f): f is { label: string; value: string } => f !== null);
+
+    return {
+      profileType,
+      documents: [],
+      profileFields,
+      userId: user.id,
+      email: user.email,
+      role: user.role === Role.HOST ? 'HOST' : 'LOCUM',
+      hasProfile: false,
+    };
+  }
+
   private async buildHostVerificationDetail(profileId: string) {
     const profile = await this.prisma.hostProfile.findUnique({
       where: { id: profileId },
@@ -581,6 +656,12 @@ export class AdminService {
         'CPSNS License',
         profile.licenseFile,
         profile.licenseOriginalName,
+      ),
+      this.verificationDocument(
+        'photo-id',
+        'Photo ID',
+        profile.photoIdFile,
+        profile.photoIdOriginalName,
       ),
     ]);
     const documents = docCandidates.filter(

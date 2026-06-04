@@ -29,6 +29,8 @@ const backendRoutes = [
   { method: 'GET', path: '/api/admin/audit-logs', expect: [401] },
   { method: 'GET', path: '/api/admin/analytics/summary', expect: [401] },
   { method: 'GET', path: '/api/admin/analytics/export', expect: [401] },
+  { method: 'GET', path: '/api/admin/notifications', expect: [401] },
+  { method: 'GET', path: '/api/admin/users/test-user-id/profile', expect: [401] },
 ];
 
 /** Frontend Next.js handlers (not proxied to Nest) */
@@ -47,6 +49,8 @@ const frontendProxyRoutes = [
   { method: 'GET', path: '/api/locum/jobs/browse-count', expect: [200] },
   { method: 'GET', path: '/api/auth/me', expect: [401] },
   { method: 'GET', path: '/api/host/profile', expect: [401] },
+  { method: 'GET', path: '/api/admin/notifications', expect: [401] },
+  { method: 'GET', path: '/api/admin/users/test-user-id/profile', expect: [401] },
 ];
 
 async function hit(base, { method, path, expect, body }) {

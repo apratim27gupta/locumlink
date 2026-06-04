@@ -25,6 +25,7 @@
   flex-shrink: 0;
   z-index: 30;
   gap: 16px;
+  overflow: visible;
 }
 
 .admin-portal .admin-topbar-brand {
@@ -50,12 +51,17 @@
 }
 
 .admin-portal .admin-topbar-actions {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   flex-shrink: 0;
-  min-width: 40px;
+}
+
+.admin-portal .admin-bell-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .admin-portal .admin-bell-btn {
@@ -94,9 +100,10 @@
 
 .admin-portal .admin-bell-dropdown {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   right: 0;
-  width: 360px;
+  left: auto;
+  width: min(360px, calc(100vw - 32px));
   max-height: 440px;
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -124,17 +131,26 @@
 .admin-portal .admin-bell-dropdown-list {
   overflow-y: auto;
   flex: 1;
+  min-height: 140px;
 }
 
 .admin-portal .admin-bell-empty {
   padding: 36px 20px;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   text-align: center;
   font-size: 14px;
   color: #9ca3af;
+  line-height: 1.4;
 }
 
 .admin-portal .admin-bell-empty svg {
-  margin-bottom: 8px;
+  display: block;
+  flex-shrink: 0;
 }
 
 .admin-portal .admin-bell-item {
