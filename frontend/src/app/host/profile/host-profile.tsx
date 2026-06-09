@@ -174,13 +174,11 @@ const AMENITY_OPTIONS = sortStringsLocale([
   'Pharmacy nearby',
   'Cafeteria',
   'Private Office Space',
-  'Admin Support',
   'IT Support',
   'Family Practice Nurses',
   'Social Worker',
   'Dietitian',
  'Pharmacist',
-'Administrative Support',
 'EMR Training Available',
 'Blood Collection Centre Nearby',
 'Hospital Nearby',
@@ -247,6 +245,13 @@ const PRACTICE_TYPE_OPTIONS = [
   ...KNOWN_PRACTICE_TYPE_VALUES,
   { value: CUSTOM_PRACTICE_TYPE, label: 'Custom practice type' },
 ];
+
+function practiceTypePickerLabel(choice: string): string {
+  if (!choice) return 'Select practice type';
+  return (
+    PRACTICE_TYPE_OPTIONS.find((o) => o.value === choice)?.label ?? choice
+  );
+}
 
 function splitPracticeTypeFromSaved(saved: string): {
   choice: string;
@@ -346,6 +351,17 @@ export default function HostProfilePage(props: {
 
   const [practiceTypeChoice, setPracticeTypeChoice] = useState('');
   const [practiceTypeCustom, setPracticeTypeCustom] = useState('');
+  const [practiceTypeDropdownOpen, setPracticeTypeDropdownOpen] =
+    useState(false);
+  const practiceTypeAnchorRef = useRef<HTMLDivElement>(null);
+  const practiceTypeMenuRef = useRef<HTMLDivElement>(null);
+  const practiceTypeMenuBox = useAnchoredDropdownMenu(
+    practiceTypeDropdownOpen,
+    setPracticeTypeDropdownOpen,
+    practiceTypeAnchorRef,
+    practiceTypeMenuRef,
+    280,
+  );
   const [numPhysicians, setNumPhysicians] = useState('');
   const [emr, setEmr] = useState('');
   const [patientVol, setPatientVol] = useState('');
@@ -642,6 +658,9 @@ export default function HostProfilePage(props: {
       <>
         <style>{`
         ${PROFILE_FORM_CAPITALIZE_CSS}
+        .host-profile-practice-select-mobile {
+          display: none;
+        }
         @media (max-width: 768px) {
           .host-profile-inner {
             padding: 0 !important;
@@ -686,6 +705,39 @@ export default function HostProfilePage(props: {
           }
           .host-profile-form-row-2 {
             grid-template-columns: 1fr !important;
+          }
+          .host-profile-practice-select {
+            max-width: 100% !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+          }
+          .host-profile-practice-select-desktop {
+            display: none !important;
+          }
+          .host-profile-practice-select-mobile {
+            display: block !important;
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+          .host-profile-practice-mobile-trigger {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            text-align: left !important;
+          }
+          .host-profile-practice-mobile-trigger-label {
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+          }
+          .host-profile-practice-mobile-option {
+            white-space: normal !important;
+            word-break: break-word !important;
+            text-align: left !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
           }
         }
       `}</style>
@@ -1808,26 +1860,17 @@ export default function HostProfilePage(props: {
                 }}
               >
                 {/* Practice type / No. of physicians */}
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    gap: 40,
-                    width: '100%',
-                  }}
-                >
-                  <div
-                    style={{
-                      flex: '1 1 220px',
-                      minWidth: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8,
-                    }}
-                  >
+                <div className="host-profile-form-row-2" style={formRowTwoCol}>
+                  <div style={formFieldCol}>
                     <label style={lbl}>Practice Type</label>
                     {/* ── Inline custom practice type: replaces select, no extra box ── */}
-                    <div style={{ position: 'relative' }}>
+                    <div
+                      style={{
+                        position: 'relative',
+                        width: '100%',
+                        minWidth: 0,
+                      }}
+                    >
                       {practiceTypeChoice === CUSTOM_PRACTICE_TYPE ? (
                         <>
                           <input
@@ -1888,62 +1931,178 @@ export default function HostProfilePage(props: {
                         </>
                       ) : (
                         <>
-                          <select
-                            style={selectField}
-                            value={practiceTypeChoice}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setPracticeTypeChoice(v);
-                              if (v !== CUSTOM_PRACTICE_TYPE)
-                                setPracticeTypeCustom('');
-                            }}
+                          <div
+                            className="host-profile-practice-select-desktop"
+                            style={{ position: 'relative' }}
                           >
-                            <option value="" disabled>
-                              Select practice type
-                            </option>
-                            {PRACTICE_TYPE_OPTIONS.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
+                            <select
+                              className="host-profile-practice-select"
+                              style={selectField}
+                              value={practiceTypeChoice}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setPracticeTypeChoice(v);
+                                if (v !== CUSTOM_PRACTICE_TYPE)
+                                  setPracticeTypeCustom('');
+                              }}
+                            >
+                              <option value="" disabled>
+                                Select practice type
                               </option>
-                            ))}
-                          </select>
-                          <svg
-                            width="18"
-                            height="18"
-                            viewBox="0 0 18 18"
-                            fill="none"
+                              {PRACTICE_TYPE_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                            <svg
+                              width="18"
+                              height="18"
+                              viewBox="0 0 18 18"
+                              fill="none"
+                              style={{
+                                position: 'absolute',
+                                right: 10,
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                pointerEvents: 'none',
+                                color: '#6B7280',
+                              }}
+                              aria-hidden="true"
+                            >
+                              <path
+                                d="M4.5 6.75L9 11.25l4.5-4.5"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+
+                          <div
+                            ref={practiceTypeAnchorRef}
+                            className="host-profile-practice-select-mobile"
                             style={{
-                              position: 'absolute',
-                              right: 10,
-                              top: '50%',
-                              transform: 'translateY(-50%)',
-                              pointerEvents: 'none',
-                              color: '#6B7280',
+                              position: 'relative',
+                              width: '100%',
+                              minWidth: 0,
                             }}
-                            aria-hidden="true"
                           >
-                            <path
-                              d="M4.5 6.75L9 11.25l4.5-4.5"
-                              stroke="currentColor"
-                              strokeWidth="1.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
+                            <button
+                              type="button"
+                              className="host-profile-practice-mobile-trigger"
+                              aria-haspopup="listbox"
+                              aria-expanded={practiceTypeDropdownOpen}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPracticeTypeDropdownOpen((v) => !v);
+                              }}
+                              style={{
+                                ...selectField,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                                cursor: 'pointer',
+                                fontFamily: 'Inter, sans-serif',
+                                color: practiceTypeChoice
+                                  ? '#0f1523'
+                                  : 'rgba(11, 15, 31, 0.4)',
+                              }}
+                            >
+                              <span className="host-profile-practice-mobile-trigger-label">
+                                {practiceTypePickerLabel(practiceTypeChoice)}
+                              </span>
+                              <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 18 18"
+                                fill="none"
+                                style={{
+                                  flexShrink: 0,
+                                  color: '#6B7280',
+                                }}
+                                aria-hidden="true"
+                              >
+                                <path
+                                  d="M4.5 6.75L9 11.25l4.5-4.5"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </button>
+                            <AnchoredDropdownPortal
+                              open={practiceTypeDropdownOpen}
+                              menuBox={practiceTypeMenuBox}
+                              menuRef={practiceTypeMenuRef}
+                              style={{
+                                border: '1px solid #D0D5DD',
+                                borderRadius: 8,
+                                padding: 8,
+                              }}
+                            >
+                              <div
+                                role="listbox"
+                                aria-label="Practice type"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 4,
+                                }}
+                              >
+                                {PRACTICE_TYPE_OPTIONS.map((opt) => {
+                                  const selected =
+                                    practiceTypeChoice === opt.value;
+                                  return (
+                                    <button
+                                      key={opt.value}
+                                      type="button"
+                                      role="option"
+                                      aria-selected={selected}
+                                      className="host-profile-practice-mobile-option"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setPracticeTypeChoice(opt.value);
+                                        if (opt.value !== CUSTOM_PRACTICE_TYPE)
+                                          setPracticeTypeCustom('');
+                                        setPracticeTypeDropdownOpen(false);
+                                      }}
+                                      style={{
+                                        all: 'unset',
+                                        cursor: 'pointer',
+                                        padding: '10px 10px',
+                                        borderRadius: 6,
+                                        border: `1px solid ${
+                                          selected
+                                            ? 'rgba(21, 34, 166, 0.35)'
+                                            : '#E5E7EB'
+                                        }`,
+                                        background: selected
+                                          ? 'rgba(115, 177, 251, 0.12)'
+                                          : '#fff',
+                                        color: '#0B0F1F',
+                                        fontSize: 13,
+                                        fontWeight: 500,
+                                        fontFamily: 'Inter, sans-serif',
+                                      }}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </AnchoredDropdownPortal>
+                          </div>
                         </>
                       )}
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      flex: '1 1 220px',
-                      minWidth: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8,
-                    }}
-                  >
+                  <div style={formFieldCol}>
                     <label style={lbl}>No. of Physicians</label>
                     <input
                       style={fieldInput}
@@ -1955,23 +2114,8 @@ export default function HostProfilePage(props: {
                 </div>
 
                 {/* EMR / Patient volume */}
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    gap: 40,
-                    width: '100%',
-                  }}
-                >
-                  <div
-                    style={{
-                      flex: '1 1 220px',
-                      minWidth: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8,
-                    }}
-                  >
+                <div className="host-profile-form-row-2" style={formRowTwoCol}>
+                  <div style={formFieldCol}>
                     <label style={lbl}>EMR System</label>
                     <input
                       style={fieldInput}
@@ -1980,15 +2124,7 @@ export default function HostProfilePage(props: {
                       placeholder="EMR system"
                     />
                   </div>
-                  <div
-                    style={{
-                      flex: '1 1 220px',
-                      minWidth: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8,
-                    }}
-                  >
+                  <div style={formFieldCol}>
                     <label style={lbl}>Patient Volume Per Day</label>
                     <input
                       style={fieldInput}
@@ -2000,22 +2136,7 @@ export default function HostProfilePage(props: {
                 </div>
 
                 {/* Clinic description */}
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    gap: 40,
-                    width: '100%',
-                  }}
-                >
-                  <div
-                    style={{
-                      flex: '1 1 100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8,
-                    }}
-                  >
+                <div style={formFieldCol}>
                     <label style={lbl}>
                       Clinic description{' '}
                       <span
@@ -2037,7 +2158,6 @@ export default function HostProfilePage(props: {
                       }
                       placeholder="Clinic Description"
                     />
-                  </div>
                 </div>
               </div>
             </div>
@@ -2403,6 +2523,22 @@ if (typeof document !== 'undefined') {
           width: 168px !important;
           min-width: 168px !important;
           max-width: 168px !important;
+        }
+        .host-profile-form-row-2 {
+          grid-template-columns: 1fr !important;
+        }
+        .host-profile-practice-select {
+          max-width: 100% !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+        .host-profile-practice-select-desktop {
+          display: none !important;
+        }
+        .host-profile-practice-select-mobile {
+          display: block !important;
+          width: 100% !important;
+          min-width: 0 !important;
         }
       }
     `;

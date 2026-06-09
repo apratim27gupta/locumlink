@@ -882,7 +882,7 @@ body.app-body {
 @media (max-width: 767px) {
   .auth-page {
     background: #0f2a7a url('/auth-bg-mobile.png') top center / cover no-repeat;
-    padding-top: 32px !important;
+    padding-top: clamp(108px, 20vh, 152px) !important;
     padding-left: 16px !important;
     padding-right: 16px !important;
     padding-bottom: 32px !important;
@@ -1271,7 +1271,7 @@ body.app-body {
 
   /* ── 5. PROFILE PAGES: vertical scroll sections  */
   /* Each section card stacks and scrolls naturally */
-  .dash-sidebar ~ div main > div > div:not(.host-step-nav-outer):not(.host-step-nav-inner) {
+  .dash-sidebar ~ div main > div > div:not(.host-step-nav-outer):not(.host-step-nav-inner):not(.host-dash-tabs-row):not(.host-dash-tabs-scroll) {
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
@@ -1380,14 +1380,14 @@ body.app-body {
   }
 
   /* ── 13. STEP PROGRESS BAR: wrap properly ─────── */
-  .dash-sidebar ~ div main div[style*="justifyContent: 'space-between'"] {
+  .dash-sidebar ~ div main div[style*="justifyContent: 'space-between'"]:not(.host-dash-header-row):not(.host-dash-profile-banner):not(.settings-row) {
     flex-wrap: wrap !important;
     gap: 8px !important;
   }
 
   /* ── 14. ACTION BUTTONS ROW: stack on mobile (exclude compact header actions) ── */
-  .dash-sidebar ~ div main div[style*="gap: 12"]:not(.host-dash-header-row) > button:not(.host-dash-post-btn),
-  .dash-sidebar ~ div main div[style*="gap: 16"]:not(.host-dash-header-row) > button:not(.host-dash-post-btn) {
+  .dash-sidebar ~ div main div[style*="gap: 12"]:not(.host-dash-header-row):not(.settings-row) > button:not(.host-dash-post-btn),
+  .dash-sidebar ~ div main div[style*="gap: 16"]:not(.host-dash-header-row):not(.settings-row) > button:not(.host-dash-post-btn) {
     width: 100% !important;
     justify-content: center !important;
   }
@@ -1800,6 +1800,10 @@ body.app-body {
     border-radius: 14px !important;
     border: 1px solid #E5E7EB !important;
     box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+    overflow-x: hidden !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
   .locum-section-header {
     display: flex !important;
@@ -1816,16 +1820,48 @@ body.app-body {
     color: #0B0F1F !important;
     line-height: 1.25 !important;
   }
+  .locum-profile-page {
+    overflow-x: hidden !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
   .locum-form-row {
     grid-template-columns: 1fr !important;
     gap: 0 !important;
     margin-bottom: 16px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
   }
   .locum-form-row > div {
     margin-bottom: 16px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
   .locum-form-row > div:last-child {
     margin-bottom: 0 !important;
+  }
+  .locum-form-row > div[aria-hidden="true"] {
+    display: none !important;
+  }
+  .locum-speciality-row {
+    grid-template-columns: 1fr !important;
+  }
+  .locum-speciality-select-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .locum-speciality-select-wrap .locum-speciality-select {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
   .locum-section-card label {
     font-size: 13px !important;
@@ -1909,22 +1945,45 @@ body.app-body {
   }
 
   /* ── Host dashboard: header, stats, profile banner ── */
+  .host-dash-top-section {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    gap: 12px !important;
+  }
   .host-dash-header-row {
     flex-direction: column !important;
     align-items: stretch !important;
     gap: 12px !important;
+    width: 100% !important;
+    min-width: 0 !important;
   }
   .host-dash-header-info {
     flex: 1 1 auto !important;
     min-width: 0 !important;
     width: 100% !important;
+    max-width: 100% !important;
+  }
+  .host-dash-header-badge {
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+  .host-dash-header-badge > span {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    max-width: 100% !important;
   }
   .host-dash-header-info h1 {
     word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    font-size: 18px !important;
+    line-height: 1.3 !important;
   }
   .host-dash-post-btn {
     width: 100% !important;
-    max-width: none !important;
+    max-width: 100% !important;
     height: 40px !important;
     padding: 8px 12px !important;
     gap: 8px !important;
@@ -1938,10 +1997,17 @@ body.app-body {
   .host-dash-stats-card {
     width: 100% !important;
     min-width: 0 !important;
+    flex-direction: column !important;
   }
-  .host-dash-stats-card > div {
+  .host-dash-stats-card > .host-dash-stats-cell {
     min-width: 0 !important;
+    width: 100% !important;
     padding: 14px 12px !important;
+    border-right: none !important;
+    border-bottom: 1px solid #e2e5ee !important;
+  }
+  .host-dash-stats-card > .host-dash-stats-cell:last-child {
+    border-bottom: none !important;
   }
   .host-dash-stats-card p {
     font-size: 13px !important;
@@ -1956,13 +2022,22 @@ body.app-body {
     flex-direction: column !important;
     align-items: stretch !important;
     gap: 12px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
   }
   .host-dash-profile-banner-content {
     flex: 1 1 auto !important;
     width: 100% !important;
     min-width: 0 !important;
+    max-width: 100% !important;
     align-items: flex-start !important;
     gap: 12px !important;
+  }
+  .host-dash-profile-banner-glyph {
+    width: 40px !important;
+    height: 40px !important;
+    flex-shrink: 0 !important;
   }
   .host-dash-profile-banner-title {
     font-size: 13px !important;
@@ -1989,20 +2064,72 @@ body.app-body {
   .host-dash-profile-banner-btn span {
     font-size: 13px !important;
   }
+  .host-dash-jobs-section {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+  .host-dash-tabs-row {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    visibility: visible !important;
+    border-bottom: 1px solid #e5e7eb !important;
+  }
+  .host-dash-tabs-scroll {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    touch-action: pan-x !important;
+  }
+  .host-dash-tabs-scroll::-webkit-scrollbar {
+    display: none !important;
+  }
   .host-dash-tab-btn {
+    display: flex !important;
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
     padding: 0 10px !important;
     min-height: 44px !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
   .host-dash-tab-label {
     font-size: 11px !important;
     line-height: 1.2 !important;
+    white-space: nowrap !important;
   }
 
-  /* ── Settings toggles ── */
+  /* ── Settings (host + locum) ── */
+  .settings-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
   .settings-row {
     align-items: flex-start !important;
     gap: 12px !important;
     padding: 14px 16px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .settings-row:has(> .settings-action-btn) {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
   }
   .settings-row button[role="switch"] {
     width: 44px !important;
@@ -2012,17 +2139,23 @@ body.app-body {
     margin-top: 2px !important;
   }
   .settings-row > div:first-child {
-    flex: 1 !important;
+    flex: 1 1 auto !important;
     min-width: 0 !important;
+    max-width: 100% !important;
   }
-  .dash-sidebar ~ div main .settings-row > button:not([role="switch"]) {
+  .settings-row:has(> .settings-action-btn) > div:first-child {
+    width: 100% !important;
+  }
+  .dash-sidebar ~ div main .settings-row > .settings-action-btn,
+  .settings-action-btn {
     width: auto !important;
-    max-width: none !important;
-    padding: 6px 10px !important;
+    max-width: 100% !important;
+    padding: 7px 12px !important;
     font-size: 12px !important;
     flex-shrink: 0 !important;
     align-self: flex-start !important;
     white-space: nowrap !important;
+    box-sizing: border-box !important;
   }
 
   /* ── Messages panels ── */
@@ -2215,6 +2348,16 @@ main.dash-main-content {
 /* Host dashboard — desktop profile banner height */
 .host-dash-profile-banner {
   min-height: 104px;
+}
+
+.host-dash-post-btn {
+  width: 172px;
+  height: 45px;
+}
+
+.host-dash-profile-banner-btn {
+  width: 150px;
+  height: 41px;
 }
 
 /* Host dashboard — horizontal job tabs (scroll without visible scrollbar) */

@@ -25,6 +25,8 @@ const backendRoutes = [
   { method: 'GET', path: '/api/messages/conversations', expect: [401] },
   { method: 'GET', path: '/api/notifications', expect: [401] },
   { method: 'GET', path: '/api/admin/stats', expect: [401] },
+  { method: 'GET', path: '/api/admin/analytics/summary', expect: [401] },
+  { method: 'GET', path: '/api/admin/analytics/export', expect: [401] },
   { method: 'GET', path: '/api/admin/users', expect: [401] },
   { method: 'GET', path: '/api/admin/verifications', expect: [401] },
   { method: 'GET', path: '/api/admin/audit-logs', expect: [401] },
@@ -39,8 +41,6 @@ const frontendAdminRoutes = [
   { method: 'GET', path: '/api/admin/users/export', expect: [401] },
   { method: 'GET', path: '/api/admin/verifications', expect: [401] },
   { method: 'GET', path: '/api/admin/audit-logs', expect: [401] },
-  { method: 'GET', path: '/api/admin/analytics/summary', expect: [401] },
-  { method: 'GET', path: '/api/admin/analytics/export', expect: [401] },
 ];
 
 /** Rewritten through Next to Nest */
@@ -52,6 +52,8 @@ const frontendProxyRoutes = [
   { method: 'GET', path: '/api/host/stats', expect: [401] },
   { method: 'GET', path: '/api/locum/stats', expect: [401] },
   { method: 'GET', path: '/api/admin/notifications', expect: [401] },
+  { method: 'GET', path: '/api/admin/analytics/summary', expect: [401] },
+  { method: 'GET', path: '/api/admin/analytics/export', expect: [401] },
   { method: 'GET', path: '/api/admin/users/test-user-id/profile', expect: [401] },
 ];
 

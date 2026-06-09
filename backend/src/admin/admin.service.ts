@@ -21,6 +21,11 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import type { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
 import {
+  analyticsSummaryToCsv,
+  buildAnalyticsSummary,
+  type AnalyticsSummary,
+} from './admin-analytics.js';
+import {
   credentialQueueSubmittedAt,
   formatAdminCpsnsDisplay,
   isEligibleForCredentialQueueHost,
@@ -212,6 +217,30 @@ export class AdminService {
       fillRate,
       avgTimesToPlacementHours,
     };
+  }
+
+  async analyticsSummary(): Promise<AnalyticsSummary> {
+    return buildAnalyticsSummary(this.prisma);
+  }
+
+  async exportAnalyticsCsv(
+    req: Request,
+    admin: AdminJwtPayload,
+  ): Promise<string> {
+    const summary = await buildAnalyticsSummary(this.prisma);
+    this.audit.log({
+      adminActorId: admin.sub,
+      action: AuditAction.EXPORT,
+      entity: 'AnalyticsReport',
+      endpoint: '/api/admin/analytics/export',
+      ip: extractIp(req),
+      userAgent:
+        typeof req.headers['user-agent'] === 'string'
+          ? req.headers['user-agent']
+          : undefined,
+      actorRole: 'ADMIN',
+    });
+    return analyticsSummaryToCsv(summary);
   }
 
   async listUsers(params: { q?: string; page: number; pageSize: number }) {

@@ -494,7 +494,9 @@ export default function LocumProfilePage(props: {
       topbarLastName={lastName}
     >
       <style>{PROFILE_FORM_CAPITALIZE_CSS}</style>
-      <div className={PROFILE_FORM_CAPITALIZE_CLASS}>
+      <div
+        className={`${PROFILE_FORM_CAPITALIZE_CLASS} locum-profile-page`}
+      >
         {/* ── page title ─────────────────────────────────────────────────── */}
         <h1
           style={{
@@ -839,7 +841,7 @@ export default function LocumProfilePage(props: {
 
           {/* Speciality */}
           <div
-            className="locum-form-row"
+            className="locum-form-row locum-speciality-row"
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
@@ -847,10 +849,19 @@ export default function LocumProfilePage(props: {
               marginBottom: 10,
             }}
           >
-            <div>
+            <div style={{ minWidth: 0, width: '100%' }}>
               <label style={lbl}>Speciality</label>
-              <div style={{ position: 'relative', marginBottom: 8 }}>
+              <div
+                className="locum-speciality-select-wrap"
+                style={{
+                  position: 'relative',
+                  marginBottom: 8,
+                  width: '100%',
+                  minWidth: 0,
+                }}
+              >
                 <select
+                  className="locum-speciality-select"
                   style={{
                     ...inp,
                     minHeight: 37,

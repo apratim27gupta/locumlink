@@ -109,7 +109,7 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
 
   return (
     <DashLayout navItems={nav} activeHref={activeHref}>
-      <div style={{ maxWidth: 720, margin: '0', padding: "0 0 48px" }}>
+      <div className="settings-page" style={{ maxWidth: 720, margin: '0', padding: "0 0 48px" }}>
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0B0F1F', margin: 0 }}>Settings</h1>
           <p style={{ fontSize: 14, color: '#6B7280', margin: '4px 0 0' }}>Manage your account preferences</p>
@@ -123,6 +123,7 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>{email || 'Loading…'}</div>
             </div>
             <button
+              className="settings-action-btn"
               onClick={() => { beforeClientNavigation('/auth'); router.push('/auth?mode=signin'); }}
               style={{ fontSize: 13, fontWeight: 600, color: '#1B31D2', background: 'none', border: '1px solid #C7D2FE', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               Change email
@@ -262,6 +263,7 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Disable your account for up to 30 days</div>
             </div>
             <button
+              className="settings-action-btn"
               onClick={() => setDeactivateModal('temporary')}
               style={{ fontSize: 13, fontWeight: 600, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap' } as React.CSSProperties}>
               Deactivate
@@ -273,6 +275,7 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>All data will be erased and cannot be recovered</div>
             </div>
             <button
+              className="settings-action-btn"
               onClick={() => setDeactivateModal('permanent')}
               style={{ fontSize: 13, fontWeight: 600, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               Delete
@@ -288,6 +291,7 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Sign out of your account on this device</div>
             </div>
             <button
+              className="settings-action-btn"
               onClick={handleLogout}
               style={{ fontSize: 13, fontWeight: 600, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               Logout

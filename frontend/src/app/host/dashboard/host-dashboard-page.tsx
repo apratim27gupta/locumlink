@@ -2182,11 +2182,12 @@ export default function HostDashboard(props: {
             <div className="host-dash-top-section" style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
               <div className="host-dash-header-row" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div className="host-dash-header-info" style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0, flex: 1 }}>
-                <div style={{
+                <div className="host-dash-header-badge" style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
             width: 'fit-content',
+            maxWidth: '100%',
             padding: 0,
             background: 'rgba(171,230,234,0.1)',
             borderRadius: 50,
@@ -2230,8 +2231,6 @@ export default function HostDashboard(props: {
                 justifyContent: 'center',
                 gap: 10,
                 padding: '10px 12px',
-                height: 45,
-                width: 172,
                 background: 'linear-gradient(270deg,#3A65DB 0%,#0F2A7A 100%)',
                 borderRadius: 8,
                 flexShrink: 0,
@@ -2273,7 +2272,11 @@ export default function HostDashboard(props: {
             justifyContent: 'space-between',
         }}>
               <div className="host-dash-profile-banner-content" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <ProfileStatusGlyph variant={profileStatusCard.glyphVariant} size={52} />
+                <ProfileStatusGlyph
+                  className="host-dash-profile-banner-glyph"
+                  variant={profileStatusCard.glyphVariant}
+                  size={52}
+                />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
                   <span className="host-dash-profile-banner-title" style={{
             fontFamily: 'Gilroy-Medium, Inter, sans-serif',
@@ -2321,8 +2324,6 @@ export default function HostDashboard(props: {
             justifyContent: 'center',
             gap: 8,
             padding: '8px 12px',
-            width: 150,
-            height: 41,
             background: '#fff',
             border: '1px solid #D0D5DD',
             borderRadius: 8,
@@ -2355,6 +2356,7 @@ export default function HostDashboard(props: {
                 {statsDisplay.map((stat, i) => (
                   <div
                     key={stat.label}
+                    className="host-dash-stats-cell"
                     style={{
                       flex: 1,
                       minWidth: 0,
@@ -2379,7 +2381,7 @@ export default function HostDashboard(props: {
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="host-dash-jobs-section" style={{ display: 'flex', flexDirection: 'column' }}>
               <div className="host-dash-tabs-row">
                 <div className="host-dash-tabs-scroll">
                   {TABS.map((tab) => {
