@@ -2277,7 +2277,7 @@ export default function HostDashboard(props: {
                   variant={profileStatusCard.glyphVariant}
                   size={52}
                 />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+                <div className="host-dash-profile-banner-text" style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, flex: 1 }}>
                   <span className="host-dash-profile-banner-title" style={{
             fontFamily: 'Gilroy-Medium, Inter, sans-serif',
             fontWeight: 'var(--font-weight-bold)',
