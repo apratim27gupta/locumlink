@@ -2,7 +2,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode, } from 'react';
 import { getAppOrigin } from '@/lib/appOrigin';
 import { authApi } from '@/lib/api';
-import { formatSupabaseNetworkError, getSupabase } from '@/lib/supabaseClient';
+import { getSupabase } from '@/lib/supabaseClient';
 import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, popLastPath, clearLastPath, type Role, } from '@/lib/auth';
 import { checkProfileExistsOnServer, ensureProfileMarkedCompleteFromServer, } from '@/lib/profileCompleteSync';
 interface AuthCtx {
@@ -114,70 +114,31 @@ export function AuthProvider({ children }: {
         saveRole(chosenRole);
         setRoleState(chosenRole);
         saveEmail(email);
-        // Dev mode: skip Supabase OTP email, use 000000
+        await authApi.sendOtp(email, chosenRole);
     }
     async function verifyOtp(email: string, otp: string): Promise<{
         role: Role;
         redirectTo: string;
     }> {
-        // Dev bypass: OTP 000000 skips Supabase
-        if (otp === '000000') {
-            const role = (getRole() ?? 'locum') as Role;
-            let tokens: { accessToken: string; refreshToken: string };
-            try {
-                tokens = await authApi.devOtpLogin(
-                    email,
-                    role === 'clinic' ? 'clinic' : 'locum',
-                );
-            }
-            catch (err) {
-                const detail = err instanceof Error ? err.message : 'Dev login failed';
-                if (/ECONNREFUSED|connect|fetch failed|Failed to fetch/i.test(detail))
-                    throw new Error('Dev login failed: backend is not reachable. From repo root run: npm run dev (and npm run db:up if Postgres is down).');
-                throw new Error(detail);
-            }
-            saveToken(tokens.accessToken);
-            syncCookies();
-            setUserId(null);
-            const profileExists = await checkProfileExistsOnServer(role, tokens.accessToken);
-            let redirectTo: string;
-            if (profileExists) {
-                markProfileComplete(); syncCookies(); syncProfileCompleteCookies(); setProfileComplete(true);
-                const lastPath = popLastPath();
-                redirectTo = lastPath ?? (role === 'clinic' ? '/host/dashboard' : '/locum/dashboard');
-            } else {
-                clearLastPath();
-                redirectTo = role === 'clinic' ? '/host/setup' : '/locum/setup';
-            }
-            return { role, redirectTo };
-        }
-        let data: Awaited<ReturnType<ReturnType<typeof getSupabase>['auth']['verifyOtp']>>['data'];
+        const role = (getRole() ?? 'locum') as Role;
+        let tokens: { accessToken: string; refreshToken: string };
         try {
-            const out = await getSupabase().auth.verifyOtp({
+            tokens = await authApi.verifyOtp(
                 email,
-                token: otp,
-                type: 'email',
-            });
-            data = out.data;
-            if (out.error)
-                throw formatSupabaseNetworkError(out.error);
+                otp,
+                role === 'clinic' ? 'clinic' : 'locum',
+            );
         }
-        catch (e) {
-            throw formatSupabaseNetworkError(e);
+        catch (err) {
+            const detail = err instanceof Error ? err.message : 'Verification failed';
+            if (/ECONNREFUSED|connect|fetch failed|Failed to fetch/i.test(detail))
+                throw new Error('Could not reach the app API. From repo root run: npm run dev (and npm run db:up if Postgres is down).');
+            throw err instanceof Error ? err : new Error(detail);
         }
-        const token = data.session?.access_token;
-        if (!token)
-            throw new Error('No access token returned from Supabase');
-        saveToken(token);
+        setUserId(null);
+        saveToken(tokens.accessToken);
         syncCookies();
-        const synced = await syncNestAccessToken();
-        if (!synced) {
-            throw new Error('Could not sign you in to the app API. Check that the backend is running on NEXT_PUBLIC_API_URL and that backend/.env.staging uses the same Supabase URL and anon key as frontend/.env.local. Remove any fake SUPABASE_SERVICE_ROLE_KEY placeholder.');
-        }
-        setUserId(data.user?.id ?? null);
-        const savedRole = (getRole() ?? 'locum') as Role;
-        const nestToken = getToken() ?? token;
-        const profileExists = await checkProfileExistsOnServer(savedRole, nestToken);
+        const profileExists = await checkProfileExistsOnServer(role, tokens.accessToken);
         let redirectTo: string;
         if (profileExists) {
             markProfileComplete();
@@ -187,13 +148,12 @@ export function AuthProvider({ children }: {
             const lastPath = popLastPath();
             redirectTo =
                 lastPath ??
-                    (savedRole === 'clinic' ? '/host/dashboard' : '/locum/dashboard');
-        }
-        else {
+                (role === 'clinic' ? '/host/dashboard' : '/locum/dashboard');
+        } else {
             clearLastPath();
-            redirectTo = savedRole === 'clinic' ? '/host/setup' : '/locum/setup';
+            redirectTo = role === 'clinic' ? '/host/setup' : '/locum/setup';
         }
-        return { role: savedRole, redirectTo };
+        return { role, redirectTo };
     }
     async function signInWithOAuth(provider: 'google' | 'azure', chosenRole: Role): Promise<void> {
         saveRole(chosenRole);

@@ -12,17 +12,21 @@ import { JwtService } from '@nestjs/jwt';
 import { Role, User, UserStatus } from '@prisma/client';
 import { createClient } from '@supabase/supabase-js';
 import * as bcrypt from 'bcrypt';
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import type { StringValue } from 'ms';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { GcsService } from '../gcs/gcs.service.js';
+import { EmailService } from '../notifications/email.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { JwtPayload } from './interfaces/jwt-payload.interface.js';
 import { AuthTokens } from './interfaces/auth-tokens.interface.js';
 
 const BCRYPT_ROUNDS = 12;
+const OTP_LENGTH = 6;
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 30 * 1000;
 
 // Current privacy policy / terms version
 const CURRENT_CONSENT_VERSION = '1.0';
@@ -60,6 +64,7 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly gcs: GcsService,
     private readonly adminNotif: AdminNotificationsService,
+    private readonly email: EmailService,
   ) {}
 
   async register(
@@ -295,14 +300,105 @@ export class AuthService {
     }
   }
 
-  async devOtpLogin(
-    email: string | undefined,
-    roleHint: Role,
-  ): Promise<AuthTokens> {
+  async sendOtp(email: string | undefined): Promise<void> {
     const normalizedEmail = email?.trim().toLowerCase();
     if (!normalizedEmail) {
       throw new BadRequestException('Email is required');
     }
+
+    const recent = await this.prisma.otp.findFirst({
+      where: { email: normalizedEmail },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (
+      recent &&
+      Date.now() - recent.createdAt.getTime() < OTP_RESEND_COOLDOWN_MS
+    ) {
+      const waitSec = Math.ceil(
+        (OTP_RESEND_COOLDOWN_MS - (Date.now() - recent.createdAt.getTime())) /
+          1000,
+      );
+      throw new BadRequestException(
+        `Please wait ${waitSec} seconds before requesting another code.`,
+      );
+    }
+
+    const otp = String(randomInt(10 ** (OTP_LENGTH - 1), 10 ** OTP_LENGTH - 1));
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+
+    await this.prisma.$transaction([
+      this.prisma.otp.deleteMany({ where: { email: normalizedEmail } }),
+      this.prisma.otp.create({
+        data: { email: normalizedEmail, otp, expiresAt },
+      }),
+    ]);
+
+    const subject = 'Your Locum Connect verification code';
+    const text = [
+      'Use this code to sign in to Locum Connect:',
+      '',
+      otp,
+      '',
+      'This code expires in 10 minutes.',
+      'If you did not request this code, you can ignore this email.',
+    ].join('\n');
+    const html = `
+      <p>Use this code to sign in to <strong>Locum Connect</strong>:</p>
+      <p style="font-size:28px;font-weight:700;letter-spacing:4px;margin:24px 0">${otp}</p>
+      <p style="color:#5a6478">This code expires in 10 minutes.</p>
+      <p style="color:#5a6478">If you did not request this code, you can ignore this email.</p>
+    `.trim();
+
+    const result = await this.email.send({
+      to: normalizedEmail,
+      subject,
+      text,
+      html,
+    });
+
+    await this.prisma.emailLog.create({
+      data: {
+        recipient: normalizedEmail,
+        eventType: 'AUTH_OTP',
+        status: result.ok ? 'SENT' : 'FAILED',
+        provider: 'zeptomail',
+        providerMessageId: result.ok ? result.messageId : undefined,
+        error: result.ok ? undefined : result.error,
+        referenceType: 'Otp',
+      },
+    });
+
+    if (!result.ok) {
+      throw new BadRequestException(
+        'Could not send verification email. Check ZEPTOMAIL_API_KEY and MAIL_FROM_ADDRESS.',
+      );
+    }
+  }
+
+  async verifyOtp(
+    email: string | undefined,
+    otp: string | undefined,
+    roleHint: Role,
+  ): Promise<AuthTokens> {
+    const normalizedEmail = email?.trim().toLowerCase();
+    const code = otp?.trim();
+    if (!normalizedEmail) {
+      throw new BadRequestException('Email is required');
+    }
+    if (!code || code.length !== OTP_LENGTH) {
+      throw new BadRequestException('A 6-digit verification code is required');
+    }
+
+    const record = await this.prisma.otp.findFirst({
+      where: { email: normalizedEmail, otp: code },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!record || record.expiresAt < new Date()) {
+      throw new UnauthorizedException('Invalid or expired verification code.');
+    }
+
+    await this.prisma.otp.deleteMany({ where: { email: normalizedEmail } });
+
     const user = await this.findOrCreateUserForSupabase(
       normalizedEmail,
       roleHint,

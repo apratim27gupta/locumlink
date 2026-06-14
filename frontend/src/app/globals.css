@@ -965,6 +965,99 @@ body.app-body {
     grid-template-columns: 1fr !important;
   }
 
+  .host-job-post-panel-body {
+    padding: 16px 12px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-job-date-field {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-job-date-field .host-job-date-text {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-job-date-field .host-job-date-text,
+  .host-job-date-field .host-job-date-trigger {
+    display: none !important;
+  }
+
+  .host-job-date-field .host-job-date-picker {
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    border: 1px solid #d0d4e4 !important;
+    border-radius: 8px !important;
+    padding: 10px 12px !important;
+    box-sizing: border-box !important;
+    background: #fff !important;
+    color: #0f1523 !important;
+    font-size: 16px !important;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .host-job-resp-field,
+  .host-job-resp-list,
+  .host-job-resp-block,
+  .host-job-resp-options {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-job-resp-check {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-job-resp-check input[type='checkbox'] {
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    min-height: 18px !important;
+    max-height: 18px !important;
+    margin-top: 2px !important;
+    flex: 0 0 18px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .host-job-resp-check-label {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.35 !important;
+  }
+
+  .host-job-resp-heading {
+    display: block !important;
+    width: 100% !important;
+  }
+
   /* Portal dropdowns (city, specialty, job title, etc.) — stay within viewport */
   .anchored-dropdown-menu {
     max-width: calc(100vw - 16px) !important;
@@ -1054,6 +1147,11 @@ body.app-body {
   .host-job-post-panel .host-job-schedule-grid {
     grid-template-columns: 1fr !important;
   }
+
+  .host-job-post-panel-body {
+    padding: 16px 12px !important;
+  }
+
   .dash-content-column {
     min-width: 0 !important;
     width: 100% !important;
@@ -1368,8 +1466,8 @@ body.app-body {
   }
 
   /* ── 11. FLEX ROWS: wrap on mobile (exclude dashboard headers/stats) ── */
-  .dash-sidebar ~ div main div[style*="flex-direction: row"]:not(.host-step-nav-step):not(.host-dash-header-row):not(.host-dash-stats-card):not(.host-dash-tabs-scroll):not(.host-dash-job-card-header):not(.locum-section-header),
-  .dash-sidebar ~ div main div[style*="flexDirection: 'row'"]:not(.host-step-nav-step):not(.host-dash-header-row):not(.host-dash-stats-card):not(.host-dash-tabs-scroll):not(.host-dash-job-card-header):not(.locum-section-header) {
+  .dash-sidebar ~ div main div[style*="flex-direction: row"]:not(.host-step-nav-step):not(.host-dash-header-row):not(.host-dash-stats-card):not(.host-dash-tabs-scroll):not(.host-dash-job-card-header):not(.host-job-resp-check):not(.locum-section-header),
+  .dash-sidebar ~ div main div[style*="flexDirection: 'row'"]:not(.host-step-nav-step):not(.host-dash-header-row):not(.host-dash-stats-card):not(.host-dash-tabs-scroll):not(.host-dash-job-card-header):not(.host-job-resp-check):not(.locum-section-header) {
     flex-wrap: wrap !important;
   }
 
@@ -2380,31 +2478,48 @@ body.app-body {
     box-sizing: border-box !important;
   }
 
-  /* Prevent iOS focus zoom on all form fields in app shells */
-  .host-profile-inner input,
+  /* Prevent iOS focus zoom on text form fields (exclude checkboxes/radios) */
+  .host-profile-inner input:not([type='checkbox']):not([type='radio']),
   .host-profile-inner textarea,
   .host-profile-inner select,
-  .host-job-post-panel input,
+  .host-job-post-panel input:not([type='checkbox']):not([type='radio']),
   .host-job-post-panel textarea,
   .host-job-post-panel select,
-  .host-applicant-detail-panel input,
+  .host-applicant-detail-panel input:not([type='checkbox']):not([type='radio']),
   .host-applicant-detail-panel textarea,
-  .host-post-job-form input,
+  .host-post-job-form input:not([type='checkbox']):not([type='radio']),
   .host-post-job-form textarea,
   .host-post-job-form select,
-  .messages-list-panel input,
-  .messages-chat-panel input,
+  .messages-list-panel input:not([type='checkbox']):not([type='radio']),
+  .messages-chat-panel input:not([type='checkbox']):not([type='radio']),
   .messages-chat-panel textarea,
-  .auth-bg__card input,
+  .auth-bg__card input:not([type='checkbox']):not([type='radio']),
   .auth-bg__card textarea,
   .auth-bg__card select,
-  .setup-modal input,
+  .setup-modal input:not([type='checkbox']):not([type='radio']),
   .setup-modal textarea,
   .setup-modal select,
   .locum-setup-input,
   .host-setup-input {
     font-size: 16px !important;
     min-height: 44px !important;
+  }
+
+  .host-job-post-panel input[type='checkbox'],
+  .host-job-post-panel input[type='radio'],
+  .host-profile-inner input[type='checkbox'],
+  .host-profile-inner input[type='radio'],
+  .host-applicant-detail-panel input[type='checkbox'],
+  .host-applicant-detail-panel input[type='radio'],
+  .setup-modal input[type='checkbox'],
+  .setup-modal input[type='radio'],
+  .host-setup-amenity-panel input[type='checkbox'] {
+    min-height: unset !important;
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    max-width: 18px !important;
+    flex-shrink: 0 !important;
   }
 
   .driver-popover,
@@ -2516,5 +2631,328 @@ main.dash-main-content {
 
 .host-dash-tab-btn--active .host-dash-tab-label {
   color: #0b0f1f;
+}
+
+/* ══════════════════════════════════════════════════
+   iOS PWA — mobile overflow & alignment (Steps 1–8)
+   ADD ONLY — max-width: 768px
+   ══════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Step 1: Global mobile base ── */
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
+  img,
+  video,
+  svg,
+  iframe {
+    max-width: 100%;
+    height: auto;
+  }
+
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* ── Step 3: Page wrappers ── */
+  .auth-page,
+  .home-landing-root,
+  .landing-root,
+  .dash-page-shell,
+  .host-dash-page,
+  .host-profile-inner,
+  .locum-profile-page,
+  .settings-page,
+  .setup-page-shell,
+  .offline-page-root,
+  .not-found-page,
+  .host-post-job-form,
+  .dash-page-container,
+  .dash-content-wrapper,
+  main.dash-main-content > div {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    padding-left: 16px;
+    padding-right: 16px;
+    box-sizing: border-box;
+  }
+
+  /* ── Step 4: Calendar / date / schedule grids ── */
+  .host-job-date-field,
+  .host-job-schedule-grid {
+    width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  .host-job-date-field table,
+  .host-job-schedule-grid table {
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .host-job-date-field td,
+  .host-job-date-field th,
+  .host-job-schedule-grid td,
+  .host-job-schedule-grid th {
+    width: calc(100% / 7);
+    min-width: 0;
+    padding: 2px;
+    font-size: clamp(10px, 2.5vw, 13px);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* Host create-post: keep date/calendar inputs inside viewport (iOS PWA) */
+  .host-job-post-panel,
+  .host-job-post-panel-body {
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-job-post-panel .host-job-schedule-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .host-job-post-panel .host-job-schedule-grid > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-job-post-panel .host-job-date-field {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-job-post-panel .host-job-date-field .host-job-date-text,
+  .host-job-post-panel .host-job-date-field .host-job-date-trigger {
+    display: none !important;
+  }
+
+  .host-job-post-panel .host-job-date-field .host-job-date-picker {
+    position: relative !important;
+    inset: auto !important;
+    left: 0 !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: auto !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    -webkit-min-logical-width: 0 !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    margin: 0 !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    border: 1px solid #d0d4e4 !important;
+    border-radius: 8px !important;
+    padding: 10px 36px 10px 12px !important;
+    box-sizing: border-box !important;
+    background: #fff !important;
+    color: #0f1523 !important;
+    font-size: 16px !important;
+    line-height: 1.25 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+  }
+
+  .host-job-post-panel .host-job-date-field .host-job-date-picker::-webkit-date-and-time-value {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: left !important;
+  }
+
+  .host-job-post-panel .host-job-date-field .host-job-date-picker::-webkit-calendar-picker-indicator {
+    position: absolute !important;
+    right: 10px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 20px !important;
+    height: 20px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    cursor: pointer !important;
+    opacity: 1 !important;
+  }
+
+  .host-job-post-panel input[type='time'] {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    font-size: 16px !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+  }
+
+  /* ── Step 5: Dropdowns & popovers ── */
+  .anchored-dropdown-menu,
+  .host-job-preset-dropdown,
+  .dash-notifications-dropdown,
+  [data-anchored-dropdown],
+  .driver-popover {
+    max-width: calc(100vw - 32px) !important;
+    overflow-y: auto !important;
+    max-height: 240px !important;
+    box-sizing: border-box !important;
+  }
+
+  .dash-notifications-dropdown {
+    right: 0 !important;
+    left: auto !important;
+  }
+
+  /* ── Step 6: Modals & sheets (bottom-sheet on mobile) ── */
+  .host-dash-modal,
+  .messages-delete-modal,
+  .setup-exit-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    top: auto !important;
+    bottom: 0 !important;
+    transform: none !important;
+    border-radius: 16px 16px 0 0 !important;
+    overflow-y: auto !important;
+    max-height: 90vh !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-job-post-panel,
+  .host-applicant-detail-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    overflow-y: auto !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-quick-message-panel {
+    max-width: calc(100vw - 32px) !important;
+    overflow-y: auto !important;
+    max-height: 240px !important;
+  }
+
+  /* ── Step 7: Flex rows that overflow ── */
+  .auth-oauth-row,
+  .landing-cta-row,
+  .landing-stats-card,
+  .home-landing-actions,
+  .host-dash-header-row,
+  .host-dash-stats-card,
+  .host-dash-job-card-header,
+  .host-dash-job-card-actions,
+  .host-dash-profile-banner,
+  .host-dash-profile-banner-content,
+  .host-dash-confirmation-alert,
+  .host-dash-tabs-scroll,
+  .locum-section-header,
+  .locum-form-row,
+  .host-setup-amenity-panel__toolbar,
+  .host-setup-amenity-panel__chips,
+  .host-job-resp-check,
+  .settings-row,
+  .browse-list-panel,
+  .browse-detail-panel,
+  .messages-list-panel,
+  .messages-chat-panel,
+  .host-applicant-detail-panel,
+  .host-post-job-form,
+  .dash-page-header {
+    flex-wrap: wrap;
+  }
+
+  .host-dash-page > *,
+  .locum-profile-page > *,
+  .settings-page > *,
+  .host-profile-inner > *,
+  .dash-page-shell > *,
+  .host-post-job-form > *,
+  main.dash-main-content > div > *,
+  .browse-list-panel > *,
+  .browse-detail-panel > *,
+  .messages-list-panel > *,
+  .messages-chat-panel > *,
+  .host-dash-job-card > *,
+  .locum-section-card > *,
+  .host-dash-header-info,
+  .host-dash-header-badge,
+  .host-dash-profile-banner-text,
+  .host-dash-profile-banner-title,
+  .host-dash-profile-banner-subtitle,
+  .host-job-resp-check-label,
+  .locum-speciality-mobile-trigger-label,
+  .logo-root,
+  .browse-search-wrap {
+    min-width: 0;
+  }
+
+  /* ── Step 8: iOS safe area ── */
+  .dash-content-column {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-sizing: border-box;
+  }
+
+  main.dash-main-content,
+  .dash-main-content {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 60px) !important;
+  }
+
+  .dash-sidebar {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .auth-page,
+  .home-landing-root,
+  .landing-root,
+  .offline-page-root,
+  .not-found-page,
+  .setup-page-shell {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .home-admin-login-btn {
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+  }
 }
 

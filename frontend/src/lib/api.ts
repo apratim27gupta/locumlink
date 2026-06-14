@@ -245,6 +245,16 @@ function nestHttpError(body: string, status: number, label: string, options?: Ne
         return new Error(parsedMessage);
     return new Error(trimmed || `${label} failed (${status})`);
 }
+async function parseAuthApiError(res: Response, label: string): Promise<Error> {
+    const text = await res.text();
+    if (text.trimStart().startsWith('<')) {
+        return new Error(
+            `${label} hit an HTML page (HTTP ${res.status}), not the API. `
+            + 'Start the Nest backend on port 3000 and set API_INTERNAL_URL=http://127.0.0.1:3000 in frontend/.env.local.',
+        );
+    }
+    return nestHttpError(text, res.status, label);
+}
 export type AuthMeResponse = {
     id: string;
     email: string;
@@ -256,40 +266,31 @@ export type AuthMeResponse = {
     updatedAt?: string;
 };
 export const authApi = {
-    devOtpLogin: async (email: string, role: Role): Promise<{
-        accessToken: string;
-        refreshToken: string;
-    }> => {
-        const res = await trackedFetch(apiFetchUrl('/api/auth/dev-otp-login'), {
+    sendOtp: async (email: string, role: Role): Promise<void> => {
+        const res = await trackedFetch(apiFetchUrl('/api/auth/send-otp'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, role }),
         });
         if (!res.ok) {
-            const text = await res.text();
-            if (text.trimStart().startsWith('<')) {
-                throw new Error(
-                    `Dev login hit an HTML page (HTTP ${res.status}), not the API. `
-                    + 'Start the Nest backend on port 3000 and set API_INTERNAL_URL=http://127.0.0.1:3000 in frontend/.env.local, then rebuild the frontend.',
-                );
-            }
-            try {
-                const j = JSON.parse(text) as { message?: string | string[] };
-                const msg = j.message;
-                if (Array.isArray(msg))
-                    throw new Error(msg.join(', '));
-                if (typeof msg === 'string')
-                    throw new Error(msg);
-            }
-            catch (e) {
-                if (e instanceof Error && e.message !== text)
-                    throw e;
-            }
-            throw new Error(text || `dev-otp-login failed: ${res.status}`);
+            throw await parseAuthApiError(res, 'Send verification code');
+        }
+    },
+    verifyOtp: async (email: string, otp: string, role: Role): Promise<{
+        accessToken: string;
+        refreshToken: string;
+    }> => {
+        const res = await trackedFetch(apiFetchUrl('/api/auth/verify-otp'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, otp, role }),
+        });
+        if (!res.ok) {
+            throw await parseAuthApiError(res, 'Verify code');
         }
         return readJsonResponse<{ accessToken: string; refreshToken: string }>(
             res,
-            'Dev login',
+            'Verify code',
         );
     },
     syncFromSupabase: async (role: Role): Promise<{

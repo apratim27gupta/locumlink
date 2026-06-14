@@ -598,6 +598,7 @@ export default function HostEditJobPage(props: {
           </button>
         </div>
         <div
+          className="host-job-post-panel-body"
           style={{
             flex: 1,
             minHeight: 0,
@@ -606,6 +607,7 @@ export default function HostEditJobPage(props: {
             display: 'flex',
             flexDirection: 'column',
             gap: 12,
+            boxSizing: 'border-box',
           }}
         >
           {closeConfirmOpen && (
@@ -776,6 +778,7 @@ export default function HostEditJobPage(props: {
                 </div>
                 <div style={sectionStack}>
                   <div
+                    className="host-job-schedule-grid"
                     style={{
                       display: 'grid',
                       gridTemplateColumns: '1fr 1fr',
@@ -800,6 +803,7 @@ export default function HostEditJobPage(props: {
                     </div>
                   </div>
                   <div
+                    className="host-job-schedule-grid"
                     style={{
                       display: 'grid',
                       gridTemplateColumns: '1fr 1fr',

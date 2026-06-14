@@ -1500,6 +1500,100 @@
   .admin-portal .metric-value {
     font-size: 24px;
   }
+
+  .admin-portal {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  .admin-portal .admin-shell {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  .admin-portal .main-content {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .admin-portal .admin-bell-dropdown {
+    max-width: calc(100vw - 32px) !important;
+    max-height: 240px !important;
+    overflow-y: auto !important;
+    right: 0 !important;
+    left: auto !important;
+  }
+
+  .admin-portal .admin-bell-dropdown-list {
+    max-height: 200px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-portal .modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  .admin-portal .modal-overlay.active {
+    align-items: flex-end !important;
+  }
+
+  .admin-portal .modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    border-radius: 16px 16px 0 0 !important;
+    overflow-y: auto !important;
+    max-height: 90vh !important;
+  }
+
+  .admin-portal .admin-notif-modal-backdrop {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  .admin-portal .admin-notif-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    border-radius: 16px 16px 0 0 !important;
+    overflow-y: auto !important;
+    max-height: 90vh !important;
+  }
+
+  .admin-portal .table-container {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-portal .header-with-actions,
+  .admin-portal .header-actions,
+  .admin-portal .filter-grid,
+  .admin-portal .metric-header {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .admin-portal input,
+  .admin-portal select,
+  .admin-portal textarea {
+    font-size: 16px !important;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
 }
 
 @media (min-width: 769px) {

@@ -7,7 +7,6 @@ import { useAuth } from '@/providers/AuthProvider';
 import { getEmail, getRole, saveRole, type Role } from '@/lib/auth';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 const OTP_LEN = 6;
-const DEMO_OTP = '000000';
 const RESEND_COOLDOWN_SEC = 30;
 export default function VerifyPage(props: {
     params?: Promise<Record<string, string | string[] | undefined>>;
@@ -79,10 +78,6 @@ export default function VerifyPage(props: {
         const otp = otpOverride ?? digits.join('');
         if (otp.length < OTP_LEN) {
             setError('Please enter the full 6-digit code.');
-            return;
-        }
-        if (otp !== DEMO_OTP) {
-            setError('Invalid code. For this demo, use 000000.');
             return;
         }
         const email = getEmail();

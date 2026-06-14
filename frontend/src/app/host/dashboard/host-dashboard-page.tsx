@@ -20,7 +20,7 @@ import { ProfileStatusGlyph } from '@/components/ProfileStatusGlyph';
 import { getHostProfileStatusCard } from '@/lib/hostAccountNotice';
 import VerificationStatusPill from '@/components/VerificationStatusPill';
 import { getHostVerificationStatusBadge } from '@/lib/profileVerificationBadge';
-import { HostJobDescriptionField, HostJobTitleField, MmDdYyyyDateField } from '@/components/host/HostJobPostingFormFields';
+import { HostJobDescriptionField, HostJobTitleField, HostKeyResponsibilitiesField, MmDdYyyyDateField } from '@/components/host/HostJobPostingFormFields';
 import {
     maxIsoDate,
     isPostingEndDatePassed,
@@ -1446,7 +1446,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         </div>
 
         
-        <div style={{
+        <div className="host-job-post-panel-body" style={{
             flex: 1,
             overflowY: 'auto',
             overflowX: 'hidden',
@@ -1509,59 +1509,14 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                   inputStyle={fieldInp}
                   labelStyle={lbl}
                 />
-                <div>
-                  <label style={lbl}>Key Responsibilities</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {RESPONSIBILITY_SECTIONS.map((section) => {
-                        const selected = respBySection[section.key] ?? new Set<string>();
-                        return (<div key={section.key}>
-                          <div style={{
-                                fontSize: 13,
-                                fontWeight: 600,
-                                color: '#111827',
-                                marginBottom: 8,
-                            }}>
-                            {section.title}:
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {section.options.map((opt) => (<label key={opt.id} style={{
-                                    display: 'flex',
-                                    alignItems: 'flex-start',
-                                    gap: 10,
-                                    fontSize: 13,
-                                    color: '#374151',
-                                    cursor: 'pointer',
-                                    lineHeight: 1.35,
-                                }}>
-                              <input type="checkbox" checked={selected.has(opt.id)} onChange={() => toggleResponsibility(section.key, opt.id)} style={{
-                                        width: 16,
-                                        height: 16,
-                                        marginTop: 2,
-                                        flexShrink: 0,
-                                        accentColor: '#1C32D2',
-                                    }}/>
-                              <span>{opt.label}</span>
-                            </label>))}
-                          </div>
-                        </div>);
-                    })}
-                    <div>
-                      <div style={{
-                            fontSize: 13,
-                            fontWeight: 600,
-                            color: '#111827',
-                            marginBottom: 8,
-                        }}>
-                        Custom
-                      </div>
-                      <textarea style={{
-                            ...fieldInp,
-                            minHeight: 56,
-                            resize: 'vertical',
-                        } as React.CSSProperties} value={respCustom} onChange={(e) => setRespCustom(e.target.value)} placeholder="Other responsibilities (one per line)"/>
-                    </div>
-                  </div>
-                </div>
+                <HostKeyResponsibilitiesField
+                  respBySection={respBySection}
+                  respCustom={respCustom}
+                  onToggle={toggleResponsibility}
+                  onCustomChange={setRespCustom}
+                  inputStyle={fieldInp}
+                  labelStyle={lbl}
+                />
               </div>
             </div>) : (<CollapsedStep icon={<DetailsIcon />} label="Details" sub="Define the role and culture." onClick={() => setStep(1)}/>)}
 

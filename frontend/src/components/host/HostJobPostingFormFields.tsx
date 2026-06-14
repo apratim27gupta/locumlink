@@ -119,12 +119,14 @@ export function MmDdYyyyDateField({ value, onChange, inputStyle, minIso = todayI
         }
     }
     const base = inputStyle ?? hostJobFieldInp;
-    return (<div style={{ position: 'relative' }}>
-      <input type="text" inputMode="numeric" autoComplete="off" placeholder="MM-DD-YYYY" pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}" title="MM-DD-YYYY" style={{
+    return (<div className="host-job-date-field" style={{ position: 'relative', width: '100%', minWidth: 0 }}>
+      <input type="text" className="host-job-date-text" inputMode="numeric" autoComplete="off" placeholder="MM-DD-YYYY" pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}" title="MM-DD-YYYY" style={{
             ...base,
             paddingRight: 40,
+            width: '100%',
+            boxSizing: 'border-box',
         }} value={value} onChange={(e) => commitFormatted(formatMmDdYyyyInput(e.target.value))}/>
-      <button type="button" aria-label="Open calendar" onClick={openCalendar} style={{
+      <button type="button" className="host-job-date-trigger" aria-label="Open calendar" onClick={openCalendar} style={{
             position: 'absolute',
             right: 2,
             top: '50%',
@@ -141,7 +143,7 @@ export function MmDdYyyyDateField({ value, onChange, inputStyle, minIso = todayI
         }}>
         <CalendarIcon />
       </button>
-      <input ref={pickerRef} type="date" tabIndex={-1} aria-hidden min={minIso} value={isoValue} onChange={(e) => {
+      <input ref={pickerRef} className="host-job-date-picker" type="date" tabIndex={-1} aria-label="Choose date" min={minIso} value={isoValue} onChange={(e) => {
             const iso = e.target.value;
             if (!iso) {
                 onChange('');
@@ -151,12 +153,16 @@ export function MmDdYyyyDateField({ value, onChange, inputStyle, minIso = todayI
             onChange(isoToMmDdYyyy(clamped));
         }} style={{
             position: 'absolute',
-            width: 1,
-            height: 1,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 44,
+            height: '100%',
             opacity: 0,
-            pointerEvents: 'none',
+            cursor: 'pointer',
             border: 'none',
             padding: 0,
+            margin: 0,
         }}/>
     </div>);
 }
@@ -254,13 +260,13 @@ export function HostKeyResponsibilitiesField({ respBySection, respCustom, onTogg
 }) {
     const base = inputStyle ?? hostJobFieldInp;
     const lbl = labelStyle ?? hostJobFieldLbl;
-    return (<div>
+    return (<div className="host-job-resp-field">
       <label style={lbl}>Key Responsibilities</label>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="host-job-resp-list" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {RESPONSIBILITY_SECTIONS.map((section) => {
             const selected = respBySection[section.key] ?? new Set<string>();
-            return (<div key={section.key}>
-              <div style={{
+            return (<div key={section.key} className="host-job-resp-block">
+              <div className="host-job-resp-heading" style={{
                     fontSize: 13,
                     fontWeight: 600,
                     color: '#111827',
@@ -268,9 +274,10 @@ export function HostKeyResponsibilitiesField({ respBySection, respCustom, onTogg
                 }}>
                 {section.title}:
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {section.options.map((opt) => (<label key={opt.id} style={{
+              <div className="host-job-resp-options" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {section.options.map((opt) => (<label key={opt.id} className="host-job-resp-check" style={{
                         display: 'flex',
+                        flexDirection: 'row',
                         alignItems: 'flex-start',
                         gap: 10,
                         fontSize: 13,
@@ -285,13 +292,13 @@ export function HostKeyResponsibilitiesField({ respBySection, respCustom, onTogg
                             flexShrink: 0,
                             accentColor: '#1C32D2',
                         }}/>
-                  <span>{opt.label}</span>
+                  <span className="host-job-resp-check-label">{opt.label}</span>
                 </label>))}
               </div>
             </div>);
         })}
-        <div>
-          <div style={{
+        <div className="host-job-resp-block">
+          <div className="host-job-resp-heading" style={{
                 fontSize: 13,
                 fontWeight: 600,
                 color: '#111827',

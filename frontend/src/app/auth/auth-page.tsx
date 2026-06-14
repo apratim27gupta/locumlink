@@ -73,8 +73,7 @@ export default function AuthPage() {
             if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.startsWith('/auth') && !nextParam.startsWith('/home')) {
                 saveLastPath(nextParam);
             }
-            try { await sendOtp(email, role); }
-            catch (err) { console.warn('[AuthPage] sendOtp failed, continuing to verify page:', err); }
+            await sendOtp(email, role);
             router.replace(`/auth/verify?role=${encodeURIComponent(role)}`);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');

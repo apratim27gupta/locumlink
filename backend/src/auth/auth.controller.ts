@@ -18,6 +18,8 @@ import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { SyncSupabaseDto } from './dto/sync-supabase.dto.js';
+import { SendOtpDto } from './dto/send-otp.dto.js';
+import { VerifyOtpDto } from './dto/verify-otp.dto.js';
 import { UpdateAvatarDto } from './dto/update-avatar.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
@@ -68,18 +70,22 @@ export class AuthController {
     return this.authService.syncFromSupabaseToken(authorization, prismaRole);
   }
   @Public()
-  @Post('dev-otp-login')
+  @Post('send-otp')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
   @HttpCode(HttpStatus.OK)
-  devOtpLogin(
-    @Body()
-    dto: {
-      email?: string;
-      role?: 'locum' | 'clinic';
-    },
-  ): Promise<AuthTokens> {
+  async sendOtp(@Body() dto: SendOtpDto): Promise<{ success: true }> {
+    await this.authService.sendOtp(dto.email);
+    return { success: true };
+  }
+
+  @Public()
+  @Post('verify-otp')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  @HttpCode(HttpStatus.OK)
+  verifyOtp(@Body() dto: VerifyOtpDto): Promise<AuthTokens> {
     const prismaRole: PrismaRole =
       dto.role === 'clinic' ? PrismaRole.HOST : PrismaRole.LOCUM;
-    return this.authService.devOtpLogin(dto.email, prismaRole);
+    return this.authService.verifyOtp(dto.email, dto.otp, prismaRole);
   }
   @Get('me')
   @UseGuards(JwtAuthGuard)

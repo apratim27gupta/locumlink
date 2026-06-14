@@ -69,6 +69,10 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   MAIL_FROM_ADDRESS: string = 'noreply@locumconnect.ca';
+
+  @IsString()
+  @IsOptional()
+  MAIL_FROM_NAME: string = 'Locum Connect';
   @IsString()
   @IsOptional()
   SENTRY_DSN?: string;

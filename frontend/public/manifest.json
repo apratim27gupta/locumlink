@@ -4,6 +4,7 @@
   "description": "Find a Locum within 2 days, without agencies or endless calls.",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#38C6C6",
   "icons": [
