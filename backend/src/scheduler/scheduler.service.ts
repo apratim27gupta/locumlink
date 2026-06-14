@@ -31,6 +31,21 @@ export class SchedulerService {
     private readonly notifService: NotificationsService,
   ) {}
 
+  private async shiftReminderAlreadySent(
+    eventType: string,
+    applicationId: string,
+  ): Promise<boolean> {
+    const existing = await this.prisma.notificationEvent.findFirst({
+      where: {
+        eventType,
+        referenceId: applicationId,
+        referenceType: 'Application',
+      },
+      select: { id: true },
+    });
+    return existing != null;
+  }
+
   // L-005 / L-007: shift reminders
   @Cron(CronExpression.EVERY_HOUR)
   async handleShiftReminders() {
@@ -65,18 +80,32 @@ export class SchedulerService {
         };
 
         if (diffH >= 47 && diffH < 48) {
-          await this.notifService.notifyLocumShiftReminder48h({
-            ...base,
-            startDate: app.jobPosting.startDate,
-            startTime: app.jobPosting.startTime,
-          });
+          if (
+            !(await this.shiftReminderAlreadySent(
+              'L_005_SHIFT_REMINDER_48H',
+              app.id,
+            ))
+          ) {
+            await this.notifService.notifyLocumShiftReminder48h({
+              ...base,
+              startDate: app.jobPosting.startDate,
+              startTime: app.jobPosting.startTime,
+            });
+          }
         }
 
         if (diffH >= 1 && diffH < 2) {
-          await this.notifService.notifyLocumShiftReminder2h({
-            ...base,
-            startTime: app.jobPosting.startTime,
-          });
+          if (
+            !(await this.shiftReminderAlreadySent(
+              'L_007_SHIFT_REMINDER_2H',
+              app.id,
+            ))
+          ) {
+            await this.notifService.notifyLocumShiftReminder2h({
+              ...base,
+              startTime: app.jobPosting.startTime,
+            });
+          }
         }
       }
     } catch (err) {
@@ -111,6 +140,15 @@ export class SchedulerService {
         }
         const user = app.locumProfile.user;
         if (!user?.email) continue;
+
+        if (
+          await this.shiftReminderAlreadySent(
+            'L_006_SHIFT_REMINDER_EVENING',
+            app.id,
+          )
+        ) {
+          continue;
+        }
 
         await this.notifService.notifyLocumShiftReminderEvening({
           recipientId: user.id,

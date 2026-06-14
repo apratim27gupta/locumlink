@@ -27,7 +27,7 @@ export class EmailService {
     }
 
     const fromName =
-      this.config.get<string>('MAIL_FROM_NAME')?.trim() || 'Locum Connect';
+      this.config.get<string>('MAIL_FROM_NAME')?.trim() || 'Locum Link';
 
     const authHeader = apiKey.startsWith('Zoho-enczapikey')
       ? apiKey

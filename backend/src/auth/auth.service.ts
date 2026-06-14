@@ -333,9 +333,9 @@ export class AuthService {
       }),
     ]);
 
-    const subject = 'Your Locum Connect verification code';
+    const subject = 'Your Locum Link verification code';
     const text = [
-      'Use this code to sign in to Locum Connect:',
+      'Use this code to sign in to Locum Link:',
       '',
       otp,
       '',
@@ -343,7 +343,7 @@ export class AuthService {
       'If you did not request this code, you can ignore this email.',
     ].join('\n');
     const html = `
-      <p>Use this code to sign in to <strong>Locum Connect</strong>:</p>
+      <p>Use this code to sign in to <strong>Locum Link</strong>:</p>
       <p style="font-size:28px;font-weight:700;letter-spacing:4px;margin:24px 0">${otp}</p>
       <p style="color:#5a6478">This code expires in 10 minutes.</p>
       <p style="color:#5a6478">If you did not request this code, you can ignore this email.</p>

@@ -72,7 +72,7 @@ class EnvironmentVariables {
 
   @IsString()
   @IsOptional()
-  MAIL_FROM_NAME: string = 'Locum Connect';
+  MAIL_FROM_NAME: string = 'Locum Link';
   @IsString()
   @IsOptional()
   SENTRY_DSN?: string;

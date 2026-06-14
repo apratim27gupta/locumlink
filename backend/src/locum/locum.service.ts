@@ -2,6 +2,8 @@ import { PushService } from '../notifications/push.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
 import { formatAdminDoctorName } from '../notifications/admin-notification-copy.js';
+import { formatLocumDoctorName } from '../notifications/notification-copy.js';
+import { isShiftWithin24Hours } from '../notifications/host-notification-copy.js';
 import {
   Injectable,
   NotFoundException,
@@ -692,9 +694,7 @@ export class LocumService {
         });
       }
     });
-    // H-003 only (Application Update). Do not also send H-009 here — even when the
-    // shift starts within 24h. H-009 is for last-minute cancellation of an ongoing
-    // commitment, not for declining a host-confirmed placement before acceptance.
+    // H-009 when shift is within 24h; otherwise H-003 (Application Update).
     try {
       const jobWithHost = await this.prisma.jobPosting.findUnique({
         where: { id: app.jobPostingId },
@@ -717,15 +717,30 @@ export class LocumService {
       const host = jobWithHost?.hostProfile;
       const hostEmail = host?.user?.email;
       if (host?.userId && hostEmail && jobWithHost) {
-        await this.notifService.notifyHostLocumDeclined({
-          recipientId: host.userId,
-          recipientEmail: hostEmail,
-          locumFirstName: locumProfile?.firstName,
-          locumLastName: locumProfile?.lastName,
-          startDate: jobWithHost.startDate,
-          applicationId,
-          jobId: jobWithHost.id,
-        });
+        if (isShiftWithin24Hours(jobWithHost.startDate)) {
+          await this.notifService.notifyHostShiftCancelled({
+            recipientId: host.userId,
+            recipientEmail: hostEmail,
+            startDate: jobWithHost.startDate,
+            clinicName: host.practiceName ?? 'the clinic',
+            cancelledBy: formatLocumDoctorName(
+              locumProfile?.firstName,
+              locumProfile?.lastName,
+            ),
+            reason: 'Locum declined the confirmed placement',
+            jobId: jobWithHost.id,
+          });
+        } else {
+          await this.notifService.notifyHostLocumDeclined({
+            recipientId: host.userId,
+            recipientEmail: hostEmail,
+            locumFirstName: locumProfile?.firstName,
+            locumLastName: locumProfile?.lastName,
+            startDate: jobWithHost.startDate,
+            applicationId,
+            jobId: jobWithHost.id,
+          });
+        }
       }
     } catch {}
     return { success: true };

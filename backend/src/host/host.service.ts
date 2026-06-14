@@ -307,6 +307,56 @@ export class HostService {
     return profile.id;
   }
 
+  /** L-001: broadcast new ACTIVE posting to verified locums. */
+  private async notifyVerifiedLocumsOfNewOpportunity(
+    hostProfileId: string,
+    job: {
+      id: string;
+      title: string;
+      status: string;
+      startDate: Date | null;
+      payPerDay: unknown;
+    },
+  ): Promise<void> {
+    if (job.status !== 'ACTIVE') return;
+    try {
+      const hostLoc = await this.prisma.hostProfile.findUnique({
+        where: { id: hostProfileId },
+        select: { city: true, province: true },
+      });
+      const activeLocums = await this.prisma.user.findMany({
+        where: {
+          role: 'LOCUM',
+          status: 'ACTIVE',
+          locumProfile: {
+            cpsnsVerificationStatus: VerificationStatus.VERIFIED,
+          },
+        },
+        select: {
+          id: true,
+          email: true,
+          locumProfile: { select: { firstName: true, lastName: true } },
+        },
+      });
+      await Promise.allSettled(
+        activeLocums.map((locum) =>
+          this.notifService.notifyLocumNewOpportunity({
+            recipientId: locum.id,
+            recipientEmail: locum.email,
+            firstName: locum.locumProfile?.firstName,
+            lastName: locum.locumProfile?.lastName,
+            jobId: job.id,
+            jobTitle: job.title,
+            startDate: job.startDate,
+            payPerDay: job.payPerDay != null ? Number(job.payPerDay) : null,
+            city: hostLoc?.city,
+            province: hostLoc?.province,
+          }),
+        ),
+      );
+    } catch {}
+  }
+
   async getDashboardStats(userId: string) {
     const hostProfileId = await this.getHostProfileId(userId);
     const now = new Date();
@@ -462,45 +512,7 @@ export class HostService {
       },
     });
 
-    // L-001: notify verified locums of new opportunity
-    if (job.status === 'ACTIVE') {
-      try {
-        const hostLoc = await this.prisma.hostProfile.findUnique({
-          where: { id: hostProfileId },
-          select: { city: true, province: true },
-        });
-        const activeLocums = await this.prisma.user.findMany({
-          where: {
-            role: 'LOCUM',
-            status: 'ACTIVE',
-            locumProfile: {
-              cpsnsVerificationStatus: VerificationStatus.VERIFIED,
-            },
-          },
-          select: {
-            id: true,
-            email: true,
-            locumProfile: { select: { firstName: true, lastName: true } },
-          },
-        });
-        await Promise.allSettled(
-          activeLocums.map((locum) =>
-            this.notifService.notifyLocumNewOpportunity({
-              recipientId: locum.id,
-              recipientEmail: locum.email,
-              firstName: locum.locumProfile?.firstName,
-              lastName: locum.locumProfile?.lastName,
-              jobId: job.id,
-              jobTitle: job.title,
-              startDate: job.startDate,
-              payPerDay: job.payPerDay != null ? Number(job.payPerDay) : null,
-              city: hostLoc?.city,
-              province: hostLoc?.province,
-            }),
-          ),
-        );
-      } catch {}
-    }
+    await this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, job);
     return {
       success: true,
       job: {
@@ -705,6 +717,11 @@ export class HostService {
         ...(dto.fullHalfDay != null && { fullHalfDay: dto.fullHalfDay }),
       },
     });
+    const newlyPublished =
+      publishingActive && job.status === PostingStatus.DRAFT;
+    if (newlyPublished) {
+      await this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, updated);
+    }
     return { success: true, job: updated };
   }
 
@@ -854,6 +871,9 @@ export class HostService {
           }),
       },
     });
+    if (updated.status === 'ACTIVE') {
+      await this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, updated);
+    }
     return { success: true, job: updated };
   }
 
