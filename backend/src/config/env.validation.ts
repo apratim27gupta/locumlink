@@ -66,9 +66,14 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   ZEPTOMAIL_API_KEY: string;
+
+  @IsUrl({ require_tld: false })
+  @IsOptional()
+  ZEPTOMAIL_API_URL: string = 'https://api.zeptomail.ca';
+
   @IsString()
   @IsOptional()
-  MAIL_FROM_ADDRESS: string = 'noreply@locumconnect.ca';
+  MAIL_FROM_ADDRESS: string = 'noreply@locumlink.ca';
 
   @IsString()
   @IsOptional()
@@ -79,6 +84,11 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   ALLOWED_ORIGINS: string = 'http://localhost:3001';
+
+  /** IANA timezone for shift start/end comparisons (e.g. America/Halifax). */
+  @IsString()
+  @IsOptional()
+  PLATFORM_TIMEZONE: string = 'America/Halifax';
 
   @IsString()
   @IsOptional()

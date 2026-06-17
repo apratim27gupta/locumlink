@@ -5,6 +5,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -57,6 +58,8 @@ function isPlaceholderSupabaseKey(key: string | undefined): boolean {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -369,8 +372,14 @@ export class AuthService {
     });
 
     if (!result.ok) {
+      const nodeEnv = this.config.get<string>('NODE_ENV') ?? 'development';
+      if (nodeEnv !== 'production') {
+        this.logger.warn(
+          `ZeptoMail failed (${result.error}); local dev OTP for ${normalizedEmail}: ${otp}`,
+        );
+      }
       throw new BadRequestException(
-        'Could not send verification email. Check ZEPTOMAIL_API_KEY and MAIL_FROM_ADDRESS.',
+        `Could not send verification email. ${result.error}`,
       );
     }
   }
@@ -500,6 +509,19 @@ export class AuthService {
     return { ...rest, avatarUrl };
   }
 
+  async markTourSeen(
+    userId: string,
+    tourKey: 'host' | 'locum',
+  ): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data:
+        tourKey === 'host'
+          ? { hasSeenHostTour: true }
+          : { hasSeenLocumTour: true },
+    });
+  }
+
   async setUserAvatarStoragePath(userId: string, storagePath: string) {
     const next = storagePath.trim();
     if (!next) throw new BadRequestException('storagePath is required');
@@ -518,8 +540,8 @@ export class AuthService {
 
   async deactivateAccount(
     userId: string,
-    meta: { ip?: string; userAgent?: string },
-  ): Promise<void> {
+    meta: { ip?: string; userAgent?: string } = {},
+  ): Promise<{ ok: true }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new UnauthorizedException('Session invalid');
@@ -530,13 +552,14 @@ export class AuthService {
       );
     }
     if (user.status === UserStatus.DEACTIVATED) {
-      return;
+      return { ok: true };
     }
+    const deactivatedAt = new Date();
     await this.prisma.user.update({
       where: { id: userId },
       data: {
         status: UserStatus.DEACTIVATED,
-        deactivatedAt: new Date(),
+        deactivatedAt,
         hashedRefreshToken: null,
         lastAppPath: null,
       },
@@ -550,19 +573,21 @@ export class AuthService {
       before: { status: user.status },
       after: {
         status: UserStatus.DEACTIVATED,
-        deactivatedAt: new Date().toISOString(),
+        deactivatedAt: deactivatedAt.toISOString(),
       },
       outcome: 'SUCCESS',
       actorRole: user.role,
       ...meta,
     });
+    return { ok: true };
   }
-  async permanentDeleteAccount(userId: string): Promise<void> {
+  async permanentDeleteAccount(userId: string): Promise<{ ok: true }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
     if (user.role === 'admin')
       throw new ForbiddenException('Admin accounts cannot be deleted.');
     await this.prisma.user.delete({ where: { id: userId } });
+    return { ok: true };
   }
   private async resetUserToFreshStart(userId: string): Promise<void> {
     const existing = await this.prisma.user.findUnique({

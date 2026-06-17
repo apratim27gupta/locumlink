@@ -32,6 +32,7 @@ import {
     calendarDatePartFromInput,
     fmtJobCalendarDate,
     localCalendarDateToIso,
+    localDateTimeToUtcParts,
     toTimezoneAwareIso,
     compareLocalCalendarDates,
 } from '@/lib/hostJobPostingForm';
@@ -1208,14 +1209,20 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                     endTime,
                 })
                 : null;
+        const partialStart = startIso
+            ? localDateTimeToUtcParts(startIso, startTime || '00:00')
+            : null;
+        const partialEnd = endIso
+            ? localDateTimeToUtcParts(endIso, endTime || '23:59')
+            : null;
         return {
             title: jobTitle.trim() || 'Draft locum shift',
             description: jobDescription.trim() || undefined,
             keyResponsibilities: keyResponsibilities.length ? keyResponsibilities : undefined,
-            startDate: scheduleFields?.startDate ?? (startIso ? toTimezoneAwareIso(startIso, '00:00') ?? undefined : undefined),
-            endDate: scheduleFields?.endDate ?? (endIso ? toTimezoneAwareIso(endIso, '23:59') ?? undefined : undefined),
-            startTime: scheduleFields?.startTime ?? (startTime || undefined),
-            endTime: scheduleFields?.endTime ?? (endTime || undefined),
+            startDate: scheduleFields?.startDate ?? partialStart?.utcDate,
+            endDate: scheduleFields?.endDate ?? partialEnd?.utcDate,
+            startTime: scheduleFields?.startTime ?? partialStart?.utcTime ?? (startTime || undefined),
+            endTime: scheduleFields?.endTime ?? partialEnd?.utcTime ?? (endTime || undefined),
             payPerDay: Number.isFinite(rateNum) && rateNum > 0 ? rateNum : undefined,
             minYearsExperience: yearsExp.trim() && Number.isFinite(yearsNum) ? yearsNum : undefined,
             requiredCredentials: credentials,

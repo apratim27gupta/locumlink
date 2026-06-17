@@ -81,6 +81,43 @@ export function isLocalPostingEndDatePassed(
     return end != null && end.getTime() < getLocalNowMs();
 }
 
+/**
+ * True when the combined shift start (local calendar date + HH:mm) is in the past.
+ * Postings with no start date are never considered passed.
+ * When startTime is missing, uses 23:59 on that day (visible for the full day).
+ */
+export function isLocalPostingStartDateTimePassed(
+    startDate: string | Date | null | undefined,
+    startTime?: string | null,
+): boolean {
+    if (startDate == null || startDate === '')
+        return false;
+
+    let dateIso: string | null;
+    if (typeof startDate === 'string') {
+        dateIso = calendarDatePartFromInput(startDate);
+        if (!dateIso) {
+            const d = new Date(startDate);
+            if (Number.isNaN(d.getTime()))
+                return false;
+            dateIso = localCalendarDateToIso(d);
+        }
+    }
+    else {
+        if (Number.isNaN(startDate.getTime()))
+            return false;
+        dateIso = localCalendarDateToIso(startDate);
+    }
+
+    const timeForCombine = startTime?.trim()
+        ? startTime
+        : '23:59';
+    const shiftStart = localDateTimeFromCalendarAndTime(dateIso, timeForCombine);
+    if (!shiftStart)
+        return false;
+    return shiftStart.getTime() < getLocalNowMs();
+}
+
 /** Compare local calendar days only (YYYY-MM-DD). */
 export function compareLocalCalendarDates(a: string, b: string): number {
     return a.localeCompare(b);
@@ -209,6 +246,32 @@ function formatLocalOffsetForDate(d: Date): string {
  * ISO 8601 instant with the browser's local offset, e.g. 2026-06-04T09:30:00-04:00.
  * Use when sending schedule fields to the API.
  */
+/** Convert local browser date + time to UTC date/time parts for API storage. */
+export function localDateTimeToUtcParts(
+    localDateStr: string,
+    localTimeStr: string,
+): { utcDate: string; utcTime: string } {
+    const localIso = `${localDateStr}T${localTimeStr}:00`;
+    const d = new Date(localIso);
+    const utcDate = d.toISOString().split('T')[0];
+    const utcTime = d.toISOString().split('T')[1].slice(0, 5);
+    return { utcDate, utcTime };
+}
+
+/** Convert stored UTC date/time parts to local values for form inputs. */
+export function utcPartsToLocalInputValues(
+    utcDateStr: string | null | undefined,
+    utcTimeStr: string | null | undefined,
+): { localDate: string; localTime: string } | null {
+    if (!utcDateStr) return null;
+    const time = utcTimeStr?.trim() ? utcTimeStr : '00:00';
+    const d = new Date(`${utcDateStr.split('T')[0]}T${time}:00Z`);
+    if (isNaN(d.getTime())) return null;
+    const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const localTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return { localDate, localTime };
+}
+
 export function toTimezoneAwareIso(
     dateIso: string,
     timeHm?: string | null,

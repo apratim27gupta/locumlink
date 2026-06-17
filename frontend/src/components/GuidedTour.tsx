@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import { useFirstVisit } from '@/hooks/useFirstVisit';
-import { getTourConfig } from '@/config/tourSteps';
+import { getTourConfig, type TourConfig } from '@/config/tourSteps';
 import type { DriveStep } from 'driver.js';
 
 const TOUR_POLL_MS = 200;
@@ -22,11 +22,21 @@ function resolveTourSteps(steps: DriveStep[]) {
 export default function GuidedTour() {
     const pathname = usePathname();
     const tourConfig = getTourConfig(pathname);
-    const { isFirstVisit, markAsSeen } = useFirstVisit(
-        tourConfig?.storageKey ?? 'hasSeenTour',
-    );
+    const storageKey = tourConfig?.storageKey ?? 'hasSeenTour';
+    const tourConfigRef = useRef<TourConfig | null>(tourConfig);
+    const { isFirstVisit, isLoading, markAsSeen } = useFirstVisit(storageKey);
     const launchedRef = useRef(false);
     const driverRef = useRef<ReturnType<typeof driver> | null>(null);
+    const markedSeenRef = useRef(false);
+
+    useEffect(() => {
+        tourConfigRef.current = getTourConfig(pathname);
+    }, [pathname]);
+
+    useEffect(() => {
+        launchedRef.current = false;
+        markedSeenRef.current = false;
+    }, [storageKey]);
 
     useEffect(() => {
         const style = document.createElement('style');
@@ -103,12 +113,18 @@ export default function GuidedTour() {
     }, []);
 
     useEffect(() => {
-        if (!tourConfig || !isFirstVisit || launchedRef.current) return;
-        if (!tourConfig.entryPaths.includes(pathname)) return;
+        const config = tourConfigRef.current;
+        if (!config || isLoading || !isFirstVisit || launchedRef.current) return;
+        if (!config.entryPaths.includes(pathname)) return;
 
-        const config = tourConfig;
         let cancelled = false;
         const startedAt = Date.now();
+
+        function markSeenOnce() {
+            if (markedSeenRef.current) return;
+            markedSeenRef.current = true;
+            markAsSeen();
+        }
 
         function launchTour(resolved: DriveStep[]) {
             if (cancelled || launchedRef.current || resolved.length === 0) return;
@@ -118,9 +134,12 @@ export default function GuidedTour() {
                 const driverObj = driver({
                     showProgress: true,
                     allowClose: true,
+                    onHighlightStarted: () => {
+                        markSeenOnce();
+                    },
                     onDestroyed: () => {
                         driverRef.current = null;
-                        markAsSeen();
+                        markSeenOnce();
                     },
                     steps: resolved,
                 });
@@ -157,7 +176,7 @@ export default function GuidedTour() {
                 driverRef.current = null;
             }
         };
-    }, [tourConfig, isFirstVisit, markAsSeen, pathname]);
+    }, [isFirstVisit, isLoading, markAsSeen, pathname]);
 
     return null;
 }

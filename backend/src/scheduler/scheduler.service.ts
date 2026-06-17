@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { browseShiftStartActiveSql } from '../host/job-schedule.util.js';
 
 const locumReminderInclude = {
   locumProfile: {
@@ -205,6 +206,29 @@ export class SchedulerService {
       }
     } catch (err) {
       this.logger.error('Expiry reminder cron failed', err);
+    }
+  }
+
+  /** Mark ACTIVE postings whose shift start (date + time) has passed as EXPIRED. */
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async expirePostingsWithPassedStartDate() {
+    try {
+      const shiftActive = browseShiftStartActiveSql();
+      const result = await this.prisma.$executeRaw`
+        UPDATE job_postings
+        SET status = 'EXPIRED'::"PostingStatus"
+        WHERE status = 'ACTIVE'::"PostingStatus"
+          AND is_deleted = false
+          AND start_date IS NOT NULL
+          AND NOT (${shiftActive})
+      `;
+      if (result > 0) {
+        this.logger.log(
+          `Expired ${result} posting(s) with passed shift start`,
+        );
+      }
+    } catch (err) {
+      this.logger.error('Expire passed shift start cron failed', err);
     }
   }
 }

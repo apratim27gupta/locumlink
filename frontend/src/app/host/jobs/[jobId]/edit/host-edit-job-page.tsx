@@ -27,6 +27,7 @@ import {
   validateJobPostingSchedule,
   getJobScheduleValidationError,
   buildJobScheduleApiFields,
+  utcPartsToLocalInputValues,
 } from '@/lib/hostJobPostingForm';
 const inp = hostJobFieldInp;
 const lbl = hostJobFieldLbl;
@@ -163,12 +164,14 @@ export default function HostEditJobPage(props: {
             .map((s) => s.trim())
             .filter(Boolean)
         : [];
-    const startIso = typeof job?.startDate === 'string' ? job.startDate : null;
-    const endIso = typeof job?.endDate === 'string' ? job.endDate : null;
-    const startDate = startIso
-      ? parseMmDdYyyyToIso(fmtIsoToMmDdYyyy(startIso))
-      : '';
-    const endDate = endIso ? parseMmDdYyyyToIso(fmtIsoToMmDdYyyy(endIso)) : '';
+    const startLocal = utcPartsToLocalInputValues(
+      typeof job?.startDate === 'string' ? job.startDate : null,
+      typeof job?.startTime === 'string' ? job.startTime : null,
+    );
+    const endLocal = utcPartsToLocalInputValues(
+      typeof job?.endDate === 'string' ? job.endDate : null,
+      typeof job?.endTime === 'string' ? job.endTime : null,
+    );
     const rc = job?.requiredCredentials;
     const credentials =
       Array.isArray(rc) && rc.length
@@ -186,10 +189,10 @@ export default function HostEditJobPage(props: {
         ]),
       ),
       respCustom: parsed.respCustom.trim(),
-      startDate: startDate || '',
-      endDate: endDate || '',
-      startTime: typeof job?.startTime === 'string' ? job.startTime : '',
-      endTime: typeof job?.endTime === 'string' ? job.endTime : '',
+      startDate: startLocal?.localDate ?? '',
+      endDate: endLocal?.localDate ?? '',
+      startTime: startLocal?.localTime ?? '',
+      endTime: endLocal?.localTime ?? '',
       ratePerDay:
         ppd === null || ppd === undefined || ppd === ''
           ? ''
@@ -292,16 +295,22 @@ export default function HostEditJobPage(props: {
         setRespCustom(parsed.respCustom);
         lastAutoRespJobTitleRef.current =
           (job.title ?? '').trim().toLowerCase() || null;
+        const startLocal = utcPartsToLocalInputValues(
+          job.startDate as string | null | undefined,
+          job.startTime as string | null | undefined,
+        );
+        const endLocal = utcPartsToLocalInputValues(
+          job.endDate as string | null | undefined,
+          job.endTime as string | null | undefined,
+        );
         setStartDateInput(
-          fmtIsoToMmDdYyyy(job.startDate as string | null | undefined),
+          startLocal ? fmtIsoToMmDdYyyy(startLocal.localDate) : '',
         );
         setEndDateInput(
-          fmtIsoToMmDdYyyy(job.endDate as string | null | undefined),
+          endLocal ? fmtIsoToMmDdYyyy(endLocal.localDate) : '',
         );
-        setStartTime(
-          typeof job.startTime === 'string' ? job.startTime : '05:00',
-        );
-        setEndTime(typeof job.endTime === 'string' ? job.endTime : '14:00');
+        setStartTime(startLocal?.localTime ?? '05:00');
+        setEndTime(endLocal?.localTime ?? '14:00');
         const ppd =
           (
             job as {

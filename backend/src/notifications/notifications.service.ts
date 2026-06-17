@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   paginateNotificationEvents,
@@ -138,6 +138,8 @@ function eventTypeToCategory(eventType: string): NotificationItem['type'] {
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly push: PushService,
@@ -186,11 +188,16 @@ export class NotificationsService {
     });
 
     if (params.emailTo && params.emailSubject && params.emailBody) {
-      await this.email.send({
+      const emailResult = await this.email.send({
         to: params.emailTo,
         subject: params.emailSubject,
         text: params.emailBody,
       });
+      if (!emailResult.ok) {
+        this.logger.error(
+          `Notification email failed for ${params.emailTo} (${params.eventType}): ${emailResult.error}`,
+        );
+      }
     }
   }
 

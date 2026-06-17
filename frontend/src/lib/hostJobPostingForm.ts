@@ -4,6 +4,7 @@ import {
     formatLocalCalendarDateForDisplay,
     isLocalPostingEndDatePassed,
     localCalendarDateToIso,
+    localDateTimeToUtcParts,
     toTimezoneAwareIso,
     validateJobPostingSchedule,
     type JobScheduleValidationResult,
@@ -195,6 +196,8 @@ export {
     getLocalTimezone,
     getLocalTimeSnapshot,
     localCalendarDateToIso,
+    localDateTimeToUtcParts,
+    utcPartsToLocalInputValues,
     endOfLocalCalendarDay,
     isLocalPostingEndDatePassed,
     validateJobPostingSchedule,
@@ -218,22 +221,24 @@ export function getJobScheduleValidationError(params: {
     return result.valid ? null : result.message;
 }
 
-/** API schedule fields with timezone-aware ISO instants for start/end. */
+/** API schedule fields: host local date/time converted to UTC parts for storage. */
 export function buildJobScheduleApiFields(params: {
     startDateIso: string;
     endDateIso: string;
     startTime: string;
     endTime: string;
 }): { startDate: string; endDate: string; startTime: string; endTime: string } | null {
-    const startDate = toTimezoneAwareIso(params.startDateIso, params.startTime);
-    const endDate = toTimezoneAwareIso(params.endDateIso, params.endTime);
-    if (!startDate || !endDate)
+    const st = params.startTime.trim();
+    const en = params.endTime.trim();
+    if (!st || !en)
         return null;
+    const start = localDateTimeToUtcParts(params.startDateIso, st);
+    const end = localDateTimeToUtcParts(params.endDateIso, en);
     return {
-        startDate,
-        endDate,
-        startTime: params.startTime.trim(),
-        endTime: params.endTime.trim(),
+        startDate: start.utcDate,
+        endDate: end.utcDate,
+        startTime: start.utcTime,
+        endTime: end.utcTime,
     };
 }
 

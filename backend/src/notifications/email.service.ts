@@ -29,11 +29,15 @@ export class EmailService {
     const fromName =
       this.config.get<string>('MAIL_FROM_NAME')?.trim() || 'Locum Link';
 
+    const apiBase =
+      this.config.get<string>('ZEPTOMAIL_API_URL')?.trim() ||
+      'https://api.zeptomail.ca';
+
     const authHeader = apiKey.startsWith('Zoho-enczapikey')
       ? apiKey
       : `Zoho-enczapikey ${apiKey}`;
 
-    const res = await fetch('https://api.zeptomail.com/v1.1/email', {
+    const res = await fetch(`${apiBase.replace(/\/$/, '')}/v1.1/email`, {
       method: 'POST',
       headers: {
         Authorization: authHeader,

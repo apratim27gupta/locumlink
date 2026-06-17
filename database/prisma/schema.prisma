@@ -111,6 +111,8 @@ model User {
   hashedRefreshToken String?
   lastAppPath        String?
   avatarStoragePath  String?    @map("avatar_storage_path")
+  hasSeenHostTour    Boolean    @default(false)
+  hasSeenLocumTour   Boolean    @default(false)
 
   // PIPEDA consent (L2-E6.4)
   consentGivenAt     DateTime?  @map("consent_given_at")

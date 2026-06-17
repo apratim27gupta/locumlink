@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",
-    "@prisma/client": "^6.19.3"
+    "@prisma/client": "^6.19.3",
+    "expo": "^56.0.12"
   }
 }

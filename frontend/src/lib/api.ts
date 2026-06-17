@@ -260,6 +260,8 @@ export type AuthMeResponse = {
     email: string;
     role: string;
     avatarUrl: string | null;
+    hasSeenHostTour?: boolean;
+    hasSeenLocumTour?: boolean;
     status?: string;
     emailVerified?: boolean;
     createdAt?: string;
@@ -321,6 +323,17 @@ export const authApi = {
             throw new Error(text || `auth/me failed: ${res.status}`);
         }
         return res.json() as Promise<AuthMeResponse>;
+    },
+    markTourSeen: async (tourKey: 'host' | 'locum'): Promise<void> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/auth/me/tour`, {
+            method: 'PATCH',
+            headers: nestHeaders(true),
+            body: JSON.stringify({ tourKey }),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || `auth/me/tour failed: ${res.status}`);
+        }
     },
     updateAvatar: async (storagePath: string): Promise<void> => {
         const res = await trackedFetch(`${NEST_BASE}/api/auth/me/avatar`, {

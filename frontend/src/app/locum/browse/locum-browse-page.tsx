@@ -24,7 +24,6 @@ import {
   locumCanApplyToJobs,
 } from '@/lib/locumAccountNotice';
 import {
-  formatLocalCalendarDateForDisplay,
   isLocalPostingEndDatePassed,
 } from '@/lib/localDateTime';
 import { relativeHoursOrDaysAgo, toLocalDateTime, toLocalTime } from '@/lib/relativeTime';
@@ -194,15 +193,26 @@ function buildBrowseSearchSuggestions(
   }
   return out;
 }
-function fmtDate(iso: string | null): string {
-  return formatLocalCalendarDateForDisplay(iso);
-}
-function fmtTime(t: string | null): string {
-  if (!t) return '';
-  const [h, m] = t.split(':').map(Number);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 || 12;
-  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+function formatUtcDateTimeToLocal(
+  dateStr: string | null | undefined,
+  timeStr: string | null | undefined,
+): { localDate: string; localTime: string } | null {
+  if (!dateStr) return null;
+  const time = timeStr?.trim() ? timeStr : '00:00';
+  const utcIso = `${dateStr.split('T')[0]}T${time}:00Z`;
+  const d = new Date(utcIso);
+  if (isNaN(d.getTime())) return null;
+  return {
+    localDate: d.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }),
+    localTime: d.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  };
 }
 function hasMinYearsExperience(
   value: number | null | undefined,
@@ -986,7 +996,11 @@ export default function LocumBrowsePage(props: {
                   >
                     {j.hostProfile.city}, {j.hostProfile.province}
                   </div>
-                  {(j.startDate || j.endDate) && (
+                  {(j.startDate || j.endDate) && (() => {
+                    const start = formatUtcDateTimeToLocal(j.startDate, j.startTime);
+                    const end = formatUtcDateTimeToLocal(j.endDate, j.endTime);
+                    if (!start && !end) return null;
+                    return (
                     <div
                       style={{
                         fontFamily: 'Inter, sans-serif',
@@ -1006,9 +1020,10 @@ export default function LocumBrowsePage(props: {
                         height={12}
                         style={{ flexShrink: 0, objectFit: 'contain' }}
                       />
-                      {fmtDate(j.startDate)} – {fmtDate(j.endDate)}
+                      {start?.localDate ?? '—'} – {end?.localDate ?? '—'}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {isApplied(j.id) && (
                     <span
@@ -1203,7 +1218,11 @@ export default function LocumBrowsePage(props: {
                     marginBottom: 14,
                   }}
                 >
-                  {(job.startDate || job.endDate) && (
+                  {(job.startDate || job.endDate) && (() => {
+                    const start = formatUtcDateTimeToLocal(job.startDate, job.startTime);
+                    const end = formatUtcDateTimeToLocal(job.endDate, job.endTime);
+                    if (!start && !end) return null;
+                    return (
                     <span
                       style={{
                         background: LOGO_TEAL_BG,
@@ -1225,10 +1244,15 @@ export default function LocumBrowsePage(props: {
                         height={14}
                         style={{ flexShrink: 0, objectFit: 'contain' }}
                       />
-                      {fmtDate(job.startDate)} – {fmtDate(job.endDate)}
+                      {start?.localDate ?? '—'} – {end?.localDate ?? '—'}
                     </span>
-                  )}
-                  {(job.startTime || job.endTime) && (
+                    );
+                  })()}
+                  {(job.startTime || job.endTime) && (() => {
+                    const start = formatUtcDateTimeToLocal(job.startDate, job.startTime);
+                    const end = formatUtcDateTimeToLocal(job.endDate, job.endTime);
+                    if (!start && !end) return null;
+                    return (
                     <span
                       style={{
                         background: LOGO_TEAL_BG,
@@ -1250,9 +1274,10 @@ export default function LocumBrowsePage(props: {
                         height={14}
                         style={{ flexShrink: 0, objectFit: 'contain' }}
                       />
-                      {fmtTime(job.startTime)} – {fmtTime(job.endTime)}
+                      {start?.localTime ?? '—'} – {end?.localTime ?? '—'}
                     </span>
-                  )}
+                    );
+                  })()}
                   {job.payPerDay && (
                     <span
                       style={{

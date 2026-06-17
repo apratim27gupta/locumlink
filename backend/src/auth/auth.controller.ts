@@ -8,6 +8,7 @@ import {
   Patch,
   Delete,
   Headers,
+  Req,
   UseGuards,
   Get,
   UsePipes,
@@ -21,11 +22,21 @@ import { SyncSupabaseDto } from './dto/sync-supabase.dto.js';
 import { SendOtpDto } from './dto/send-otp.dto.js';
 import { VerifyOtpDto } from './dto/verify-otp.dto.js';
 import { UpdateAvatarDto } from './dto/update-avatar.dto.js';
+import { UpdateTourDto } from './dto/update-tour.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
 import { Public } from './decorators/public.decorator.js';
 import type { User } from '@prisma/client';
 import { AuthTokens } from './interfaces/auth-tokens.interface.js';
+
+interface JwtRequest {
+  user: {
+    id: string;
+    email: string;
+    role: string;
+  };
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -95,6 +106,19 @@ export class AuthController {
   ) {
     return this.authService.presentMe(user);
   }
+  @Patch('me/tour')
+  @UseGuards(JwtAuthGuard)
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  @HttpCode(HttpStatus.OK)
+  async markTourSeen(
+    @CurrentUser()
+    user: User,
+    @Body()
+    dto: UpdateTourDto,
+  ): Promise<{ success: true }> {
+    await this.authService.markTourSeen(user.id, dto.tourKey);
+    return { success: true };
+  }
   @Patch('me/avatar')
   @UseGuards(JwtAuthGuard)
   @UsePipes(new ValidationPipe({ whitelist: true }))
@@ -123,26 +147,14 @@ export class AuthController {
     return { success: true };
   }
   @Post('me/deactivate')
-  @Delete('me/permanent-delete')
-  @UseGuards(JwtAuthGuard)
-  async permanentDeleteAccount(@CurrentUser() user: User) {
-    await this.authService.permanentDeleteAccount(user.id);
-    return { ok: true };
+  @HttpCode(HttpStatus.OK)
+  deactivate(@Req() req: JwtRequest) {
+    return this.authService.deactivateAccount(req.user.id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @Delete('me/permanent-delete')
   @HttpCode(HttpStatus.OK)
-  async deactivateAccount(
-    @CurrentUser()
-    user: User,
-    @Ip()
-    ip: string,
-    @Headers('user-agent')
-    userAgent: string,
-  ): Promise<{
-    success: true;
-  }> {
-    await this.authService.deactivateAccount(user.id, { ip, userAgent });
-    return { success: true };
+  permanentDelete(@Req() req: JwtRequest) {
+    return this.authService.permanentDeleteAccount(req.user.id);
   }
 }

@@ -23,6 +23,7 @@ import {
   paginateJobPostings,
   paginateApplications,
   parsePaginationParams,
+  countBrowseActiveJobPostings,
 } from '../common/pagination/index.js';
 import {
   adminCpsnsNumberOrEmpty,
@@ -408,9 +409,7 @@ export class LocumService {
     };
   }
   async countBrowseOpportunities(): Promise<number> {
-    return this.prisma.jobPosting.count({
-      where: { status: 'ACTIVE', isDeleted: false },
-    });
+    return countBrowseActiveJobPostings(this.prisma);
   }
   async browseJobs(query: Record<string, unknown> = {}) {
     const pagination = parsePaginationParams(query, 20);
@@ -418,7 +417,7 @@ export class LocumService {
 
     const page = await paginateJobPostings(
       this.prisma,
-      { status: 'ACTIVE', isDeleted: false },
+      { status: 'ACTIVE', isDeleted: false, excludePassedStartDate: true },
       pagination,
       {
         hostProfile: {

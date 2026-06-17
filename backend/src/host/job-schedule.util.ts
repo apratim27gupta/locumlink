@@ -1,4 +1,13 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+
+const DEFAULT_PLATFORM_TIMEZONE = 'America/Halifax';
+
+/** IANA zone for interpreting stored calendar date + clock time (from PLATFORM_TIMEZONE env). */
+export function getPlatformTimezone(): string {
+  const tz = process.env.PLATFORM_TIMEZONE?.trim();
+  return tz && tz.length > 0 ? tz : DEFAULT_PLATFORM_TIMEZONE;
+}
 
 /** YYYY-MM-DD from date-only or ISO string (calendar day as written, not UTC-shifted). */
 export function extractCalendarDatePart(
@@ -122,30 +131,19 @@ export function assertJobScheduleAcceptable(params: {
     if (endMs <= startMs) {
       throw new BadRequestException('End time must be after start time.');
     }
-  } else if (
-    hasStart &&
-    hasEnd &&
-    hasClockTimes &&
-    startDb &&
-    endDb &&
-    formatCalendarDateForApi(startDb) === formatCalendarDateForApi(endDb)
-  ) {
-    const st = params.startTime!.trim();
-    const en = params.endTime!.trim();
-    if (en <= st) {
+  } else if (hasStart && hasEnd && hasClockTimes && !startHasInstant && !endHasInstant) {
+    const startMs = utcDateTimePartsToMs(startRaw, params.startTime!);
+    const endMs = utcDateTimePartsToMs(endRaw, params.endTime!);
+    if (startMs != null && endMs != null && endMs <= startMs) {
       throw new BadRequestException('End time must be after start time.');
     }
   }
 
-  if (!params.allowPast && (hasStart || hasEnd) && hasClockTimes) {
-    if (hasStart && !startHasInstant) {
+  if (!params.allowPast && hasStart && hasClockTimes && !startHasInstant) {
+    const startMs = utcDateTimePartsToMs(startRaw, params.startTime!);
+    if (startMs != null && startMs < Date.now()) {
       throw new BadRequestException(
-        'Start date must be sent as a timezone-aware ISO 8601 timestamp.',
-      );
-    }
-    if (hasEnd && !endHasInstant) {
-      throw new BadRequestException(
-        'End date must be sent as a timezone-aware ISO 8601 timestamp.',
+        'Start date and time cannot be in the past.',
       );
     }
   }
@@ -167,4 +165,48 @@ export function isPostingEndDatePassed(
   const d = endDate.getUTCDate();
   const endOfStoredDay = Date.UTC(y, mo, d, 23, 59, 59, 999);
   return endOfStoredDay < Date.now();
+}
+
+/** Combine stored UTC calendar date + HH:mm into epoch ms. */
+export function utcDateTimePartsToMs(
+  dateStr: string,
+  timeStr: string,
+): number | null {
+  const cal = extractCalendarDatePart(dateStr);
+  const tm = parseClockTimeHm(timeStr);
+  if (!cal || !tm) return null;
+  const [y, mo, d] = cal.split('-').map(Number);
+  return Date.UTC(y, mo - 1, d, tm.hours, tm.minutes, 0, 0);
+}
+
+/** Parse HH:mm (24h) from a stored start_time / end_time varchar. */
+export function parseClockTimeHm(
+  time: string | null | undefined,
+): { hours: number; minutes: number } | null {
+  const m = time?.trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const hours = Number(m[1]);
+  const minutes = Number(m[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return { hours, minutes };
+}
+
+/**
+ * PostgreSQL: shift start (start_date + start_time stored as UTC) is still in the future.
+ * Used for locum browse queries and expiry cron (single source of truth).
+ */
+export function browseShiftStartActiveSql(): Prisma.Sql {
+  return Prisma.sql`(
+    start_date IS NULL
+    OR (
+      start_date::timestamp
+      + COALESCE(
+          NULLIF(
+            substring(COALESCE(start_time, '') FROM '^([0-9]{1,2}:[0-9]{2})'),
+            ''
+          )::time,
+          TIME '23:59:59'
+        )
+    ) > NOW()
+  )`;
 }
