@@ -9,9 +9,9 @@ const FRONTEND = 'http://127.0.0.1:3001';
 const backendRoutes = [
   { method: 'GET', path: '/api/health', expect: [200] },
   { method: 'GET', path: '/api/locum/jobs/browse-count', expect: [200] },
-  { method: 'GET', path: '/api/admin-auth/oauth-setup', expect: [200] },
-  { method: 'GET', path: '/api/admin-auth/google', expect: [302, 503] },
   { method: 'GET', path: '/api/admin-auth/me', expect: [401] },
+  { method: 'POST', path: '/api/admin-auth/request-otp', expect: [400, 200], body: {} },
+  { method: 'POST', path: '/api/admin-auth/verify-otp', expect: [400, 401], body: {} },
   { method: 'POST', path: '/api/auth/login', expect: [400, 401], body: {} },
   { method: 'POST', path: '/api/auth/register', expect: [400], body: {} },
   { method: 'GET', path: '/api/auth/me', expect: [401] },

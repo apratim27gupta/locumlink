@@ -3,19 +3,16 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { adminApiBase } from '@/lib/adminApi';
-
-function isAdminLoginPath(pathname: string): boolean {
-  return pathname === '/admin/login' || pathname.startsWith('/admin/login/');
-}
+import { isAdminPublicPath } from '@/lib/admin-public-paths';
 
 export default function AdminAuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [ready, setReady] = useState(() => isAdminLoginPath(pathname));
+  const [ready, setReady] = useState(() => isAdminPublicPath(pathname));
 
   useEffect(() => {
-    if (isAdminLoginPath(pathname)) {
+    if (isAdminPublicPath(pathname)) {
       setReady(true);
       return;
     }

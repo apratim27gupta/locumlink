@@ -1,8 +1,6 @@
 import type { ConfigService } from '@nestjs/config';
 
 export const ADMIN_JWT_STRATEGY = 'admin-jwt';
-/** Passport Google OAuth for admin only (credentials in `backend/.env`, not Supabase). */
-export const ADMIN_GOOGLE_STRATEGY = 'admin-google';
 export const ADMIN_AUTH_COOKIE = 'll_admin';
 export const ADMIN_AUTH_COOKIE_OPTS = {
   httpOnly: true,
@@ -11,41 +9,31 @@ export const ADMIN_AUTH_COOKIE_OPTS = {
   path: '/',
 };
 
+/** OTP rows for locum/clinic email sign-in (`auth.service.ts`). */
+export const USER_OTP_PURPOSE = 'user_auth';
+/** Admin sign-in OTP. */
+export const ADMIN_OTP_LOGIN = 'admin_login';
+
+export const ADMIN_OTP_LENGTH = 6;
+export const ADMIN_LOGIN_OTP_TTL_MS = 10 * 60 * 1000;
+export const ADMIN_OTP_RESEND_COOLDOWN_MS = 30 * 1000;
+
+export const ADMIN_OTP_REQUEST_GENERIC =
+  'If this email is registered as an admin, a verification code has been sent.';
+
+export const ADMIN_OTP_VERIFY_GENERIC =
+  'Invalid or expired verification code.';
+
 /** Matches `npm run dev` (Next on 3001). Use port 3002 only if you run `npm run dev:3002 -w frontend`. */
 const DEFAULT_ADMIN_FRONTEND = 'http://localhost:3001/admin';
 
-/**
- * Google OAuth redirect URI sent to Google. Derived from ADMIN_FRONTEND_REDIRECT_URL
- * so port 3002 and Codespaces stay in sync. Stale GOOGLE_ADMIN_CALLBACK_URL on :3000
- * is ignored when it disagrees with the frontend origin.
- */
-export function resolveAdminGoogleCallbackUrl(config: ConfigService): string {
+export function adminFrontendOrigin(config: ConfigService): string {
   const frontend = config
     .get<string>('ADMIN_FRONTEND_REDIRECT_URL', DEFAULT_ADMIN_FRONTEND)
     .trim();
-  let derived: string;
   try {
-    derived = `${new URL(frontend).origin}/api/admin-auth/google/callback`;
+    return new URL(frontend).origin;
   } catch {
-    derived = 'http://localhost:3001/api/admin-auth/google/callback';
-  }
-
-  const explicit = config.get<string>('GOOGLE_ADMIN_CALLBACK_URL', '').trim();
-  if (!explicit) return derived;
-
-  try {
-    const explicitOrigin = new URL(explicit).origin;
-    const derivedOrigin = new URL(derived).origin;
-    if (explicitOrigin !== derivedOrigin) {
-      console.warn(
-        `[admin-auth] GOOGLE_ADMIN_CALLBACK_URL (${explicit}) does not match ` +
-          `ADMIN_FRONTEND_REDIRECT_URL (${derivedOrigin}). Using ${derived}. ` +
-          `Remove or fix GOOGLE_ADMIN_CALLBACK_URL in backend/.env and match Google Cloud.`,
-      );
-      return derived;
-    }
-    return explicit;
-  } catch {
-    return explicit;
+    return 'http://localhost:3001';
   }
 }

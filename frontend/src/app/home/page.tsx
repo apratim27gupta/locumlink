@@ -7,11 +7,6 @@ export default async function HomePage(props: {
     params?: Promise<Record<string, string | string[] | undefined>>;
     searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-    let initialActiveJobCount = 0;
-    try {
-        initialActiveJobCount = await getActiveJobPostingCount();
-    } catch (err) {
-        console.error('[home] active job count', err);
-    }
+    const initialActiveJobCount = await getActiveJobPostingCount();
     return <HomePageClient {...props} initialActiveJobCount={initialActiveJobCount} />;
 }

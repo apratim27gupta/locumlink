@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+const ADMIN_PUBLIC_PREFIXES = ['/admin/login'];
+
 const PUBLIC_PREFIXES = [
     '/',
     '/home',
@@ -12,7 +15,7 @@ export function middleware(req: NextRequest) {
     // Separate admin entrypoint:
     // - /admin/login is public
     // - all other /admin routes require the admin cookie (NOT the normal ll_access cookie)
-    if (pathname === '/admin/login' || pathname.startsWith('/admin/login/')) {
+    if (ADMIN_PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
         return NextResponse.next();
     }
     if (pathname.startsWith('/admin')) {

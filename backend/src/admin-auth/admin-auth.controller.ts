@@ -2,96 +2,69 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
+  Ip,
   Post,
-  Req,
   Res,
-  UseFilters,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
-import { AuthGuard } from '@nestjs/passport';
-import type { AdminJwtPayload } from './admin-auth.types.js';
 import { Public } from '../auth/decorators/public.decorator.js';
 import { AdminAuthService } from './admin-auth.service.js';
-import {
-  ADMIN_GOOGLE_STRATEGY,
-  resolveAdminGoogleCallbackUrl,
-} from './admin-auth.constants.js';
 import { AdminJwtAuthGuard } from './guards/admin-jwt-auth.guard.js';
-import { AdminGoogleEnabledGuard } from './guards/admin-google-enabled.guard.js';
-import { RedirectAdminOAuthToLoginFilter } from './filters/redirect-admin-oauth-login.filter.js';
 import { CurrentAdmin } from './decorators/current-admin.decorator.js';
+import type { AdminJwtPayload } from './admin-auth.types.js';
+import {
+  AdminRequestOtpDto,
+  AdminVerifyOtpDto,
+} from './dto/admin-auth.dto.js';
 
 @Public()
 @Controller('admin-auth')
 export class AdminAuthController {
-  constructor(
-    private readonly adminAuth: AdminAuthService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly adminAuth: AdminAuthService) {}
 
-  @Post('login')
-  async emailLogin(@Body() body: { email?: string }, @Res() res: Response) {
-    const u = await this.adminAuth.loginWithEmail(body.email ?? '');
+  @Post('request-otp')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async requestOtp(@Body() body: AdminRequestOtpDto, @Ip() ip: string) {
+    await this.adminAuth.requestLoginOtp(body.email, ip);
+    return { ok: true, message: this.adminAuth.otpRequestGenericMessage() };
+  }
+
+  @Post('verify-otp')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async verifyOtp(
+    @Body() body: AdminVerifyOtpDto,
+    @Ip() ip: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const u = await this.adminAuth.verifyLoginOtp(body.email, body.otp, ip);
     const token = await this.adminAuth.signAdminJwt({
       adminId: u.adminId,
       email: u.email,
     });
     this.adminAuth.setAdminSessionCookie(res, token);
-    return res.status(200).json({
+    return {
       ok: true,
       redirect: this.adminAuth.getFrontendRedirectUrl(),
-    });
-  }
-
-  /** Legacy Google OAuth — disabled in UI; use POST /admin-auth/login instead. */
-  @Get('oauth-setup')
-  oauthSetup() {
-    const callbackUrl = resolveAdminGoogleCallbackUrl(this.config);
-    const frontendRedirect = this.adminAuth.getFrontendRedirectUrl();
-    return {
-      callbackUrl,
-      frontendRedirect,
-      allowedEmail: this.adminAuth.getAllowedAdminEmail(),
-      googleCloudHint:
-        'APIs & Services → Credentials → your OAuth client → Authorized redirect URIs → paste callbackUrl exactly.',
     };
   }
 
-  @Get('google')
-  @UseGuards(AdminGoogleEnabledGuard, AuthGuard(ADMIN_GOOGLE_STRATEGY))
-  googleAuth(): void {
-    /* Passport issues HTTP redirect */
-  }
-
-  @Get('google/callback')
-  @UseFilters(RedirectAdminOAuthToLoginFilter)
-  @UseGuards(AdminGoogleEnabledGuard, AuthGuard(ADMIN_GOOGLE_STRATEGY))
-  async googleAuthCallback(
-    @Req() req: { user: { adminId: string; email: string } },
-    @Res() res: Response,
-  ) {
-    const u = req.user;
-    const token = await this.adminAuth.signAdminJwt({
-      adminId: u.adminId,
-      email: u.email,
-    });
-
-    this.adminAuth.setAdminSessionCookie(res, token);
-
-    return res.redirect(this.adminAuth.getFrontendRedirectUrl());
-  }
-
   @Get('logout')
-  async logout(@Res() res: Response) {
+  async logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie(this.adminAuth.getCookieName(), { path: '/' });
-    return res.status(200).json({ ok: true });
+    return { ok: true };
   }
 
   @Get('me')
   @UseGuards(AdminJwtAuthGuard)
   async me(@CurrentAdmin() admin: AdminJwtPayload) {
-    return { admin };
+    const fresh = await this.adminAuth.loadAdminSessionUser(admin.sub);
+    return { admin: fresh };
   }
 }

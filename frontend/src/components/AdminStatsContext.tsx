@@ -14,6 +14,7 @@ import { adminFetchJson } from '@/lib/adminApi';
 import { normalizeAdminStats, type AdminStats } from '@/lib/adminStats';
 import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
 import { onPwaRefresh } from '@/lib/pwaEvents';
+import { isAdminPublicPath } from '@/lib/admin-public-paths';
 
 export type { AdminStats };
 
@@ -29,7 +30,7 @@ const AdminStatsContext = createContext<AdminStatsContextValue | null>(null);
 
 export function AdminStatsProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isLogin = pathname === '/admin/login' || pathname.startsWith('/admin/login/');
+  const isPublic = isAdminPublicPath(pathname);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [adminEmail, setAdminEmail] = useState('');
   const [loading, setLoading] = useState(true);
@@ -50,7 +51,7 @@ export function AdminStatsProvider({ children }: { children: ReactNode }) {
       const msg = e instanceof Error ? e.message : 'Failed to load admin stats';
       setError(
         msg === 'Unauthorized' || msg.includes('401')
-          ? 'Not signed in or session expired. Sign in again at /admin/login with aroradamini873@gmail.com.'
+          ? 'Not signed in or session expired. Sign in again at /admin/login.'
           : msg,
       );
       setStats(null);
@@ -60,23 +61,23 @@ export function AdminStatsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (isLogin) {
+    if (isPublic) {
       setLoading(false);
       return;
     }
     void refresh();
-  }, [refresh, isLogin]);
+  }, [refresh, isPublic]);
 
   useVisibilityPolling(() => {
     void refresh();
-  }, 30_000, !isLogin);
+  }, 30_000, !isPublic);
 
   useEffect(() => {
-    if (isLogin) return;
+    if (isPublic) return;
     return onPwaRefresh(() => {
       void refresh();
     });
-  }, [refresh, isLogin]);
+  }, [refresh, isPublic]);
 
   const value = useMemo(
     () => ({ stats, adminEmail, loading, error, refresh }),

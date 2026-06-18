@@ -23,6 +23,7 @@ import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { JwtPayload } from './interfaces/jwt-payload.interface.js';
 import { AuthTokens } from './interfaces/auth-tokens.interface.js';
+import { USER_OTP_PURPOSE } from '../admin-auth/admin-auth.constants.js';
 
 const BCRYPT_ROUNDS = 12;
 const OTP_LENGTH = 6;
@@ -310,7 +311,7 @@ export class AuthService {
     }
 
     const recent = await this.prisma.otp.findFirst({
-      where: { email: normalizedEmail },
+      where: { email: normalizedEmail, purpose: USER_OTP_PURPOSE },
       orderBy: { createdAt: 'desc' },
     });
     if (
@@ -330,9 +331,16 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 
     await this.prisma.$transaction([
-      this.prisma.otp.deleteMany({ where: { email: normalizedEmail } }),
+      this.prisma.otp.deleteMany({
+        where: { email: normalizedEmail, purpose: USER_OTP_PURPOSE },
+      }),
       this.prisma.otp.create({
-        data: { email: normalizedEmail, otp, expiresAt },
+        data: {
+          email: normalizedEmail,
+          otp,
+          expiresAt,
+          purpose: USER_OTP_PURPOSE,
+        },
       }),
     ]);
 
@@ -399,14 +407,20 @@ export class AuthService {
     }
 
     const record = await this.prisma.otp.findFirst({
-      where: { email: normalizedEmail, otp: code },
+      where: {
+        email: normalizedEmail,
+        otp: code,
+        purpose: USER_OTP_PURPOSE,
+      },
       orderBy: { createdAt: 'desc' },
     });
     if (!record || record.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired verification code.');
     }
 
-    await this.prisma.otp.deleteMany({ where: { email: normalizedEmail } });
+    await this.prisma.otp.deleteMany({
+      where: { email: normalizedEmail, purpose: USER_OTP_PURPOSE },
+    });
 
     const user = await this.findOrCreateUserForSupabase(
       normalizedEmail,

@@ -3,17 +3,16 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { AdminAuthController } from './admin-auth.controller.js';
 import { AdminAuthService } from './admin-auth.service.js';
 import { AdminJwtStrategy } from './strategies/admin-jwt.strategy.js';
-import { AdminGoogleStrategy } from './strategies/admin-google.strategy.js';
-import { AdminGoogleEnabledGuard } from './guards/admin-google-enabled.guard.js';
-import { RedirectAdminOAuthToLoginFilter } from './filters/redirect-admin-oauth-login.filter.js';
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
+    NotificationsModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -29,13 +28,7 @@ import { RedirectAdminOAuthToLoginFilter } from './filters/redirect-admin-oauth-
     }),
   ],
   controllers: [AdminAuthController],
-  providers: [
-    AdminAuthService,
-    AdminJwtStrategy,
-    AdminGoogleStrategy,
-    AdminGoogleEnabledGuard,
-    RedirectAdminOAuthToLoginFilter,
-  ],
+  providers: [AdminAuthService, AdminJwtStrategy],
   exports: [AdminAuthService],
 })
 export class AdminAuthModule {}
