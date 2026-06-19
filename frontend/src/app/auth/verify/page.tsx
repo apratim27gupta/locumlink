@@ -250,6 +250,6 @@ export default function VerifyPage(props: {
         </button>
       </div>
     </AuthSplitLayout>
-    <Link href="/home" className="home-admin-login-btn">Home</Link>
+    <Link href="/home?skipSetup=1" className="home-admin-login-btn">Home</Link>
     </>);
 }

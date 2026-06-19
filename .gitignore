@@ -8,6 +8,10 @@ node_modules/
 *serviceaccount*.json
 frontend/.next/
 frontend/out/
+frontend/public/sw.js
+frontend/public/workbox-*.js
+frontend/public/worker-*.js
+frontend/public/fallback-*.js
 backend/dist/
 dist/generated/
 *.log

@@ -12,6 +12,20 @@ export function PwaLifecycle() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
+    // next-pwa is disabled in dev, but a stale sw.js from an old `next build` can
+    // still intercept localhost and break routes like /admin/login.
+    if (process.env.NODE_ENV === 'development') {
+      void (async () => {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((key) => caches.delete(key)));
+        }
+      })();
+      return;
+    }
+
     const onSwMessage = (event: MessageEvent) => {
       if (event.data?.type === 'LL_PWA_REFRESH') {
         dispatchPwaRefresh();

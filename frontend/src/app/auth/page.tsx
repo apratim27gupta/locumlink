@@ -247,7 +247,7 @@ function AuthPageInner() {
                 )}
             </p>
         </AuthSplitLayout>
-        <Link href="/home" className="home-admin-login-btn">Home</Link>
+        <Link href="/home?skipSetup=1" className="home-admin-login-btn">Home</Link>
         </>
     );
 }
@@ -259,7 +259,7 @@ export default function AuthPage() {
                 <AuthSplitLayout variant="signup">
                     <div style={{ padding: 24, textAlign: 'center', color: '#6B7280' }}>Loading…</div>
                 </AuthSplitLayout>
-                <Link href="/home" className="home-admin-login-btn">Home</Link>
+                <Link href="/home?skipSetup=1" className="home-admin-login-btn">Home</Link>
             </>
         }>
             <AuthPageInner />

@@ -319,8 +319,8 @@ export default function HostSetupPage(props: {
   }
 
   function navigateToHome() {
-    beforeClientNavigation('/');
-    router.push('/?skipSetup=1');
+    beforeClientNavigation('/home?skipSetup=1');
+    router.push('/home?skipSetup=1');
   }
 
   const step1Valid = useMemo(

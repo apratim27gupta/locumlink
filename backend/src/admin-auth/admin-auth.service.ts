@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -16,6 +17,7 @@ import {
   ADMIN_LOGIN_OTP_TTL_MS,
   ADMIN_OTP_LENGTH,
   ADMIN_OTP_LOGIN,
+  ADMIN_OTP_EMAIL_NOT_AUTHORIZED,
   ADMIN_OTP_REQUEST_GENERIC,
   ADMIN_OTP_RESEND_COOLDOWN_MS,
   ADMIN_OTP_VERIFY_GENERIC,
@@ -59,10 +61,14 @@ export class AdminAuthService {
 
   async requestLoginOtp(rawEmail: string, ip: string): Promise<void> {
     const email = rawEmail?.trim().toLowerCase();
-    if (!email) return;
+    if (!email) {
+      throw new BadRequestException('Email is required.');
+    }
 
     const admin = await this.prisma.admin.findUnique({ where: { email } });
-    if (!admin) return;
+    if (!admin) {
+      throw new ForbiddenException(ADMIN_OTP_EMAIL_NOT_AUTHORIZED);
+    }
 
     if (!shouldAllowAdminOtpRequest(email, ip)) return;
 

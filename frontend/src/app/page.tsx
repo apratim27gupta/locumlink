@@ -15,5 +15,10 @@ export default async function Root({ searchParams }: RootProps) {
         }
         redirect(`/auth/callback?${qs.toString()}`);
     }
-    redirect('/home');
+    const qs = new URLSearchParams();
+    for (const [key, val] of Object.entries(sp)) {
+        if (typeof val === 'string') qs.set(key, val);
+    }
+    const suffix = qs.toString();
+    redirect(suffix ? `/home?${suffix}` : '/home');
 }

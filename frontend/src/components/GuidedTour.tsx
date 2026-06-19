@@ -113,9 +113,9 @@ export default function GuidedTour() {
     }, []);
 
     useEffect(() => {
-        const config = tourConfigRef.current;
-        if (!config || isLoading || !isFirstVisit || launchedRef.current) return;
-        if (!config.entryPaths.includes(pathname)) return;
+        const tourConfig = tourConfigRef.current;
+        if (!tourConfig || isLoading || !isFirstVisit || launchedRef.current) return;
+        if (!tourConfig.entryPaths.includes(pathname)) return;
 
         let cancelled = false;
         const startedAt = Date.now();
@@ -153,7 +153,7 @@ export default function GuidedTour() {
         function pollForElements() {
             if (cancelled || launchedRef.current) return;
 
-            const resolved = resolveTourSteps(config.steps);
+            const resolved = resolveTourSteps(tourConfig.steps);
             if (resolved.length > 0) {
                 launchTour(resolved);
                 return;

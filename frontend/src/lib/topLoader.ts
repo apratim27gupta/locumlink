@@ -91,6 +91,17 @@ export function stopLoader(): void {
     }
 }
 
+/** Clear stacked loaders after route changes (click + programmatic nav). */
+export function resetLoader(): void {
+    if (typeof window === 'undefined')
+        return;
+    if (depth === 0)
+        return;
+    depth = 0;
+    emitActive();
+    finishProgressAnimation();
+}
+
 export function subscribeTopLoader(listener: Listener): () => void {
     if (typeof window === 'undefined')
         return () => { };

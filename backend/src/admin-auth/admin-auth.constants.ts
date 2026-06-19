@@ -21,6 +21,9 @@ export const ADMIN_OTP_RESEND_COOLDOWN_MS = 30 * 1000;
 export const ADMIN_OTP_REQUEST_GENERIC =
   'If this email is registered as an admin, a verification code has been sent.';
 
+export const ADMIN_OTP_EMAIL_NOT_AUTHORIZED =
+  'This email is not authorized for admin access.';
+
 export const ADMIN_OTP_VERIFY_GENERIC =
   'Invalid or expired verification code.';
 

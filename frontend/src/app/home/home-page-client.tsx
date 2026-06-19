@@ -4,8 +4,6 @@ import { useRouter } from 'next/navigation';
 import { getToken, getRole, isProfileComplete } from '@/lib/auth';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { HomeLandingView } from '@/components/HomeLandingView';
-import { beforeClientNavigation } from '@/lib/topLoader';
-
 export default function HomePageClient(props: {
     params?: Promise<Record<string, string | string[] | undefined>>;
     searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -35,9 +33,7 @@ export default function HomePageClient(props: {
             : null;
         const skipSetup = params.get('skipSetup') === '1';
         if (!done && !skipSetup) {
-            const href = role === 'clinic' ? '/host/setup' : '/locum/setup';
-            beforeClientNavigation(href);
-            router.replace(href);
+            router.replace(role === 'clinic' ? '/host/setup' : '/locum/setup');
             return;
         }
         if (skipSetup) {
@@ -45,24 +41,25 @@ export default function HomePageClient(props: {
             return;
         }
         if (safeNext) {
-            beforeClientNavigation(safeNext);
             router.replace(safeNext);
             return;
         }
-        const dash = role === 'clinic' ? '/host/dashboard' : '/locum/dashboard';
-        beforeClientNavigation(dash);
-        router.replace(dash);
+        router.replace(role === 'clinic' ? '/host/dashboard' : '/locum/dashboard');
     }, [router]);
-    if (!isClient) {
-        return null;
-    }
-    if (!authChecked) {
-        if (getToken()) {
-            return (<div className="flex min-h-[50vh] w-full items-center justify-center text-sm text-neutral-500">
+    if (!authChecked && isClient && getToken()) {
+        return (<div className="flex min-h-[50vh] w-full items-center justify-center text-sm text-neutral-500">
           Loading…
         </div>);
-        }
-        return null;
     }
-    return <HomeLandingView interactive initialActiveJobCount={initialActiveJobCount} />;
+    if (authChecked || !isClient) {
+        return (
+            <HomeLandingView
+                interactive={isClient}
+                initialActiveJobCount={initialActiveJobCount}
+            />
+        );
+    }
+    return (<div className="flex min-h-[50vh] w-full items-center justify-center text-sm text-neutral-500">
+      Loading…
+    </div>);
 }

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { startLoader, stopLoader } from '@/lib/topLoader';
+import { resetLoader, startLoader } from '@/lib/topLoader';
 export default function RouteTransitionLoader() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -11,7 +11,7 @@ export default function RouteTransitionLoader() {
             isFirst.current = false;
             return;
         }
-        stopLoader();
+        resetLoader();
     }, [pathname, searchParams]);
     useEffect(() => {
         const handler = (e: MouseEvent) => {

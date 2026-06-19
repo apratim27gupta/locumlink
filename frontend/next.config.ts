@@ -71,12 +71,28 @@ export default withPWA({
   customWorkerDir: 'worker',
   disable: process.env.NODE_ENV === 'development',
   fallbacks: { document: '/offline' },
+  workboxOptions: {
+    // Admin auth must always hit the network — never substitute /offline or a stale shell.
+    navigateFallbackDenylist: [/^\/admin/, /^\/api/, /^\/_next/],
+  },
   runtimeCaching: [
     {
       urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/api/'),
       handler: 'NetworkOnly',
       method: 'GET',
       options: {},
+    },
+    {
+      urlPattern: ({ request }: { request: Request }) => request.mode === 'navigate',
+      handler: 'NetworkFirst',
+      options: {
+        cacheName: 'document-cache',
+        networkTimeoutSeconds: 10,
+        expiration: {
+          maxEntries: 32,
+          maxAgeSeconds: 24 * 60 * 60,
+        },
+      },
     },
   ],
 })(nextConfig);
