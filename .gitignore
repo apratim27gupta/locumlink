@@ -26,3 +26,6 @@ dist/
 generated/
 frontend/tsconfig.tsbuildinfo
 .cursorignore
+frontend/public/sw.js
+frontend/public/worker-*.js
+frontend/public/fallback-*.js
