@@ -21,6 +21,13 @@ const nextConfig: NextConfig = {
           { key: 'Pragma', value: 'no-cache' },
         ],
       },
+      {
+        source: '/documents/:path*.pdf',
+        headers: [
+          { key: 'Content-Type', value: 'application/pdf' },
+          { key: 'Content-Disposition', value: 'inline' },
+        ],
+      },
     ];
   },
 

@@ -10,8 +10,6 @@ const PUBLIC_PREFIXES = [
   '/register',
   '/auth',
   '/documents',
-  '/terms',
-  '/privacy',
 ];
 
 export async function middleware(request: NextRequest) {
