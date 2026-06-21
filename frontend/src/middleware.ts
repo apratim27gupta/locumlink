@@ -2,7 +2,17 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 const ADMIN_PUBLIC_PREFIXES = ['/admin/login'];
-const PUBLIC_PREFIXES = ['/', '/home', '/login', '/signup', '/register', '/auth'];
+const PUBLIC_PREFIXES = [
+  '/',
+  '/home',
+  '/login',
+  '/signup',
+  '/register',
+  '/auth',
+  '/documents',
+  '/terms',
+  '/privacy',
+];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -105,6 +115,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|auth/callback$|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|auth/callback$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|docx|pdf)$).*)',
   ],
 };

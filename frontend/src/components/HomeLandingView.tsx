@@ -24,7 +24,7 @@ function HomeLandingLegalLinks() {
     return (
         <>
             <a
-                href="/documents/terms-of-use.docx"
+                href="/terms"
                 className="home-landing-doc-link"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -32,7 +32,7 @@ function HomeLandingLegalLinks() {
                 Terms of use
             </a>
             <a
-                href="/documents/privacy-policy.docx"
+                href="/privacy"
                 className="home-landing-doc-link"
                 target="_blank"
                 rel="noopener noreferrer"
