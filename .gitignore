@@ -32,3 +32,4 @@ frontend/public/worker-*.js
 frontend/public/fallback-*.js
 *.bak
 **/.env*
+ecosystem.config.js
