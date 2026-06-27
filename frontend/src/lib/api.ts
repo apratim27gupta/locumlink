@@ -574,7 +574,6 @@ export type Job = {
     isDeleted?: boolean;
     applicationsCount: number;
     hasAcceptedLocum?: boolean;
-    maxApplicants?: number;
     startDate?: string | null;
     endDate?: string | null;
     payPerDay?: string | number | null;
@@ -681,7 +680,6 @@ export interface CreateJobPayload {
     endTime?: string;
     payPerDay?: number;
     minYearsExperience?: number;
-    maxApplicants?: number;
     travelRequired?: boolean;
     scheduleFlexible?: boolean;
     requiredCredentials?: string[];
@@ -915,7 +913,6 @@ export const hostApi = {
         return res.json();
     },
     reopenJob: async (jobId: string, payload: {
-        additionalApplicants: number;
         startDate?: string;
         endDate?: string;
     }): Promise<unknown> => {
@@ -1155,10 +1152,11 @@ export const notificationsApi = {
         if (!res.ok) throw new Error('Failed to save push subscription');
     },
     unsubscribe: async (endpoint: string): Promise<void> => {
-        await trackedFetch(`${NEST_BASE}/api/notifications/push/unsubscribe`, {
+        const res = await trackedFetch(`${NEST_BASE}/api/notifications/push/unsubscribe`, {
             method: 'DELETE', cache: 'no-store', headers: nestHeaders(true), skipTopLoader: true,
             body: JSON.stringify({ endpoint }),
         });
+        if (!res.ok) throw new Error('Failed to remove push subscription');
     },
     markRead: async (id: string): Promise<void> => {
         const res = await trackedFetch(`${NEST_BASE}/api/notifications/${encodeURIComponent(id)}/read`, {

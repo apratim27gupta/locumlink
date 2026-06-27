@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module.js';
 import { PrismaClientKnownExceptionFilter } from './prisma/prisma-client-exception.filter.js';
 import cookieParser from 'cookie-parser';
@@ -8,6 +9,12 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
   app.useGlobalFilters(new PrismaClientKnownExceptionFilter());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }),
+  );
   app.use(cookieParser());
 
   const nodeEnv = config.get<string>('NODE_ENV', 'development');

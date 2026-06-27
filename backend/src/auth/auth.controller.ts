@@ -69,6 +69,7 @@ export class AuthController {
   }
   @Public()
   @Post('sync-supabase')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
   @HttpCode(HttpStatus.OK)
   syncSupabase(
     @Headers('authorization')
@@ -95,10 +96,13 @@ export class AuthController {
   @Post('verify-otp')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   @HttpCode(HttpStatus.OK)
-  verifyOtp(@Body() dto: VerifyOtpDto): Promise<AuthTokens> {
+  verifyOtp(
+    @Body() dto: VerifyOtpDto,
+    @Ip() ip: string,
+  ): Promise<AuthTokens> {
     const prismaRole: PrismaRole =
       dto.role === 'clinic' ? PrismaRole.HOST : PrismaRole.LOCUM;
-    return this.authService.verifyOtp(dto.email, dto.otp, prismaRole);
+    return this.authService.verifyOtp(dto.email, dto.otp, prismaRole, ip);
   }
   @Get('me')
   @UseGuards(JwtAuthGuard)

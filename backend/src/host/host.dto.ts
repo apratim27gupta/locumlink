@@ -5,7 +5,6 @@ import {
   IsOptional,
   IsIn,
   IsNumber,
-  Min,
   MaxLength,
 } from 'class-validator';
 
@@ -193,10 +192,6 @@ export class CreateJobDto {
   @IsOptional()
   minYearsExperience?: number;
 
-  @IsNumber()
-  @IsOptional()
-  maxApplicants?: number;
-
   @IsBoolean()
   @IsOptional()
   travelRequired?: boolean;
@@ -276,10 +271,6 @@ export class UpdateJobDto {
   @IsOptional()
   minYearsExperience?: number;
 
-  @IsNumber()
-  @IsOptional()
-  maxApplicants?: number;
-
   @IsBoolean()
   @IsOptional()
   travelRequired?: boolean;
@@ -312,10 +303,6 @@ export class UpdateApplicationDto {
 }
 
 export class ReopenJobDto {
-  @IsNumber()
-  @Min(1)
-  additionalApplicants!: number;
-
   @IsString()
   @IsOptional()
   startDate?: string;

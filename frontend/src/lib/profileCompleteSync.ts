@@ -7,10 +7,11 @@ import {
     type Role,
 } from '@/lib/auth';
 
+/** Browser: same-origin `/api/*` via Next rewrites (matches api.ts). */
 const NEST_BASE =
     typeof window === 'undefined'
         ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '')
-        : (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
+        : '';
 
 function profileCheckUrl(role: Role): string {
     const path = role === 'clinic' ? '/api/host/profile' : '/api/locum/profile';

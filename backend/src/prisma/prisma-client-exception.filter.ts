@@ -15,7 +15,9 @@ export class PrismaClientKnownExceptionFilter implements ExceptionFilter {
     const status =
       code === 'P2025'
         ? HttpStatus.NOT_FOUND
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+        : code === 'P2002' || code === 'P2003'
+          ? HttpStatus.BAD_REQUEST
+          : HttpStatus.INTERNAL_SERVER_ERROR;
     res.status(status).json({
       statusCode: status,
       message: isProd ? 'Database error' : `[${code}] ${exception.message}`,

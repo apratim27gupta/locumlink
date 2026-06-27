@@ -268,7 +268,6 @@ model JobPosting {
   endTime               String?     @map("end_time") @db.VarChar(10)
   payPerDay             Decimal?    @map("pay_per_day") @db.Decimal(10, 2)
   minYearsExperience    Int?        @map("min_years_experience")
-  maxApplicants         Int         @default(20) @map("max_applicants")
   travelRequired        Boolean     @default(false) @map("travel_required")
   scheduleFlexible      Boolean     @default(false) @map("schedule_flexible")
   requiredCredentials   String[]    @default([]) @map("required_credentials")

@@ -25,6 +25,13 @@ import { LoginDto } from './dto/login.dto.js';
 import { JwtPayload } from './interfaces/jwt-payload.interface.js';
 import { AuthTokens } from './interfaces/auth-tokens.interface.js';
 import { USER_OTP_PURPOSE } from '../admin-auth/admin-auth.constants.js';
+import { assertOwnsStoragePath } from '../common/utils/storage-path.util.js';
+import {
+  UserOtpRateLimitError,
+  assertUserOtpVerifyAllowed,
+  clearUserOtpVerifyAttempts,
+  recordUserOtpVerifyFailure,
+} from './user-otp-rate-limit.js';
 
 const BCRYPT_ROUNDS = 12;
 const OTP_LENGTH = 6;
@@ -272,7 +279,11 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
     });
-    if (!user || user.status === 'DEACTIVATED') {
+    if (
+      !user ||
+      user.status === 'DEACTIVATED' ||
+      user.status === 'SUSPENDED'
+    ) {
       throw new UnauthorizedException('Session invalid');
     }
     return user;
@@ -440,6 +451,7 @@ export class AuthService {
     email: string | undefined,
     otp: string | undefined,
     roleHint: Role,
+    ip = '',
   ): Promise<AuthTokens> {
     const normalizedEmail = email?.trim().toLowerCase();
     const code = otp?.trim();
@@ -448,6 +460,15 @@ export class AuthService {
     }
     if (!code || code.length !== OTP_LENGTH) {
       throw new BadRequestException('A 6-digit verification code is required');
+    }
+
+    try {
+      assertUserOtpVerifyAllowed(normalizedEmail, ip);
+    } catch (err) {
+      if (err instanceof UserOtpRateLimitError) {
+        throw new UnauthorizedException('Invalid or expired verification code.');
+      }
+      throw err;
     }
 
     const record = await this.prisma.otp.findFirst({
@@ -460,8 +481,11 @@ export class AuthService {
       orderBy: { createdAt: 'desc' },
     });
     if (!record || record.expiresAt < new Date()) {
+      recordUserOtpVerifyFailure(normalizedEmail, ip);
       throw new UnauthorizedException('Invalid or expired verification code.');
     }
+
+    clearUserOtpVerifyAttempts(normalizedEmail, ip);
 
     await this.prisma.otp.deleteMany({
       where: {
@@ -564,6 +588,7 @@ export class AuthService {
   async setUserAvatarStoragePath(userId: string, storagePath: string) {
     const next = storagePath.trim();
     if (!next) throw new BadRequestException('storagePath is required');
+    assertOwnsStoragePath(next, userId);
     const existing = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { avatarStoragePath: true },
@@ -621,12 +646,7 @@ export class AuthService {
     return { ok: true };
   }
   async permanentDeleteAccount(userId: string): Promise<{ ok: true }> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
-    if (user.role === 'admin')
-      throw new ForbiddenException('Admin accounts cannot be deleted.');
-    await this.prisma.user.delete({ where: { id: userId } });
-    return { ok: true };
+    return this.deactivateAccount(userId);
   }
   private async resetUserToFreshStart(userId: string): Promise<void> {
     const existing = await this.prisma.user.findUnique({

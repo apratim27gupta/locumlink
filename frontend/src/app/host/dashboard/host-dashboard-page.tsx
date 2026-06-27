@@ -388,21 +388,18 @@ function CompBadge({ change, direction, period, }: {
 function ReOpenModal({ job, onConfirm, onCancel, }: {
     job: Job;
     onConfirm: (payload: {
-        additionalApplicants: number;
         startDate: string;
         endDate: string;
     }) => Promise<void>;
     onCancel: () => void;
 }) {
-    const [step, setStep] = useState<1 | 2 | 3>(1);
-    const [extra, setExtra] = useState('10');
+    const [step, setStep] = useState<1 | 3>(1);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [dontShow, setDontShow] = useState(false);
     const [busy, setBusy] = useState(false);
     useEffect(() => {
         setStep(1);
-        setExtra('10');
         setStartDate(isoToDateInputLocal(job.startDate as string | null | undefined));
         setEndDate(isoToDateInputLocal(job.endDate as string | null | undefined));
         setDontShow(false);
@@ -433,12 +430,9 @@ function ReOpenModal({ job, onConfirm, onCancel, }: {
             window.alert('Invalid dates.');
             return;
         }
-        const n = Number(extra);
-        const additionalApplicants = Number.isFinite(n) && n >= 1 ? Math.floor(n) : 10;
         setBusy(true);
         try {
             await onConfirm({
-                additionalApplicants,
                 startDate: startIso,
                 endDate: endIso,
             });
@@ -453,8 +447,6 @@ function ReOpenModal({ job, onConfirm, onCancel, }: {
     function titleForStep(): string {
         if (step === 1)
             return 'Re-open the position';
-        if (step === 2)
-            return 'Additional applicants';
         return 'Dates for this posting';
     }
     const primaryLabel = busy ? 'Reopening…' : step === 3 ? 'Reopen' : 'Continue';
@@ -517,10 +509,7 @@ function ReOpenModal({ job, onConfirm, onCancel, }: {
               <input type="checkbox" checked={dontShow} onChange={(e) => setDontShow(e.target.checked)} style={{ width: 14, height: 14, accentColor: '#1C32D2' }}/>
               Don&apos;t show again
             </label>
-          </>) : step === 2 ? (<div style={{ marginBottom: 24 }}>
-            <label style={lbl}>How many additional applicants can apply?</label>
-            <input type="number" min={1} step={1} style={{ ...fieldInp, maxWidth: 160 }} value={extra} onChange={(e) => setExtra(e.target.value)}/>
-          </div>) : (<div style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          </>) : (<div style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
               <label style={lbl}>Start date</label>
               <input type="date" style={fieldInp} value={startDate} onChange={(e) => setStartDate(e.target.value)}/>
@@ -746,6 +735,9 @@ function JobActionsKebabIcon() {
 function canHostShowReopenJob(job: Job): boolean {
     if (job.status === 'DRAFT')
         return false;
+    if (job.status === 'ACTIVE') {
+        return isJobPastEndDate(job);
+    }
     return true;
 }
 const JOB_ACTIONS_MENU_W = 196;
@@ -2055,7 +2047,6 @@ export default function HostDashboard(props: {
         }
     }
     async function handleReopen(payload: {
-        additionalApplicants: number;
         startDate: string;
         endDate: string;
     }) {

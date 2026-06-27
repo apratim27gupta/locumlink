@@ -13,6 +13,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Role } from '@prisma/client';
+import { Roles } from '../auth/decorators/roles.decorator.js';
 import { HostService } from './host.service.js';
 import {
   SaveHostProfileDto,
@@ -30,6 +32,7 @@ interface JwtRequest {
 }
 @Controller('host')
 @UseGuards(AuthGuard('jwt'))
+@Roles(Role.HOST)
 export class HostController {
   constructor(private readonly hostService: HostService) {}
   @Post('profile')

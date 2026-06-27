@@ -11,6 +11,7 @@ import {
   parsePaginationParams,
 } from '../common/pagination/index.js';
 import { GcsService } from '../gcs/gcs.service.js';
+import { assertOwnsStoragePath } from '../common/utils/storage-path.util.js';
 const userSelect = {
   id: true,
   email: true,
@@ -283,6 +284,26 @@ export class MessageService {
       ),
     );
 
+    const conversationExists = await this.prisma.message.findFirst({
+      where: {
+        OR: [
+          { senderId: userId, recipientId: partnerId },
+          { senderId: partnerId, recipientId: userId },
+        ],
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (!conversationExists) {
+      return {
+        items: [],
+        nextCursor: null,
+        hasNextPage: false,
+        partner: null,
+      };
+    }
+
     const partner = await this.prisma.user.findUnique({
       where: { id: partnerId },
       select: {
@@ -333,6 +354,9 @@ export class MessageService {
     const trimmed = (body ?? '').trim();
     if (!trimmed && (!attachments || attachments.length === 0)) {
       throw new ForbiddenException('Message body or attachment is required');
+    }
+    for (const a of attachments ?? []) {
+      assertOwnsStoragePath(a.storagePath, senderId);
     }
     const message = await this.prisma.message.create({
       data: {

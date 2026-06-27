@@ -1,4 +1,9 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import webpush from 'web-push';
 
@@ -18,6 +23,13 @@ export class PushService implements OnModuleInit {
     userId: string,
     sub: { endpoint: string; keys: { p256dh: string; auth: string } },
   ) {
+    const existing = await this.prisma.pushSubscription.findUnique({
+      where: { endpoint: sub.endpoint },
+    });
+    if (existing && existing.userId !== userId) {
+      throw new ForbiddenException();
+    }
+
     await this.prisma.pushSubscription.upsert({
       where: { endpoint: sub.endpoint },
       update: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
@@ -30,8 +42,13 @@ export class PushService implements OnModuleInit {
     });
   }
 
-  async deleteSubscription(endpoint: string) {
-    await this.prisma.pushSubscription.deleteMany({ where: { endpoint } });
+  async deleteSubscription(userId: string, endpoint: string) {
+    const result = await this.prisma.pushSubscription.deleteMany({
+      where: { endpoint, userId },
+    });
+    if (result.count === 0) {
+      throw new NotFoundException('Push subscription not found');
+    }
   }
 
   async sendToUser(

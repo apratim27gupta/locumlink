@@ -19,6 +19,7 @@ import {
   type User,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { assertOwnsStoragePath } from '../common/utils/storage-path.util.js';
 import {
   paginateJobPostings,
   paginateApplications,
@@ -326,6 +327,7 @@ export class LocumService {
           where: { locumProfileId: profile.id, documentType: d.type },
         });
         if (!d.storageUrl) return;
+        assertOwnsStoragePath(d.storageUrl, userId);
         const fileName =
           d.displayName || d.storageUrl.split('/').pop() || d.storageUrl;
         await this.prisma.document.create({
@@ -637,6 +639,11 @@ export class LocumService {
     if (app.jobPosting.isDeleted)
       throw new BadRequestException('This posting has been removed by the host.');
     if (response === 'accept') {
+      if (app.jobPosting.status !== 'ACTIVE') {
+        throw new BadRequestException(
+          'This posting is no longer active and cannot be accepted.',
+        );
+      }
       if (app.locumAcceptedAt)
         throw new BadRequestException(
           'You have already accepted this placement.',

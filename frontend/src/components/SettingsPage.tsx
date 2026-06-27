@@ -271,7 +271,7 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
           </>, false)}
           {row(<>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#DC2626' }}>Permanently delete account</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#DC2626' }}>Delete account</div>
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>All data will be erased and cannot be recovered</div>
             </div>
             <button
@@ -330,19 +330,19 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
             <div style={{ width: 48, height: 48, borderRadius: 12, background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
             </div>
-            <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0B0F1F', margin: '0 0 8px' }}>Permanently delete account?</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0B0F1F', margin: '0 0 8px' }}>Delete account?</h2>
             <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
               <p style={{ fontSize: 13, color: '#991B1B', margin: 0, lineHeight: 1.5 }}>
-                ⚠️ This action is <strong>irreversible</strong>. All your data including profile, applications, messages and history will be permanently erased and can never be recovered.
+                ⚠️ Your account will be deactivated and you will be logged out. Your data will be retained securely.
               </p>
             </div>
             <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.6, margin: '0 0 24px' }}>
-              Are you absolutely sure you want to permanently delete your account?
+              Are you sure you want to delete your account?
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button disabled={busy} onClick={() => setDeactivateModal(null)} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #E5E7EB', background: '#fff', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Cancel</button>
               <button disabled={busy} onClick={() => void handlePermanentDelete()} style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: '#DC2626', color: '#fff', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.7 : 1 }}>
-                {busy ? 'Deleting…' : 'Yes, delete permanently'}
+                {busy ? 'Deleting…' : 'Yes, delete account'}
               </button>
             </div>
           </div>

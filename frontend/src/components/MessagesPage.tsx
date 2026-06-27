@@ -924,7 +924,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             borderRadius: 10,
             overflow: 'hidden',
             background: '#fff',
-            height: 'calc(100vh - 200px)',
+            height: 'calc(100dvh - 200px)',
             minHeight: 500,
         }}>
         

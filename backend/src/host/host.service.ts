@@ -23,6 +23,7 @@ import {
   type User,
 } from '@prisma/client';
 import { GcsService } from '../gcs/gcs.service.js';
+import { assertOwnsStoragePath } from '../common/utils/storage-path.util.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SaveHostProfileDto, CreateJobDto, UpdateJobDto } from './host.dto.js';
 import {
@@ -180,6 +181,10 @@ export class HostService {
 
   async saveProfile(userId: string, dto: SaveHostProfileDto) {
     await this.assertHostCanWrite(userId);
+    const licensePath = dto.licenseFile?.trim();
+    if (licensePath) assertOwnsStoragePath(licensePath, userId);
+    const photoPath = dto.photoIdFile?.trim();
+    if (photoPath) assertOwnsStoragePath(photoPath, userId);
     const data = this.toHostProfileData(userId, dto);
     const { userId: _userIdInData, ...update } = data;
     void _userIdInData;
@@ -503,7 +508,6 @@ export class HostService {
         endTime: dto.endTime ?? null,
         payPerDay: dto.payPerDay ?? null,
         minYearsExperience: dto.minYearsExperience ?? null,
-        maxApplicants: dto.maxApplicants ?? 20,
         travelRequired: dto.travelRequired ?? false,
         scheduleFlexible: dto.scheduleFlexible ?? false,
         requiredCredentials: dto.requiredCredentials ?? [],
@@ -678,6 +682,17 @@ export class HostService {
     if (!job) throw new NotFoundException('Job not found');
     if (job.hostProfileId !== hostProfileId) throw new ForbiddenException();
 
+    const ALLOWED_TRANSITIONS: Partial<
+      Record<PostingStatus, PostingStatus[]>
+    > = {
+      DRAFT: ['ACTIVE', 'CANCELLED'],
+      ACTIVE: ['DRAFT', 'CANCELLED'],
+      ONGOING: ['CANCELLED'],
+      EXPIRED: [],
+      COMPLETED: [],
+      CANCELLED: [],
+    };
+
     let statusToSave: PostingStatus | undefined;
     if (dto.status != null) {
       const requestedStatus = String(dto.status).toUpperCase();
@@ -692,6 +707,15 @@ export class HostService {
         statusToSave = isVerified ? PostingStatus.ACTIVE : PostingStatus.DRAFT;
       } else {
         statusToSave = requestedStatus as PostingStatus;
+      }
+    }
+
+    if (statusToSave != null && statusToSave !== job.status) {
+      const allowed = ALLOWED_TRANSITIONS[job.status] ?? [];
+      if (!allowed.includes(statusToSave)) {
+        throw new BadRequestException(
+          `Cannot transition job from ${job.status} to ${statusToSave}.`,
+        );
       }
     }
 
@@ -725,7 +749,6 @@ export class HostService {
         ...(dto.minYearsExperience != null && {
           minYearsExperience: dto.minYearsExperience,
         }),
-        ...(dto.maxApplicants != null && { maxApplicants: dto.maxApplicants }),
         ...(dto.travelRequired != null && {
           travelRequired: dto.travelRequired,
         }),
@@ -804,7 +827,6 @@ export class HostService {
     userId: string,
     jobId: string,
     dto: {
-      additionalApplicants: number;
       startDate?: string;
       endDate?: string;
     },
@@ -813,7 +835,6 @@ export class HostService {
     const hostProfileId = await this.getHostProfileId(userId);
     const job = await this.prisma.jobPosting.findUnique({
       where: { id: jobId },
-      include: { _count: { select: { applications: true } } },
     });
     if (!job) throw new NotFoundException('Job not found');
     if (job.hostProfileId !== hostProfileId) throw new ForbiddenException();
@@ -826,16 +847,12 @@ export class HostService {
       hostProfile?.cpsnsVerificationStatus,
     );
 
-    const appCount = job._count.applications;
-    const atApplicantCap =
-      job.status === 'ACTIVE' && appCount >= job.maxApplicants;
     const pastEndDate = isPostingEndDatePassed(job.endDate);
     const eligible =
       job.status === 'ONGOING' ||
       job.status === 'COMPLETED' ||
       job.status === 'EXPIRED' ||
       job.status === 'CANCELLED' ||
-      atApplicantCap ||
       pastEndDate;
 
     if (!eligible) {
@@ -875,24 +892,22 @@ export class HostService {
       );
     }
 
-    if (job.status === 'ONGOING') {
-      await this.prisma.application.updateMany({
-        where: { jobPostingId: jobId, status: 'CONFIRMED' },
-        data: { status: 'SHORTLISTED' },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // Reopen = fresh job — delete ALL previous applications
+      await tx.application.deleteMany({
+        where: { jobPostingId: jobId },
       });
-    }
-
-    const updated = await this.prisma.jobPosting.update({
-      where: { id: jobId },
-      data: {
-        status: isVerified ? 'ACTIVE' : 'DRAFT',
-        maxApplicants: job.maxApplicants + dto.additionalApplicants,
-        ...(startDateParsed != null &&
-          endDateParsed != null && {
-            startDate: startDateParsed,
-            endDate: endDateParsed,
-          }),
-      },
+      return tx.jobPosting.update({
+        where: { id: jobId },
+        data: {
+          status: isVerified ? 'ACTIVE' : 'DRAFT',
+          ...(startDateParsed != null &&
+            endDateParsed != null && {
+              startDate: startDateParsed,
+              endDate: endDateParsed,
+            }),
+        },
+      });
     });
     if (updated.status === 'ACTIVE') {
       await this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, updated);
@@ -1003,13 +1018,27 @@ export class HostService {
     const hostProfileId = await this.getHostProfileId(userId);
     const job = await this.prisma.jobPosting.findUnique({
       where: { id: jobId },
+      select: { hostProfileId: true, status: true, isDeleted: true },
     });
     if (!job) throw new NotFoundException('Job not found');
     if (job.hostProfileId !== hostProfileId) throw new ForbiddenException();
 
+    if (status === 'CONFIRMED') {
+      if (job.isDeleted) {
+        throw new BadRequestException(
+          'This posting has been removed and cannot accept confirmations.',
+        );
+      }
+      if (job.status !== 'ACTIVE') {
+        throw new BadRequestException(
+          'Only active postings can have applicants confirmed.',
+        );
+      }
+    }
+
     // PRD L2-E7.1: set placedAt when status moves to CONFIRMED
     const updated = await this.prisma.application.update({
-      where: { id: appId },
+      where: { id: appId, jobPostingId: jobId },
       data: {
         status,
         ...(status === 'CONFIRMED' && { placedAt: new Date() }),
@@ -1096,10 +1125,7 @@ export class HostService {
         role: Role.HOST,
         status: { in: [UserStatus.ACTIVE, UserStatus.PENDING] },
         hostProfile: { isNot: null },
-        OR: [
-          { avatarStoragePath: { not: null } },
-          { hostProfile: { photoIdFile: { not: null } } },
-        ],
+        avatarStoragePath: { not: null },
       },
       orderBy: { updatedAt: 'desc' },
       take: 50,
@@ -1109,21 +1135,16 @@ export class HostService {
         updatedAt: true,
         hostProfile: {
           select: {
-            photoIdFile: true,
             updatedAt: true,
           },
         },
       },
     });
 
-    const isImagePath = (path: string) =>
-      /\.(jpe?g|png|webp|gif)$/i.test(path) || path.includes('/avatars/');
-
     type Candidate = { userId: string; path: string; at: number };
     const candidates: Candidate[] = [];
     for (const host of hosts) {
       const avatar = host.avatarStoragePath?.trim() ?? '';
-      const photoId = host.hostProfile?.photoIdFile?.trim() ?? '';
       const profileAt = host.hostProfile?.updatedAt.getTime() ?? 0;
       const userAt = host.updatedAt.getTime();
       if (avatar) {
@@ -1131,12 +1152,6 @@ export class HostService {
           userId: host.id,
           path: avatar,
           at: Math.max(userAt, profileAt),
-        });
-      } else if (photoId && isImagePath(photoId)) {
-        candidates.push({
-          userId: host.id,
-          path: photoId,
-          at: profileAt,
         });
       }
     }

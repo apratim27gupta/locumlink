@@ -13,6 +13,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { NotificationsService } from './notifications.service.js';
 import { PushService } from './push.service.js';
+import { PushSubscribeDto, PushUnsubscribeDto } from './push.dto.js';
 
 interface JwtRequest {
   user: { id: string; email: string; role: string };
@@ -51,14 +52,17 @@ export class NotificationsController {
   @Post('push/subscribe')
   subscribe(
     @Req() req: JwtRequest,
-    @Body() body: { endpoint: string; keys: { p256dh: string; auth: string } },
+    @Body() body: PushSubscribeDto,
   ) {
     return this.pushService.saveSubscription(req.user.id, body);
   }
 
   @Delete('push/unsubscribe')
-  unsubscribe(@Body() body: { endpoint: string }) {
-    return this.pushService.deleteSubscription(body.endpoint);
+  unsubscribe(
+    @Req() req: JwtRequest,
+    @Body() body: PushUnsubscribeDto,
+  ) {
+    return this.pushService.deleteSubscription(req.user.id, body.endpoint);
   }
 
   @Get('push/vapid-public-key')

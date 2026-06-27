@@ -32,7 +32,7 @@ export function formatJobDateHostApplicantTitle(
 
 export function formatPayPerDay(pay: number | null | undefined): string {
   if (pay == null) return '';
-  return ` Rate: $${Number(pay).toLocaleString()}/hour.`;
+  return ` Rate: $${Number(pay).toLocaleString()}/day.`;
 }
 
 export function formatVerificationRejectionReason(

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
@@ -61,12 +61,17 @@ function fmtDate(iso: string | null): string {
     return formatLocalCalendarDateForDisplay(iso);
 }
 function fmtTime(t: string | null): string {
-    if (!t)
-        return '';
+    if (!t) return '';
     const [h, m] = t.split(':').map(Number);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const h12 = h % 12 || 12;
-    return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+    if (Number.isNaN(h) || Number.isNaN(m)) return '';
+    // Convert UTC HH:mm to local time using today's date as carrier
+    const utcDate = new Date();
+    utcDate.setUTCHours(h, m, 0, 0);
+    const localH = utcDate.getHours();
+    const localM = utcDate.getMinutes();
+    const ampm = localH >= 12 ? 'PM' : 'AM';
+    const h12 = localH % 12 || 12;
+    return `${String(h12).padStart(2, '0')}:${String(localM).padStart(2, '0')} ${ampm}`;
 }
 function applicationStatusPresentation(app: MyApplication): {
     label: string;
@@ -152,6 +157,7 @@ export default function LocumDashboard(props: {
     const [respondingAppId, setRespondingAppId] = useState<string | null>(null);
     const [rejectConfirmAppId, setRejectConfirmAppId] = useState<string | null>(null);
     const [respondError, setRespondError] = useState<string | null>(null);
+    const respondingRef = useRef(false);
     useEffect(() => {
         if (authLoading)
             return;
@@ -200,7 +206,10 @@ export default function LocumDashboard(props: {
             if (!cancelled)
                 setApplications(apps);
         })
-            .catch(() => { })
+            .catch(() => {
+            if (!cancelled)
+                setProfileError('Could not load your applications. Please try again.');
+        })
             .finally(() => {
             if (!cancelled)
                 setLoading(false);
@@ -223,11 +232,6 @@ export default function LocumDashboard(props: {
     const cpsnsVerified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
     const todayStart =
         startOfLocalCalendarDay(localCalendarDateToIso()) ?? new Date();
-    const isRecentApplication = (app: MyApplication) => app.status === 'APPLIED'
-        || app.status === 'SHORTLISTED'
-        || app.status === 'CONFIRMED'
-        || app.locumResponse === 'ACCEPTED'
-        || app.locumResponse === 'REJECTED';
     const isUpcomingApplication = (app: MyApplication) => {
         const startDate = localDateFromCalendarInput(
             app.jobPosting.startDate ?? null,
@@ -260,6 +264,17 @@ export default function LocumDashboard(props: {
             && endDate
             && endDate.getTime() < todayStart.getTime();
     };
+    const isRecentApplication = (app: MyApplication) => {
+        // If it belongs to a time-based tab, exclude from Recent
+        if (isUpcomingApplication(app)) return false;
+        if (isOngoingApplication(app)) return false;
+        if (isCompletedApplication(app)) return false;
+        return app.status === 'APPLIED'
+            || app.status === 'SHORTLISTED'
+            || app.status === 'CONFIRMED'
+            || app.locumResponse === 'ACCEPTED'
+            || app.locumResponse === 'REJECTED';
+    };
     const tabApps = applications.filter((app) => {
         if (tab === 'recent')
             return isRecentApplication(app);
@@ -286,6 +301,9 @@ export default function LocumDashboard(props: {
         completed: completedCount,
     };
     async function respondToPlacement(appId: string, response: 'accept' | 'decline') {
+        if (respondingRef.current)
+            return;
+        respondingRef.current = true;
         setRespondError(null);
         setRespondingAppId(appId);
         try {
@@ -296,11 +314,13 @@ export default function LocumDashboard(props: {
             ]);
             setApplications(apps);
             setShiftStats(stats);
+            setRejectConfirmAppId(null);
         }
         catch (e) {
             setRespondError(e instanceof Error ? e.message : 'Could not update application.');
         }
         finally {
+            respondingRef.current = false;
             setRespondingAppId(null);
         }
     }
@@ -634,7 +654,9 @@ export default function LocumDashboard(props: {
             })}
       </div>
 
-      {rejectConfirmAppId ? (
+      {rejectConfirmAppId ? (() => {
+        const rejecting = respondingAppId === rejectConfirmAppId;
+        return (
         <div
           role="presentation"
           style={{
@@ -648,7 +670,7 @@ export default function LocumDashboard(props: {
             padding: 24,
           }}
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setRejectConfirmAppId(null);
+            if (!rejecting && e.target === e.currentTarget) setRejectConfirmAppId(null);
           }}
         >
           <div
@@ -675,7 +697,7 @@ export default function LocumDashboard(props: {
                 color: '#0B0F1F',
               }}
             >
-              Are you sure?
+              Are you sure you want to reject?
             </h3>
             <p
               style={{
@@ -691,6 +713,7 @@ export default function LocumDashboard(props: {
             <div style={{ display: 'flex', gap: 12 }}>
               <button
                 type="button"
+                disabled={rejecting}
                 onClick={() => setRejectConfirmAppId(null)}
                 style={{
                   flex: 1,
@@ -701,37 +724,36 @@ export default function LocumDashboard(props: {
                   color: '#374151',
                   fontSize: 15,
                   fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: rejecting ? 'default' : 'pointer',
                   fontFamily: 'inherit',
+                  opacity: rejecting ? 0.6 : 1,
                 }}
               >
                 No
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  const appId = rejectConfirmAppId;
-                  setRejectConfirmAppId(null);
-                  void respondToPlacement(appId, 'decline');
-                }}
+                disabled={rejecting}
+                onClick={() => void respondToPlacement(rejectConfirmAppId, 'decline')}
                 style={{
                   flex: 1,
                   padding: '10px 16px',
                   border: 'none',
                   borderRadius: 8,
-                  background: '#DC2626',
+                  background: rejecting ? '#F87171' : '#DC2626',
                   color: '#fff',
                   fontSize: 15,
                   fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: rejecting ? 'default' : 'pointer',
                   fontFamily: 'inherit',
                 }}
               >
-                Yes
+                {rejecting ? 'Rejecting…' : 'Yes, reject'}
               </button>
             </div>
           </div>
         </div>
-      ) : null}
+        );
+      })() : null}
     </DashLayout>);
 }

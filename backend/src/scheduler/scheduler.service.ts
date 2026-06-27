@@ -55,7 +55,11 @@ export class SchedulerService {
       const confirmedApps = await this.prisma.application.findMany({
         where: {
           status: 'CONFIRMED',
-          jobPosting: { startDate: { not: null } },
+          jobPosting: {
+            isDeleted: false,
+            status: { not: 'CANCELLED' },
+            startDate: { not: null },
+          },
         },
         include: locumReminderInclude,
       });
@@ -126,7 +130,11 @@ export class SchedulerService {
       const confirmedApps = await this.prisma.application.findMany({
         where: {
           status: 'CONFIRMED',
-          jobPosting: { startDate: { not: null } },
+          jobPosting: {
+            startDate: { not: null },
+            isDeleted: false,
+            status: { not: 'CANCELLED' },
+          },
         },
         include: locumReminderInclude,
       });

@@ -7,10 +7,14 @@ import {
   Param,
   Query,
   Req,
+  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { Role } from '@prisma/client';
 import { Public } from '../auth/decorators/public.decorator.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
 import { LocumService } from './locum.service.js';
 import { ApplyJobDto, RespondToConfirmedPlacementDto } from './locum.dto.js';
 interface JwtRequest {
@@ -21,6 +25,8 @@ interface JwtRequest {
   };
 }
 @Controller('locum')
+@UseGuards(AuthGuard('jwt'))
+@Roles(Role.LOCUM)
 export class LocumController {
   constructor(private readonly locumService: LocumService) {}
   @Post('profile')

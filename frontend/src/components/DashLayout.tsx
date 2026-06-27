@@ -319,6 +319,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         prevNotifTotal.current = notifTotal;
     }, [notifTotal]);
     useEffect(() => {
+        if (typeof Notification === 'undefined' || !('serviceWorker' in navigator)) return;
         if (!getToken() || typeof window === 'undefined') return;
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
         let cancelled = false;

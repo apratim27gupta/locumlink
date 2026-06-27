@@ -27,7 +27,7 @@ import { sortStringsLocale } from '@/lib/sortLocale';
 const LOCUM_SETUP_MODAL = {
   widthPx: 476,
   heightPx: 790,
-  maxHeight: 'calc(100vh - 40px)',
+  maxHeight: 'calc(100dvh - 40px)',
   paddingPx: 32,
   borderRadiusPx: 6,
   contentWidthPx: 412,
@@ -400,7 +400,7 @@ export default function LocumSetupPage() {
     <div
       className="setup-page-shell"
       style={{
-        height: '100vh',
+        height: '100dvh',
         width: '100vw',
         overflow: 'hidden',
         position: 'relative',

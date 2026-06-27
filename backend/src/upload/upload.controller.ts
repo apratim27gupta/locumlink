@@ -6,7 +6,6 @@ import {
   UseInterceptors,
   Req,
   BadRequestException,
-  Body,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -53,13 +52,11 @@ export class UploadController {
     req: JwtRequest,
     @UploadedFile()
     file: Express.Multer.File,
-    @Body('folder')
-    folder?: string,
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
     if (!ALLOWED.has(file.mimetype))
       throw new BadRequestException('Only PDF, JPG, PNG, DOC, DOCX allowed');
-    const dest = folder ?? `uploads/${req.user.id}`;
+    const dest = `uploads/${req.user.id}`;
     const path = file.path
       ? await this.gcs.uploadFromPath(
           file.path,
