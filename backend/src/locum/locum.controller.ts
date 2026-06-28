@@ -11,7 +11,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { Role } from '@prisma/client';
 import { Public } from '../auth/decorators/public.decorator.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -25,7 +25,7 @@ interface JwtRequest {
   };
 }
 @Controller('locum')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(JwtAuthGuard)
 @Roles(Role.LOCUM)
 export class LocumController {
   constructor(private readonly locumService: LocumService) {}
