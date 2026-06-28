@@ -31,7 +31,8 @@ function readEnvVar(filePath, key) {
   }
 }
 
-const ZEPTOMAIL_API_KEY = readEnvVar(ENV_PATH, 'ZEPTOMAIL_API_KEY');
+const TWILIO_API_KEY_SID = readEnvVar(ENV_PATH, 'TWILIO_API_KEY_SID');
+const TWILIO_API_KEY_SECRET = readEnvVar(ENV_PATH, 'TWILIO_API_KEY_SECRET');
 const MAIL_FROM_ADDRESS = readEnvVar(ENV_PATH, 'MAIL_FROM_ADDRESS');
 const ADMIN_ALERT_EMAIL = readEnvVar(ROOT_ENV_PATH, 'ADMIN_ALERT_EMAIL');
 
@@ -88,33 +89,37 @@ async function sendAlertEmail(pdfPath, errorCount) {
     .split(',')
     .map((e) => e.trim())
     .filter(Boolean)
-    .map((address) => ({ email_address: { address } }));
+    .map((address) => ({ address }));
 
   if (toEmails.length === 0) {
     throw new Error('No admin alert emails configured (ADMIN_ALERT_EMAIL is empty)');
   }
-  if (!ZEPTOMAIL_API_KEY || !MAIL_FROM_ADDRESS) {
-    throw new Error('Missing ZEPTOMAIL_API_KEY or MAIL_FROM_ADDRESS in backend/.env');
+  if (!TWILIO_API_KEY_SID || !TWILIO_API_KEY_SECRET || !MAIL_FROM_ADDRESS) {
+    throw new Error('Missing TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET or MAIL_FROM_ADDRESS in backend/.env');
   }
 
   const payload = {
     from: { address: MAIL_FROM_ADDRESS, name: 'Locum Link Monitor' },
     to: toEmails,
-    subject: `Locum Link - ${errorCount} New Error(s) Detected`,
-    textbody: `A new error report has been generated with ${errorCount} error(s). See the attached PDF for full details.`,
+    content: {
+      subject: `Locum Link - ${errorCount} New Error(s) Detected`,
+      html: `<p>A new error report has been generated with ${errorCount} error(s). See the attached PDF for full details.</p>`,
+      text: `A new error report has been generated with ${errorCount} error(s). See the attached PDF for full details.`,
+    },
     attachments: [
       {
         content: pdfBase64,
-        mime_type: 'application/pdf',
-        name: `error-report-${Date.now()}.pdf`,
+        contentType: 'application/pdf',
+        filename: `error-report-${Date.now()}.pdf`,
       },
     ],
   };
 
-  const response = await fetch('https://api.zeptomail.ca/v1.1/email', {
+  const credentials = Buffer.from(`${TWILIO_API_KEY_SID}:${TWILIO_API_KEY_SECRET}`).toString('base64');
+  const response = await fetch('https://comms.twilio.com/v1/Emails', {
     method: 'POST',
     headers: {
-      Authorization: ZEPTOMAIL_API_KEY,
+      Authorization: `Basic ${credentials}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
@@ -123,7 +128,7 @@ async function sendAlertEmail(pdfPath, errorCount) {
 
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`ZeptoMail responded ${response.status}: ${text}`);
+    throw new Error(`Twilio Email responded ${response.status}: ${text}`);
   }
   return { status: response.status, body: text };
 }

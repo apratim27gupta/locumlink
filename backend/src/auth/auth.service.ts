@@ -436,7 +436,7 @@ export class AuthService {
         recipient: normalizedEmail,
         eventType: 'AUTH_OTP',
         status: result.ok ? 'SENT' : 'FAILED',
-        provider: 'zeptomail',
+        provider: 'twilio',
         providerMessageId: result.ok ? result.messageId : undefined,
         error: result.ok ? undefined : result.error,
         referenceType: 'Otp',
@@ -447,7 +447,7 @@ export class AuthService {
       const nodeEnv = this.config.get<string>('NODE_ENV') ?? 'development';
       if (nodeEnv !== 'production') {
         this.logger.warn(
-          `ZeptoMail failed (${result.error}); local dev OTP for ${normalizedEmail}: ${otp}`,
+          `Email failed (${result.error}); local dev OTP for ${normalizedEmail}: ${otp}`,
         );
       }
       this.prisma.errorLog.create({
@@ -456,7 +456,7 @@ export class AuthService {
           method: 'POST',
           statusCode: 400,
           message: `OTP email failed for ${normalizedEmail}: ${result.error}`,
-          metadata: { email: normalizedEmail, provider: 'zeptomail', error: result.error },
+          metadata: { email: normalizedEmail, provider: 'twilio', error: result.error },
         },
       }).catch(() => {});
       throw new BadRequestException(

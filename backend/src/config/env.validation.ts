@@ -65,11 +65,11 @@ class EnvironmentVariables {
   GCS_KEY_FILE?: string;
   @IsString()
   @IsOptional()
-  ZEPTOMAIL_API_KEY: string;
+  TWILIO_API_KEY_SID: string;
 
-  @IsUrl({ require_tld: false })
+  @IsString()
   @IsOptional()
-  ZEPTOMAIL_API_URL: string = 'https://api.zeptomail.ca';
+  TWILIO_API_KEY_SECRET: string;
 
   @IsString()
   @IsOptional()

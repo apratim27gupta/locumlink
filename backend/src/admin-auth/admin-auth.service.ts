@@ -277,7 +277,7 @@ export class AdminAuthService {
         recipient: params.to,
         eventType: params.eventType,
         status: result.ok ? 'SENT' : 'FAILED',
-        provider: 'zeptomail',
+        provider: 'twilio',
         providerMessageId: result.ok ? result.messageId : undefined,
         error: result.ok ? undefined : result.error,
         referenceId: params.adminId,

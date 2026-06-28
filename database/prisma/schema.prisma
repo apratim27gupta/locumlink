@@ -435,7 +435,7 @@ model EmailLog {
   recipient         String
   eventType         String    @map("event_type")
   status            String    @default("PENDING")
-  provider          String    @default("zeptomail")
+  provider          String    @default("twilio")
   providerMessageId String?   @map("provider_message_id")
   error             String?
   referenceId       String?   @map("reference_id")

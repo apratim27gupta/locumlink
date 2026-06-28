@@ -17,11 +17,12 @@ export class EmailService {
     text: string;
     html?: string;
   }): Promise<EmailSendResult> {
-    const apiKey = this.config.get<string>('ZEPTOMAIL_API_KEY')?.trim();
+    const sid = this.config.get<string>('TWILIO_API_KEY_SID')?.trim();
+    const secret = this.config.get<string>('TWILIO_API_KEY_SECRET')?.trim();
     const from = this.config.get<string>('MAIL_FROM_ADDRESS')?.trim();
-    if (!apiKey || !from) {
+    if (!sid || !secret || !from) {
       const error =
-        'Email not configured (set ZEPTOMAIL_API_KEY and MAIL_FROM_ADDRESS)';
+        'Email not configured (set TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET and MAIL_FROM_ADDRESS)';
       this.logger.warn(`Skipping email to ${params.to}: ${error}`);
       return { ok: false, error };
     }
@@ -29,48 +30,38 @@ export class EmailService {
     const fromName =
       this.config.get<string>('MAIL_FROM_NAME')?.trim() || 'Locum Link';
 
-    const apiBase =
-      this.config.get<string>('ZEPTOMAIL_API_URL')?.trim() ||
-      'https://api.zeptomail.ca';
-
-    const authHeader = apiKey.startsWith('Zoho-enczapikey')
-      ? apiKey
-      : `Zoho-enczapikey ${apiKey}`;
-
-    const res = await fetch(`${apiBase.replace(/\/$/, '')}/v1.1/email`, {
+    const credentials = Buffer.from(`${sid}:${secret}`).toString('base64');
+    const res = await fetch('https://comms.twilio.com/v1/Emails', {
       method: 'POST',
       headers: {
-        Authorization: authHeader,
+        Authorization: `Basic ${credentials}`,
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         from: { address: from, name: fromName },
-        to: [
-          {
-            email_address: {
-              address: params.to,
-            },
-          },
-        ],
-        subject: params.subject,
-        textbody: params.text,
-        htmlbody: params.html ?? `<p>${params.text.replace(/\n/g, '<br>')}</p>`,
+        to: [{ address: params.to }],
+        content: {
+          subject: params.subject,
+          html: params.html ?? `<p>${params.text.replace(/\n/g, '<br>')}</p>`,
+          text: params.text,
+        },
       }),
     });
 
     if (!res.ok) {
       const detail = await res.text();
-      const error = `ZeptoMail API error (${res.status}): ${detail}`;
+      const error = `Twilio Email API error (${res.status}): ${detail}`;
       this.logger.error(error);
       return { ok: false, error };
     }
 
     try {
       const body = (await res.json()) as {
-        data?: Array<{ message_id?: string }>;
+        operationId?: string;
+        operationLocation?: string;
       };
-      const messageId = body.data?.[0]?.message_id;
+      const messageId = body.operationId;
       return { ok: true, messageId };
     } catch {
       return { ok: true };
