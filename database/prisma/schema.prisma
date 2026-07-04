@@ -134,6 +134,7 @@ model User {
   auditActorLogs     AuditLog[]         @relation("AuditActor")
   notifications      NotificationEvent[]
   pushSubscriptions  PushSubscription[]
+  expoPushTokens     ExpoPushToken[]
 
   @@unique([email, role])
   @@map("users")
@@ -505,6 +506,19 @@ model PushSubscription {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@map("push_subscriptions")
+}
+
+model ExpoPushToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("expo_push_tokens")
 }
 
 model ErrorLog {

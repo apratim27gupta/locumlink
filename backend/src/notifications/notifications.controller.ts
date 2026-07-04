@@ -14,6 +14,10 @@ import { AuthGuard } from '@nestjs/passport';
 import { NotificationsService } from './notifications.service.js';
 import { PushService } from './push.service.js';
 import { PushSubscribeDto, PushUnsubscribeDto } from './push.dto.js';
+import {
+  RegisterExpoPushDto,
+  UnregisterExpoPushDto,
+} from './expo-push.dto.js';
 
 interface JwtRequest {
   user: { id: string; email: string; role: string };
@@ -68,5 +72,25 @@ export class NotificationsController {
   @Get('push/vapid-public-key')
   getVapidKey() {
     return { key: process.env.VAPID_PUBLIC_KEY };
+  }
+
+  @Post('push/register-expo')
+  registerExpo(
+    @Req() req: JwtRequest,
+    @Body() body: RegisterExpoPushDto,
+  ) {
+    return this.pushService.saveExpoToken(
+      req.user.id,
+      body.token,
+      body.platform,
+    );
+  }
+
+  @Delete('push/unregister-expo')
+  unregisterExpo(
+    @Req() req: JwtRequest,
+    @Body() body: UnregisterExpoPushDto,
+  ) {
+    return this.pushService.deleteExpoToken(req.user.id, body.token);
   }
 }

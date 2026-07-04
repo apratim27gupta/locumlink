@@ -1161,6 +1161,26 @@ export const notificationsApi = {
         });
         if (!res.ok) throw new Error('Failed to remove push subscription');
     },
+    registerExpoToken: async (token: string, platform: 'ios' | 'android'): Promise<void> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/notifications/push/register-expo`, {
+            method: 'POST',
+            cache: 'no-store',
+            headers: nestHeaders(true),
+            skipTopLoader: true,
+            body: JSON.stringify({ token, platform }),
+        });
+        if (!res.ok) throw new Error('Failed to register Expo push token');
+    },
+    unregisterExpoToken: async (token: string): Promise<void> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/notifications/push/unregister-expo`, {
+            method: 'DELETE',
+            cache: 'no-store',
+            headers: nestHeaders(true),
+            skipTopLoader: true,
+            body: JSON.stringify({ token }),
+        });
+        if (!res.ok) throw new Error('Failed to unregister Expo push token');
+    },
     markRead: async (id: string): Promise<void> => {
         const res = await trackedFetch(`${NEST_BASE}/api/notifications/${encodeURIComponent(id)}/read`, {
             method: 'PATCH',

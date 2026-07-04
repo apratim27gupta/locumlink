@@ -18,6 +18,7 @@ import { subscribeMessagesUpdated } from '@/lib/messagesUpdatedEvent';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { isExternalNotificationHref, resolveNotificationAction, resolveNotificationTitle } from '@/lib/notificationActions';
 import { CountBadge } from '@/components/CountBadge';
+import { isNativeShell } from '@/lib/nativeShell';
 interface NavItem {
     label: string;
     href: string;
@@ -319,6 +320,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         prevNotifTotal.current = notifTotal;
     }, [notifTotal]);
     useEffect(() => {
+        if (isNativeShell()) return;
         if (typeof Notification === 'undefined' || !('serviceWorker' in navigator)) return;
         if (!getToken() || typeof window === 'undefined') return;
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;

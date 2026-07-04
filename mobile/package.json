@@ -4,7 +4,10 @@
   "main": "index.ts",
   "dependencies": {
     "expo": "~54.0.0",
+    "expo-constants": "~18.0.13",
+    "expo-device": "~8.0.10",
     "expo-linking": "~8.0.12",
+    "expo-notifications": "~0.32.17",
     "expo-web-browser": "~15.0.11",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -18,10 +21,10 @@
     "typescript": "~5.9.2"
   },
   "scripts": {
-    "start": "expo start --lan",
-    "android": "expo start --android --lan",
-    "ios": "expo start --ios --lan",
-    "web": "expo start --web"
+    "start": "node node_modules/expo/bin/cli start --lan",
+    "android": "node node_modules/expo/bin/cli start --android --lan",
+    "ios": "node node_modules/expo/bin/cli start --ios --lan",
+    "web": "node node_modules/expo/bin/cli start --web"
   },
   "private": true
 }

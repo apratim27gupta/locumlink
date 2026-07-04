@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -10,9 +10,10 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import * as WebBrowser from 'expo-web-browser';
+import { buildNativeInjectScript, useExpoPush } from './useExpoPush';
 
 const PRIMARY_COLOR = '#38C6C6';
-const APP_ORIGIN = process.env.EXPO_PUBLIC_APP_URL ?? 'https://locumlink.ca';
+const APP_ORIGIN = process.env.EXPO_PUBLIC_APP_URL ?? 'https://staging.locumlink.ca';
 
 const OAUTH_URL_PATTERNS = [
   'supabase.co/auth/v1/authorize',
@@ -21,9 +22,38 @@ const OAUTH_URL_PATTERNS = [
 ];
 // Email OTP never hits these — stays in WebView unaffected
 
+function resolveNotificationUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  const path = url.startsWith('/') ? url : `/${url}`;
+  return `${APP_ORIGIN}${path}`;
+}
+
 export default function App() {
   const webViewRef = useRef<WebView>(null);
   const [hasError, setHasError] = useState(false);
+
+  const handleNotificationTap = useCallback((url: string | undefined) => {
+    const target = resolveNotificationUrl(url);
+    if (!target) return;
+    webViewRef.current?.injectJavaScript(
+      `window.location.href = ${JSON.stringify(target)};`,
+    );
+  }, []);
+
+  const { pushToken } = useExpoPush(handleNotificationTap);
+
+  const nativeInjectScript = useMemo(
+    () => buildNativeInjectScript(Platform.OS, pushToken),
+    [pushToken],
+  );
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || !webViewRef.current) return;
+    webViewRef.current.injectJavaScript(
+      buildNativeInjectScript(Platform.OS, pushToken),
+    );
+  }, [pushToken]);
 
   function handleRetry() {
     setHasError(false);
@@ -76,6 +106,7 @@ export default function App() {
               allowsInlineMediaPlayback
               setSupportMultipleWindows={false}
               startInLoadingState
+              injectedJavaScriptBeforeContentLoaded={nativeInjectScript}
               renderLoading={() => (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={PRIMARY_COLOR} />
@@ -83,7 +114,7 @@ export default function App() {
               )}
               onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
               onError={() => setHasError(true)}
-              onContentProcessTerminated={() => webViewRef.current?.reload()}
+              onContentProcessDidTerminate={() => webViewRef.current?.reload()}
               onHttpError={(event) => {
                 const { statusCode } = event.nativeEvent;
                 if (statusCode >= 500) {
