@@ -135,6 +135,8 @@ model User {
   notifications      NotificationEvent[]
   pushSubscriptions  PushSubscription[]
   expoPushTokens     ExpoPushToken[]
+  blocksInitiated    UserBlock[]        @relation("BlocksInitiated")
+  blocksReceived     UserBlock[]        @relation("BlocksReceived")
 
   @@unique([email, role])
   @@map("users")
@@ -519,6 +521,20 @@ model ExpoPushToken {
 
   @@index([userId])
   @@map("expo_push_tokens")
+}
+
+model UserBlock {
+  id        String   @id @default(cuid())
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  blocker   User     @relation("BlocksInitiated", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+  @@map("user_blocks")
 }
 
 model ErrorLog {

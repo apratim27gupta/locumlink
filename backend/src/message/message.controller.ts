@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { MessageService } from './message.service.js';
-import { SendMessageDto, EditMessageDto } from './message.dto.js';
+import { SendMessageDto, EditMessageDto, BlockUserDto } from './message.dto.js';
 interface JwtRequest {
   user: {
     id: string;
@@ -90,5 +90,25 @@ export class MessageController {
     id: string,
   ) {
     return this.messageService.deleteMessage(req.user.id, id);
+  }
+
+  @Get('blocks')
+  listBlocks(@Req() req: JwtRequest) {
+    return this.messageService.listBlockedUsers(req.user.id);
+  }
+
+  @Post('blocks')
+  @HttpCode(HttpStatus.OK)
+  blockUser(@Req() req: JwtRequest, @Body() dto: BlockUserDto) {
+    return this.messageService.blockUser(req.user.id, dto.userId);
+  }
+
+  @Delete('blocks/:userId')
+  @HttpCode(HttpStatus.OK)
+  unblockUser(
+    @Req() req: JwtRequest,
+    @Param('userId') userId: string,
+  ) {
+    return this.messageService.unblockUser(req.user.id, userId);
   }
 }

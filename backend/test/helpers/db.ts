@@ -35,6 +35,7 @@ export async function cleanupTables(): Promise<void> {
       audit_logs,
       push_subscriptions,
       expo_push_tokens,
+      user_blocks,
       users
     RESTART IDENTITY CASCADE
   `);

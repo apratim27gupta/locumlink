@@ -6,7 +6,7 @@ import { onPwaRefresh } from '@/lib/pwaEvents';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
-import { fetchAllPaginated, hostApi, locumApi, messageApi, uploadFile, type ApplicationRecord, type Conversation, type ConversationPartner, type MyApplication, type ThreadMessage, type ThreadPartner, } from '@/lib/api';
+import { fetchAllPaginated, hostApi, locumApi, messageApi, uploadFile, type ApplicationRecord, type BlockStatus, type Conversation, type ConversationPartner, type MyApplication, type ThreadMessage, type ThreadPartner, } from '@/lib/api';
 import { getEmail, getToken } from '@/lib/auth';
 import { subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { dispatchMessagesUpdated } from '@/lib/messagesUpdatedEvent';
@@ -73,6 +73,11 @@ const MESSAGES_LIST_WIDTH_KEY = 'll-messages-list-width';
 const MESSAGES_LIST_MIN = 260;
 const MESSAGES_LIST_MAX = 560;
 const MESSAGES_LIST_DEFAULT = 360;
+const EMPTY_BLOCK_STATUS: BlockStatus = {
+    blockedByMe: false,
+    blockedByPartner: false,
+    isMessagingBlocked: false,
+};
 function readStoredMessagesListWidth(): number {
     if (typeof window === 'undefined')
         return MESSAGES_LIST_DEFAULT;
@@ -329,6 +334,143 @@ function DeleteModal({ onDeleteForEveryone, onDeleteForMe, onCancel, }: {
       </div>
     </>);
 }
+function BlockUserModal({ partnerName, onConfirm, onCancel, busy, }: {
+    partnerName: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+    busy: boolean;
+}) {
+    return (<>
+      <div onClick={onCancel} style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            zIndex: 500,
+        }}/>
+      <div className="messages-delete-modal" style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%,-50%)',
+            background: '#fff',
+            borderRadius: 12,
+            padding: '24px 28px',
+            width: 360,
+            maxWidth: 'calc(100vw - 32px)',
+            zIndex: 501,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+            fontFamily: 'Inter, sans-serif',
+        }}>
+        <div style={{
+            fontSize: 16,
+            fontWeight: 700,
+            color: '#0f1523',
+            marginBottom: 10,
+        }}>
+          Block {partnerName}?
+        </div>
+        <p style={{
+            fontSize: 14,
+            color: '#6B7280',
+            lineHeight: 1.5,
+            margin: '0 0 20px',
+        }}>
+          They won&apos;t be able to send you messages, and you won&apos;t be able to message them. You can unblock them anytime.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button type="button" disabled={busy} onClick={onConfirm} style={{
+            padding: '10px 16px',
+            background: '#DC2626',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: busy ? 'default' : 'pointer',
+            fontFamily: 'inherit',
+            opacity: busy ? 0.7 : 1,
+        }}>
+            {busy ? 'Blocking…' : 'Block user'}
+          </button>
+          <button type="button" disabled={busy} onClick={onCancel} style={{
+            padding: '8px',
+            background: 'none',
+            border: 'none',
+            color: '#9CA3AF',
+            fontSize: 13,
+            cursor: busy ? 'default' : 'pointer',
+            fontFamily: 'inherit',
+        }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>);
+}
+function UnblockUserModal({ partnerName, onConfirm, onCancel, busy, }: {
+    partnerName: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+    busy: boolean;
+}) {
+    return (<>
+      <div onClick={onCancel} style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15,23,42,0.45)',
+            zIndex: 500,
+        }}/>
+      <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%,-50%)',
+            background: '#fff',
+            borderRadius: 16,
+            padding: 28,
+            width: 420,
+            maxWidth: 'calc(100vw - 32px)',
+            zIndex: 501,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+            fontFamily: 'Inter, sans-serif',
+        }}>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0B0F1F', margin: '0 0 8px' }}>
+          Unblock {partnerName}?
+        </h2>
+        <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.6, margin: '0 0 24px' }}>
+          You will be able to send and receive messages from this user again.
+        </p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button type="button" disabled={busy} onClick={onCancel} style={{
+            padding: '10px 18px',
+            borderRadius: 8,
+            border: '1px solid #E5E7EB',
+            background: '#fff',
+            fontFamily: 'inherit',
+            fontWeight: 600,
+            fontSize: 14,
+            cursor: busy ? 'default' : 'pointer',
+        }}>
+            Cancel
+          </button>
+          <button type="button" disabled={busy} onClick={onConfirm} style={{
+            padding: '10px 18px',
+            borderRadius: 8,
+            border: 'none',
+            background: '#1B31D2',
+            color: '#fff',
+            fontFamily: 'inherit',
+            fontWeight: 600,
+            fontSize: 14,
+            cursor: busy ? 'default' : 'pointer',
+            opacity: busy ? 0.7 : 1,
+        }}>
+            {busy ? 'Unblocking…' : 'Unblock'}
+          </button>
+        </div>
+      </div>
+    </>);
+}
 export interface MessagesPageProps {
     role: 'host' | 'locum';
 }
@@ -359,6 +501,11 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const [editBody, setEditBody] = useState('');
     const [savingEdit, setSavingEdit] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<ThreadMessage | null>(null);
+    const [blockStatus, setBlockStatus] = useState<BlockStatus>(EMPTY_BLOCK_STATUS);
+    const [threadMenuOpen, setThreadMenuOpen] = useState(false);
+    const [showBlockModal, setShowBlockModal] = useState(false);
+    const [showUnblockModal, setShowUnblockModal] = useState(false);
+    const [blockBusy, setBlockBusy] = useState(false);
     const [myApplications, setMyApplications] = useState<MyApplication[]>([]);
     const [myListPreviewName, setMyListPreviewName] = useState<string | null>(null);
     const [myCpsnsVerified, setMyCpsnsVerified] = useState(false);
@@ -436,6 +583,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const imagePickRef = useRef<HTMLInputElement>(null);
     const threadSinceRef = useRef<string | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
+    const threadMenuRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         if (!menuOpenId)
             return;
@@ -447,6 +595,17 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         document.addEventListener('mousedown', onClickOutside);
         return () => document.removeEventListener('mousedown', onClickOutside);
     }, [menuOpenId]);
+    useEffect(() => {
+        if (!threadMenuOpen)
+            return;
+        function onClickOutside(e: MouseEvent) {
+            if (threadMenuRef.current && !threadMenuRef.current.contains(e.target as Node)) {
+                setThreadMenuOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', onClickOutside);
+        return () => document.removeEventListener('mousedown', onClickOutside);
+    }, [threadMenuOpen]);
     useEffect(() => {
         const t = window.setTimeout(() => setDebouncedSearchQuery(search.trim()), 280);
         return () => window.clearTimeout(t);
@@ -494,14 +653,15 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const loadThread = useCallback(async (partnerId: string) => {
         setLoadingThread(true);
         try {
-            const { items, partner: p } = await messageApi.getThread(partnerId, { limit: 100 });
+            const { items, partner: p, blockStatus: status } = await messageApi.getThread(partnerId, { limit: 100 });
             const hiddenIds = new Set(JSON.parse(localStorage.getItem('deleted-for-me') || '[]'));
             const visible = items.filter((m: ThreadMessage) => !hiddenIds.has(m.id));
             setThread(visible);
             const last = visible[visible.length - 1];
             threadSinceRef.current = last?.sentAt ?? null;
             setPartner(p);
-            setConversations((prev) => prev.map((c) => c.partnerId === partnerId ? { ...c, unreadCount: 0 } : c));
+            setBlockStatus(status ?? EMPTY_BLOCK_STATUS);
+            setConversations((prev) => prev.map((c) => c.partnerId === partnerId ? { ...c, unreadCount: 0, blockStatus: status ?? c.blockStatus } : c));
             dispatchMessagesUpdated();
         }
         catch {
@@ -574,6 +734,8 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     }, [thread, loadingThread]);
     useEffect(() => {
         threadSinceRef.current = null;
+        setBlockStatus(EMPTY_BLOCK_STATUS);
+        setThreadMenuOpen(false);
     }, [selectedPartnerId]);
     const pollMessages = useCallback(async () => {
         if (!selectedPartnerId || !getToken())
@@ -603,6 +765,9 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             }
             setConversations(convs.map((c) => c.partnerId === selectedPartnerId ? { ...c, unreadCount: 0 } : c));
             syncPartnerFromConversations(convs, selectedPartnerId);
+            const match = convs.find((c) => c.partnerId === selectedPartnerId);
+            if (match?.blockStatus)
+                setBlockStatus(match.blockStatus);
             dispatchMessagesUpdated();
         }
         catch {
@@ -797,6 +962,50 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             setDeleteTarget(null);
         }
     }
+    async function handleBlockUser() {
+        if (!selectedPartnerId || blockBusy)
+            return;
+        setBlockBusy(true);
+        try {
+            await messageApi.blockUser(selectedPartnerId);
+            const nextStatus: BlockStatus = {
+                blockedByMe: true,
+                blockedByPartner: false,
+                isMessagingBlocked: true,
+            };
+            setBlockStatus(nextStatus);
+            setConversations((prev) => prev.map((c) => c.partnerId === selectedPartnerId ? { ...c, blockStatus: nextStatus } : c));
+            setShowBlockModal(false);
+            setThreadMenuOpen(false);
+            void loadConversations({ skipTopLoader: true });
+        }
+        catch (e: unknown) {
+            window.alert(e instanceof Error ? e.message : 'Could not block this user.');
+        }
+        finally {
+            setBlockBusy(false);
+        }
+    }
+    async function handleUnblockUser() {
+        if (!selectedPartnerId || blockBusy)
+            return;
+        setBlockBusy(true);
+        try {
+            await messageApi.unblockUser(selectedPartnerId);
+            const nextStatus = EMPTY_BLOCK_STATUS;
+            setBlockStatus(nextStatus);
+            setConversations((prev) => prev.map((c) => c.partnerId === selectedPartnerId ? { ...c, blockStatus: nextStatus } : c));
+            setShowUnblockModal(false);
+            setThreadMenuOpen(false);
+            void loadConversations({ skipTopLoader: true });
+        }
+        catch (e: unknown) {
+            window.alert(e instanceof Error ? e.message : 'Could not unblock this user.');
+        }
+        finally {
+            setBlockBusy(false);
+        }
+    }
     const hostIdsWithConvs = useMemo(() => new Set(conversations.map((c) => c.partnerId)), [conversations]);
     const locumApplicationSidebarRows = useMemo(() => {
         if (role !== 'locum')
@@ -880,6 +1089,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const hostThreadNeedsConfirm = Boolean(showHostThreadConfirm &&
         (threadHostApplication?.status === 'APPLIED' || threadHostApplication?.status === 'SHORTLISTED'));
     const hostThreadAlreadyConfirmed = Boolean(showHostThreadConfirm && threadHostApplication?.status === 'CONFIRMED');
+    const isMessagingBlocked = blockStatus.isMessagingBlocked;
     function onListPanelResizeMouseDown(e: ReactMouseEvent<HTMLDivElement>) {
         e.preventDefault();
         e.stopPropagation();
@@ -1009,6 +1219,13 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                         alignItems: 'center',
                         marginBottom: 2,
                     }}>
+                          <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        minWidth: 0,
+                        flex: 1,
+                    }}>
                           <span style={{
                         fontSize: 13,
                         fontWeight: 600,
@@ -1016,13 +1233,24 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        maxWidth: Math.max(80, listPanelWidth - 120),
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
+                        minWidth: 0,
                     }}>
                             {name}
                           </span>
+                          {conv.blockStatus?.blockedByMe ? (<span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '2px 8px',
+                        background: 'rgba(209, 213, 219, 0.2)',
+                        borderRadius: 40,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: 'rgba(11, 15, 31, 0.7)',
+                        flexShrink: 0,
+                    }}>
+                              Blocked
+                            </span>) : null}
+                          </div>
                           <div style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -1483,8 +1711,14 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                         </div>))}
                     </div>) : null}
                   </div>
-                  {(hostThreadNeedsConfirm || hostThreadAlreadyConfirmed) ? (<div style={{ flexShrink: 0, paddingTop: 2 }}>
-                      {hostThreadNeedsConfirm ? (<button type="button" onClick={() => void handleConfirmButtonClick()} disabled={confirmLocumBusy} style={{
+                  {!loadingThread && partner ? (<div style={{
+                        flexShrink: 0,
+                        paddingTop: 2,
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 8,
+                    }}>
+                      {(hostThreadNeedsConfirm || hostThreadAlreadyConfirmed) ? (hostThreadNeedsConfirm ? (<button type="button" onClick={() => void handleConfirmButtonClick()} disabled={confirmLocumBusy} style={{
                         padding: '8px 18px',
                         borderRadius: 8,
                         border: 'none',
@@ -1511,7 +1745,72 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                         fontFamily: 'inherit',
                     }}>
                           Confirmed
-                        </span>)}
+                        </span>)) : null}
+                      <div style={{ position: 'relative', flexShrink: 0 }} ref={threadMenuRef}>
+                        <button type="button" aria-label="Conversation options" onClick={() => setThreadMenuOpen((v) => !v)} style={{
+                            background: '#F9FAFB',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: 6,
+                            padding: '6px 10px',
+                            cursor: 'pointer',
+                            fontSize: 16,
+                            color: '#374151',
+                            lineHeight: 1,
+                            minWidth: 36,
+                            fontFamily: 'inherit',
+                        }} title="Conversation options">
+                          ⋮
+                        </button>
+                        {threadMenuOpen && (<div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            right: 0,
+                            marginTop: 4,
+                            background: '#fff',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: 8,
+                            boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+                            zIndex: 50,
+                            minWidth: 160,
+                            overflow: 'hidden',
+                        }}>
+                          {blockStatus.blockedByMe ? (<button type="button" onClick={() => {
+                                setThreadMenuOpen(false);
+                                setShowUnblockModal(true);
+                            }} style={{
+                            display: 'block',
+                            width: '100%',
+                            padding: '10px 14px',
+                            background: 'none',
+                            border: 'none',
+                            textAlign: 'left',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: '#374151',
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                        }}>
+                              Unblock user
+                            </button>) : (<button type="button" onClick={() => {
+                                setThreadMenuOpen(false);
+                                setShowBlockModal(true);
+                            }} style={{
+                            display: 'block',
+                            width: '100%',
+                            padding: '10px 14px',
+                            background: 'none',
+                            border: 'none',
+                            textAlign: 'left',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: '#DC2626',
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                        }}>
+                              Block user
+                            </button>)}
+                        </div>)}
+                      </div>
                     </div>) : null}
                 </div>)}
             </div>
@@ -1844,7 +2143,35 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                 }}>
                   {sendError}
                 </div>)}
-              {pendingFiles.length > 0 && (<div style={{
+              {isMessagingBlocked && (<div style={{
+                    marginBottom: 10,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    background: '#FFFBEB',
+                    border: '1px solid #FDE68A',
+                    fontSize: 12,
+                    color: '#92400E',
+                    lineHeight: 1.5,
+                }}>
+                  {blockStatus.blockedByMe ? (<>
+                      You blocked {partnerName || 'this user'}.{' '}
+                      <button type="button" onClick={() => setShowUnblockModal(true)} style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        color: '#1B31D2',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: 'inherit',
+                        textDecoration: 'underline',
+                    }}>
+                        Unblock
+                      </button>
+                      {' '}to send messages again.
+                    </>) : 'You can\u2019t send messages in this conversation.'}
+                </div>)}
+              {!isMessagingBlocked && pendingFiles.length > 0 && (<div style={{
                     display: 'flex',
                     flexWrap: 'wrap',
                     gap: 8,
@@ -1886,6 +2213,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                       </button>
                     </div>))}
                 </div>)}
+              {!isMessagingBlocked && (<>
               <textarea ref={inputRef} value={messageText} onChange={(e) => setMessageText(e.target.value)} onKeyDown={handleKeyDown} placeholder="Type a message… (Enter for new line, Ctrl+Enter or ⌘+Enter to send)" rows={2} style={{
                 width: '100%',
                 border: '1px solid #E5E7EB',
@@ -1967,6 +2295,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                   {sending ? 'Sending…' : 'Send'}
                 </button>
               </div>
+              </>)}
             </div>
           </div>)}
       </div>
@@ -1979,6 +2308,10 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         setThread((prev) => prev.filter((m) => m.id !== deleteTarget.id));
         setDeleteTarget(null);
       }} onCancel={() => setDeleteTarget(null)}/>)}
+
+      {showBlockModal && (<BlockUserModal partnerName={partnerName || 'this user'} busy={blockBusy} onConfirm={() => void handleBlockUser()} onCancel={() => !blockBusy && setShowBlockModal(false)}/>)}
+
+      {showUnblockModal && (<UnblockUserModal partnerName={partnerName || 'this user'} busy={blockBusy} onConfirm={() => void handleUnblockUser()} onCancel={() => !blockBusy && setShowUnblockModal(false)}/>)}
 
       {showConfirmJobOverlay && (<div style={{
             position: 'fixed',

@@ -37,3 +37,7 @@ export class EditMessageDto {
   @MinLength(1)
   body!: string;
 }
+export class BlockUserDto {
+  @IsString()
+  userId!: string;
+}
