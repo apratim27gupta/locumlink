@@ -10,6 +10,7 @@ const PUBLIC_PREFIXES = [
   '/register',
   '/auth',
   '/documents',
+  '/support',
   '/offline',
 ];
 

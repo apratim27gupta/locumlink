@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { LocumProfile } from '@/types';
 import { getLocumAccountNotice } from '@/lib/locumAccountNotice';
-import { contactSupportMailtoHref } from '@/lib/support';
+import { SUPPORT_PAGE_PATH } from '@/lib/support';
 
 const styles = {
     suspended: {
@@ -64,8 +64,8 @@ export default function LocumAccountNotice({
                 </Link>
             )}
             {notice.variant === 'suspended' && (
-                <a
-                    href={contactSupportMailtoHref()}
+                <Link
+                    href={SUPPORT_PAGE_PATH}
                     style={{
                         display: 'inline-block',
                         marginTop: 8,
@@ -75,7 +75,7 @@ export default function LocumAccountNotice({
                     }}
                 >
                     Contact Support
-                </a>
+                </Link>
             )}
         </div>
     );

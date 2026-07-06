@@ -5,7 +5,9 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
+import { UserReportReason } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   paginateMessages,
@@ -13,6 +15,8 @@ import {
 } from '../common/pagination/index.js';
 import { GcsService } from '../gcs/gcs.service.js';
 import { assertOwnsStoragePath } from '../common/utils/storage-path.util.js';
+import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
+import type { ReportUserDto } from './message.dto.js';
 const userSelect = {
   id: true,
   email: true,
@@ -42,7 +46,45 @@ export class MessageService {
     private readonly pushService: PushService,
     private readonly gcs: GcsService,
     private readonly notifService: NotificationsService,
+    private readonly adminNotifications: AdminNotificationsService,
   ) {}
+
+  private displayUserName(user: {
+    email: string;
+    role: string;
+    locumProfile?: { firstName: string | null; lastName: string | null } | null;
+    hostProfile?: {
+      contactFirstName: string | null;
+      contactLastName: string | null;
+      practiceName: string | null;
+    } | null;
+  }): string {
+    const locumName = [
+      user.locumProfile?.firstName,
+      user.locumProfile?.lastName,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    if (locumName) return locumName;
+
+    const hostContact = [
+      user.hostProfile?.contactFirstName,
+      user.hostProfile?.contactLastName,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    return user.hostProfile?.practiceName || hostContact || user.email;
+  }
+
+  private reportReasonLabel(reason: UserReportReason): string {
+    return reason
+      .toLowerCase()
+      .split('_')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
 
   private async getBlockStatus(
     userId: string,
@@ -155,6 +197,77 @@ export class MessageService {
         user: row.blocked,
       })),
     };
+  }
+
+  async reportUser(reporterId: string, dto: ReportUserDto) {
+    const reportedId = dto.userId;
+    if (reporterId === reportedId) {
+      throw new BadRequestException('You cannot report yourself.');
+    }
+
+    const [reporter, reported, existingOpen] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: reporterId },
+        select: userSelect,
+      }),
+      this.prisma.user.findUnique({
+        where: { id: reportedId },
+        select: userSelect,
+      }),
+      this.prisma.userReport.findFirst({
+        where: { reporterId, reportedId, status: 'OPEN' },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!reporter) {
+      throw new NotFoundException('Reporter not found');
+    }
+    if (!reported) {
+      throw new NotFoundException('User not found');
+    }
+    if (existingOpen) {
+      throw new ConflictException(
+        'You already have an open report for this user.',
+      );
+    }
+
+    const details = dto.details?.trim() || null;
+    const shouldBlock = dto.block === true;
+    const report = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.userReport.create({
+        data: {
+          reporterId,
+          reportedId,
+          reason: dto.reason,
+          details,
+          alsoBlockedReporter: shouldBlock,
+        },
+      });
+
+      if (shouldBlock) {
+        await tx.userBlock.upsert({
+          where: {
+            blockerId_blockedId: { blockerId: reporterId, blockedId: reportedId },
+          },
+          update: {},
+          create: { blockerId: reporterId, blockedId: reportedId },
+        });
+      }
+
+      return created;
+    });
+
+    await this.adminNotifications.notifyAccountFlagged({
+      doctorName: this.displayUserName(reported),
+      reporter: this.displayUserName(reporter),
+      reason: this.reportReasonLabel(dto.reason),
+      userId: reportedId,
+      reportId: report.id,
+      alsoBlocked: shouldBlock,
+    });
+
+    return { ok: true, reportId: report.id, blocked: shouldBlock };
   }
 
   private async signAttachments<

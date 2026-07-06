@@ -46,6 +46,10 @@ export const NOTIFICATION_EVENT_DEFAULTS: Record<
     href: '/host/dashboard?postJob=1',
     actionLabel: 'Repost Opportunity',
   },
+  H_010_ACCOUNT_WARNING: {
+    href: contactSupportMailtoHref(),
+    actionLabel: 'Contact Support',
+  },
   L_001_NEW_OPPORTUNITY: {
     href: '/locum/browse',
     actionLabel: 'Browse Opportunities',
@@ -94,6 +98,10 @@ export const NOTIFICATION_EVENT_DEFAULTS: Record<
     href: '/locum/browse',
     actionLabel: 'Browse Opportunities',
   },
+  L_013_ACCOUNT_WARNING: {
+    href: contactSupportMailtoHref(),
+    actionLabel: 'Contact Support',
+  },
 };
 
 /** Fallback in-app titles when payload.title is missing or an internal event code. */
@@ -107,6 +115,7 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   H_007_ACCOUNT_SUSPENDED: 'Important: Account Suspension Notice',
   H_008_POSTING_EXPIRING: 'Shift Coverage Reminder',
   H_009_SHIFT_CANCELLED: 'Last-Minute Cancellation Alert',
+  H_010_ACCOUNT_WARNING: 'Account warning',
   L_001_NEW_OPPORTUNITY: 'New Locum Opportunity Available',
   L_002_HOST_CONFIRMED: 'Shift Confirmed',
   L_003_APPLICATION_ACCEPTED: 'Application Accepted — Action Required',
@@ -119,6 +128,7 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   L_010_ACCOUNT_REJECTED: 'Action Required: Account Verification',
   L_011_ACCOUNT_SUSPENDED: 'Account suspended',
   L_012_SHIFT_CANCELLED: 'Shift Cancelled',
+  L_013_ACCOUNT_WARNING: 'Account warning',
 };
 
 function isInternalNotificationCode(text: string): boolean {

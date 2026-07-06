@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
 import { landingApi, locumApi } from '@/lib/api';
 import { beforeClientNavigation } from '@/lib/topLoader';
+import { SupportLegalLinks } from '@/components/SupportLegalLinks';
 
 const LANDING_AVATAR_FALLBACKS = [
     '/avatar-1.jpeg',
@@ -21,26 +22,7 @@ function footerAvatarSources(hostUrls: string[]): string[] {
 }
 
 function HomeLandingLegalLinks() {
-    return (
-        <>
-            <a
-                href="/documents/terms-of-use.pdf"
-                className="home-landing-doc-link"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
-                Terms of Use
-            </a>
-            <a
-                href="/documents/privacy-policy.pdf"
-                className="home-landing-doc-link"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
-                Privacy Policy
-            </a>
-        </>
-    );
+    return <SupportLegalLinks variant="landing" />;
 }
 export type HomeLandingViewProps = {
     interactive?: boolean;

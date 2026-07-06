@@ -6,7 +6,7 @@ import { onPwaRefresh } from '@/lib/pwaEvents';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
-import { fetchAllPaginated, hostApi, locumApi, messageApi, uploadFile, type ApplicationRecord, type BlockStatus, type Conversation, type ConversationPartner, type MyApplication, type ThreadMessage, type ThreadPartner, } from '@/lib/api';
+import { fetchAllPaginated, hostApi, locumApi, messageApi, uploadFile, type ApplicationRecord, type BlockStatus, type Conversation, type ConversationPartner, type MyApplication, type ReportReason, type ThreadMessage, type ThreadPartner, } from '@/lib/api';
 import { getEmail, getToken } from '@/lib/auth';
 import { subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { dispatchMessagesUpdated } from '@/lib/messagesUpdatedEvent';
@@ -78,6 +78,13 @@ const EMPTY_BLOCK_STATUS: BlockStatus = {
     blockedByPartner: false,
     isMessagingBlocked: false,
 };
+const REPORT_REASONS: Array<{ value: ReportReason; label: string }> = [
+    { value: 'HARASSMENT', label: 'Harassment or abusive behavior' },
+    { value: 'SPAM', label: 'Spam or unwanted messages' },
+    { value: 'INAPPROPRIATE_CONTENT', label: 'Inappropriate content' },
+    { value: 'FRAUD', label: 'Fraud or misrepresentation' },
+    { value: 'OTHER', label: 'Other' },
+];
 function readStoredMessagesListWidth(): number {
     if (typeof window === 'undefined')
         return MESSAGES_LIST_DEFAULT;
@@ -407,6 +414,126 @@ function BlockUserModal({ partnerName, onConfirm, onCancel, busy, }: {
       </div>
     </>);
 }
+function ReportUserModal({ partnerName, mode, onConfirm, onCancel, busy, }: {
+    partnerName: string;
+    mode: 'report' | 'block-and-report';
+    onConfirm: (reason: ReportReason, details: string) => void;
+    onCancel: () => void;
+    busy: boolean;
+}) {
+    const [reason, setReason] = useState<ReportReason>('HARASSMENT');
+    const [details, setDetails] = useState('');
+    const isBlockAndReport = mode === 'block-and-report';
+    return (<>
+      <div onClick={onCancel} style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            zIndex: 500,
+        }}/>
+      <div className="messages-delete-modal" style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%,-50%)',
+            background: '#fff',
+            borderRadius: 12,
+            padding: '24px 28px',
+            width: 360,
+            maxWidth: 'calc(100vw - 32px)',
+            zIndex: 501,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+            fontFamily: 'Inter, sans-serif',
+        }}>
+        <div style={{
+            fontSize: 16,
+            fontWeight: 700,
+            color: '#0f1523',
+            marginBottom: 10,
+        }}>
+          {isBlockAndReport ? `Block and report ${partnerName}?` : `Report ${partnerName}?`}
+        </div>
+        <p style={{
+            fontSize: 14,
+            color: '#6B7280',
+            lineHeight: 1.5,
+            margin: '0 0 16px',
+        }}>
+          {isBlockAndReport
+                ? `We'll review this report, and you won't receive messages from ${partnerName}.`
+                : 'Our admin team will review this report. The other user will not see who reported them.'}
+        </p>
+        <label style={{
+            display: 'block',
+            fontSize: 12,
+            fontWeight: 700,
+            color: '#374151',
+            marginBottom: 6,
+        }}>
+          Reason
+        </label>
+        <select value={reason} disabled={busy} onChange={(e) => setReason(e.target.value as ReportReason)} style={{
+            width: '100%',
+            border: '1px solid #D1D5DB',
+            borderRadius: 8,
+            padding: '9px 10px',
+            fontSize: 14,
+            fontFamily: 'inherit',
+            marginBottom: 12,
+            background: '#fff',
+        }}>
+          {REPORT_REASONS.map((item) => (<option key={item.value} value={item.value}>{item.label}</option>))}
+        </select>
+        <label style={{
+            display: 'block',
+            fontSize: 12,
+            fontWeight: 700,
+            color: '#374151',
+            marginBottom: 6,
+        }}>
+          Details (optional)
+        </label>
+        <textarea value={details} disabled={busy} maxLength={2000} onChange={(e) => setDetails(e.target.value)} rows={4} placeholder="Add context for the admin team" style={{
+            width: '100%',
+            border: '1px solid #D1D5DB',
+            borderRadius: 8,
+            padding: '9px 10px',
+            fontSize: 14,
+            fontFamily: 'inherit',
+            marginBottom: 16,
+            resize: 'vertical',
+            boxSizing: 'border-box',
+        }}/>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button type="button" disabled={busy} onClick={() => onConfirm(reason, details)} style={{
+            padding: '10px 16px',
+            background: isBlockAndReport ? '#DC2626' : '#B45309',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: busy ? 'default' : 'pointer',
+            fontFamily: 'inherit',
+            opacity: busy ? 0.7 : 1,
+        }}>
+            {busy ? (isBlockAndReport ? 'Blocking and reporting…' : 'Reporting…') : (isBlockAndReport ? 'Block and report' : 'Submit report')}
+          </button>
+          <button type="button" disabled={busy} onClick={onCancel} style={{
+            padding: '8px',
+            background: 'none',
+            border: 'none',
+            color: '#9CA3AF',
+            fontSize: 13,
+            cursor: busy ? 'default' : 'pointer',
+            fontFamily: 'inherit',
+        }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>);
+}
 function UnblockUserModal({ partnerName, onConfirm, onCancel, busy, }: {
     partnerName: string;
     onConfirm: () => void;
@@ -506,6 +633,8 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const [showBlockModal, setShowBlockModal] = useState(false);
     const [showUnblockModal, setShowUnblockModal] = useState(false);
     const [blockBusy, setBlockBusy] = useState(false);
+    const [reportMode, setReportMode] = useState<'report' | 'block-and-report' | null>(null);
+    const [reportBusy, setReportBusy] = useState(false);
     const [myApplications, setMyApplications] = useState<MyApplication[]>([]);
     const [myListPreviewName, setMyListPreviewName] = useState<string | null>(null);
     const [myCpsnsVerified, setMyCpsnsVerified] = useState(false);
@@ -984,6 +1113,36 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         }
         finally {
             setBlockBusy(false);
+        }
+    }
+    async function handleReportUser(reason: ReportReason, details: string) {
+        if (!selectedPartnerId || reportBusy || !reportMode)
+            return;
+        setReportBusy(true);
+        try {
+            const shouldBlock = reportMode === 'block-and-report';
+            await messageApi.reportUser(selectedPartnerId, reason, details, { block: shouldBlock });
+            if (shouldBlock) {
+                const nextStatus: BlockStatus = {
+                    blockedByMe: true,
+                    blockedByPartner: false,
+                    isMessagingBlocked: true,
+                };
+                setBlockStatus(nextStatus);
+                setConversations((prev) => prev.map((c) => c.partnerId === selectedPartnerId ? { ...c, blockStatus: nextStatus } : c));
+                void loadConversations({ skipTopLoader: true });
+            }
+            setReportMode(null);
+            setThreadMenuOpen(false);
+            window.alert(shouldBlock
+                ? 'User blocked and report submitted. Our team will review it.'
+                : 'Report submitted. Our team will review it.');
+        }
+        catch (e: unknown) {
+            window.alert(e instanceof Error ? e.message : 'Could not submit this report.');
+        }
+        finally {
+            setReportBusy(false);
         }
     }
     async function handleUnblockUser() {
@@ -1791,7 +1950,44 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                             fontFamily: 'inherit',
                         }}>
                               Unblock user
-                            </button>) : (<button type="button" onClick={() => {
+                            </button>) : (<>
+                            <button type="button" onClick={() => {
+                                setThreadMenuOpen(false);
+                                setReportMode('report');
+                            }} style={{
+                            display: 'block',
+                            width: '100%',
+                            padding: '10px 14px',
+                            background: 'none',
+                            border: 'none',
+                            textAlign: 'left',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: '#B45309',
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                        }}>
+                              Report user
+                            </button>
+                            <button type="button" onClick={() => {
+                                setThreadMenuOpen(false);
+                                setReportMode('block-and-report');
+                            }} style={{
+                            display: 'block',
+                            width: '100%',
+                            padding: '10px 14px',
+                            background: 'none',
+                            border: 'none',
+                            textAlign: 'left',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: '#DC2626',
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                        }}>
+                              Block and report
+                            </button>
+                            <button type="button" onClick={() => {
                                 setThreadMenuOpen(false);
                                 setShowBlockModal(true);
                             }} style={{
@@ -1808,7 +2004,8 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                             fontFamily: 'inherit',
                         }}>
                               Block user
-                            </button>)}
+                            </button>
+                          </>)}
                         </div>)}
                       </div>
                     </div>) : null}
@@ -2312,6 +2509,8 @@ function MessagesPageInner({ role }: MessagesPageProps) {
       {showBlockModal && (<BlockUserModal partnerName={partnerName || 'this user'} busy={blockBusy} onConfirm={() => void handleBlockUser()} onCancel={() => !blockBusy && setShowBlockModal(false)}/>)}
 
       {showUnblockModal && (<UnblockUserModal partnerName={partnerName || 'this user'} busy={blockBusy} onConfirm={() => void handleUnblockUser()} onCancel={() => !blockBusy && setShowUnblockModal(false)}/>)}
+
+      {reportMode && (<ReportUserModal partnerName={partnerName || 'this user'} mode={reportMode} busy={reportBusy} onConfirm={(reason, details) => void handleReportUser(reason, details)} onCancel={() => !reportBusy && setReportMode(null)}/>)}
 
       {showConfirmJobOverlay && (<div style={{
             position: 'fixed',

@@ -955,6 +955,7 @@ export type BlockedUser = {
     blockedAt: string;
     user: ConversationPartner;
 };
+export type ReportReason = 'HARASSMENT' | 'SPAM' | 'INAPPROPRIATE_CONTENT' | 'FRAUD' | 'OTHER';
 export type Conversation = {
     partnerId: string;
     partner: ConversationPartner;
@@ -1134,6 +1135,29 @@ export const messageApi = {
             throw nestHttpError(text, res.status, 'Blocking user');
         }
         return res.json() as Promise<{ ok: true }>;
+    },
+    reportUser: async (
+        userId: string,
+        reason: ReportReason,
+        details?: string,
+        opts?: { block?: boolean },
+    ): Promise<{ ok: true; reportId: string; blocked: boolean }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/messages/reports`, {
+            method: 'POST',
+            headers: nestHeaders(true),
+            skipTopLoader: true,
+            body: JSON.stringify({
+                userId,
+                reason,
+                ...(details?.trim() ? { details: details.trim() } : {}),
+                ...(opts?.block ? { block: true } : {}),
+            }),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, opts?.block ? 'Blocking and reporting user' : 'Reporting user');
+        }
+        return res.json() as Promise<{ ok: true; reportId: string; blocked: boolean }>;
     },
     unblockUser: async (userId: string): Promise<{ ok: true }> => {
         const res = await trackedFetch(`${NEST_BASE}/api/messages/blocks/${encodeURIComponent(userId)}`, {

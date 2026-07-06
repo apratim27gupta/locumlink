@@ -19,6 +19,7 @@ import { beforeClientNavigation } from '@/lib/topLoader';
 import { isExternalNotificationHref, resolveNotificationAction, resolveNotificationTitle } from '@/lib/notificationActions';
 import { CountBadge } from '@/components/CountBadge';
 import { isNativeShell } from '@/lib/nativeShell';
+import { SupportLegalLinks } from '@/components/SupportLegalLinks';
 interface NavItem {
     label: string;
     href: string;
@@ -1136,6 +1137,11 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         })}
             </div>
           </nav>
+
+          <SupportLegalLinks
+            variant="sidebar"
+            onNavigate={() => setMobileNavOpen(false)}
+          />
         </aside>
 
         <div

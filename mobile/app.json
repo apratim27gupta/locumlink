@@ -16,7 +16,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "ca.locumlink.app",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -36,7 +38,10 @@
               "pathPrefix": "/auth/callback"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -44,14 +49,15 @@
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
-    "extra": {
-      "eas": {
-        "projectId": "d9a67417-a865-46e5-9429-25b67af8224f"
-      }
-    },
     "plugins": [
       "expo-web-browser",
       "expo-notifications"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "cc191bc9-a1a5-4609-8326-cc2db4fb0ef6"
+      }
+    },
+    "owner": "satyam_gautam24"
   }
 }

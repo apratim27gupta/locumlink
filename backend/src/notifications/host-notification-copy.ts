@@ -132,6 +132,19 @@ export const H007_HOST_ACCOUNT_SUSPENDED = {
   actionLabel: 'Contact Support',
 };
 
+/** H-010 — Host account warning */
+export function buildH010AccountWarning(params: { warningNote: string }) {
+  const body = `A Locum Link admin has sent you an account warning: ${params.warningNote}`;
+  return {
+    inAppTitle: 'Account warning',
+    inAppBody: body,
+    emailSubject: 'Important: Locum Link account warning',
+    emailBody: body,
+    priority: 'HIGH' as HostCopyPriority,
+    actionLabel: 'Contact Support',
+  };
+}
+
 /** H-008 — Posting expiring in 48 hours */
 export function buildH008PostingExpiring(params: {
   dateStr: string;

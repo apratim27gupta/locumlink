@@ -15,6 +15,7 @@ import {
   buildL006ShiftReminderEvening,
   buildL007ShiftReminder2h,
   buildL008NewMessage,
+  buildL013AccountWarning,
   buildL012ShiftCancelled,
   contactSupportMailtoHref,
   formatLocumDoctorName,
@@ -37,6 +38,7 @@ import {
   buildH002LocumAccepted,
   buildH003LocumDeclined,
   buildH004NewMessage,
+  buildH010AccountWarning,
   buildH008PostingExpiring,
   buildH009ShiftCancelled,
   formatHostDoctorName,
@@ -58,6 +60,7 @@ export type NotifEventType =
   | 'H_007_ACCOUNT_SUSPENDED'
   | 'H_008_POSTING_EXPIRING'
   | 'H_009_SHIFT_CANCELLED'
+  | 'H_010_ACCOUNT_WARNING'
   // Locum
   | 'L_001_NEW_OPPORTUNITY'
   | 'L_002_HOST_CONFIRMED'
@@ -71,6 +74,7 @@ export type NotifEventType =
   | 'L_010_ACCOUNT_REJECTED'
   | 'L_011_ACCOUNT_SUSPENDED'
   | 'L_012_SHIFT_CANCELLED'
+  | 'L_013_ACCOUNT_WARNING'
   // Admin
   | 'A_001_NEW_HOST_REGISTRATION'
   | 'A_002_NEW_LOCUM_REGISTRATION'
@@ -579,6 +583,34 @@ export class NotificationsService {
     });
   }
 
+  /** L-013: locum account warning by admin — in-app, push, and email. */
+  async notifyLocumAccountWarning(params: {
+    recipientId: string;
+    recipientEmail: string;
+    warningNote: string;
+    referenceId?: string;
+  }): Promise<void> {
+    const copy = buildL013AccountWarning({
+      warningNote: params.warningNote,
+    });
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'L_013_ACCOUNT_WARNING',
+      title: copy.inAppTitle,
+      body: copy.inAppBody,
+      href: contactSupportMailtoHref(),
+      priority: copy.priority,
+      actionLabel: copy.actionLabel,
+      referenceId: params.referenceId,
+      referenceType: 'User',
+      pushTitle: copy.inAppTitle,
+      pushBody: copy.inAppBody,
+      emailTo: params.recipientEmail,
+      emailSubject: copy.emailSubject,
+      emailBody: copy.emailBody,
+    });
+  }
+
   /** H-001: locum applied to host posting */
   async notifyHostLocumApplied(params: {
     recipientId: string;
@@ -827,6 +859,34 @@ export class NotificationsService {
       emailTo: params.recipientEmail,
       emailSubject: copy.emailSubject,
       emailBody: copy.emailBody(reason),
+    });
+  }
+
+  /** H-010: host account warning by admin — in-app, push, and email. */
+  async notifyHostAccountWarning(params: {
+    recipientId: string;
+    recipientEmail: string;
+    warningNote: string;
+    referenceId?: string;
+  }): Promise<void> {
+    const copy = buildH010AccountWarning({
+      warningNote: params.warningNote,
+    });
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'H_010_ACCOUNT_WARNING',
+      title: copy.inAppTitle,
+      body: copy.inAppBody,
+      href: contactSupportMailtoHref(),
+      priority: copy.priority,
+      actionLabel: copy.actionLabel,
+      referenceId: params.referenceId,
+      referenceType: 'User',
+      pushTitle: copy.inAppTitle,
+      pushBody: copy.inAppBody,
+      emailTo: params.recipientEmail,
+      emailSubject: copy.emailSubject,
+      emailBody: copy.emailBody,
     });
   }
 
