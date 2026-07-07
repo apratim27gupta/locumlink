@@ -5,7 +5,7 @@ import { getSupabase } from '@/lib/supabaseClient';
 import { toUserFacingError } from '@/lib/userFacingError';
 import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, popLastPath, clearLastPath, type Role, } from '@/lib/auth';
 import { checkProfileExistsOnServer, ensureProfileMarkedCompleteFromServer, } from '@/lib/profileCompleteSync';
-import { getOAuthCallbackRedirect } from '@/lib/nativeShell';
+import { getOAuthCallbackRedirect, isNativeShell } from '@/lib/nativeShell';
 interface AuthCtx {
     userId: string | null;
     role: Role | null;
@@ -181,10 +181,12 @@ export function AuthProvider({ children }: {
         setRoleState(chosenRole);
         const supabase = getSupabase();
         const redirectTo = getOAuthCallbackRedirect(chosenRole);
-        const { error } = await supabase.auth.signInWithOAuth({
+        const inNativeShell = isNativeShell();
+        const { data, error } = await supabase.auth.signInWithOAuth({
             provider: provider === 'azure' ? 'azure' : provider,
             options: {
                 redirectTo,
+                skipBrowserRedirect: inNativeShell,
                 ...(provider === 'azure' && {
                     scopes: 'openid profile email',
                     queryParams: {
@@ -193,8 +195,11 @@ export function AuthProvider({ children }: {
                 }),
             },
         });
- 
+
         if (error) throw new Error(error.message);
+        if (inNativeShell && data?.url) {
+            window.location.assign(data.url);
+        }
     }
     async function completeOAuthSignIn(): Promise<{ role: Role; redirectTo: string }> {
         const supabase = getSupabase();

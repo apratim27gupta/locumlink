@@ -14,8 +14,8 @@ import * as WebBrowser from 'expo-web-browser';
 import { buildNativeInjectScript, useExpoPush } from './useExpoPush';
 import {
   APP_ORIGIN,
+  getOAuthBrowserReturnUrl,
   isForeignOAuthCallbackUrl,
-  NATIVE_OAUTH_RETURN_URL,
   toWebOAuthCallbackUrl,
 } from './oauthEnv';
 
@@ -95,19 +95,21 @@ export default function App() {
   const handleShouldStartLoadWithRequest = useCallback((request: { url: string }) => {
     if (Platform.OS === 'web') return true;
 
-    if (isForeignOAuthCallbackUrl(request.url)) {
+    const oauthCallback = toWebOAuthCallbackUrl(request.url);
+    if (oauthCallback) {
+      if (oauthCallback !== request.url) {
+        navigateWebViewTo(oauthCallback);
+      }
       return false;
     }
 
-    const oauthCallback = toWebOAuthCallbackUrl(request.url);
-    if (oauthCallback && oauthCallback !== request.url) {
-      navigateWebViewTo(oauthCallback);
+    if (isForeignOAuthCallbackUrl(request.url)) {
       return false;
     }
 
     const isOAuthUrl = OAUTH_URL_PATTERNS.some((p) => request.url.includes(p));
     if (isOAuthUrl) {
-      void WebBrowser.openAuthSessionAsync(request.url, NATIVE_OAUTH_RETURN_URL)
+      void WebBrowser.openAuthSessionAsync(request.url, getOAuthBrowserReturnUrl())
         .then((result) => {
           if (result.type === 'success' && result.url) {
             handleOAuthReturnUrl(result.url);

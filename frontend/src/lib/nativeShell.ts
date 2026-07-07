@@ -47,6 +47,10 @@ export function getOAuthCallbackRedirect(role: string): string {
   return `${getAppOrigin()}/auth/callback?${roleParam}`;
 }
 
+function isAllowedMisdirectedCallback(host: string, appHost: string): boolean {
+  return appHost === 'staging.locumlink.ca' && host === 'locumlink.ca';
+}
+
 /** Map OAuth return URL to the HTTPS callback for this environment's WebView. */
 export function webCallbackUrlFromOAuthResult(
   resultUrl: string,
@@ -61,7 +65,9 @@ export function webCallbackUrlFromOAuthResult(
 
     if (isNative) {
       // custom scheme — always for this install
-    } else if (parsed.pathname !== '/auth/callback' || parsed.hostname !== appHost) {
+    } else if (parsed.pathname !== '/auth/callback') {
+      return null;
+    } else if (parsed.hostname !== appHost && !isAllowedMisdirectedCallback(parsed.hostname, appHost)) {
       return null;
     }
 
