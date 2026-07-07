@@ -12,13 +12,14 @@ import { WebView } from 'react-native-webview';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { buildNativeInjectScript, useExpoPush } from './useExpoPush';
+import {
+  APP_ORIGIN,
+  isForeignOAuthCallbackUrl,
+  NATIVE_OAUTH_RETURN_URL,
+  toWebOAuthCallbackUrl,
+} from './oauthEnv';
 
 const PRIMARY_COLOR = '#38C6C6';
-const APP_ORIGIN = process.env.EXPO_PUBLIC_APP_URL ?? 'https://staging.locumlink.ca';
-
-/** Must match `scheme` in app.json and frontend `nativeShell.ts` */
-const NATIVE_OAUTH_SCHEME = 'calocumlinkapp';
-const NATIVE_OAUTH_RETURN_URL = `${NATIVE_OAUTH_SCHEME}://auth/callback`;
 
 const OAUTH_URL_PATTERNS = [
   'supabase.co/auth/v1/authorize',
@@ -27,42 +28,6 @@ const OAUTH_URL_PATTERNS = [
   'appleid.apple.com',
 ];
 // Email OTP never hits these — stays in WebView unaffected
-
-function toWebOAuthCallbackUrl(resultUrl: string): string | null {
-  try {
-    const parsed = new URL(resultUrl);
-    const origin = APP_ORIGIN.replace(/\/$/, '');
-    const isNativeScheme = parsed.protocol === `${NATIVE_OAUTH_SCHEME}:`;
-    const isAuthCallback =
-      isNativeScheme || parsed.pathname === '/auth/callback';
-
-    if (!isAuthCallback) return null;
-
-    const code = parsed.searchParams.get('code');
-    const role = parsed.searchParams.get('role');
-    const error =
-      parsed.searchParams.get('error_description')
-      ?? parsed.searchParams.get('error');
-    if (!code && !error) return null;
-
-    if (
-      !isNativeScheme
-      && parsed.origin === new URL(origin).origin
-      && parsed.pathname === '/auth/callback'
-    ) {
-      return parsed.toString();
-    }
-
-    const target = new URL('/auth/callback', origin);
-    if (code) target.searchParams.set('code', code);
-    if (role) target.searchParams.set('role', role);
-    if (error) target.searchParams.set('error', error);
-    return target.toString();
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
 
 function resolveNotificationUrl(url: string | undefined): string | null {
   if (!url) return null;
@@ -129,6 +94,10 @@ export default function App() {
 
   const handleShouldStartLoadWithRequest = useCallback((request: { url: string }) => {
     if (Platform.OS === 'web') return true;
+
+    if (isForeignOAuthCallbackUrl(request.url)) {
+      return false;
+    }
 
     const oauthCallback = toWebOAuthCallbackUrl(request.url);
     if (oauthCallback && oauthCallback !== request.url) {

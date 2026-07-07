@@ -6,17 +6,26 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_APP_URL": "https://staging.locumlink.ca"
+      },
       "ios": {
         "simulator": false
       }
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_APP_URL": "https://staging.locumlink.ca"
+      },
       "ios": {
         "simulator": false
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_APP_URL": "https://locumlink.ca"
+      },
       "ios": {
         "simulator": false
       }

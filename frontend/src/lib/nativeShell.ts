@@ -6,6 +6,7 @@ export const NATIVE_OAUTH_SCHEME = 'calocumlinkapp';
 export type NativeShellInfo = {
   platform: string;
   pushToken: string | null;
+  appOrigin?: string;
 };
 
 declare global {
@@ -46,19 +47,23 @@ export function getOAuthCallbackRedirect(role: string): string {
   return `${getAppOrigin()}/auth/callback?${roleParam}`;
 }
 
-/** Map OAuth return URL to the HTTPS callback the WebView should load (with PKCE cookies). */
+/** Map OAuth return URL to the HTTPS callback for this environment's WebView. */
 export function webCallbackUrlFromOAuthResult(
   resultUrl: string,
   appOrigin: string,
 ): string | null {
+  const origin = (appOrigin || getAppOrigin()).replace(/\/$/, '');
+  const appHost = new URL(origin).hostname;
+  const isNative = resultUrl.startsWith(`${NATIVE_OAUTH_SCHEME}://auth/callback`);
+
   try {
     const parsed = new URL(resultUrl);
-    const origin = appOrigin.replace(/\/$/, '');
-    const isNativeScheme = parsed.protocol === `${NATIVE_OAUTH_SCHEME}:`;
-    const isAuthCallback =
-      isNativeScheme || parsed.pathname === '/auth/callback';
 
-    if (!isAuthCallback) return null;
+    if (isNative) {
+      // custom scheme — always for this install
+    } else if (parsed.pathname !== '/auth/callback' || parsed.hostname !== appHost) {
+      return null;
+    }
 
     const code = parsed.searchParams.get('code');
     const role = parsed.searchParams.get('role');
@@ -67,11 +72,7 @@ export function webCallbackUrlFromOAuthResult(
       ?? parsed.searchParams.get('error');
     if (!code && !error) return null;
 
-    if (
-      !isNativeScheme
-      && parsed.origin === new URL(origin).origin
-      && parsed.pathname === '/auth/callback'
-    ) {
+    if (!isNative && parsed.origin === new URL(origin).origin) {
       return parsed.toString();
     }
 

@@ -26,29 +26,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      },
-      "intentFilters": [
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "https",
-              "host": "locumlink.ca",
-              "pathPrefix": "/auth/callback"
-            },
-            {
-              "scheme": "https",
-              "host": "staging.locumlink.ca",
-              "pathPrefix": "/auth/callback"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        }
-      ]
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png",

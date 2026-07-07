@@ -64,6 +64,8 @@ export function useExpoPush(onNotificationTap: (url: string | undefined) => void
   return { pushToken };
 }
 
+import { APP_ORIGIN } from './oauthEnv';
+
 export function buildNativeInjectScript(
   platform: string,
   pushToken: string | null,
@@ -72,6 +74,7 @@ export function buildNativeInjectScript(
     window.__LOCUMLINK_NATIVE__ = {
       platform: ${JSON.stringify(platform)},
       pushToken: ${JSON.stringify(pushToken)},
+      appOrigin: ${JSON.stringify(APP_ORIGIN)},
     };
     window.dispatchEvent(new CustomEvent('ll-native-shell-update'));
     true;
