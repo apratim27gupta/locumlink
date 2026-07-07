@@ -18,7 +18,10 @@ interface AuthCtx {
     }>;
     completeProfile: () => void;
     logout: () => void;
-    signInWithOAuth: (provider: 'google' | 'azure', role: Role) => Promise<void>;
+    signInWithOAuth: (
+        provider: 'apple' | 'google' | 'azure',
+        role: Role,
+    ) => Promise<void>;
     completeOAuthSignIn: () => Promise<{ role: Role; redirectTo: string }>;
 }
 const Ctx = createContext<AuthCtx | null>(null);
@@ -170,23 +173,26 @@ export function AuthProvider({ children }: {
         }
         return { role, redirectTo };
     }
-    async function signInWithOAuth(provider: 'google' | 'azure', chosenRole: Role): Promise<void> {
+    async function signInWithOAuth(
+        provider: 'apple' | 'google' | 'azure',
+        chosenRole: Role,
+    ): Promise<void> {
         saveRole(chosenRole);
         setRoleState(chosenRole);
         const supabase = getSupabase();
         const redirectTo = `${getAppOrigin()}/auth/callback?role=${chosenRole}`;
-       const { error } = await supabase.auth.signInWithOAuth({
-    provider: provider === 'azure' ? 'azure' : 'google',
-    options: {
-        redirectTo,
-        ...(provider === 'azure' && {
-            scopes: 'openid profile email',
-            queryParams: {
-                prompt: 'select_account',
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: provider === 'azure' ? 'azure' : provider,
+            options: {
+                redirectTo,
+                ...(provider === 'azure' && {
+                    scopes: 'openid profile email',
+                    queryParams: {
+                        prompt: 'select_account',
+                    },
+                }),
             },
-        }),
-    },
-});
+        });
  
         if (error) throw new Error(error.message);
     }

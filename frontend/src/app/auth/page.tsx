@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthSplitLayout from '@/components/AuthSplitLayout';
+import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
 import MicrosoftIcon from '@/components/icons/MicrosoftIcon';
 import { useAuth } from '@/providers/AuthProvider';
@@ -51,7 +52,9 @@ function AuthPageInner() {
     const [lockWarning, setLockWarning] = useState<string | null>(null);
     const [email, setEmail] = useState('');
     const [error, setError] = useState(() => sanitizeErrorMessage(params.get('error')));
-    const [busyAction, setBusyAction] = useState<null | 'email' | 'google' | 'azure'>(null);
+    const [busyAction, setBusyAction] = useState<
+        null | 'email' | 'apple' | 'google' | 'azure'
+    >(null);
 
     useEffect(() => {
         if (params.get('mode') === 'signin') setMode('signin');
@@ -85,7 +88,7 @@ function AuthPageInner() {
         }
     }
 
-    async function handleOAuth(provider: 'google' | 'azure') {
+    async function handleOAuth(provider: 'apple' | 'google' | 'azure') {
         setError('');
         setBusyAction(provider);
         try {
@@ -165,6 +168,11 @@ function AuthPageInner() {
 
                 <div className="auth-oauth-row">
                     {([
+                        {
+                            title: 'Apple',
+                            provider: 'apple' as const,
+                            icon: <AppleIcon size={24} />,
+                        },
                         {
                             title: 'Google',
                             provider: 'google' as const,
