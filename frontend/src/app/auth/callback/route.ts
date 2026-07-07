@@ -52,7 +52,26 @@ function redirectToNativeShell(requestUrl: URL): NextResponse | null {
   if (role) nativeReturn.searchParams.set('role', role);
   if (error) nativeReturn.searchParams.set('error', error);
 
-  return NextResponse.redirect(nativeReturn);
+  // JS navigation handles custom schemes more reliably than HTTP 307 from HTTPS.
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Signing in</title>
+</head>
+<body style="font-family:system-ui,sans-serif;text-align:center;padding:2rem;color:#374151">
+  <p>Returning to Locum Link…</p>
+  <script>window.location.replace(${JSON.stringify(nativeReturn.toString())});</script>
+</body>
+</html>`;
+  return new NextResponse(html, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
+  });
 }
 
 /** Fallback page if the native return URL is unavailable. */

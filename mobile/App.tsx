@@ -26,12 +26,11 @@ const PRIMARY_COLOR = '#38C6C6';
 const IS_EXPO_GO = Constants.appOwnership === 'expo';
 
 /**
- * Expo Go: use staging HTTPS callback. Server defers PKCE exchange when the
- * Custom Tab arrives without verifier cookies, so openAuthSessionAsync can
- * return the URL to the WebView where PKCE lives.
+ * Expo Go: redirect OAuth straight back to exp:// so the Custom Tab never
+ * loads staging (PKCE verifier stays in the WebView).
  */
 function getExpoGoOAuthReturnUrl(): string {
-  return `${APP_ORIGIN}/auth/callback`;
+  return Linking.createURL('/auth/callback');
 }
 
 function getBrowserReturnUrl(): string {
@@ -45,13 +44,10 @@ function rewriteOAuthUrlForExpoGo(url: string): string {
     const redirectTo = parsed.searchParams.get('redirect_to');
     if (!redirectTo) return url;
     const role = new URL(redirectTo).searchParams.get('role') ?? 'locum';
-    const nativeReturn = Linking.createURL('/auth/callback', {
+    const expoReturn = Linking.createURL('/auth/callback', {
       queryParams: { role },
     });
-    const httpsReturn = new URL(getExpoGoOAuthReturnUrl());
-    httpsReturn.searchParams.set('role', role);
-    httpsReturn.searchParams.set('native_return', nativeReturn);
-    parsed.searchParams.set('redirect_to', httpsReturn.toString());
+    parsed.searchParams.set('redirect_to', expoReturn);
     return parsed.toString();
   } catch {
     return url;
@@ -103,6 +99,10 @@ export default function App() {
         oauthInFlightRef.current = false;
         if (result.type === 'success' && result.url) {
           handleOAuthReturnUrl(result.url);
+          return;
+        }
+        if (result.type === 'dismiss' || result.type === 'cancel') {
+          void Linking.getInitialURL().then(handleOAuthReturnUrl);
         }
       })
       .catch(() => {
