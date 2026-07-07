@@ -45,8 +45,12 @@ function rewriteOAuthUrlForExpoGo(url: string): string {
     const redirectTo = parsed.searchParams.get('redirect_to');
     if (!redirectTo) return url;
     const role = new URL(redirectTo).searchParams.get('role') ?? 'locum';
+    const nativeReturn = Linking.createURL('/auth/callback', {
+      queryParams: { role },
+    });
     const httpsReturn = new URL(getExpoGoOAuthReturnUrl());
     httpsReturn.searchParams.set('role', role);
+    httpsReturn.searchParams.set('native_return', nativeReturn);
     parsed.searchParams.set('redirect_to', httpsReturn.toString());
     return parsed.toString();
   } catch {

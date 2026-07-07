@@ -19,7 +19,43 @@ function isPkceVerifierError(message: string): boolean {
   return /PKCE|verifier/i.test(message);
 }
 
-/** Keep the callback URL intact so openAuthSessionAsync can return to the native shell. */
+function getNativeReturnUrl(requestUrl: URL): URL | null {
+  const value = requestUrl.searchParams.get('native_return');
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    const isExpoGo = url.protocol === 'exp:' && url.pathname.includes('/auth/callback');
+    const isStandaloneApp =
+      url.protocol === 'calocumlinkapp:' &&
+      url.hostname === 'auth' &&
+      url.pathname === '/callback';
+
+    if (!isExpoGo && !isStandaloneApp) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+function redirectToNativeShell(requestUrl: URL): NextResponse | null {
+  const nativeReturn = getNativeReturnUrl(requestUrl);
+  if (!nativeReturn) return null;
+
+  const code = requestUrl.searchParams.get('code');
+  const role = requestUrl.searchParams.get('role');
+  const error =
+    requestUrl.searchParams.get('error_description') ??
+    requestUrl.searchParams.get('error');
+
+  if (code) nativeReturn.searchParams.set('code', code);
+  if (role) nativeReturn.searchParams.set('role', role);
+  if (error) nativeReturn.searchParams.set('error', error);
+
+  return NextResponse.redirect(nativeReturn);
+}
+
+/** Fallback page if the native return URL is unavailable. */
 function deferToNativeShell(): NextResponse {
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -48,6 +84,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const origin = getAppOrigin();
 
   if (error) {
+    const nativeRedirect = redirectToNativeShell(requestUrl);
+    if (nativeRedirect) return nativeRedirect;
+
     const signInUrl = new URL('/auth', origin);
     signInUrl.searchParams.set('mode', 'signin');
     signInUrl.searchParams.set('error', error);
@@ -63,6 +102,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         completeUrl.searchParams.set('code', code);
         return NextResponse.redirect(completeUrl);
       }
+      const nativeRedirect = redirectToNativeShell(requestUrl);
+      if (nativeRedirect) return nativeRedirect;
       return deferToNativeShell();
     }
 
@@ -79,6 +120,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           completeUrl.searchParams.set('code', code);
           return NextResponse.redirect(completeUrl);
         }
+        const nativeRedirect = redirectToNativeShell(requestUrl);
+        if (nativeRedirect) return nativeRedirect;
         return deferToNativeShell();
       }
       const signInUrl = new URL('/auth', origin);
