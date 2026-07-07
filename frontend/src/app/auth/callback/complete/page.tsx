@@ -5,6 +5,7 @@ import AuthSplitLayout from '@/components/AuthSplitLayout';
 import { useAuth } from '@/providers/AuthProvider';
 import { toUserFacingError } from '@/lib/userFacingError';
 import { saveRole } from '@/lib/auth';
+import { getSupabase } from '@/lib/supabaseClient';
 
 function AuthCallbackCompleteInner() {
     const router = useRouter();
@@ -17,6 +18,13 @@ function AuthCallbackCompleteInner() {
             try {
                 const roleFromUrl = params.get('role') as 'clinic' | 'locum' | null;
                 if (roleFromUrl) saveRole(roleFromUrl);
+                const code = params.get('code');
+                if (code) {
+                    const supabase = getSupabase();
+                    const { error: exchangeError } =
+                        await supabase.auth.exchangeCodeForSession(code);
+                    if (exchangeError) throw new Error(exchangeError.message);
+                }
                 const { redirectTo } = await completeOAuthSignIn();
                 if (!cancelled)
                     router.replace(redirectTo);
@@ -30,7 +38,7 @@ function AuthCallbackCompleteInner() {
         return () => {
             cancelled = true;
         };
-    }, [completeOAuthSignIn, router]);
+    }, [completeOAuthSignIn, params, router]);
     return (<AuthSplitLayout variant="signup">
       <h2 className="auth-callback-heading" style={{
             width: '100%',

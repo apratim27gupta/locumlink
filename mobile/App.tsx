@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { buildNativeInjectScript, useExpoPush } from './useExpoPush';
@@ -21,6 +22,37 @@ import {
 } from './oauthEnv';
 
 const PRIMARY_COLOR = '#38C6C6';
+
+const IS_EXPO_GO = Constants.appOwnership === 'expo';
+
+/**
+ * Expo Go: use staging HTTPS callback. Server defers PKCE exchange when the
+ * Custom Tab arrives without verifier cookies, so openAuthSessionAsync can
+ * return the URL to the WebView where PKCE lives.
+ */
+function getExpoGoOAuthReturnUrl(): string {
+  return `${APP_ORIGIN}/auth/callback`;
+}
+
+function getBrowserReturnUrl(): string {
+  return IS_EXPO_GO ? getExpoGoOAuthReturnUrl() : getOAuthBrowserReturnUrl();
+}
+
+function rewriteOAuthUrlForExpoGo(url: string): string {
+  if (!IS_EXPO_GO) return url;
+  try {
+    const parsed = new URL(url);
+    const redirectTo = parsed.searchParams.get('redirect_to');
+    if (!redirectTo) return url;
+    const role = new URL(redirectTo).searchParams.get('role') ?? 'locum';
+    const httpsReturn = new URL(getExpoGoOAuthReturnUrl());
+    httpsReturn.searchParams.set('role', role);
+    parsed.searchParams.set('redirect_to', httpsReturn.toString());
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
 
 function resolveNotificationUrl(url: string | undefined): string | null {
   if (!url) return null;
@@ -35,9 +67,11 @@ export default function App() {
   const [hasError, setHasError] = useState(false);
 
   const navigateWebViewTo = useCallback((url: string) => {
-    webViewRef.current?.injectJavaScript(
-      `window.location.href = ${JSON.stringify(url)};`,
-    );
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(
+        `window.location.replace(${JSON.stringify(url)}); true;`,
+      );
+    }
   }, []);
 
   const handleOAuthReturnUrl = useCallback((url: string | null | undefined) => {
@@ -52,7 +86,15 @@ export default function App() {
     if (oauthInFlightRef.current) return;
     oauthInFlightRef.current = true;
 
-    void WebBrowser.openAuthSessionAsync(url, getOAuthBrowserReturnUrl())
+    const authUrl = rewriteOAuthUrlForExpoGo(url);
+    const browserOptions =
+      Platform.OS === 'android' ? { createTask: false } : undefined;
+
+    void WebBrowser.openAuthSessionAsync(
+      authUrl,
+      getBrowserReturnUrl(),
+      browserOptions,
+    )
       .then((result) => {
         oauthInFlightRef.current = false;
         if (result.type === 'success' && result.url) {
@@ -121,8 +163,10 @@ export default function App() {
     if (oauthCallback) {
       if (oauthCallback !== url) {
         navigateWebViewTo(oauthCallback);
+        return true;
       }
-      return true;
+      // Allow the WebView to load the callback URL (PKCE exchange happens here).
+      return false;
     }
 
     if (isForeignOAuthCallbackUrl(url)) {

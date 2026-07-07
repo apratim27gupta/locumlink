@@ -29,6 +29,20 @@ export function isNativeOAuthCallbackUrl(url: string): boolean {
   return url.startsWith(`${NATIVE_OAUTH_SCHEME}://auth/callback`);
 }
 
+/** Expo Go deep link — exp://host:port/--/auth/callback */
+export function isExpoDevOAuthCallbackUrl(url: string): boolean {
+  if (!url.startsWith('exp://')) return false;
+  try {
+    return new URL(url).pathname.includes('/auth/callback');
+  } catch {
+    return url.includes('/auth/callback');
+  }
+}
+
+function isAppOwnedOAuthCallbackUrl(url: string): boolean {
+  return isNativeOAuthCallbackUrl(url) || isExpoDevOAuthCallbackUrl(url);
+}
+
 export function isOAuthStartUrl(url: string): boolean {
   return (
     url.includes('supabase.co/auth/v1/authorize')
@@ -44,7 +58,7 @@ function isAllowedMisdirectedCallback(host: string): boolean {
 }
 
 export function isOAuthCallbackForThisApp(url: string): boolean {
-  if (isNativeOAuthCallbackUrl(url)) return true;
+  if (isAppOwnedOAuthCallbackUrl(url)) return true;
 
   try {
     const parsed = new URL(url);
@@ -69,7 +83,7 @@ export function toWebOAuthCallbackUrl(resultUrl: string): string | null {
       ?? parsed.searchParams.get('error');
     if (!code && !error) return null;
 
-    if (!isNativeOAuthCallbackUrl(resultUrl) && parsed.origin === new URL(APP_ORIGIN).origin) {
+    if (!isAppOwnedOAuthCallbackUrl(resultUrl) && parsed.origin === new URL(APP_ORIGIN).origin) {
       return parsed.toString();
     }
 
