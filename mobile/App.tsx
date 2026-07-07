@@ -16,18 +16,11 @@ import {
   APP_ORIGIN,
   getOAuthBrowserReturnUrl,
   isForeignOAuthCallbackUrl,
+  isOAuthStartUrl,
   toWebOAuthCallbackUrl,
 } from './oauthEnv';
 
 const PRIMARY_COLOR = '#38C6C6';
-
-const OAUTH_URL_PATTERNS = [
-  'supabase.co/auth/v1/authorize',
-  'accounts.google.com',
-  'login.microsoftonline.com',
-  'appleid.apple.com',
-];
-// Email OTP never hits these — stays in WebView unaffected
 
 function resolveNotificationUrl(url: string | undefined): string | null {
   if (!url) return null;
@@ -38,6 +31,7 @@ function resolveNotificationUrl(url: string | undefined): string | null {
 
 export default function App() {
   const webViewRef = useRef<WebView>(null);
+  const oauthInFlightRef = useRef(false);
   const [hasError, setHasError] = useState(false);
 
   const navigateWebViewTo = useCallback((url: string) => {
@@ -47,11 +41,28 @@ export default function App() {
   }, []);
 
   const handleOAuthReturnUrl = useCallback((url: string | null | undefined) => {
+    oauthInFlightRef.current = false;
     if (!url) return;
     const webCallback = toWebOAuthCallbackUrl(url);
     if (!webCallback) return;
     navigateWebViewTo(webCallback);
   }, [navigateWebViewTo]);
+
+  const openOAuthInBrowser = useCallback((url: string) => {
+    if (oauthInFlightRef.current) return;
+    oauthInFlightRef.current = true;
+
+    void WebBrowser.openAuthSessionAsync(url, getOAuthBrowserReturnUrl())
+      .then((result) => {
+        oauthInFlightRef.current = false;
+        if (result.type === 'success' && result.url) {
+          handleOAuthReturnUrl(result.url);
+        }
+      })
+      .catch(() => {
+        oauthInFlightRef.current = false;
+      });
+  }, [handleOAuthReturnUrl]);
 
   const handleNotificationTap = useCallback((url: string | undefined) => {
     const target = resolveNotificationUrl(url);
@@ -92,35 +103,49 @@ export default function App() {
     webViewRef.current?.reload();
   }
 
-  const handleShouldStartLoadWithRequest = useCallback((request: { url: string }) => {
-    if (Platform.OS === 'web') return true;
+  const handleWebViewMessage = useCallback((event: { nativeEvent: { data: string } }) => {
+    try {
+      const msg = JSON.parse(event.nativeEvent.data) as { type?: string; url?: string };
+      if (msg.type === 'oauth' && typeof msg.url === 'string') {
+        openOAuthInBrowser(msg.url);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [openOAuthInBrowser]);
 
-    const oauthCallback = toWebOAuthCallbackUrl(request.url);
+  const interceptOAuthNavigation = useCallback((url: string): boolean => {
+    if (Platform.OS === 'web') return false;
+
+    const oauthCallback = toWebOAuthCallbackUrl(url);
     if (oauthCallback) {
-      if (oauthCallback !== request.url) {
+      if (oauthCallback !== url) {
         navigateWebViewTo(oauthCallback);
       }
-      return false;
+      return true;
     }
 
-    if (isForeignOAuthCallbackUrl(request.url)) {
-      return false;
+    if (isForeignOAuthCallbackUrl(url)) {
+      return true;
     }
 
-    const isOAuthUrl = OAUTH_URL_PATTERNS.some((p) => request.url.includes(p));
-    if (isOAuthUrl) {
-      void WebBrowser.openAuthSessionAsync(request.url, getOAuthBrowserReturnUrl())
-        .then((result) => {
-          if (result.type === 'success' && result.url) {
-            handleOAuthReturnUrl(result.url);
-          }
-        })
-        .catch(() => {});
-      return false;
+    if (isOAuthStartUrl(url)) {
+      openOAuthInBrowser(url);
+      return true;
     }
 
-    return true;
-  }, [handleOAuthReturnUrl, navigateWebViewTo]);
+    return false;
+  }, [navigateWebViewTo, openOAuthInBrowser]);
+
+  const handleShouldStartLoadWithRequest = useCallback((request: { url: string }) => {
+    return !interceptOAuthNavigation(request.url);
+  }, [interceptOAuthNavigation]);
+
+  const handleNavigationStateChange = useCallback((navState: { url: string }) => {
+    if (interceptOAuthNavigation(navState.url)) {
+      webViewRef.current?.stopLoading();
+    }
+  }, [interceptOAuthNavigation]);
 
   return (
     <SafeAreaProvider>
@@ -158,6 +183,8 @@ export default function App() {
                 </View>
               )}
               onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+              onNavigationStateChange={handleNavigationStateChange}
+              onMessage={handleWebViewMessage}
               onError={() => setHasError(true)}
               onContentProcessDidTerminate={() => webViewRef.current?.reload()}
               onHttpError={(event) => {

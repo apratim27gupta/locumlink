@@ -1,4 +1,4 @@
-/** Production host — Supabase Site URL; may receive misdirected staging OAuth callbacks. */
+/** Production host — Supabase Site URL fallback during staging OAuth. */
 export const PROD_HOST = 'locumlink.ca';
 
 /** Web origin this mobile shell wraps — set per build via EXPO_PUBLIC_APP_URL. */
@@ -13,12 +13,13 @@ export const NATIVE_OAUTH_SCHEME = 'calocumlinkapp';
 
 export const NATIVE_OAUTH_RETURN_URL = `${NATIVE_OAUTH_SCHEME}://auth/callback`;
 
-/** Staging-only: Supabase Site URL fallback lands on prod — listen for that in the system browser. */
+/**
+ * URL the system browser session waits for after OAuth.
+ * Staging: Supabase often falls back to prod Site URL — listen for that.
+ * Prod / calocumlinkapp success is also handled via Linking deep links.
+ */
 export function getOAuthBrowserReturnUrl(): string {
   if (APP_HOST === 'staging.locumlink.ca') {
-    return `https://${PROD_HOST}/auth/callback`;
-  }
-  if (APP_HOST === PROD_HOST) {
     return `https://${PROD_HOST}/auth/callback`;
   }
   return NATIVE_OAUTH_RETURN_URL;
@@ -28,15 +29,20 @@ export function isNativeOAuthCallbackUrl(url: string): boolean {
   return url.startsWith(`${NATIVE_OAUTH_SCHEME}://auth/callback`);
 }
 
-/**
- * Staging may receive prod HTTPS callbacks when Supabase uses Site URL instead of calocumlinkapp.
- * Prod builds never accept staging callbacks.
- */
+export function isOAuthStartUrl(url: string): boolean {
+  return (
+    url.includes('supabase.co/auth/v1/authorize')
+    || url.includes('accounts.google.com')
+    || url.includes('login.microsoftonline.com')
+    || url.includes('appleid.apple.com')
+  );
+}
+
+/** Staging may receive prod HTTPS callbacks when Supabase uses Site URL instead of calocumlinkapp. */
 function isAllowedMisdirectedCallback(host: string): boolean {
   return APP_HOST === 'staging.locumlink.ca' && host === PROD_HOST;
 }
 
-/** True only for this app's custom scheme or allowed HTTPS callback hosts. */
 export function isOAuthCallbackForThisApp(url: string): boolean {
   if (isNativeOAuthCallbackUrl(url)) return true;
 
@@ -50,10 +56,7 @@ export function isOAuthCallbackForThisApp(url: string): boolean {
   }
 }
 
-/**
- * Map an OAuth return URL into the HTTPS callback for this app's WebView.
- * Native scheme → APP_ORIGIN; matching HTTPS host → unchanged; other hosts → null.
- */
+/** Map OAuth return URL into the HTTPS callback for this app's WebView (PKCE cookies live there). */
 export function toWebOAuthCallbackUrl(resultUrl: string): string | null {
   if (!isOAuthCallbackForThisApp(resultUrl)) return null;
 
@@ -80,7 +83,6 @@ export function toWebOAuthCallbackUrl(resultUrl: string): string | null {
   }
 }
 
-/** Block WebView navigation to another environment's OAuth callback (never block allowed misdirects). */
 export function isForeignOAuthCallbackUrl(url: string): boolean {
   try {
     const parsed = new URL(url);

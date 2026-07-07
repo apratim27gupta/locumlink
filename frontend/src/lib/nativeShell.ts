@@ -12,6 +12,9 @@ export type NativeShellInfo = {
 declare global {
   interface Window {
     __LOCUMLINK_NATIVE__?: NativeShellInfo;
+    ReactNativeWebView?: {
+      postMessage: (message: string) => void;
+    };
   }
 }
 
@@ -45,6 +48,15 @@ export function getOAuthCallbackRedirect(role: string): string {
     return `${getNativeOAuthCallbackBase()}?${roleParam}`;
   }
   return `${getAppOrigin()}/auth/callback?${roleParam}`;
+}
+
+/** Hand off OAuth to the native shell — never navigate the WebView (Apple blocks embedded browsers). */
+export function requestNativeOAuth(url: string): boolean {
+  if (typeof window === 'undefined' || !isNativeShell()) return false;
+  const bridge = window.ReactNativeWebView;
+  if (!bridge?.postMessage) return false;
+  bridge.postMessage(JSON.stringify({ type: 'oauth', url }));
+  return true;
 }
 
 function isAllowedMisdirectedCallback(host: string, appHost: string): boolean {

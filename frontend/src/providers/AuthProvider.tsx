@@ -5,7 +5,7 @@ import { getSupabase } from '@/lib/supabaseClient';
 import { toUserFacingError } from '@/lib/userFacingError';
 import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, popLastPath, clearLastPath, type Role, } from '@/lib/auth';
 import { checkProfileExistsOnServer, ensureProfileMarkedCompleteFromServer, } from '@/lib/profileCompleteSync';
-import { getOAuthCallbackRedirect, isNativeShell } from '@/lib/nativeShell';
+import { getOAuthCallbackRedirect, isNativeShell, requestNativeOAuth } from '@/lib/nativeShell';
 interface AuthCtx {
     userId: string | null;
     role: Role | null;
@@ -198,7 +198,9 @@ export function AuthProvider({ children }: {
 
         if (error) throw new Error(error.message);
         if (inNativeShell && data?.url) {
-            window.location.assign(data.url);
+            if (!requestNativeOAuth(data.url)) {
+                throw new Error('Could not start social sign-in. Please try again.');
+            }
         }
     }
     async function completeOAuthSignIn(): Promise<{ role: Role; redirectTo: string }> {
