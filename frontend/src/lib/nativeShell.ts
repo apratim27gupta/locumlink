@@ -15,7 +15,10 @@ declare global {
 }
 
 export function isNativeShell(): boolean {
-  return typeof window !== 'undefined' && Boolean(window.__LOCUMLINK_NATIVE__);
+  if (typeof window === 'undefined') return false;
+  if (window.__LOCUMLINK_NATIVE__) return true;
+  // Fallback when inject runs late — Android/iOS WebView user agents include "; wv)".
+  return /\bwv\b/i.test(navigator.userAgent);
 }
 
 export function getNativePushToken(): string | null {
@@ -43,7 +46,7 @@ export function getOAuthCallbackRedirect(role: string): string {
   return `${getAppOrigin()}/auth/callback?${roleParam}`;
 }
 
-/** Map native OAuth return URL to the HTTPS callback the WebView should load (with PKCE cookies). */
+/** Map OAuth return URL to the HTTPS callback the WebView should load (with PKCE cookies). */
 export function webCallbackUrlFromOAuthResult(
   resultUrl: string,
   appOrigin: string,
@@ -51,27 +54,32 @@ export function webCallbackUrlFromOAuthResult(
   try {
     const parsed = new URL(resultUrl);
     const origin = appOrigin.replace(/\/$/, '');
+    const isNativeScheme = parsed.protocol === `${NATIVE_OAUTH_SCHEME}:`;
+    const isAuthCallback =
+      isNativeScheme || parsed.pathname === '/auth/callback';
 
-    if (parsed.protocol === `${NATIVE_OAUTH_SCHEME}:`) {
-      const target = new URL('/auth/callback', origin);
-      const code = parsed.searchParams.get('code');
-      const role = parsed.searchParams.get('role');
-      const error =
-        parsed.searchParams.get('error_description')
-        ?? parsed.searchParams.get('error');
-      if (code) target.searchParams.set('code', code);
-      if (role) target.searchParams.set('role', role);
-      if (error) target.searchParams.set('error', error);
-      if (!code && !error) return null;
-      return target.toString();
-    }
+    if (!isAuthCallback) return null;
+
+    const code = parsed.searchParams.get('code');
+    const role = parsed.searchParams.get('role');
+    const error =
+      parsed.searchParams.get('error_description')
+      ?? parsed.searchParams.get('error');
+    if (!code && !error) return null;
 
     if (
-      parsed.origin === new URL(origin).origin
+      !isNativeScheme
+      && parsed.origin === new URL(origin).origin
       && parsed.pathname === '/auth/callback'
     ) {
       return parsed.toString();
     }
+
+    const target = new URL('/auth/callback', origin);
+    if (code) target.searchParams.set('code', code);
+    if (role) target.searchParams.set('role', role);
+    if (error) target.searchParams.set('error', error);
+    return target.toString();
   } catch {
     /* ignore malformed URLs */
   }

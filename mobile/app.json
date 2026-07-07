@@ -36,6 +36,11 @@
               "scheme": "https",
               "host": "locumlink.ca",
               "pathPrefix": "/auth/callback"
+            },
+            {
+              "scheme": "https",
+              "host": "staging.locumlink.ca",
+              "pathPrefix": "/auth/callback"
             }
           ],
           "category": [

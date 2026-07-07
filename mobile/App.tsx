@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { buildNativeInjectScript, useExpoPush } from './useExpoPush';
 
@@ -31,27 +32,32 @@ function toWebOAuthCallbackUrl(resultUrl: string): string | null {
   try {
     const parsed = new URL(resultUrl);
     const origin = APP_ORIGIN.replace(/\/$/, '');
+    const isNativeScheme = parsed.protocol === `${NATIVE_OAUTH_SCHEME}:`;
+    const isAuthCallback =
+      isNativeScheme || parsed.pathname === '/auth/callback';
 
-    if (parsed.protocol === `${NATIVE_OAUTH_SCHEME}:`) {
-      const target = new URL('/auth/callback', origin);
-      const code = parsed.searchParams.get('code');
-      const role = parsed.searchParams.get('role');
-      const error =
-        parsed.searchParams.get('error_description')
-        ?? parsed.searchParams.get('error');
-      if (code) target.searchParams.set('code', code);
-      if (role) target.searchParams.set('role', role);
-      if (error) target.searchParams.set('error', error);
-      if (!code && !error) return null;
-      return target.toString();
-    }
+    if (!isAuthCallback) return null;
+
+    const code = parsed.searchParams.get('code');
+    const role = parsed.searchParams.get('role');
+    const error =
+      parsed.searchParams.get('error_description')
+      ?? parsed.searchParams.get('error');
+    if (!code && !error) return null;
 
     if (
-      parsed.origin === new URL(origin).origin
+      !isNativeScheme
+      && parsed.origin === new URL(origin).origin
       && parsed.pathname === '/auth/callback'
     ) {
       return parsed.toString();
     }
+
+    const target = new URL('/auth/callback', origin);
+    if (code) target.searchParams.set('code', code);
+    if (role) target.searchParams.set('role', role);
+    if (error) target.searchParams.set('error', error);
+    return target.toString();
   } catch {
     /* ignore */
   }
@@ -69,13 +75,24 @@ export default function App() {
   const webViewRef = useRef<WebView>(null);
   const [hasError, setHasError] = useState(false);
 
+  const navigateWebViewTo = useCallback((url: string) => {
+    webViewRef.current?.injectJavaScript(
+      `window.location.href = ${JSON.stringify(url)};`,
+    );
+  }, []);
+
+  const handleOAuthReturnUrl = useCallback((url: string | null | undefined) => {
+    if (!url) return;
+    const webCallback = toWebOAuthCallbackUrl(url);
+    if (!webCallback) return;
+    navigateWebViewTo(webCallback);
+  }, [navigateWebViewTo]);
+
   const handleNotificationTap = useCallback((url: string | undefined) => {
     const target = resolveNotificationUrl(url);
     if (!target) return;
-    webViewRef.current?.injectJavaScript(
-      `window.location.href = ${JSON.stringify(target)};`,
-    );
-  }, []);
+    navigateWebViewTo(target);
+  }, [navigateWebViewTo]);
 
   const { pushToken } = useExpoPush(handleNotificationTap);
 
@@ -83,6 +100,20 @@ export default function App() {
     () => buildNativeInjectScript(Platform.OS, pushToken),
     [pushToken],
   );
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    void WebBrowser.warmUpAsync();
+    WebBrowser.maybeCompleteAuthSession();
+    void Linking.getInitialURL().then(handleOAuthReturnUrl);
+    const sub = Linking.addEventListener('url', (event) => {
+      handleOAuthReturnUrl(event.url);
+    });
+    return () => {
+      sub.remove();
+      void WebBrowser.coolDownAsync();
+    };
+  }, [handleOAuthReturnUrl]);
 
   useEffect(() => {
     if (Platform.OS === 'web' || !webViewRef.current) return;
@@ -97,22 +128,28 @@ export default function App() {
   }
 
   const handleShouldStartLoadWithRequest = useCallback((request: { url: string }) => {
+    if (Platform.OS === 'web') return true;
+
+    const oauthCallback = toWebOAuthCallbackUrl(request.url);
+    if (oauthCallback && oauthCallback !== request.url) {
+      navigateWebViewTo(oauthCallback);
+      return false;
+    }
+
     const isOAuthUrl = OAUTH_URL_PATTERNS.some((p) => request.url.includes(p));
-    if (isOAuthUrl && Platform.OS !== 'web') {
+    if (isOAuthUrl) {
       void WebBrowser.openAuthSessionAsync(request.url, NATIVE_OAUTH_RETURN_URL)
         .then((result) => {
-          if (result.type !== 'success' || !result.url) return;
-          const webCallback = toWebOAuthCallbackUrl(result.url);
-          if (!webCallback) return;
-          webViewRef.current?.injectJavaScript(
-            `window.location.href = ${JSON.stringify(webCallback)};`,
-          );
+          if (result.type === 'success' && result.url) {
+            handleOAuthReturnUrl(result.url);
+          }
         })
         .catch(() => {});
       return false;
     }
+
     return true;
-  }, []);
+  }, [handleOAuthReturnUrl, navigateWebViewTo]);
 
   return (
     <SafeAreaProvider>
