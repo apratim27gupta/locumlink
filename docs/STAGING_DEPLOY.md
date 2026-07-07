@@ -107,6 +107,7 @@ DATABASE_URL=postgresql://postgres:<password>@127.0.0.1:5433/l2_staging
 In Supabase → Authentication → URL configuration, add:
 
 - Redirect URL: `https://staging.locumlink.ca/auth/callback`
+- Redirect URL: `calocumlinkapp://auth/callback` (mobile app OAuth — PKCE returns via custom scheme)
 
 ---
 

@@ -1,11 +1,11 @@
 'use client';
 import { createContext, useContext, useEffect, useState, ReactNode, } from 'react';
-import { getAppOrigin } from '@/lib/appOrigin';
 import { authApi } from '@/lib/api';
 import { getSupabase } from '@/lib/supabaseClient';
 import { toUserFacingError } from '@/lib/userFacingError';
 import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, popLastPath, clearLastPath, type Role, } from '@/lib/auth';
 import { checkProfileExistsOnServer, ensureProfileMarkedCompleteFromServer, } from '@/lib/profileCompleteSync';
+import { getOAuthCallbackRedirect } from '@/lib/nativeShell';
 interface AuthCtx {
     userId: string | null;
     role: Role | null;
@@ -180,7 +180,7 @@ export function AuthProvider({ children }: {
         saveRole(chosenRole);
         setRoleState(chosenRole);
         const supabase = getSupabase();
-        const redirectTo = `${getAppOrigin()}/auth/callback?role=${chosenRole}`;
+        const redirectTo = getOAuthCallbackRedirect(chosenRole);
         const { error } = await supabase.auth.signInWithOAuth({
             provider: provider === 'azure' ? 'azure' : provider,
             options: {

@@ -15,12 +15,48 @@ import { buildNativeInjectScript, useExpoPush } from './useExpoPush';
 const PRIMARY_COLOR = '#38C6C6';
 const APP_ORIGIN = process.env.EXPO_PUBLIC_APP_URL ?? 'https://staging.locumlink.ca';
 
+/** Must match `scheme` in app.json and frontend `nativeShell.ts` */
+const NATIVE_OAUTH_SCHEME = 'calocumlinkapp';
+const NATIVE_OAUTH_RETURN_URL = `${NATIVE_OAUTH_SCHEME}://auth/callback`;
+
 const OAUTH_URL_PATTERNS = [
   'supabase.co/auth/v1/authorize',
   'accounts.google.com',
   'login.microsoftonline.com',
+  'appleid.apple.com',
 ];
 // Email OTP never hits these — stays in WebView unaffected
+
+function toWebOAuthCallbackUrl(resultUrl: string): string | null {
+  try {
+    const parsed = new URL(resultUrl);
+    const origin = APP_ORIGIN.replace(/\/$/, '');
+
+    if (parsed.protocol === `${NATIVE_OAUTH_SCHEME}:`) {
+      const target = new URL('/auth/callback', origin);
+      const code = parsed.searchParams.get('code');
+      const role = parsed.searchParams.get('role');
+      const error =
+        parsed.searchParams.get('error_description')
+        ?? parsed.searchParams.get('error');
+      if (code) target.searchParams.set('code', code);
+      if (role) target.searchParams.set('role', role);
+      if (error) target.searchParams.set('error', error);
+      if (!code && !error) return null;
+      return target.toString();
+    }
+
+    if (
+      parsed.origin === new URL(origin).origin
+      && parsed.pathname === '/auth/callback'
+    ) {
+      return parsed.toString();
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 
 function resolveNotificationUrl(url: string | undefined): string | null {
   if (!url) return null;
@@ -63,13 +99,14 @@ export default function App() {
   const handleShouldStartLoadWithRequest = useCallback((request: { url: string }) => {
     const isOAuthUrl = OAUTH_URL_PATTERNS.some((p) => request.url.includes(p));
     if (isOAuthUrl && Platform.OS !== 'web') {
-      WebBrowser.openAuthSessionAsync(request.url, APP_ORIGIN + '/auth/callback')
+      void WebBrowser.openAuthSessionAsync(request.url, NATIVE_OAUTH_RETURN_URL)
         .then((result) => {
-          if (result.type === 'success' && result.url) {
-            webViewRef.current?.injectJavaScript(
-              `window.location.href = ${JSON.stringify(result.url)};`,
-            );
-          }
+          if (result.type !== 'success' || !result.url) return;
+          const webCallback = toWebOAuthCallbackUrl(result.url);
+          if (!webCallback) return;
+          webViewRef.current?.injectJavaScript(
+            `window.location.href = ${JSON.stringify(webCallback)};`,
+          );
         })
         .catch(() => {});
       return false;
