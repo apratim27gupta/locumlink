@@ -24,6 +24,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Nest API routes authenticate via Authorization Bearer (ll_access), not Supabase cookies.
+  if (pathname.startsWith('/api')) {
+    return NextResponse.next();
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
