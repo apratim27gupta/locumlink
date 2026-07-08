@@ -11,6 +11,8 @@ const PUBLIC_PREFIXES = [
   '/auth',
   '/documents',
   '/support',
+  '/privacy-policy',
+  '/terms-of-use',
   '/offline',
 ];
 

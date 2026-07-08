@@ -1,6 +1,7 @@
-import Link from 'next/link';
+import { Suspense } from 'react';
 import { PublicPageShell } from '@/components/PublicPageShell';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
+import { PublicPageBackLink } from '@/components/PublicPageBackLink';
 import { contactSupportMailtoHref, getSupportEmail } from '@/lib/support';
 
 export default function SupportPage() {
@@ -35,11 +36,9 @@ export default function SupportPage() {
                     </section>
                 </article>
 
-                <p className="support-page__back">
-                    <Link href="/home" className="support-text-link">
-                        ← Back to home
-                    </Link>
-                </p>
+                <Suspense fallback={null}>
+                    <PublicPageBackLink />
+                </Suspense>
             </div>
         </PublicPageShell>
     );

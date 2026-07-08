@@ -1,8 +1,12 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import {
     PRIVACY_POLICY_PATH,
     SUPPORT_PAGE_PATH,
     TERMS_OF_USE_PATH,
+    legalPageHref,
 } from '@/lib/support';
 
 type SupportLegalLinksProps = {
@@ -11,34 +15,32 @@ type SupportLegalLinksProps = {
 };
 
 export function SupportLegalLinks({ variant, onNavigate }: SupportLegalLinksProps) {
+    const pathname = usePathname();
+
     if (variant === 'sidebar') {
         return (
             <div className="dash-sidebar-footer-links">
                 <Link
-                    href={SUPPORT_PAGE_PATH}
+                    href={legalPageHref(SUPPORT_PAGE_PATH, pathname)}
                     onClick={onNavigate}
                     className="dash-sidebar-footer-link"
                 >
                     Support
                 </Link>
-                <a
-                    href={PRIVACY_POLICY_PATH}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                <Link
+                    href={legalPageHref(PRIVACY_POLICY_PATH, pathname)}
                     onClick={onNavigate}
                     className="dash-sidebar-footer-link"
                 >
                     Privacy Policy
-                </a>
-                <a
-                    href={TERMS_OF_USE_PATH}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                </Link>
+                <Link
+                    href={legalPageHref(TERMS_OF_USE_PATH, pathname)}
                     onClick={onNavigate}
                     className="dash-sidebar-footer-link"
                 >
                     Terms of Use
-                </a>
+                </Link>
             </div>
         );
     }
@@ -48,22 +50,12 @@ export function SupportLegalLinks({ variant, onNavigate }: SupportLegalLinksProp
             <Link href={SUPPORT_PAGE_PATH} className="home-landing-doc-link" onClick={onNavigate}>
                 Support
             </Link>
-            <a
-                href={TERMS_OF_USE_PATH}
-                className="home-landing-doc-link"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
+            <Link href={TERMS_OF_USE_PATH} className="home-landing-doc-link">
                 Terms of Use
-            </a>
-            <a
-                href={PRIVACY_POLICY_PATH}
-                className="home-landing-doc-link"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
+            </Link>
+            <Link href={PRIVACY_POLICY_PATH} className="home-landing-doc-link">
                 Privacy Policy
-            </a>
+            </Link>
         </>
     );
 }

@@ -3,6 +3,20 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    return [
+      {
+        source: '/documents/privacy-policy.pdf',
+        destination: '/privacy-policy',
+        permanent: true,
+      },
+      {
+        source: '/documents/terms-of-use.pdf',
+        destination: '/terms-of-use',
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {

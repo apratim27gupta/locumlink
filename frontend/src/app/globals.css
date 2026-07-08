@@ -856,6 +856,52 @@
   color: var(--color-text-secondary);
 }
 
+.legal-section {
+  margin-bottom: 28px;
+}
+
+.legal-section:last-child {
+  margin-bottom: 0;
+}
+
+.legal-section__body {
+  margin: 0 0 12px;
+  font-family: var(--font-family-body);
+  font-size: var(--font-body);
+  line-height: 1.65;
+  color: var(--color-text-secondary);
+}
+
+.legal-section__body:last-child {
+  margin-bottom: 0;
+}
+
+.legal-section__list {
+  margin: 0 0 12px;
+  padding-left: 1.25rem;
+  font-family: var(--font-family-body);
+  font-size: var(--font-body);
+  line-height: 1.65;
+  color: var(--color-text-secondary);
+}
+
+.legal-section__list li + li {
+  margin-top: 6px;
+}
+
+.legal-subsection {
+  margin-top: 12px;
+}
+
+.legal-subsection__title {
+  margin: 0 0 8px;
+  font-family: var(--font-family-body);
+  font-size: var(--font-body);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+}
+
 .support-text-link {
   font-family: inherit;
   font-weight: var(--font-weight-bold);
