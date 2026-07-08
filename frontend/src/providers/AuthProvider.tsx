@@ -163,12 +163,12 @@ export function AuthProvider({ children }: {
             syncCookies();
             syncProfileCompleteCookies();
             setProfileComplete(true);
-            const lastPath = popLastPath();
+            const lastPath = popLastPath(role);
             redirectTo =
                 lastPath ??
                 (role === 'clinic' ? '/host/dashboard' : '/locum/dashboard');
         } else {
-            clearLastPath();
+            clearLastPath(role);
             redirectTo = role === 'clinic' ? '/host/setup' : '/locum/setup';
         }
         return { role, redirectTo };
@@ -219,10 +219,10 @@ export function AuthProvider({ children }: {
         let redirectTo: string;
         if (profileExists) {
             markProfileComplete(); syncCookies(); syncProfileCompleteCookies(); setProfileComplete(true);
-            const lastPath = popLastPath();
+            const lastPath = popLastPath(savedRole);
             redirectTo = lastPath ?? (savedRole === 'clinic' ? '/host/dashboard' : '/locum/dashboard');
         } else {
-            clearLastPath();
+            clearLastPath(savedRole);
             redirectTo = savedRole === 'clinic' ? '/host/setup' : '/locum/setup';
         }
         return { role: savedRole, redirectTo };

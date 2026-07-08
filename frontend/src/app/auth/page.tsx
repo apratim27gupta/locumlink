@@ -76,9 +76,8 @@ function AuthPageInner() {
         setBusyAction('email');
         try {
             const nextParam = params.get('next');
-            if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.startsWith('/auth') && !nextParam.startsWith('/home')) {
-                saveLastPath(nextParam);
-            }
+            if (nextParam)
+                saveLastPath(nextParam, role);
             await sendOtp(email, role);
             router.replace(`/auth/verify?role=${encodeURIComponent(role)}`);
         } catch (err: unknown) {
@@ -93,9 +92,8 @@ function AuthPageInner() {
         setBusyAction(provider);
         try {
             const nextParam = params.get('next');
-            if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.startsWith('/auth') && !nextParam.startsWith('/home')) {
-                saveLastPath(nextParam);
-            }
+            if (nextParam)
+                saveLastPath(nextParam, role);
             await signInWithOAuth(provider, role);
         } catch (err: unknown) {
             setError(toUserFacingError(err, 'Could not start social sign-in. Please try again.'));
