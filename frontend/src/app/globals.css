@@ -782,9 +782,19 @@
   font-family: var(--font-family-body);
 }
 
+/* Public pages (support, privacy, terms) must scroll inside the locked app shell. */
+#app-root:has(.public-page-root) {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
 .public-page-nav {
   position: sticky;
   top: 0;
+  z-index: 20;
+  flex-shrink: 0;
+  background: var(--color-app-bg);
 }
 
 .public-page-nav__logo {
@@ -803,6 +813,10 @@
 .support-page {
   width: 100%;
   max-width: 640px;
+}
+
+.support-page--legal {
+  max-width: 720px;
 }
 
 .support-card {
@@ -927,6 +941,10 @@
   margin: 20px 0 0;
   font-family: var(--font-family-body);
   font-size: var(--font-body);
+}
+
+.support-page__back--top {
+  margin: 0 0 16px;
 }
 
 .home-admin-login-btn {

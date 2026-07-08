@@ -11,6 +11,9 @@ export default function SupportPage() {
     return (
         <PublicPageShell showSignIn={false}>
             <div className="support-page">
+                <Suspense fallback={null}>
+                    <PublicPageBackLink />
+                </Suspense>
                 <article className="support-card">
                     <h1 className="support-page__title">Support</h1>
                     <p className="support-page__lead">
@@ -35,10 +38,6 @@ export default function SupportPage() {
                         </div>
                     </section>
                 </article>
-
-                <Suspense fallback={null}>
-                    <PublicPageBackLink />
-                </Suspense>
             </div>
         </PublicPageShell>
     );

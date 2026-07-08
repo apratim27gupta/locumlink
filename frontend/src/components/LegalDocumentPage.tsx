@@ -58,7 +58,10 @@ export function LegalDocumentPage({
 }: LegalDocumentPageProps) {
     return (
         <PublicPageShell showSignIn={false}>
-            <div className="support-page">
+            <div className="support-page support-page--legal">
+                <Suspense fallback={null}>
+                    <PublicPageBackLink />
+                </Suspense>
                 <article className="support-card">
                     <h1 className="support-page__title">{title}</h1>
                     <p className="support-page__lead">Effective Date: {effectiveDate}</p>
@@ -67,9 +70,6 @@ export function LegalDocumentPage({
                     ))}
                     {footer}
                 </article>
-                <Suspense fallback={null}>
-                    <PublicPageBackLink />
-                </Suspense>
             </div>
         </PublicPageShell>
     );
