@@ -9,6 +9,9 @@
       "env": {
         "EXPO_PUBLIC_APP_URL": "https://staging.locumlink.ca"
       },
+      "android": {
+        "buildType": "apk"
+      },
       "ios": {
         "simulator": false
       }

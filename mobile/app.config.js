@@ -24,6 +24,13 @@ const oauthIntentFilter = {
 module.exports = {
   expo: {
     ...base.expo,
+    ios: {
+      ...base.expo.ios,
+      usesAppleSignIn: true,
+      entitlements: {
+        'com.apple.developer.applesignin': ['Default'],
+      },
+    },
     android: {
       ...base.expo.android,
       intentFilters: [oauthIntentFilter],

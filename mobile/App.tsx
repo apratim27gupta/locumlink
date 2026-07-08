@@ -15,7 +15,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { buildNativeInjectScript, useExpoPush } from './useExpoPush';
 import {
   APP_ORIGIN,
-  getOAuthBrowserReturnUrl,
+  NATIVE_OAUTH_RETURN_URL,
   isForeignOAuthCallbackUrl,
   isOAuthStartUrl,
   toWebOAuthCallbackUrl,
@@ -34,7 +34,8 @@ function getExpoGoOAuthReturnUrl(): string {
 }
 
 function getBrowserReturnUrl(): string {
-  return IS_EXPO_GO ? getExpoGoOAuthReturnUrl() : getOAuthBrowserReturnUrl();
+  if (IS_EXPO_GO) return getExpoGoOAuthReturnUrl();
+  return NATIVE_OAUTH_RETURN_URL;
 }
 
 function rewriteOAuthUrlForExpoGo(url: string): string {
@@ -116,7 +117,7 @@ export default function App() {
     navigateWebViewTo(target);
   }, [navigateWebViewTo]);
 
-  const { pushToken } = useExpoPush(handleNotificationTap);
+  const { pushToken, syncPushToken } = useExpoPush(handleNotificationTap);
 
   const nativeInjectScript = useMemo(
     () => buildNativeInjectScript(Platform.OS, pushToken),
@@ -143,6 +144,14 @@ export default function App() {
       buildNativeInjectScript(Platform.OS, pushToken),
     );
   }, [pushToken]);
+
+  const handleWebViewLoadEnd = useCallback(() => {
+    if (Platform.OS === 'web' || !webViewRef.current) return;
+    webViewRef.current.injectJavaScript(
+      buildNativeInjectScript(Platform.OS, pushToken),
+    );
+    void syncPushToken();
+  }, [pushToken, syncPushToken]);
 
   function handleRetry() {
     setHasError(false);
@@ -224,6 +233,7 @@ export default function App() {
               allowsInlineMediaPlayback
               setSupportMultipleWindows={false}
               startInLoadingState
+              applicationNameForUserAgent="LocumLinkNative"
               injectedJavaScriptBeforeContentLoaded={nativeInjectScript}
               renderLoading={() => (
                 <View style={styles.loadingContainer}>
@@ -232,6 +242,7 @@ export default function App() {
               )}
               onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
               onNavigationStateChange={handleNavigationStateChange}
+              onLoadEnd={handleWebViewLoadEnd}
               onMessage={handleWebViewMessage}
               onError={() => setHasError(true)}
               onContentProcessDidTerminate={() => webViewRef.current?.reload()}

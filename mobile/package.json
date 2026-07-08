@@ -4,7 +4,9 @@
   "main": "index.ts",
   "dependencies": {
     "expo": "~54.0.0",
+    "expo-apple-authentication": "~8.0.8",
     "expo-constants": "~18.0.13",
+    "expo-dev-client": "~6.0.21",
     "expo-device": "~8.0.10",
     "expo-linking": "~8.0.12",
     "expo-notifications": "~0.32.17",
@@ -24,7 +26,9 @@
     "start": "node node_modules/expo/bin/cli start --lan",
     "android": "node node_modules/expo/bin/cli start --android --lan",
     "ios": "node node_modules/expo/bin/cli start --ios --lan",
-    "web": "node node_modules/expo/bin/cli start --web"
+    "web": "node node_modules/expo/bin/cli start --web",
+    "build:ios:preview": "node scripts/eas-ios-preview.js",
+    "build:ios:production": "eas build --platform ios --profile production"
   },
   "private": true
 }

@@ -15,14 +15,24 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ca.locumlink.app",
+      "usesAppleSignIn": true,
+      "associatedDomains": [
+        "applinks:locumlink.ca",
+        "applinks:staging.locumlink.ca"
+      ],
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserNotificationsUsageDescription": "Locum Link sends alerts for messages, applications, and account updates."
       }
     },
     "android": {
       "package": "ca.locumlink.app",
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -33,8 +43,15 @@
       "bundler": "metro"
     },
     "plugins": [
+      "expo-dev-client",
       "expo-web-browser",
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "color": "#38C6C6"
+        }
+      ],
+      "expo-apple-authentication"
     ],
     "extra": {
       "eas": {

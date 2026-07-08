@@ -15,13 +15,10 @@ export const NATIVE_OAUTH_RETURN_URL = `${NATIVE_OAUTH_SCHEME}://auth/callback`;
 
 /**
  * URL the system browser session waits for after OAuth.
- * Staging: Supabase often falls back to prod Site URL — listen for that.
- * Prod / calocumlinkapp success is also handled via Linking deep links.
+ * Standalone builds use the custom scheme (matches Supabase redirectTo in native shell).
+ * Misdirected HTTPS callbacks are still handled via Linking / universal links.
  */
 export function getOAuthBrowserReturnUrl(): string {
-  if (APP_HOST === 'staging.locumlink.ca') {
-    return `https://${PROD_HOST}/auth/callback`;
-  }
   return NATIVE_OAUTH_RETURN_URL;
 }
 

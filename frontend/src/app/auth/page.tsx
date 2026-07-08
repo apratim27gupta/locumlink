@@ -97,6 +97,7 @@ function AuthPageInner() {
             await signInWithOAuth(provider, role);
         } catch (err: unknown) {
             setError(toUserFacingError(err, 'Could not start social sign-in. Please try again.'));
+        } finally {
             setBusyAction(null);
         }
     }

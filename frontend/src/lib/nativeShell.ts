@@ -19,10 +19,12 @@ declare global {
 }
 
 export function isNativeShell(): boolean {
-  if (typeof window === 'undefined') return false;
-  if (window.__LOCUMLINK_NATIVE__) return true;
-  // Fallback when inject runs late — Android/iOS WebView user agents include "; wv)".
-  return /\bwv\b/i.test(navigator.userAgent);
+    if (typeof window === 'undefined') return false;
+    if (window.__LOCUMLINK_NATIVE__) return true;
+    // iOS WKWebView does not include "; wv)" — detect the RN bridge directly.
+    if (window.ReactNativeWebView?.postMessage) return true;
+    if (/LocumLinkNative/i.test(navigator.userAgent)) return true;
+    return /\bwv\b/i.test(navigator.userAgent);
 }
 
 export function getNativePushToken(): string | null {
