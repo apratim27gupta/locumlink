@@ -32,7 +32,7 @@ import {
   clearUserOtpVerifyAttempts,
   recordUserOtpVerifyFailure,
 } from './user-otp-rate-limit.js';
-import { getFixedOtpForStaging } from '../config/fixed-otp.util.js';
+import { getFixedAuthOtp, getReviewOtpForEmail } from '../config/fixed-otp.util.js';
 
 const BCRYPT_ROUNDS = 12;
 const OTP_LENGTH = 6;
@@ -387,7 +387,7 @@ export class AuthService {
       );
     }
 
-    const fixedOtp = getFixedOtpForStaging(this.config, OTP_LENGTH);
+    const fixedOtp = getFixedAuthOtp(normalizedEmail, this.config, OTP_LENGTH);
     const otp =
       fixedOtp ??
       String(randomInt(10 ** (OTP_LENGTH - 1), 10 ** OTP_LENGTH - 1));
@@ -413,15 +413,22 @@ export class AuthService {
     ]);
 
     if (fixedOtp) {
+      const reviewOtp = getReviewOtpForEmail(
+        normalizedEmail,
+        this.config,
+        OTP_LENGTH,
+      );
       this.logger.log(
-        `Staging FIXED_OTP_CODE: OTP email skipped for ${normalizedEmail}`,
+        reviewOtp
+          ? `Review OTP: email skipped for ${normalizedEmail}`
+          : `Staging FIXED_OTP_CODE: OTP email skipped for ${normalizedEmail}`,
       );
       await this.prisma.emailLog.create({
         data: {
           recipient: normalizedEmail,
           eventType: 'AUTH_OTP',
           status: 'SKIPPED',
-          provider: 'staging_fixed_otp',
+          provider: reviewOtp ? 'review_otp' : 'staging_fixed_otp',
           referenceType: 'Otp',
         },
       });
