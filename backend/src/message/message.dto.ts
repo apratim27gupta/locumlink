@@ -5,6 +5,9 @@ import {
   ValidateNested,
   IsInt,
   Min,
+  IsIn,
+  IsBoolean,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 export class MessageAttachmentDto {
@@ -36,4 +39,25 @@ export class EditMessageDto {
   @IsString()
   @MinLength(1)
   body!: string;
+}
+export class BlockUserDto {
+  @IsString()
+  userId!: string;
+}
+
+export class ReportUserDto {
+  @IsString()
+  userId!: string;
+
+  @IsIn(['HARASSMENT', 'SPAM', 'INAPPROPRIATE_CONTENT', 'FRAUD', 'OTHER'])
+  reason!: 'HARASSMENT' | 'SPAM' | 'INAPPROPRIATE_CONTENT' | 'FRAUD' | 'OTHER';
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(2000)
+  details?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  block?: boolean;
 }

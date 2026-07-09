@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   FileCheck,
   Shield,
@@ -55,6 +56,7 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { stats, adminEmail } = useAdminStats();
   const pendingCount = stats?.pendingVerifications ?? 0;
+  const openReports = stats?.openReports ?? 0;
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
@@ -89,6 +91,13 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
       label: 'User Management',
       href: '/admin/users',
       icon: <Users size={20} />,
+    },
+    {
+      id: 'reports',
+      label: 'Reports',
+      href: '/admin/reports',
+      icon: <AlertTriangle size={20} />,
+      badge: openReports > 0 ? openReports : undefined,
     },
     {
       id: 'audit',

@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthSplitLayout from '@/components/AuthSplitLayout';
+import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
 import MicrosoftIcon from '@/components/icons/MicrosoftIcon';
 import { useAuth } from '@/providers/AuthProvider';
@@ -51,7 +52,9 @@ function AuthPageInner() {
     const [lockWarning, setLockWarning] = useState<string | null>(null);
     const [email, setEmail] = useState('');
     const [error, setError] = useState(() => sanitizeErrorMessage(params.get('error')));
-    const [busyAction, setBusyAction] = useState<null | 'email' | 'google' | 'azure'>(null);
+    const [busyAction, setBusyAction] = useState<
+        null | 'email' | 'apple' | 'google' | 'azure'
+    >(null);
 
     useEffect(() => {
         if (params.get('mode') === 'signin') setMode('signin');
@@ -73,9 +76,8 @@ function AuthPageInner() {
         setBusyAction('email');
         try {
             const nextParam = params.get('next');
-            if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.startsWith('/auth') && !nextParam.startsWith('/home')) {
-                saveLastPath(nextParam);
-            }
+            if (nextParam)
+                saveLastPath(nextParam, role);
             await sendOtp(email, role);
             router.replace(`/auth/verify?role=${encodeURIComponent(role)}`);
         } catch (err: unknown) {
@@ -85,17 +87,17 @@ function AuthPageInner() {
         }
     }
 
-    async function handleOAuth(provider: 'google' | 'azure') {
+    async function handleOAuth(provider: 'apple' | 'google' | 'azure') {
         setError('');
         setBusyAction(provider);
         try {
             const nextParam = params.get('next');
-            if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.startsWith('/auth') && !nextParam.startsWith('/home')) {
-                saveLastPath(nextParam);
-            }
+            if (nextParam)
+                saveLastPath(nextParam, role);
             await signInWithOAuth(provider, role);
         } catch (err: unknown) {
             setError(toUserFacingError(err, 'Could not start social sign-in. Please try again.'));
+        } finally {
             setBusyAction(null);
         }
     }
@@ -165,6 +167,11 @@ function AuthPageInner() {
 
                 <div className="auth-oauth-row">
                     {([
+                        {
+                            title: 'Apple',
+                            provider: 'apple' as const,
+                            icon: <AppleIcon size={24} />,
+                        },
                         {
                             title: 'Google',
                             provider: 'google' as const,

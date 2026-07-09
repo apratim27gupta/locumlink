@@ -1,11 +1,5 @@
 import type { NotificationItem } from '@/lib/api';
-
-const SUPPORT_EMAIL = 'support@locumlink.ca';
-
-function contactSupportMailtoHref(): string {
-  const subject = encodeURIComponent('Account suspension — support request');
-  return `mailto:${SUPPORT_EMAIL}?subject=${subject}`;
-}
+import { SUPPORT_PAGE_PATH } from '@/lib/support';
 
 const EVENT_DEFAULTS: Record<string, { href: string; actionLabel: string }> = {
   H_001_LOCUM_APPLIED: { href: '/host/dashboard', actionLabel: 'Review Application' },
@@ -14,9 +8,10 @@ const EVENT_DEFAULTS: Record<string, { href: string; actionLabel: string }> = {
   H_004_NEW_MESSAGE: { href: '/host/messages', actionLabel: 'Read Message' },
   H_005_ACCOUNT_VERIFIED: { href: '/host/dashboard?postJob=1', actionLabel: 'Post Your First Opportunity' },
   H_006_ACCOUNT_REJECTED: { href: '/host/profile', actionLabel: 'Complete Verification' },
-  H_007_ACCOUNT_SUSPENDED: { href: contactSupportMailtoHref(), actionLabel: 'Contact Support' },
+  H_007_ACCOUNT_SUSPENDED: { href: SUPPORT_PAGE_PATH, actionLabel: 'Contact Support' },
   H_008_POSTING_EXPIRING: { href: '/host/dashboard', actionLabel: 'Extend Opportunity' },
   H_009_SHIFT_CANCELLED: { href: '/host/dashboard?postJob=1', actionLabel: 'Repost Opportunity' },
+  H_010_ACCOUNT_WARNING: { href: SUPPORT_PAGE_PATH, actionLabel: 'Contact Support' },
   L_001_NEW_OPPORTUNITY: { href: '/locum/browse', actionLabel: 'Browse Opportunities' },
   L_002_HOST_CONFIRMED: { href: '/locum/dashboard', actionLabel: 'View Shift Details' },
   L_003_APPLICATION_ACCEPTED: { href: '/locum/dashboard', actionLabel: 'Confirm Availability' },
@@ -27,8 +22,9 @@ const EVENT_DEFAULTS: Record<string, { href: string; actionLabel: string }> = {
   L_008_NEW_MESSAGE: { href: '/locum/messages', actionLabel: 'Reply' },
   L_009_ACCOUNT_VERIFIED: { href: '/locum/browse', actionLabel: 'Browse Opportunities' },
   L_010_ACCOUNT_REJECTED: { href: '/locum/profile', actionLabel: 'Complete Verification' },
-  L_011_ACCOUNT_SUSPENDED: { href: contactSupportMailtoHref(), actionLabel: 'Contact Support' },
+  L_011_ACCOUNT_SUSPENDED: { href: SUPPORT_PAGE_PATH, actionLabel: 'Contact Support' },
   L_012_SHIFT_CANCELLED: { href: '/locum/browse', actionLabel: 'Browse Opportunities' },
+  L_013_ACCOUNT_WARNING: { href: SUPPORT_PAGE_PATH, actionLabel: 'Contact Support' },
 };
 
 const EVENT_TITLES: Record<string, string> = {
@@ -41,6 +37,7 @@ const EVENT_TITLES: Record<string, string> = {
   H_007_ACCOUNT_SUSPENDED: 'Important: Account Suspension Notice',
   H_008_POSTING_EXPIRING: 'Shift Coverage Reminder',
   H_009_SHIFT_CANCELLED: 'Last-Minute Cancellation Alert',
+  H_010_ACCOUNT_WARNING: 'Account warning',
   L_001_NEW_OPPORTUNITY: 'New Locum Opportunity Available',
   L_002_HOST_CONFIRMED: 'Shift Confirmed',
   L_003_APPLICATION_ACCEPTED: 'Application Accepted — Action Required',
@@ -53,7 +50,15 @@ const EVENT_TITLES: Record<string, string> = {
   L_010_ACCOUNT_REJECTED: 'Action Required: Account Verification',
   L_011_ACCOUNT_SUSPENDED: 'Account suspended',
   L_012_SHIFT_CANCELLED: 'Shift Cancelled',
+  L_013_ACCOUNT_WARNING: 'Account warning',
 };
+
+const SUPPORT_EVENT_TYPES = new Set([
+  'H_007_ACCOUNT_SUSPENDED',
+  'H_010_ACCOUNT_WARNING',
+  'L_011_ACCOUNT_SUSPENDED',
+  'L_013_ACCOUNT_WARNING',
+]);
 
 function isInternalNotificationCode(text: string): boolean {
   return /^[HLA]_\d{3}_/i.test(text.trim());
@@ -75,7 +80,9 @@ export function resolveNotificationAction(notif: NotificationItem): {
   const defaults = eventType ? EVENT_DEFAULTS[eventType] : undefined;
   const rawHref = notif.href?.trim();
   const href =
-    eventType === 'H_002_LOCUM_ACCEPTED' || eventType === 'H_003_LOCUM_DECLINED'
+    SUPPORT_EVENT_TYPES.has(eventType)
+      ? defaults?.href ?? SUPPORT_PAGE_PATH
+      : eventType === 'H_002_LOCUM_ACCEPTED' || eventType === 'H_003_LOCUM_DECLINED'
       ? defaults?.href ?? '/host/dashboard'
       : rawHref && rawHref !== '/'
         ? rawHref

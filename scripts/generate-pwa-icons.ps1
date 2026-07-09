@@ -27,8 +27,9 @@ function New-PwaIcon {
     $img.Dispose()
 }
 
-$publicDir = Join-Path $PSScriptRoot '..\frontend\public' | Resolve-Path
-$source = Join-Path $publicDir 'logo.png'
+$repoRoot = Join-Path $PSScriptRoot '..' | Resolve-Path
+$publicDir = Join-Path $repoRoot 'frontend\public'
+$source = Join-Path $repoRoot 'mobile\assets\icon-192.png'
 
 New-PwaIcon -SourcePath $source -DestPath (Join-Path $publicDir 'apple-touch-icon.png') -Size 180
 New-PwaIcon -SourcePath $source -DestPath (Join-Path $publicDir 'icon-192.png') -Size 192

@@ -11,6 +11,7 @@ import {
   AuditAction,
   PostingStatus,
   Role,
+  UserReportStatus,
   UserStatus,
   VerificationStatus,
 } from '@prisma/client';
@@ -20,6 +21,7 @@ import type { AdminJwtPayload } from '../admin-auth/admin-auth.types.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import type { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
+import type { AdminReportActionDto } from './dto/admin-report-action.dto.js';
 import {
   analyticsSummaryToCsv,
   buildAnalyticsSummary,
@@ -39,6 +41,21 @@ const VERIFICATION_PENDING_FILTER: VerificationStatus[] = [
 
 /** Matches VerificationStatus enum values in schema (avoids enum-as-namespace in type positions). */
 type VerificationListFilter = 'PENDING_TAB' | 'VERIFIED' | 'REJECTED';
+
+const reportUserSelect = {
+  id: true,
+  email: true,
+  role: true,
+  status: true,
+  locumProfile: { select: { firstName: true, lastName: true } },
+  hostProfile: {
+    select: {
+      contactFirstName: true,
+      contactLastName: true,
+      practiceName: true,
+    },
+  },
+} as const;
 
 function formatAuditDetail(params: {
   before?: unknown;
@@ -95,6 +112,41 @@ export class AdminService {
     return { label, value: s };
   }
 
+  private reportUserSummary(user: {
+    id: string;
+    email: string;
+    role: Role;
+    status: UserStatus;
+    locumProfile?: { firstName: string | null; lastName: string | null } | null;
+    hostProfile?: {
+      contactFirstName: string | null;
+      contactLastName: string | null;
+      practiceName: string | null;
+    } | null;
+  }) {
+    const locumName = [
+      user.locumProfile?.firstName,
+      user.locumProfile?.lastName,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    const hostContact = [
+      user.hostProfile?.contactFirstName,
+      user.hostProfile?.contactLastName,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      name: user.hostProfile?.practiceName || locumName || hostContact || user.email,
+    };
+  }
+
   private async verificationDocument(
     id: string,
     label: string,
@@ -126,6 +178,7 @@ export class AdminService {
     totalApplications: number;
     fillRate: number;
     avgTimesToPlacementHours: number | null;
+    openReports: number;
   }> {
     const [
       roleGroups,
@@ -138,6 +191,7 @@ export class AdminService {
       totalApplications,
       confirmedApplications,
       placedApplications,
+      openReports,
     ] = await Promise.all([
       this.prisma.user.groupBy({
         by: ['role'],
@@ -177,6 +231,9 @@ export class AdminService {
         },
         select: { appliedAt: true, placedAt: true },
         take: 1000,
+      }),
+      this.prisma.userReport.count({
+        where: { status: UserReportStatus.OPEN },
       }),
     ]);
 
@@ -222,6 +279,7 @@ export class AdminService {
       totalApplications,
       fillRate,
       avgTimesToPlacementHours,
+      openReports,
     };
   }
 
@@ -367,6 +425,183 @@ export class AdminService {
       ].join(','),
     );
     return [header, ...lines].join('\n');
+  }
+
+  async listReports(params: { status?: string }) {
+    const status =
+      params.status &&
+      ['OPEN', 'DISMISSED', 'WARNED', 'SUSPENDED'].includes(params.status)
+        ? (params.status as UserReportStatus)
+        : UserReportStatus.OPEN;
+    const rows = await this.prisma.userReport.findMany({
+      where: { status },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        reporter: { select: reportUserSelect },
+        reported: { select: reportUserSelect },
+        reviewedBy: { select: { id: true, email: true, name: true } },
+      },
+    });
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        reason: row.reason,
+        details: row.details,
+        status: row.status,
+        alsoBlockedReporter: row.alsoBlockedReporter,
+        createdAt: row.createdAt.toISOString(),
+        reviewedAt: row.reviewedAt?.toISOString() ?? null,
+        warningNote: row.warningNote,
+        reporter: this.reportUserSummary(row.reporter),
+        reported: this.reportUserSummary(row.reported),
+        reviewedBy: row.reviewedBy,
+      })),
+    };
+  }
+
+  async getReport(reportId: string) {
+    const report = await this.prisma.userReport.findUnique({
+      where: { id: reportId },
+      include: {
+        reporter: { select: reportUserSelect },
+        reported: { select: reportUserSelect },
+        reviewedBy: { select: { id: true, email: true, name: true } },
+      },
+    });
+    if (!report) throw new NotFoundException('Report not found');
+
+    const newestMessages = await this.prisma.message.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          { senderId: report.reporterId, recipientId: report.reportedId },
+          { senderId: report.reportedId, recipientId: report.reporterId },
+        ],
+      },
+      orderBy: { sentAt: 'desc' },
+      take: 5,
+      include: {
+        attachments: {
+          select: {
+            id: true,
+            fileName: true,
+            mimeType: true,
+            size: true,
+          },
+        },
+      },
+    });
+
+    return {
+      id: report.id,
+      reason: report.reason,
+      details: report.details,
+      status: report.status,
+      alsoBlockedReporter: report.alsoBlockedReporter,
+      createdAt: report.createdAt.toISOString(),
+      reviewedAt: report.reviewedAt?.toISOString() ?? null,
+      warningNote: report.warningNote,
+      reporter: this.reportUserSummary(report.reporter),
+      reported: this.reportUserSummary(report.reported),
+      reviewedBy: report.reviewedBy,
+      messages: newestMessages.reverse().map((message) => ({
+        id: message.id,
+        senderId: message.senderId,
+        recipientId: message.recipientId,
+        body: message.body,
+        sentAt: message.sentAt.toISOString(),
+        editedAt: message.editedAt?.toISOString() ?? null,
+        attachments: message.attachments,
+      })),
+    };
+  }
+
+  async actionReport(
+    req: Request,
+    adminPayload: AdminJwtPayload,
+    reportId: string,
+    dto: AdminReportActionDto,
+  ) {
+    const report = await this.prisma.userReport.findUnique({
+      where: { id: reportId },
+      include: { reported: true },
+    });
+    if (!report) throw new NotFoundException('Report not found');
+
+    if (dto.action === 'WARN') {
+      const warningNote = dto.warningNote?.trim();
+      if (!warningNote) {
+        throw new BadRequestException('Warning note is required.');
+      }
+      if (report.reported.role === Role.LOCUM) {
+        await this.notifService.notifyLocumAccountWarning({
+          recipientId: report.reported.id,
+          recipientEmail: report.reported.email,
+          warningNote,
+          referenceId: report.reported.id,
+        });
+      } else if (report.reported.role === Role.HOST) {
+        await this.notifService.notifyHostAccountWarning({
+          recipientId: report.reported.id,
+          recipientEmail: report.reported.email,
+          warningNote,
+          referenceId: report.reported.id,
+        });
+      }
+      await this.prisma.userReport.update({
+        where: { id: reportId },
+        data: {
+          status: UserReportStatus.WARNED,
+          warningNote,
+          reviewedAt: new Date(),
+          reviewedById: adminPayload.sub,
+        },
+      });
+    } else if (dto.action === 'SUSPEND') {
+      const suspensionNote = dto.suspensionNote?.trim();
+      if (!suspensionNote) {
+        throw new BadRequestException('Suspension note is required.');
+      }
+      await this.updateUser(req, adminPayload, report.reportedId, {
+        status: UserStatus.SUSPENDED,
+        suspensionNote,
+      });
+      await this.prisma.userReport.update({
+        where: { id: reportId },
+        data: {
+          status: UserReportStatus.SUSPENDED,
+          reviewedAt: new Date(),
+          reviewedById: adminPayload.sub,
+        },
+      });
+    } else {
+      await this.prisma.userReport.update({
+        where: { id: reportId },
+        data: {
+          status: UserReportStatus.DISMISSED,
+          reviewedAt: new Date(),
+          reviewedById: adminPayload.sub,
+        },
+      });
+    }
+
+    this.audit.log({
+      adminActorId: adminPayload.sub,
+      subjectId: report.reportedId,
+      action: AuditAction.UPDATE,
+      entity: 'UserReport',
+      entityId: reportId,
+      before: { status: report.status },
+      after: { action: dto.action },
+      ip: extractIp(req),
+      userAgent: req.headers['user-agent'],
+      endpoint: `${req.method} ${req.originalUrl}`,
+      outcome: 'SUCCESS',
+      actorRole: 'admin',
+    });
+
+    return this.getReport(reportId);
   }
 
   async updateUser(

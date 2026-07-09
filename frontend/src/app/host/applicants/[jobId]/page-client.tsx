@@ -751,7 +751,12 @@ export default function HostApplicantsPage(props: {
                         setComposeSent(true);
                     }
                     catch (e) {
-                        setComposeError(e instanceof Error ? e.message : 'Could not send message.');
+                        const msg = e instanceof Error ? e.message : 'Could not send message.';
+                        setComposeError(
+                            msg.includes('cannot message')
+                                ? 'This user is unavailable for messaging.'
+                                : msg,
+                        );
                     }
                     finally {
                         setComposeSending(false);

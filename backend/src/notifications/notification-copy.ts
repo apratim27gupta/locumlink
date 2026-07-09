@@ -50,9 +50,7 @@ export function formatSuspensionReason(note?: string | null): string {
 }
 
 export function contactSupportMailtoHref(): string {
-  const email = process.env.SUPPORT_EMAIL?.trim() || 'support@locumlink.ca';
-  const subject = encodeURIComponent('Account suspension — support request');
-  return `mailto:${email}?subject=${subject}`;
+  return '/support';
 }
 
 export function locumBrowseHref(jobId?: string): string {
@@ -256,6 +254,19 @@ export const L011_LOCUM_ACCOUNT_SUSPENDED = {
   priority: 'CRITICAL' as LocumCopyPriority,
   actionLabel: 'Contact Support',
 };
+
+/** L-013 — Locum account warning */
+export function buildL013AccountWarning(params: { warningNote: string }) {
+  const body = `A Locum Link admin has sent you an account warning: ${params.warningNote}`;
+  return {
+    inAppTitle: 'Account warning',
+    inAppBody: body,
+    emailSubject: 'Important: Locum Link account warning',
+    emailBody: body,
+    priority: 'HIGH' as LocumCopyPriority,
+    actionLabel: 'Contact Support',
+  };
+}
 
 /** L-012 — Host cancelled confirmed shift */
 export function buildL012ShiftCancelled(params: {

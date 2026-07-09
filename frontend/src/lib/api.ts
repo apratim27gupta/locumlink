@@ -945,6 +945,17 @@ export type ConversationPartner = {
         practiceName: string;
     } | null;
 };
+export type BlockStatus = {
+    blockedByMe: boolean;
+    blockedByPartner: boolean;
+    isMessagingBlocked: boolean;
+};
+export type BlockedUser = {
+    userId: string;
+    blockedAt: string;
+    user: ConversationPartner;
+};
+export type ReportReason = 'HARASSMENT' | 'SPAM' | 'INAPPROPRIATE_CONTENT' | 'FRAUD' | 'OTHER';
 export type Conversation = {
     partnerId: string;
     partner: ConversationPartner;
@@ -960,6 +971,7 @@ export type Conversation = {
         } | null;
     };
     unreadCount: number;
+    blockStatus?: BlockStatus;
 };
 export type ThreadMessage = {
     id: string;
@@ -1023,7 +1035,10 @@ export const messageApi = {
         skipTopLoader?: boolean;
         /** ISO timestamp — poll only messages newer than this (lighter on RAM/CPU). */
         since?: string;
-    }): Promise<PaginatedResult<ThreadMessage> & { partner: ThreadPartner | null }> => {
+    }): Promise<PaginatedResult<ThreadMessage> & {
+        partner: ThreadPartner | null;
+        blockStatus?: BlockStatus;
+    }> => {
         const sp = new URLSearchParams();
         if (opts?.since)
             sp.set('since', opts.since);
@@ -1043,7 +1058,10 @@ export const messageApi = {
             const text = await res.text();
             throw nestHttpError(text, res.status, 'Loading thread');
         }
-        return res.json() as Promise<PaginatedResult<ThreadMessage> & { partner: ThreadPartner | null }>;
+        return res.json() as Promise<PaginatedResult<ThreadMessage> & {
+            partner: ThreadPartner | null;
+            blockStatus?: BlockStatus;
+        }>;
     },
     sendMessage: async (recipientId: string, body: string, jobPostingId?: string, attachments?: {
         storagePath: string;
@@ -1105,6 +1123,68 @@ export const messageApi = {
             message: ThreadMessage;
         }>;
     },
+    blockUser: async (userId: string): Promise<{ ok: true }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/messages/blocks`, {
+            method: 'POST',
+            headers: nestHeaders(true),
+            skipTopLoader: true,
+            body: JSON.stringify({ userId }),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Blocking user');
+        }
+        return res.json() as Promise<{ ok: true }>;
+    },
+    reportUser: async (
+        userId: string,
+        reason: ReportReason,
+        details?: string,
+        opts?: { block?: boolean },
+    ): Promise<{ ok: true; reportId: string; blocked: boolean }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/messages/reports`, {
+            method: 'POST',
+            headers: nestHeaders(true),
+            skipTopLoader: true,
+            body: JSON.stringify({
+                userId,
+                reason,
+                ...(details?.trim() ? { details: details.trim() } : {}),
+                ...(opts?.block ? { block: true } : {}),
+            }),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, opts?.block ? 'Blocking and reporting user' : 'Reporting user');
+        }
+        return res.json() as Promise<{ ok: true; reportId: string; blocked: boolean }>;
+    },
+    unblockUser: async (userId: string): Promise<{ ok: true }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/messages/blocks/${encodeURIComponent(userId)}`, {
+            method: 'DELETE',
+            headers: nestHeaders(false),
+            skipTopLoader: true,
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Unblocking user');
+        }
+        return res.json() as Promise<{ ok: true }>;
+    },
+    getBlockedUsers: async (opts?: { skipTopLoader?: boolean }): Promise<{
+        blockedUsers: BlockedUser[];
+    }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/messages/blocks`, {
+            cache: 'no-store',
+            headers: nestHeaders(false),
+            skipTopLoader: opts?.skipTopLoader ?? false,
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Loading blocked users');
+        }
+        return res.json() as Promise<{ blockedUsers: BlockedUser[] }>;
+    },
 };
 export type NotificationPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NORMAL' | 'LOW';
 
@@ -1160,6 +1240,26 @@ export const notificationsApi = {
             body: JSON.stringify({ endpoint }),
         });
         if (!res.ok) throw new Error('Failed to remove push subscription');
+    },
+    registerExpoToken: async (token: string, platform: 'ios' | 'android'): Promise<void> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/notifications/push/register-expo`, {
+            method: 'POST',
+            cache: 'no-store',
+            headers: nestHeaders(true),
+            skipTopLoader: true,
+            body: JSON.stringify({ token, platform }),
+        });
+        if (!res.ok) throw new Error('Failed to register Expo push token');
+    },
+    unregisterExpoToken: async (token: string): Promise<void> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/notifications/push/unregister-expo`, {
+            method: 'DELETE',
+            cache: 'no-store',
+            headers: nestHeaders(true),
+            skipTopLoader: true,
+            body: JSON.stringify({ token }),
+        });
+        if (!res.ok) throw new Error('Failed to unregister Expo push token');
     },
     markRead: async (id: string): Promise<void> => {
         const res = await trackedFetch(`${NEST_BASE}/api/notifications/${encodeURIComponent(id)}/read`, {

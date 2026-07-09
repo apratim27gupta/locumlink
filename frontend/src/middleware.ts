@@ -10,6 +10,9 @@ const PUBLIC_PREFIXES = [
   '/register',
   '/auth',
   '/documents',
+  '/support',
+  '/privacy-policy',
+  '/terms-of-use',
   '/offline',
 ];
 
@@ -18,6 +21,11 @@ export async function middleware(request: NextRequest) {
 
   // OAuth PKCE: route handler must exchange code before any Supabase cookie refresh
   if (pathname === '/auth/callback') {
+    return NextResponse.next();
+  }
+
+  // Nest API routes authenticate via Authorization Bearer (ll_access), not Supabase cookies.
+  if (pathname.startsWith('/api')) {
     return NextResponse.next();
   }
 

@@ -181,6 +181,8 @@ export class AdminNotificationsService {
     reason: string;
     reporter: string;
     userId: string;
+    reportId?: string;
+    alsoBlocked?: boolean;
   }): Promise<void> {
     const copy = buildA004AccountFlagged(params);
     await this.notifyAllAdmins({

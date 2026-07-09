@@ -99,6 +99,21 @@ enum AuditAction {
   STATUS_CHANGE
 }
 
+enum UserReportStatus {
+  OPEN
+  DISMISSED
+  WARNED
+  SUSPENDED
+}
+
+enum UserReportReason {
+  HARASSMENT
+  SPAM
+  INAPPROPRIATE_CONTENT
+  FRAUD
+  OTHER
+}
+
 model User {
   id                 String     @id @default(cuid())
   email              String
@@ -134,6 +149,11 @@ model User {
   auditActorLogs     AuditLog[]         @relation("AuditActor")
   notifications      NotificationEvent[]
   pushSubscriptions  PushSubscription[]
+  expoPushTokens     ExpoPushToken[]
+  blocksInitiated    UserBlock[]        @relation("BlocksInitiated")
+  blocksReceived     UserBlock[]        @relation("BlocksReceived")
+  reportsFiled       UserReport[]       @relation("ReportsFiled")
+  reportsReceived    UserReport[]       @relation("ReportsReceived")
 
   @@unique([email, role])
   @@map("users")
@@ -476,6 +496,7 @@ model Admin {
   createdAt         DateTime                 @default(now())
   auditLogs         AuditLog[]
   notifications     AdminNotificationEvent[]
+  reviewedReports   UserReport[]
 
   @@map("admins")
 }
@@ -505,6 +526,56 @@ model PushSubscription {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@map("push_subscriptions")
+}
+
+model ExpoPushToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("expo_push_tokens")
+}
+
+model UserBlock {
+  id        String   @id @default(cuid())
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  blocker   User     @relation("BlocksInitiated", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+  @@map("user_blocks")
+}
+
+model UserReport {
+  id                  String           @id @default(cuid())
+  reporterId          String           @map("reporter_id")
+  reportedId          String           @map("reported_id")
+  reason              UserReportReason
+  details             String?          @db.VarChar(2000)
+  status              UserReportStatus @default(OPEN)
+  warningNote         String?          @map("warning_note") @db.VarChar(2000)
+  alsoBlockedReporter Boolean          @default(false) @map("also_blocked_reporter")
+  reviewedAt          DateTime?        @map("reviewed_at")
+  reviewedById        String?          @map("reviewed_by_id")
+  createdAt           DateTime         @default(now()) @map("created_at")
+
+  reporter   User   @relation("ReportsFiled", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported   User   @relation("ReportsReceived", fields: [reportedId], references: [id], onDelete: Cascade)
+  reviewedBy Admin? @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([reportedId])
+  @@index([reporterId])
+  @@index([status, createdAt])
+  @@map("user_reports")
 }
 
 model ErrorLog {

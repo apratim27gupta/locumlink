@@ -3,6 +3,20 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    return [
+      {
+        source: '/documents/privacy-policy.pdf',
+        destination: '/privacy-policy',
+        permanent: true,
+      },
+      {
+        source: '/documents/terms-of-use.pdf',
+        destination: '/terms-of-use',
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {
@@ -45,6 +59,8 @@ const nextConfig: NextConfig = {
       { source: '/api/admin/analytics/export', destination: `${apiBase}/api/admin/analytics/export` },
       { source: '/api/admin/notifications', destination: `${apiBase}/api/admin/notifications` },
       { source: '/api/admin/notifications/:id/read', destination: `${apiBase}/api/admin/notifications/:id/read` },
+      { source: '/api/admin/reports', destination: `${apiBase}/api/admin/reports` },
+      { source: '/api/admin/reports/:path*', destination: `${apiBase}/api/admin/reports/:path*` },
       { source: '/api/admin/verifications', destination: `${apiBase}/api/admin/verifications` },
       { source: '/api/admin/verifications/:path*', destination: `${apiBase}/api/admin/verifications/:path*` },
       { source: '/api/admin/users/:id/profile', destination: `${apiBase}/api/admin/users/:id/profile` },

@@ -102,3 +102,66 @@ export async function adminDownloadAnalyticsReport(): Promise<void> {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export type AdminReportStatus = 'OPEN' | 'DISMISSED' | 'WARNED' | 'SUSPENDED';
+export type AdminReportReason = 'HARASSMENT' | 'SPAM' | 'INAPPROPRIATE_CONTENT' | 'FRAUD' | 'OTHER';
+
+export type AdminReportUser = {
+  id: string;
+  email: string;
+  role: 'HOST' | 'LOCUM' | 'ADMIN';
+  status: string;
+  name: string;
+};
+
+export type AdminReportRow = {
+  id: string;
+  reason: AdminReportReason;
+  details: string | null;
+  status: AdminReportStatus;
+  alsoBlockedReporter: boolean;
+  createdAt: string;
+  reviewedAt: string | null;
+  warningNote: string | null;
+  reporter: AdminReportUser;
+  reported: AdminReportUser;
+  reviewedBy?: { id: string; email: string; name: string } | null;
+};
+
+export type AdminReportDetail = AdminReportRow & {
+  messages: Array<{
+    id: string;
+    senderId: string;
+    recipientId: string;
+    body: string;
+    sentAt: string;
+    editedAt: string | null;
+    attachments: Array<{
+      id: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+    }>;
+  }>;
+};
+
+export async function adminListReports(status: AdminReportStatus = 'OPEN'): Promise<{ items: AdminReportRow[] }> {
+  return adminFetchJson(`/api/admin/reports?${new URLSearchParams({ status }).toString()}`);
+}
+
+export async function adminGetReport(id: string): Promise<AdminReportDetail> {
+  return adminFetchJson(`/api/admin/reports/${encodeURIComponent(id)}`);
+}
+
+export async function adminActionReport(
+  id: string,
+  body:
+    | { action: 'DISMISS' }
+    | { action: 'WARN'; warningNote: string }
+    | { action: 'SUSPEND'; suspensionNote: string },
+): Promise<AdminReportDetail> {
+  return adminFetchJson(`/api/admin/reports/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}

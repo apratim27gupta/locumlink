@@ -621,6 +621,15 @@
   background-color: #b45309;
 }
 
+.admin-portal .btn-danger {
+  background-color: #dc2626;
+  color: white;
+}
+
+.admin-portal .btn-danger:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
 .admin-portal .btn-success {
   background-color: #059669;
   color: white;

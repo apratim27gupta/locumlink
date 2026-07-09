@@ -14,40 +14,51 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ca.locumlink.app"
+      "bundleIdentifier": "ca.locumlink.app",
+      "buildNumber": "1",
+      "usesAppleSignIn": true,
+      "associatedDomains": [
+        "applinks:locumlink.ca",
+        "applinks:staging.locumlink.ca"
+      ],
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserNotificationsUsageDescription": "Locum Link sends alerts for messages, applications, and account updates."
+      }
     },
     "android": {
       "package": "ca.locumlink.app",
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      },
-      "intentFilters": [
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "https",
-              "host": "locumlink.ca",
-              "pathPrefix": "/auth/callback"
-            }
-          ],
-          "category": ["BROWSABLE", "DEFAULT"]
-        }
-      ]
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
+    "plugins": [
+      "expo-dev-client",
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "color": "#38C6C6"
+        }
+      ],
+      "expo-apple-authentication"
+    ],
     "extra": {
       "eas": {
-        "projectId": "d9a67417-a865-46e5-9429-25b67af8224f"
+        "projectId": "cc191bc9-a1a5-4609-8326-cc2db4fb0ef6"
       }
     },
-    "plugins": [
-      "expo-web-browser"
-    ]
+    "owner": "satyam_gautam24"
   }
 }

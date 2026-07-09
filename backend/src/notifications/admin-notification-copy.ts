@@ -72,15 +72,20 @@ export function buildA004AccountFlagged(params: {
   doctorName: string;
   reason: string;
   reporter: string;
+  reportId?: string;
+  alsoBlocked?: boolean;
 }) {
+  const blockedCopy = params.alsoBlocked
+    ? ' The reporter also blocked this account.'
+    : '';
   return {
     inAppTitle: 'URGENT: Account Flagged for Review',
-    inAppBody: `User account flagged: ${params.doctorName}. Reason: ${params.reason}. Reported by: ${params.reporter}.`,
+    inAppBody: `User account flagged: ${params.doctorName}. Reason: ${params.reason}. Reported by: ${params.reporter}.${blockedCopy}`,
     emailSubject: 'URGENT: Account Flagged for Review',
-    emailBody: `User account ${params.doctorName} has been flagged. Reason: ${params.reason}. Reported by: ${params.reporter}. Immediate investigation required.`,
+    emailBody: `User account ${params.doctorName} has been flagged. Reason: ${params.reason}. Reported by: ${params.reporter}.${blockedCopy} Immediate investigation required.`,
     priority: 'CRITICAL' as AdminCopyPriority,
     actionLabel: 'Investigate Report',
-    href: '/admin/users',
+    href: params.reportId ? `/admin/reports/${params.reportId}` : '/admin/reports',
   };
 }
 

@@ -5,6 +5,29 @@ const TOKEN_KEY_LEGACY = 'll_access';
 const ROLE_KEY = 'll_role';
 const EMAIL_KEY = 'll_email';
 const LAST_PATH_KEY = 'll_last_path';
+const LAST_PATH_KEY_CLINIC = 'll_last_path_clinic';
+const LAST_PATH_KEY_LOCUM = 'll_last_path_locum';
+
+function lastPathStorageKey(role: Role): string {
+    return role === 'clinic' ? LAST_PATH_KEY_CLINIC : LAST_PATH_KEY_LOCUM;
+}
+
+function roleForPath(path: string): Role | null {
+    if (path.startsWith('/host'))
+        return 'clinic';
+    if (path.startsWith('/locum'))
+        return 'locum';
+    return null;
+}
+
+/** Host/locum deep links only — never auth, home, or admin. */
+function isStorableLastPath(path: string): boolean {
+    if (!path || path === '/' || path.startsWith('//'))
+        return false;
+    if (path.startsWith('/auth') || path.startsWith('/home') || path.startsWith('/admin'))
+        return false;
+    return roleForPath(path) !== null;
+}
 function setCookie(name: string, value: string, days = 365): void {
     if (typeof document === 'undefined')
         return;
@@ -128,24 +151,49 @@ export function clearProfileCompleteCookies(): void {
     deleteCookie('ll_profile_locum');
     deleteCookie('ll_profile_complete');
 }
-export function saveLastPath(path: string): void {
+export function saveLastPath(path: string, role?: Role | null): void {
     if (typeof window === 'undefined')
         return;
-    if (path === '/' || path.startsWith('/auth') || path.startsWith('/home'))
+    if (!isStorableLastPath(path))
         return;
-    localStorage.setItem(LAST_PATH_KEY, path);
+    const resolvedRole = role ?? roleForPath(path) ?? getRole();
+    if (!resolvedRole)
+        return;
+    const pathRole = roleForPath(path);
+    if (pathRole && pathRole !== resolvedRole)
+        return;
+    localStorage.setItem(lastPathStorageKey(resolvedRole), path);
+    localStorage.removeItem(LAST_PATH_KEY);
 }
-export function popLastPath(): string | null {
+export function popLastPath(role?: Role | null): string | null {
     if (typeof window === 'undefined')
         return null;
-    const path = localStorage.getItem(LAST_PATH_KEY);
-    localStorage.removeItem(LAST_PATH_KEY);
+    const resolvedRole = role ?? getRole();
+    if (!resolvedRole) {
+        localStorage.removeItem(LAST_PATH_KEY);
+        return null;
+    }
+    const key = lastPathStorageKey(resolvedRole);
+    let path = localStorage.getItem(key);
+    localStorage.removeItem(key);
+    if (!path) {
+        const legacy = localStorage.getItem(LAST_PATH_KEY);
+        if (legacy && isStorableLastPath(legacy) && roleForPath(legacy) === resolvedRole)
+            path = legacy;
+        localStorage.removeItem(LAST_PATH_KEY);
+    }
     return path;
 }
-export function clearLastPath(): void {
+export function clearLastPath(role?: Role | null): void {
     if (typeof window === 'undefined')
         return;
+    if (role) {
+        localStorage.removeItem(lastPathStorageKey(role));
+        return;
+    }
     localStorage.removeItem(LAST_PATH_KEY);
+    localStorage.removeItem(LAST_PATH_KEY_CLINIC);
+    localStorage.removeItem(LAST_PATH_KEY_LOCUM);
 }
 export function syncCookies(): void {
     if (typeof window === 'undefined')
@@ -167,6 +215,8 @@ export function clearSession(): void {
         ROLE_KEY,
         EMAIL_KEY,
         LAST_PATH_KEY,
+        LAST_PATH_KEY_CLINIC,
+        LAST_PATH_KEY_LOCUM,
     ].forEach((k) => localStorage.removeItem(k));
     localStorage.removeItem(TOKEN_KEY_LEGACY);
     deleteCookie('ll_access');

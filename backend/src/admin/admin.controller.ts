@@ -23,6 +23,7 @@ import { CurrentAdmin } from '../admin-auth/decorators/current-admin.decorator.j
 import type { AdminJwtPayload } from '../admin-auth/admin-auth.types.js';
 import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
 import { AdminService } from './admin.service.js';
+import { AdminReportActionDto } from './dto/admin-report-action.dto.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
 
@@ -60,6 +61,27 @@ export class AdminController {
       `attachment; filename="locumlink-analytics-${date}.csv"`,
     );
     return res.status(200).send(`\uFEFF${csv}`);
+  }
+
+  @Get('reports')
+  async reports(@Query('status') status?: string) {
+    return this.admin.listReports({ status });
+  }
+
+  @Get('reports/:id')
+  async getReport(@Param('id') id: string) {
+    return this.admin.getReport(id);
+  }
+
+  @Patch('reports/:id')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async patchReport(
+    @Req() req: Request,
+    @CurrentAdmin() admin: AdminJwtPayload,
+    @Param('id') id: string,
+    @Body() dto: AdminReportActionDto,
+  ) {
+    return this.admin.actionReport(req, admin, id, dto);
   }
 
   @Get('users')

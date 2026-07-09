@@ -30,6 +30,7 @@ import {
   recordAdminVerifyFailure,
   shouldAllowAdminOtpRequest,
 } from './admin-login-rate-limit.js';
+import { getFixedOtpForStaging } from '../config/fixed-otp.util.js';
 import type { AdminJwtPayload } from './admin-auth.types.js';
 
 @Injectable()
@@ -96,6 +97,24 @@ export class AdminAuthService {
         },
       }),
     ]);
+
+    const fixedOtp = getFixedOtpForStaging(this.config, ADMIN_OTP_LENGTH);
+    if (fixedOtp) {
+      this.logger.log(
+        `Staging FIXED_OTP_CODE: admin OTP email skipped for ${email}`,
+      );
+      await this.prisma.emailLog.create({
+        data: {
+          recipient: email,
+          eventType: 'ADMIN_LOGIN_OTP',
+          status: 'SKIPPED',
+          provider: 'staging_fixed_otp',
+          referenceId: admin.id,
+          referenceType: 'Admin',
+        },
+      });
+      return;
+    }
 
     await this.sendAdminOtpEmail({
       to: email,
@@ -211,6 +230,8 @@ export class AdminAuthService {
   }
 
   private generateOtp(): string {
+    const fixed = getFixedOtpForStaging(this.config, ADMIN_OTP_LENGTH);
+    if (fixed) return fixed;
     return String(
       randomInt(10 ** (ADMIN_OTP_LENGTH - 1), 10 ** ADMIN_OTP_LENGTH - 1),
     );

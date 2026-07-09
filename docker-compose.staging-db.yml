@@ -1,0 +1,22 @@
+# Postgres for the dedicated staging VM (host port 5433).
+services:
+  postgres_staging:
+    image: postgres:16-alpine
+    container_name: l2_postgres_staging
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${STAGING_POSTGRES_PASSWORD:-change-me-staging}
+      POSTGRES_DB: l2_staging
+    volumes:
+      - pgdata_staging:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d l2_staging"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata_staging:

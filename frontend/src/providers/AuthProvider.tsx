@@ -1,11 +1,11 @@
 'use client';
 import { createContext, useContext, useEffect, useState, ReactNode, } from 'react';
-import { getAppOrigin } from '@/lib/appOrigin';
 import { authApi } from '@/lib/api';
 import { getSupabase } from '@/lib/supabaseClient';
 import { toUserFacingError } from '@/lib/userFacingError';
 import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, popLastPath, clearLastPath, type Role, } from '@/lib/auth';
 import { checkProfileExistsOnServer, ensureProfileMarkedCompleteFromServer, } from '@/lib/profileCompleteSync';
+import { getOAuthCallbackRedirect, isNativeShell, requestNativeOAuth } from '@/lib/nativeShell';
 interface AuthCtx {
     userId: string | null;
     role: Role | null;
@@ -18,12 +18,32 @@ interface AuthCtx {
     }>;
     completeProfile: () => void;
     logout: () => void;
-    signInWithOAuth: (provider: 'google' | 'azure', role: Role) => Promise<void>;
+    signInWithOAuth: (
+        provider: 'apple' | 'google' | 'azure',
+        role: Role,
+    ) => Promise<void>;
     completeOAuthSignIn: () => Promise<{ role: Role; redirectTo: string }>;
 }
 const Ctx = createContext<AuthCtx | null>(null);
 
 let syncNestInFlight: Promise<boolean> | null = null;
+
+function getJwtSubject(token: string | null): string | null {
+    if (!token || typeof window === 'undefined')
+        return null;
+    try {
+        const payload = token.split('.')[1];
+        if (!payload)
+            return null;
+        const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+        const normalized = base64.padEnd(base64.length + ((4 - base64.length % 4) % 4), '=');
+        const decoded = JSON.parse(window.atob(normalized)) as { sub?: unknown };
+        return typeof decoded.sub === 'string' ? decoded.sub : null;
+    }
+    catch {
+        return null;
+    }
+}
 
 /** Exchange Supabase access token for Nest JWT — never store Supabase token as ll_access. */
 async function syncNestAccessToken(supabaseAccessToken: string): Promise<boolean> {
@@ -87,6 +107,9 @@ export function AuthProvider({ children }: {
                             syncProfileCompleteCookies();
                         }
                     }
+                    else {
+                        setUserId(getJwtSubject(getToken()));
+                    }
                 }
                 catch (e) {
                     console.error(e);
@@ -117,7 +140,7 @@ export function AuthProvider({ children }: {
                     }
                 }
                 else if (!session) {
-                    setUserId(null);
+                    setUserId(getJwtSubject(getToken()));
                 }
             });
             subscription = sub;
@@ -152,6 +175,7 @@ export function AuthProvider({ children }: {
         }
         setUserId(null);
         saveToken(tokens.accessToken);
+        setUserId(getJwtSubject(tokens.accessToken));
         syncCookies();
         const profileExists = await checkProfileExistsOnServer(role, tokens.accessToken);
         let redirectTo: string;
@@ -160,35 +184,45 @@ export function AuthProvider({ children }: {
             syncCookies();
             syncProfileCompleteCookies();
             setProfileComplete(true);
-            const lastPath = popLastPath();
+            const lastPath = popLastPath(role);
             redirectTo =
                 lastPath ??
                 (role === 'clinic' ? '/host/dashboard' : '/locum/dashboard');
         } else {
-            clearLastPath();
+            clearLastPath(role);
             redirectTo = role === 'clinic' ? '/host/setup' : '/locum/setup';
         }
         return { role, redirectTo };
     }
-    async function signInWithOAuth(provider: 'google' | 'azure', chosenRole: Role): Promise<void> {
+    async function signInWithOAuth(
+        provider: 'apple' | 'google' | 'azure',
+        chosenRole: Role,
+    ): Promise<void> {
         saveRole(chosenRole);
         setRoleState(chosenRole);
         const supabase = getSupabase();
-        const redirectTo = `${getAppOrigin()}/auth/callback?role=${chosenRole}`;
-       const { error } = await supabase.auth.signInWithOAuth({
-    provider: provider === 'azure' ? 'azure' : 'google',
-    options: {
-        redirectTo,
-        ...(provider === 'azure' && {
-            scopes: 'openid profile email',
-            queryParams: {
-                prompt: 'select_account',
+        const redirectTo = getOAuthCallbackRedirect(chosenRole);
+        const inNativeShell = isNativeShell();
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: provider === 'azure' ? 'azure' : provider,
+            options: {
+                redirectTo,
+                skipBrowserRedirect: inNativeShell,
+                ...(provider === 'azure' && {
+                    scopes: 'openid profile email',
+                    queryParams: {
+                        prompt: 'select_account',
+                    },
+                }),
             },
-        }),
-    },
-});
- 
+        });
+
         if (error) throw new Error(error.message);
+        if (inNativeShell && data?.url) {
+            if (!requestNativeOAuth(data.url)) {
+                throw new Error('Could not start social sign-in. Please try again.');
+            }
+        }
     }
     async function completeOAuthSignIn(): Promise<{ role: Role; redirectTo: string }> {
         const supabase = getSupabase();
@@ -206,10 +240,10 @@ export function AuthProvider({ children }: {
         let redirectTo: string;
         if (profileExists) {
             markProfileComplete(); syncCookies(); syncProfileCompleteCookies(); setProfileComplete(true);
-            const lastPath = popLastPath();
+            const lastPath = popLastPath(savedRole);
             redirectTo = lastPath ?? (savedRole === 'clinic' ? '/host/dashboard' : '/locum/dashboard');
         } else {
-            clearLastPath();
+            clearLastPath(savedRole);
             redirectTo = savedRole === 'clinic' ? '/host/setup' : '/locum/setup';
         }
         return { role: savedRole, redirectTo };

@@ -4,7 +4,10 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
+import { UserReportReason } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   paginateMessages,
@@ -12,6 +15,8 @@ import {
 } from '../common/pagination/index.js';
 import { GcsService } from '../gcs/gcs.service.js';
 import { assertOwnsStoragePath } from '../common/utils/storage-path.util.js';
+import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
+import type { ReportUserDto } from './message.dto.js';
 const userSelect = {
   id: true,
   email: true,
@@ -27,6 +32,13 @@ const userSelect = {
 } as const;
 /** Cap rows loaded when building the inbox list (avoids OOM on busy accounts). */
 const CONVERSATION_SCAN_LIMIT = 400;
+
+type BlockStatus = {
+  blockedByMe: boolean;
+  blockedByPartner: boolean;
+  isMessagingBlocked: boolean;
+};
+
 @Injectable()
 export class MessageService {
   constructor(
@@ -34,7 +46,230 @@ export class MessageService {
     private readonly pushService: PushService,
     private readonly gcs: GcsService,
     private readonly notifService: NotificationsService,
+    private readonly adminNotifications: AdminNotificationsService,
   ) {}
+
+  private displayUserName(user: {
+    email: string;
+    role: string;
+    locumProfile?: { firstName: string | null; lastName: string | null } | null;
+    hostProfile?: {
+      contactFirstName: string | null;
+      contactLastName: string | null;
+      practiceName: string | null;
+    } | null;
+  }): string {
+    const locumName = [
+      user.locumProfile?.firstName,
+      user.locumProfile?.lastName,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    if (locumName) return locumName;
+
+    const hostContact = [
+      user.hostProfile?.contactFirstName,
+      user.hostProfile?.contactLastName,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    return user.hostProfile?.practiceName || hostContact || user.email;
+  }
+
+  private reportReasonLabel(reason: UserReportReason): string {
+    return reason
+      .toLowerCase()
+      .split('_')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+
+  private async getBlockStatus(
+    userId: string,
+    partnerId: string,
+  ): Promise<BlockStatus> {
+    const blocks = await this.prisma.userBlock.findMany({
+      where: {
+        OR: [
+          { blockerId: userId, blockedId: partnerId },
+          { blockerId: partnerId, blockedId: userId },
+        ],
+      },
+      select: { blockerId: true },
+    });
+    const blockedByMe = blocks.some((b) => b.blockerId === userId);
+    const blockedByPartner = blocks.some((b) => b.blockerId === partnerId);
+    return {
+      blockedByMe,
+      blockedByPartner,
+      isMessagingBlocked: blockedByMe || blockedByPartner,
+    };
+  }
+
+  private async getBlockStatusMap(
+    userId: string,
+    partnerIds: string[],
+  ): Promise<Map<string, BlockStatus>> {
+    const map = new Map<string, BlockStatus>();
+    if (partnerIds.length === 0) return map;
+
+    const blocks = await this.prisma.userBlock.findMany({
+      where: {
+        OR: [
+          { blockerId: userId, blockedId: { in: partnerIds } },
+          { blockerId: { in: partnerIds }, blockedId: userId },
+        ],
+      },
+      select: { blockerId: true, blockedId: true },
+    });
+
+    for (const partnerId of partnerIds) {
+      const blockedByMe = blocks.some(
+        (b) => b.blockerId === userId && b.blockedId === partnerId,
+      );
+      const blockedByPartner = blocks.some(
+        (b) => b.blockerId === partnerId && b.blockedId === userId,
+      );
+      map.set(partnerId, {
+        blockedByMe,
+        blockedByPartner,
+        isMessagingBlocked: blockedByMe || blockedByPartner,
+      });
+    }
+    return map;
+  }
+
+  private async assertCanMessage(
+    senderId: string,
+    recipientId: string,
+  ): Promise<void> {
+    const status = await this.getBlockStatus(senderId, recipientId);
+    if (status.isMessagingBlocked) {
+      throw new ForbiddenException('You cannot message this user.');
+    }
+  }
+
+  async blockUser(blockerId: string, blockedId: string) {
+    if (blockerId === blockedId) {
+      throw new BadRequestException('You cannot block yourself.');
+    }
+    const target = await this.prisma.user.findUnique({
+      where: { id: blockedId },
+      select: { id: true },
+    });
+    if (!target) {
+      throw new NotFoundException('User not found');
+    }
+    await this.prisma.userBlock.upsert({
+      where: {
+        blockerId_blockedId: { blockerId, blockedId },
+      },
+      update: {},
+      create: { blockerId, blockedId },
+    });
+    return { ok: true };
+  }
+
+  async unblockUser(blockerId: string, blockedId: string) {
+    const result = await this.prisma.userBlock.deleteMany({
+      where: { blockerId, blockedId },
+    });
+    if (result.count === 0) {
+      throw new NotFoundException('Block not found');
+    }
+    return { ok: true };
+  }
+
+  async listBlockedUsers(userId: string) {
+    const rows = await this.prisma.userBlock.findMany({
+      where: { blockerId: userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        blocked: { select: userSelect },
+      },
+    });
+    return {
+      blockedUsers: rows.map((row) => ({
+        userId: row.blockedId,
+        blockedAt: row.createdAt,
+        user: row.blocked,
+      })),
+    };
+  }
+
+  async reportUser(reporterId: string, dto: ReportUserDto) {
+    const reportedId = dto.userId;
+    if (reporterId === reportedId) {
+      throw new BadRequestException('You cannot report yourself.');
+    }
+
+    const [reporter, reported, existingOpen] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: reporterId },
+        select: userSelect,
+      }),
+      this.prisma.user.findUnique({
+        where: { id: reportedId },
+        select: userSelect,
+      }),
+      this.prisma.userReport.findFirst({
+        where: { reporterId, reportedId, status: 'OPEN' },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!reporter) {
+      throw new NotFoundException('Reporter not found');
+    }
+    if (!reported) {
+      throw new NotFoundException('User not found');
+    }
+    if (existingOpen) {
+      throw new ConflictException(
+        'You already have an open report for this user.',
+      );
+    }
+
+    const details = dto.details?.trim() || null;
+    const shouldBlock = dto.block === true;
+    const report = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.userReport.create({
+        data: {
+          reporterId,
+          reportedId,
+          reason: dto.reason,
+          details,
+          alsoBlockedReporter: shouldBlock,
+        },
+      });
+
+      if (shouldBlock) {
+        await tx.userBlock.upsert({
+          where: {
+            blockerId_blockedId: { blockerId: reporterId, blockedId: reportedId },
+          },
+          update: {},
+          create: { blockerId: reporterId, blockedId: reportedId },
+        });
+      }
+
+      return created;
+    });
+
+    await this.adminNotifications.notifyAccountFlagged({
+      doctorName: this.displayUserName(reported),
+      reporter: this.displayUserName(reporter),
+      reason: this.reportReasonLabel(dto.reason),
+      userId: reportedId,
+      reportId: report.id,
+      alsoBlocked: shouldBlock,
+    });
+
+    return { ok: true, reportId: report.id, blocked: shouldBlock };
+  }
+
   private async signAttachments<
     T extends {
       attachments?: {
@@ -205,11 +440,13 @@ export class MessageService {
     }
     const seen = new Set<string>();
     const conversations = [];
+    const partnerIds: string[] = [];
     for (const msg of messages) {
       const partnerId =
         msg.senderId === userId ? msg.recipientId : msg.senderId;
       if (seen.has(partnerId)) continue;
       seen.add(partnerId);
+      partnerIds.push(partnerId);
       const partner = msg.senderId === userId ? msg.recipient : msg.sender;
       conversations.push({
         partnerId,
@@ -225,7 +462,17 @@ export class MessageService {
         unreadCount: unreadByPartner.get(partnerId) ?? 0,
       });
     }
-    return { conversations };
+    const blockStatusMap = await this.getBlockStatusMap(userId, partnerIds);
+    return {
+      conversations: conversations.map((conv) => ({
+        ...conv,
+        blockStatus: blockStatusMap.get(conv.partnerId) ?? {
+          blockedByMe: false,
+          blockedByPartner: false,
+          isMessagingBlocked: false,
+        },
+      })),
+    };
   }
   async getThread(
     userId: string,
@@ -296,47 +543,80 @@ export class MessageService {
     });
 
     if (!conversationExists) {
+      const blockStatus = await this.getBlockStatus(userId, partnerId);
+      const partner = await this.prisma.user.findUnique({
+        where: { id: partnerId },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          locumProfile: {
+            select: {
+              firstName: true,
+              lastName: true,
+              specializationText: true,
+              specialty: true,
+              city: true,
+              province: true,
+            },
+          },
+          hostProfile: {
+            select: {
+              contactFirstName: true,
+              contactLastName: true,
+              practiceName: true,
+              city: true,
+              province: true,
+            },
+          },
+        },
+      });
       return {
         items: [],
         nextCursor: null,
         hasNextPage: false,
-        partner: null,
+        partner,
+        blockStatus,
       };
     }
 
-    const partner = await this.prisma.user.findUnique({
-      where: { id: partnerId },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        locumProfile: {
-          select: {
-            firstName: true,
-            lastName: true,
-            specializationText: true,
-            specialty: true,
-            city: true,
-            province: true,
+    const [partner, blockStatus] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: partnerId },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          locumProfile: {
+            select: {
+              firstName: true,
+              lastName: true,
+              specializationText: true,
+              specialty: true,
+              city: true,
+              province: true,
+            },
+          },
+          hostProfile: {
+            select: {
+              contactFirstName: true,
+              contactLastName: true,
+              practiceName: true,
+              city: true,
+              province: true,
+            },
           },
         },
-        hostProfile: {
-          select: {
-            contactFirstName: true,
-            contactLastName: true,
-            practiceName: true,
-            city: true,
-            province: true,
-          },
-        },
-      },
-    });
+      }),
+      this.getBlockStatus(userId, partnerId),
+    ]);
 
     return {
       items: withSigned,
       nextCursor: page.nextCursor,
       hasNextPage: page.hasNextPage,
       partner,
+      blockStatus,
     };
   }
   async sendMessage(
@@ -355,6 +635,7 @@ export class MessageService {
     if (!trimmed && (!attachments || attachments.length === 0)) {
       throw new ForbiddenException('Message body or attachment is required');
     }
+    await this.assertCanMessage(senderId, recipientId);
     for (const a of attachments ?? []) {
       assertOwnsStoragePath(a.storagePath, senderId);
     }

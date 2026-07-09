@@ -8,6 +8,10 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const schema = 'database/prisma/schema.prisma';
 
+// Root prisma.config.ts reads DATABASE_URL from repo-root .env; dev env lives in backend/.env.
+require('dotenv').config({ path: path.join(root, 'backend', '.env') });
+require('dotenv').config({ path: path.join(root, '.env') });
+
 try {
     execSync('docker compose up -d', { stdio: 'inherit', cwd: root, env: process.env });
 }

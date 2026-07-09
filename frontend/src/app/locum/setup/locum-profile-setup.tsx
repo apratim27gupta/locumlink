@@ -212,7 +212,7 @@ const locumModalCardBase: React.CSSProperties = {
 };
 export default function LocumSetupPage() {
   const router = useRouter();
-  const { completeProfile } = useAuth();
+  const { completeProfile, logout } = useAuth();
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -373,6 +373,15 @@ export default function LocumSetupPage() {
       localStorage.setItem('locum_setup_form', JSON.stringify(form));
     } catch {}
   }, [form]);
+  function handleCloseSetup() {
+    try {
+      localStorage.removeItem('locum_setup_form');
+    } catch {}
+    logout();
+    beforeClientNavigation('/auth');
+    router.push('/auth');
+  }
+
   async function handleFinish() {
     setBusy(true);
     setErr('');
@@ -448,10 +457,7 @@ export default function LocumSetupPage() {
         >
           <button
             type="button"
-            onClick={() => {
-              beforeClientNavigation('/auth');
-              router.push('/auth');
-            }}
+            onClick={handleCloseSetup}
             aria-label="Close"
             style={{
               position: 'absolute',
