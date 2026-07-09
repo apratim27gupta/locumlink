@@ -3,7 +3,7 @@ export const PROD_HOST = 'locumlink.ca';
 
 /** Web origin this mobile shell wraps — set per build via EXPO_PUBLIC_APP_URL. */
 export const APP_ORIGIN = (
-  process.env.EXPO_PUBLIC_APP_URL ?? 'https://staging.locumlink.ca'
+  process.env.EXPO_PUBLIC_APP_URL ?? 'https://locumlink.ca'
 ).replace(/\/$/, '');
 
 export const APP_HOST = new URL(APP_ORIGIN).hostname;
