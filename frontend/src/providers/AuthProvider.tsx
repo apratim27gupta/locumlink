@@ -28,6 +28,23 @@ const Ctx = createContext<AuthCtx | null>(null);
 
 let syncNestInFlight: Promise<boolean> | null = null;
 
+function getJwtSubject(token: string | null): string | null {
+    if (!token || typeof window === 'undefined')
+        return null;
+    try {
+        const payload = token.split('.')[1];
+        if (!payload)
+            return null;
+        const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+        const normalized = base64.padEnd(base64.length + ((4 - base64.length % 4) % 4), '=');
+        const decoded = JSON.parse(window.atob(normalized)) as { sub?: unknown };
+        return typeof decoded.sub === 'string' ? decoded.sub : null;
+    }
+    catch {
+        return null;
+    }
+}
+
 /** Exchange Supabase access token for Nest JWT — never store Supabase token as ll_access. */
 async function syncNestAccessToken(supabaseAccessToken: string): Promise<boolean> {
     if (syncNestInFlight) return syncNestInFlight;
@@ -90,6 +107,9 @@ export function AuthProvider({ children }: {
                             syncProfileCompleteCookies();
                         }
                     }
+                    else {
+                        setUserId(getJwtSubject(getToken()));
+                    }
                 }
                 catch (e) {
                     console.error(e);
@@ -120,7 +140,7 @@ export function AuthProvider({ children }: {
                     }
                 }
                 else if (!session) {
-                    setUserId(null);
+                    setUserId(getJwtSubject(getToken()));
                 }
             });
             subscription = sub;
@@ -155,6 +175,7 @@ export function AuthProvider({ children }: {
         }
         setUserId(null);
         saveToken(tokens.accessToken);
+        setUserId(getJwtSubject(tokens.accessToken));
         syncCookies();
         const profileExists = await checkProfileExistsOnServer(role, tokens.accessToken);
         let redirectTo: string;
