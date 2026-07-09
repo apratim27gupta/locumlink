@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ca.locumlink.app",
+      "buildNumber": "1",
       "usesAppleSignIn": true,
       "associatedDomains": [
         "applinks:locumlink.ca",

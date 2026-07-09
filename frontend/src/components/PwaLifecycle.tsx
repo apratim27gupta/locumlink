@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { dispatchPwaRefresh } from '@/lib/pwaEvents';
+import { installPwaLoadErrorRecovery } from '@/lib/pwaRecovery';
 
 /**
  * PWA: detect service-worker updates, bridge push → in-app refresh, refetch on resume.
  */
 export function PwaLifecycle() {
   const [updateReady, setUpdateReady] = useState(false);
+
+  useEffect(() => installPwaLoadErrorRecovery(), []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;

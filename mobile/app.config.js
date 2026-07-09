@@ -21,9 +21,20 @@ const oauthIntentFilter = {
   category: ['BROWSABLE', 'DEFAULT'],
 };
 
+const isDevClientBuild = process.env.EAS_BUILD_PROFILE === 'development';
+
+function resolvePlugins() {
+  const plugins = base.expo.plugins ?? [];
+  return plugins.filter((plugin) => {
+    const name = typeof plugin === 'string' ? plugin : plugin[0];
+    return isDevClientBuild || name !== 'expo-dev-client';
+  });
+}
+
 module.exports = {
   expo: {
     ...base.expo,
+    plugins: resolvePlugins(),
     ios: {
       ...base.expo.ios,
       usesAppleSignIn: true,

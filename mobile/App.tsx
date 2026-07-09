@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Platform,
   Pressable,
   StyleSheet,
@@ -20,6 +21,10 @@ import {
   isOAuthStartUrl,
   toWebOAuthCallbackUrl,
 } from './oauthEnv';
+import {
+  CLEAR_PWA_STORAGE_SCRIPT,
+  MAX_WEBVIEW_RECOVERY_ATTEMPTS,
+} from './webViewRecovery';
 
 const PRIMARY_COLOR = '#38C6C6';
 
@@ -65,7 +70,36 @@ function resolveNotificationUrl(url: string | undefined): string | null {
 export default function App() {
   const webViewRef = useRef<WebView>(null);
   const oauthInFlightRef = useRef(false);
+  const recoveryAttemptsRef = useRef(0);
   const [hasError, setHasError] = useState(false);
+
+  const clearWebViewCache = useCallback(() => {
+    webViewRef.current?.clearCache?.(true);
+  }, []);
+
+  const attemptWebViewRecovery = useCallback((injectPwaClear = false) => {
+    const webView = webViewRef.current;
+    if (!webView) return;
+
+    recoveryAttemptsRef.current += 1;
+    setHasError(false);
+    clearWebViewCache();
+
+    if (injectPwaClear) {
+      webView.injectJavaScript(CLEAR_PWA_STORAGE_SCRIPT);
+      return;
+    }
+
+    webView.reload();
+  }, [clearWebViewCache]);
+
+  const handleWebViewFailure = useCallback(() => {
+    if (recoveryAttemptsRef.current < MAX_WEBVIEW_RECOVERY_ATTEMPTS) {
+      attemptWebViewRecovery(recoveryAttemptsRef.current > 0);
+      return;
+    }
+    setHasError(true);
+  }, [attemptWebViewRecovery]);
 
   const navigateWebViewTo = useCallback((url: string) => {
     if (webViewRef.current) {
@@ -145,8 +179,23 @@ export default function App() {
     );
   }, [pushToken]);
 
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      if (hasError) {
+        attemptWebViewRecovery(true);
+      }
+    });
+
+    return () => sub.remove();
+  }, [attemptWebViewRecovery, hasError]);
+
   const handleWebViewLoadEnd = useCallback(() => {
     if (Platform.OS === 'web' || !webViewRef.current) return;
+    recoveryAttemptsRef.current = 0;
+    setHasError(false);
     webViewRef.current.injectJavaScript(
       buildNativeInjectScript(Platform.OS, pushToken),
     );
@@ -154,7 +203,10 @@ export default function App() {
   }, [pushToken, syncPushToken]);
 
   function handleRetry() {
+    recoveryAttemptsRef.current = 0;
     setHasError(false);
+    clearWebViewCache();
+    webViewRef.current?.injectJavaScript(CLEAR_PWA_STORAGE_SCRIPT);
     webViewRef.current?.reload();
   }
 
@@ -244,12 +296,16 @@ export default function App() {
               onNavigationStateChange={handleNavigationStateChange}
               onLoadEnd={handleWebViewLoadEnd}
               onMessage={handleWebViewMessage}
-              onError={() => setHasError(true)}
-              onContentProcessDidTerminate={() => webViewRef.current?.reload()}
+              onError={handleWebViewFailure}
+              onContentProcessDidTerminate={() => {
+                setHasError(false);
+                clearWebViewCache();
+                webViewRef.current?.reload();
+              }}
               onHttpError={(event) => {
                 const { statusCode } = event.nativeEvent;
                 if (statusCode >= 500) {
-                  setHasError(true);
+                  handleWebViewFailure();
                 }
               }}
             />

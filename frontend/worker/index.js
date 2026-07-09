@@ -1,5 +1,20 @@
 /* Custom service worker (bundled into sw.js by next-pwa) */
 
+/** Drop stale navigations after a new SW activates (post-deploy WebView recovery). */
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((key) => key === 'document-cache')
+          .map((key) => caches.delete(key)),
+      );
+      await self.clients.claim();
+    })(),
+  );
+});
+
 self.addEventListener('push', (event) => {
   let payload = { title: 'Locum Link', body: 'You have a new update', url: '/' };
   try {
