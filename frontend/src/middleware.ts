@@ -14,6 +14,7 @@ const PUBLIC_PREFIXES = [
   '/privacy-policy',
   '/terms-of-use',
   '/offline',
+  '/locum/browse',
 ];
 
 export async function middleware(request: NextRequest) {

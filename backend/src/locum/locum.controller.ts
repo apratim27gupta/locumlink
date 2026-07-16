@@ -52,6 +52,7 @@ export class LocumController {
     const count = await this.locumService.countBrowseOpportunities();
     return { count };
   }
+  @Public()
   @Get('jobs')
   browseJobs(@Query() query: Record<string, unknown>) {
     return this.locumService.browseJobs(query);

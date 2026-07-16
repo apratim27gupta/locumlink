@@ -11,8 +11,11 @@ import {
   type ReactNode,
 } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { fetchAllPaginated, locumApi, type BrowseJob } from '@/lib/api';
+import { getToken } from '@/lib/auth';
+import { beforeClientNavigation } from '@/lib/topLoader';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { LocumProfile } from '@/types';
 import LocumAccountNotice from '@/components/LocumAccountNotice';
@@ -355,6 +358,8 @@ export default function LocumBrowsePage(props: {
     },
     [],
   );
+  const router = useRouter();
+  const [loggedIn, setLoggedIn] = useState(false);
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState<string | null>(null);
   const [applyError, setApplyError] = useState('');
@@ -377,6 +382,10 @@ export default function LocumBrowsePage(props: {
     loadJobs();
   }, [loadJobs]);
   useEffect(() => {
+    setLoggedIn(Boolean(getToken()));
+  }, []);
+  useEffect(() => {
+    if (!getToken()) return;
     locumApi
       .getProfile()
       .then((data) => {
@@ -385,6 +394,7 @@ export default function LocumBrowsePage(props: {
       .catch(() => {});
   }, []);
   useEffect(() => {
+    if (!getToken()) return;
     fetchAllPaginated((cursor) => locumApi.getMyApplications({ cursor, limit: 100 }))
       .then((applications) => {
         const ids = new Set(
@@ -473,6 +483,11 @@ export default function LocumBrowsePage(props: {
   const cpsnsVerified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
   async function handleApply(jobId: string) {
     if (applied.has(jobId)) return;
+    if (!getToken()) {
+      beforeClientNavigation('/auth');
+      router.push('/auth?role=locum&next=/locum/browse');
+      return;
+    }
     const targetJob = jobs.find((j) => j.id === jobId);
     if (targetJob && isJobRemovedByHost(targetJob)) {
       setApplyError('This posting has been removed by the host.');
@@ -505,8 +520,9 @@ export default function LocumBrowsePage(props: {
   }
   const isApplied = (id: string) => applied.has(id);
   const isApplying = (id: string) => applying === id;
-  const applyDisabled = (id: string) =>
-    !canApply || isApplied(id) || isApplying(id);
+  const applyAllowed =
+    !selectedJobUnavailable && !isApplied(job?.id ?? '') && !isApplying(job?.id ?? '');
+  const applyReady = loggedIn ? canApply && applyAllowed : applyAllowed;
   function onBrowseListResizeMouseDown(e: ReactMouseEvent<HTMLDivElement>) {
     e.preventDefault();
     e.stopPropagation();
@@ -539,7 +555,10 @@ export default function LocumBrowsePage(props: {
   }
   const displayName = profile?.firstName
     ? `Dr ${profile.firstName}${profile.lastName ? ` ${profile.lastName}` : ''}`
-    : 'Doctor';
+    : loggedIn
+      ? 'Doctor'
+      : null;
+  const welcomeLine = displayName ?? 'Browse available shifts';
   return (
     <DashLayout
       navItems={NAV}
@@ -568,16 +587,22 @@ export default function LocumBrowsePage(props: {
               gap: 6,
             }}
           >
-            <NameWithVerifiedShield verified={cpsnsVerified}>
-              <span>Welcome {displayName}</span>
+            <NameWithVerifiedShield verified={loggedIn && cpsnsVerified}>
+              <span>{loggedIn ? `Welcome ${displayName}` : welcomeLine}</span>
             </NameWithVerifiedShield>
           </h1>
           <p style={{ fontSize: 12, color: '#8892a4', marginBottom: 14 }}></p>
 
-          {!canApply && profile && accountNotice ? (
+          {!loggedIn ? (
+            <p style={{ fontSize: 12, color: '#8892a4', marginBottom: 14 }}>
+              Sign in to apply for shifts. Browsing is free — no account required.
+            </p>
+          ) : null}
+
+          {loggedIn && !canApply && profile && accountNotice ? (
             <LocumAccountNotice profile={profile} />
           ) : null}
-          {!canApply && profile && !accountNotice ? (
+          {loggedIn && !canApply && profile && !accountNotice ? (
             <div
               style={{
                 marginBottom: 14,
@@ -1653,21 +1678,18 @@ export default function LocumBrowsePage(props: {
                         ? 'This posting was removed by the host'
                         : selectedJobPassed
                           ? 'This job has passed'
-                          : !canApply
-                            ? accountNotice?.title ?? 'Verify CPSNS to apply'
-                            : undefined
+                          : !loggedIn
+                            ? 'Sign in to apply for this shift'
+                            : !canApply
+                              ? accountNotice?.title ?? 'Verify CPSNS to apply'
+                              : undefined
                   }
                   style={{ display: 'inline-block' }}
                 >
                   <button
                     type="button"
                     onClick={() => handleApply(job.id)}
-                    disabled={
-                      !canApply ||
-                      selectedJobUnavailable ||
-                      isApplied(job.id) ||
-                      isApplying(job.id)
-                    }
+                    disabled={!applyReady}
                     style={{
                       height: 34,
                       padding: '0 14px',
@@ -1677,29 +1699,21 @@ export default function LocumBrowsePage(props: {
                       fontWeight: 'var(--font-weight-bold)',
                       fontFamily: 'inherit',
                       cursor:
-                        !canApply ||
-                        selectedJobUnavailable ||
-                        isApplied(job.id)
+                        !applyReady
                           ? 'not-allowed'
                           : isApplying(job.id)
                             ? 'wait'
                             : 'pointer',
                       background:
-                        !canApply ||
-                        selectedJobUnavailable ||
-                        isApplied(job.id)
+                        !applyReady
                           ? '#e5e7eb'
                           : 'linear-gradient(135deg, #0F2A7A 0%, #1E3FAF 100%)',
                       color:
-                        !canApply ||
-                        selectedJobUnavailable ||
-                        isApplied(job.id)
+                        !applyReady
                           ? '#9ca3af'
                           : '#fff',
                       boxShadow:
-                        !canApply ||
-                        selectedJobUnavailable ||
-                        isApplied(job.id)
+                        !applyReady
                           ? 'none'
                           : '0 2px 10px rgba(15, 42, 122, 0.22)',
                       opacity: isApplying(job.id) ? 0.88 : 1,
@@ -1711,7 +1725,9 @@ export default function LocumBrowsePage(props: {
                         ? 'Applied'
                         : selectedJobRemoved
                           ? 'Posting removed'
-                          : 'Apply'}
+                          : !loggedIn
+                            ? 'Sign in to apply'
+                            : 'Apply'}
                   </button>
                 </span>
               </div>

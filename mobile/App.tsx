@@ -283,6 +283,9 @@ export default function App() {
               thirdPartyCookiesEnabled
               originWhitelist={['*']}
               allowsInlineMediaPlayback
+              mediaCapturePermissionGrantType={
+                Platform.OS === 'ios' ? 'grant' : undefined
+              }
               setSupportMultipleWindows={false}
               startInLoadingState
               applicationNameForUserAgent="LocumLinkNative"
