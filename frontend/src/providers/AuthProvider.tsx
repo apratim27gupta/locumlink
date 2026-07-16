@@ -200,14 +200,28 @@ export function AuthProvider({ children }: {
     ): Promise<void> {
         saveRole(chosenRole);
         setRoleState(chosenRole);
+        const inNativeShell = isNativeShell();
+
+        // Apple OAuth redirect never includes the user's name in Supabase metadata.
+        // Use Apple JS (popup + signInWithIdToken) on web so we can persist given_name.
+        if (provider === 'apple' && !inNativeShell) {
+            const { signInWithAppleWeb } = await import('@/lib/appleWebSignIn');
+            await signInWithAppleWeb();
+            const { redirectTo } = await completeOAuthSignIn();
+            window.location.assign(redirectTo);
+            return;
+        }
+
         const supabase = getSupabase();
         const redirectTo = getOAuthCallbackRedirect(chosenRole);
-        const inNativeShell = isNativeShell();
         const { data, error } = await supabase.auth.signInWithOAuth({
             provider: provider === 'azure' ? 'azure' : provider,
             options: {
                 redirectTo,
                 skipBrowserRedirect: inNativeShell,
+                ...(provider === 'apple' && {
+                    scopes: 'name email',
+                }),
                 ...(provider === 'azure' && {
                     scopes: 'openid profile email',
                     queryParams: {

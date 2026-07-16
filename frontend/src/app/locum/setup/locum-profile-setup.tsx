@@ -21,6 +21,7 @@ import { sanitizeCpsnsInput } from '@/lib/cpsnsVerify';
 import BarWaveButton from '@/components/ui/BarWaveButton';
 import { dispatchProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { beforeClientNavigation } from '@/lib/topLoader';
+import { fetchOAuthUserNamesFromSession } from '@/lib/oauthUserNames';
 import { useAnchoredDropdownMenu } from '@/hooks/useAnchoredDropdownMenu';
 import { AnchoredDropdownPortal } from '@/components/ui/AnchoredDropdownMenu';
 import { sortStringsLocale } from '@/lib/sortLocale';
@@ -216,6 +217,7 @@ export default function LocumSetupPage() {
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [oauthNameLocked, setOauthNameLocked] = useState(false);
   const [form, setForm] = useState<LocumProfile>({
     firstName: '',
     lastName: '',
@@ -350,23 +352,38 @@ export default function LocumSetupPage() {
     },
     [],
   );
-  // Auto-save form to localStorage
+  // Restore draft + OAuth name (single pass — avoids race with localStorage)
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('locum_setup_form');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setForm((f) => ({ ...f, ...parsed }));
-        if (parsed.specialization) {
-          setSpecializationTags(
-            parsed.specialization
-              .split(',')
-              .map((s: string) => s.trim())
-              .filter(Boolean),
-          );
+    void (async () => {
+      let nextForm = form;
+      try {
+        const saved = localStorage.getItem('locum_setup_form');
+        if (saved) {
+          const parsed = JSON.parse(saved) as Partial<LocumProfile>;
+          nextForm = { ...nextForm, ...parsed };
+          if (parsed.specialization) {
+            setSpecializationTags(
+              parsed.specialization
+                .split(',')
+                .map((s: string) => s.trim())
+                .filter(Boolean),
+            );
+          }
         }
+      } catch {}
+
+      const names = await fetchOAuthUserNamesFromSession();
+      if (names?.firstName && !(nextForm.firstName ?? '').trim()) {
+        nextForm = {
+          ...nextForm,
+          firstName: names.firstName,
+          lastName: (nextForm.lastName ?? '').trim() || names.lastName,
+        };
+        setOauthNameLocked(true);
       }
-    } catch {}
+      setForm(nextForm);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only init
   }, []);
   useEffect(() => {
     try {
@@ -583,6 +600,15 @@ export default function LocumSetupPage() {
                         width: '100%',
                       }}
                     >
+                      {oauthNameLocked ? (
+                        <p style={{ fontSize: 14, color: '#475467', margin: 0, lineHeight: 1.5 }}>
+                          Signed in as{' '}
+                          <strong>
+                            {[form.firstName, form.lastName].filter(Boolean).join(' ')}
+                          </strong>
+                        </p>
+                      ) : (
+                        <>
                       <div
                         style={{
                           flex: 1,
@@ -624,6 +650,8 @@ export default function LocumSetupPage() {
                           onChange={(e) => set('lastName', e.target.value)}
                         />
                       </div>
+                        </>
+                      )}
                     </div>
 
                     <div
