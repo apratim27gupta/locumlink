@@ -205,7 +205,8 @@ export function AuthProvider({ children }: {
         // including the iOS/Android WebView shell loading locumlink.ca.
         if (provider === 'apple') {
             const { signInWithAppleWeb } = await import('@/lib/appleWebSignIn');
-            await signInWithAppleWeb();
+            const outcome = await signInWithAppleWeb();
+            if (outcome === 'redirect') return;
             const { redirectTo } = await completeOAuthSignIn();
             window.location.assign(redirectTo);
             return;
