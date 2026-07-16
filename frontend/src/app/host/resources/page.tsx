@@ -40,6 +40,11 @@ const DOCUMENTS = [
         description: 'Comprehensive guidelines for the Locum Program, last updated April 2024.',
         url: 'https://msi.medavie.bluecross.ca/wp-content/uploads/sites/3/2024/04/FINAL-Locum-Program-Guidelines-Apr-25-2024.pdf',
     },
+    {
+        title: 'Locum Program Claim Form',
+        description: 'Claim form for the Locum Program covering Jun 15, 2026 – Mar 31, 2027.',
+        url: '/documents/locum-program-claim-form-2026-2027.pdf',
+    },
 ];
 
 function PdfIcon() {
