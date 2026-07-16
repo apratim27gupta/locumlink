@@ -6,6 +6,9 @@ import { getSupabase } from '@/lib/supabaseClient';
 const APPLE_SCRIPT_SRC =
   'https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js';
 
+/** Apple Services ID for Sign in with Apple JS (same as Supabase Apple provider). */
+const DEFAULT_APPLE_SERVICES_ID = 'ca.locumlink.web';
+
 type AppleJsName = {
   firstName?: string | null;
   middleName?: string | null;
@@ -75,7 +78,7 @@ function loadAppleScript(): Promise<void> {
   return scriptLoadPromise;
 }
 
-/** Resolve Apple Services ID from env or the Supabase OAuth authorize URL. */
+/** Resolve Apple Services ID — env override, else Supabase→Apple redirect, else default. */
 async function resolveAppleClientId(
   supabase: SupabaseClient,
   redirectTo: string,
@@ -83,26 +86,29 @@ async function resolveAppleClientId(
   const fromEnv = (process.env.NEXT_PUBLIC_APPLE_CLIENT_ID ?? '').trim();
   if (fromEnv) return fromEnv;
 
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'apple',
-    options: {
-      redirectTo,
-      skipBrowserRedirect: true,
-      scopes: 'name email',
-    },
-  });
-  if (error) throw new Error(error.message);
-
-  const authUrl = data?.url;
-  if (!authUrl) {
-    throw new Error('Could not start Sign in with Apple.');
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo,
+        skipBrowserRedirect: true,
+        scopes: 'name email',
+      },
+    });
+    if (!error && data?.url) {
+      // signInWithOAuth URL is Supabase-only; follow one hop to read Apple's client_id.
+      const res = await fetch(data.url, { redirect: 'manual', credentials: 'omit' });
+      const location = res.headers.get('Location');
+      if (location) {
+        const clientId = new URL(location).searchParams.get('client_id')?.trim();
+        if (clientId) return clientId;
+      }
+    }
+  } catch {
+    /* use default Services ID */
   }
 
-  const clientId = new URL(authUrl).searchParams.get('client_id')?.trim();
-  if (!clientId) {
-    throw new Error('Could not resolve Apple client ID.');
-  }
-  return clientId;
+  return DEFAULT_APPLE_SERVICES_ID;
 }
 
 /**
