@@ -14,6 +14,8 @@ const APPLE_ERROR_HINTS: Record<string, string> = {
   user_cancelled_authorize: 'Sign-in was cancelled.',
   invalid_request:
     'Apple Sign-In is not configured for this domain. Add this site Return URL in Apple Developer (Services ID ca.locumlink.web).',
+  'nonces mismatch':
+    'Apple sign-in nonce check failed. Try again; if it persists, contact support.',
 };
 
 type AppleJsName = {
@@ -43,7 +45,7 @@ declare global {
           scope: string;
           redirectURI: string;
           usePopup: boolean;
-          nonce: string;
+          nonce?: string;
         }) => void;
         signIn: () => Promise<AppleJsSignInResponse>;
       };
@@ -115,14 +117,12 @@ export async function signInWithAppleWeb(): Promise<void> {
   const supabase = getSupabase();
   const redirectURI = `${getAppOrigin()}/auth/callback`;
   const clientId = resolveAppleClientId();
-  const nonce = crypto.randomUUID();
 
   window.AppleID.auth.init({
     clientId,
     scope: 'name email',
     redirectURI,
     usePopup: true,
-    nonce,
   });
 
   let response: AppleJsSignInResponse;
@@ -137,10 +137,11 @@ export async function signInWithAppleWeb(): Promise<void> {
     throw new Error('Apple did not return a sign-in token.');
   }
 
+  // Omit nonce on both sides — GoTrue compares hex(SHA256) while Apple uses
+  // base64url(SHA256) in the id_token (supabase/auth#2378).
   const { error } = await supabase.auth.signInWithIdToken({
     provider: 'apple',
     token: idToken,
-    nonce,
     access_token: response.authorization.code,
   });
   if (error) throw new Error(error.message);
