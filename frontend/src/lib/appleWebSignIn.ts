@@ -195,18 +195,43 @@ async function signInWithAppleRedirect(): Promise<'redirect'> {
 }
 
 /** Finish Apple JS redirect flow after POST to /auth/callback/apple. */
-export async function completeAppleWebSignInFromStorage(): Promise<boolean> {
-  if (typeof window === 'undefined') return false;
-  const raw = sessionStorage.getItem(APPLE_JS_RESPONSE_STORAGE_KEY);
-  if (!raw) return false;
-  sessionStorage.removeItem(APPLE_JS_RESPONSE_STORAGE_KEY);
+async function loadApplePendingPayload(): Promise<StoredAppleJsResponse | null> {
+  if (typeof window === 'undefined') return null;
 
-  let stored: StoredAppleJsResponse;
-  try {
-    stored = JSON.parse(raw) as StoredAppleJsResponse;
-  } catch {
-    throw new Error('Apple sign-in data was invalid.');
+  const raw = sessionStorage.getItem(APPLE_JS_RESPONSE_STORAGE_KEY);
+  if (raw) {
+    sessionStorage.removeItem(APPLE_JS_RESPONSE_STORAGE_KEY);
+    try {
+      return JSON.parse(raw) as StoredAppleJsResponse;
+    } catch {
+      throw new Error('Apple sign-in data was invalid.');
+    }
   }
+
+  const res = await fetch('/api/auth/apple/consume', { credentials: 'include' });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error('Apple sign-in session expired. Please try again.');
+  }
+
+  const body = (await res.json()) as {
+    ok: boolean;
+    id_token?: string;
+    code?: string;
+    user?: StoredAppleJsResponse['user'];
+  };
+  if (!body.ok || !body.id_token) return null;
+
+  return {
+    id_token: body.id_token,
+    code: body.code,
+    user: body.user ?? null,
+  };
+}
+
+export async function completeAppleWebSignInFromStorage(): Promise<boolean> {
+  const stored = await loadApplePendingPayload();
+  if (!stored) return false;
 
   await exchangeAppleTokens({
     authorization: {

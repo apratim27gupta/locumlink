@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  APPLE_PENDING_COOKIE,
+  APPLE_PENDING_MAX_AGE_SEC,
+  encodeApplePendingPayload,
+  type ApplePendingPayload,
+} from '@/lib/applePendingAuth';
 import { getAppOrigin } from '@/lib/appOrigin';
-
-const APPLE_JS_RESPONSE_KEY = 'll_apple_js_response';
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 function redirectToAuth(error: string): NextResponse {
   const signInUrl = new URL('/auth', getAppOrigin());
@@ -18,7 +14,34 @@ function redirectToAuth(error: string): NextResponse {
   return NextResponse.redirect(signInUrl);
 }
 
-/** Apple Sign in with Apple JS (form_post) lands here when usePopup is false (WebView). */
+function redirectToComplete(payload: {
+  id_token: string;
+  code?: string;
+  user?: unknown;
+}): NextResponse {
+  const completeUrl = new URL('/auth/callback/complete', getAppOrigin());
+  completeUrl.searchParams.set('provider', 'apple');
+
+  const response = NextResponse.redirect(completeUrl);
+  response.cookies.set(
+    APPLE_PENDING_COOKIE,
+    encodeApplePendingPayload({
+      id_token: payload.id_token,
+      code: payload.code,
+      user: payload.user as ApplePendingPayload['user'],
+    }),
+    {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: APPLE_PENDING_MAX_AGE_SEC,
+      path: '/',
+    },
+  );
+  return response;
+}
+
+/** Apple Sign in with Apple JS (form_post) lands here when usePopup is false. */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   let formData: FormData;
   try {
@@ -51,46 +74,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const payload = JSON.stringify({
+  return redirectToComplete({
     id_token: idToken,
     code: code || undefined,
     user,
-  });
-
-  const completeUrl = new URL('/auth/callback/complete', getAppOrigin());
-  completeUrl.searchParams.set('provider', 'apple');
-
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Signing in with Apple</title>
-</head>
-<body style="font-family:system-ui,sans-serif;text-align:center;padding:2rem;color:#374151">
-  <p>Completing Apple sign-in…</p>
-  <script>
-    try {
-      sessionStorage.setItem(${JSON.stringify(APPLE_JS_RESPONSE_KEY)}, ${JSON.stringify(payload)});
-      window.location.replace(${JSON.stringify(completeUrl.toString())});
-    } catch (e) {
-      window.location.replace(${JSON.stringify(
-        new URL('/auth?mode=signin&error=Could+not+complete+Apple+sign-in', getAppOrigin()).toString(),
-      )});
-    }
-  </script>
-  <noscript>
-    <p>JavaScript is required to finish signing in.</p>
-    <a href="${escapeHtml(completeUrl.toString())}">Continue</a>
-  </noscript>
-</body>
-</html>`;
-
-  return new NextResponse(html, {
-    status: 200,
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'no-store',
-    },
   });
 }

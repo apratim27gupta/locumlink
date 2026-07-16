@@ -17,8 +17,11 @@ import { buildNativeInjectScript, useExpoPush } from './useExpoPush';
 import {
   APP_ORIGIN,
   NATIVE_OAUTH_RETURN_URL,
+  getAppleAuthBrowserReturnUrl,
+  isAppleAuthStartUrl,
   isForeignOAuthCallbackUrl,
   isOAuthStartUrl,
+  toWebAppleAuthCompleteUrl,
   toWebOAuthCallbackUrl,
 } from './oauthEnv';
 import {
@@ -115,6 +118,41 @@ export default function App() {
     const webCallback = toWebOAuthCallbackUrl(url);
     if (!webCallback) return;
     navigateWebViewTo(webCallback);
+  }, [navigateWebViewTo]);
+
+  const openAppleAuthInBrowser = useCallback((url: string) => {
+    if (oauthInFlightRef.current) return;
+    oauthInFlightRef.current = true;
+
+    const browserOptions =
+      Platform.OS === 'android'
+        ? { createTask: false }
+        : { preferEphemeralSession: false };
+
+    void WebBrowser.openAuthSessionAsync(
+      url,
+      getAppleAuthBrowserReturnUrl(),
+      browserOptions,
+    )
+      .then((result) => {
+        oauthInFlightRef.current = false;
+        if (result.type === 'success' && result.url) {
+          const webCallback = toWebAppleAuthCompleteUrl(result.url);
+          if (webCallback) {
+            navigateWebViewTo(webCallback);
+            return;
+          }
+        }
+        if (result.type === 'dismiss' || result.type === 'cancel') {
+          void Linking.getInitialURL().then((initial) => {
+            const webCallback = initial ? toWebAppleAuthCompleteUrl(initial) : null;
+            if (webCallback) navigateWebViewTo(webCallback);
+          });
+        }
+      })
+      .catch(() => {
+        oauthInFlightRef.current = false;
+      });
   }, [navigateWebViewTo]);
 
   const openOAuthInBrowser = useCallback((url: string) => {
@@ -238,13 +276,18 @@ export default function App() {
       return true;
     }
 
+    if (isAppleAuthStartUrl(url)) {
+      openAppleAuthInBrowser(url);
+      return true;
+    }
+
     if (isOAuthStartUrl(url)) {
       openOAuthInBrowser(url);
       return true;
     }
 
     return false;
-  }, [navigateWebViewTo, openOAuthInBrowser]);
+  }, [navigateWebViewTo, openAppleAuthInBrowser, openOAuthInBrowser]);
 
   const handleShouldStartLoadWithRequest = useCallback((request: { url: string }) => {
     return !interceptOAuthNavigation(request.url);
