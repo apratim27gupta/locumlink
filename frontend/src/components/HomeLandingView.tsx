@@ -190,7 +190,7 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
                 <Link href="/auth?role=clinic&locked=true" className="btn-landing-cta">
                   Post a Locum Request
                 </Link>
-                <Link href="/auth?role=locum&locked=true" className="btn-signin">
+                <Link href="/locum/browse" className="btn-signin">
                   Browse Locum Shifts
                 </Link>
               </>) : (<>
