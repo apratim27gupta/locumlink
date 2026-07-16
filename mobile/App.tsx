@@ -18,9 +18,12 @@ import {
   APP_ORIGIN,
   NATIVE_OAUTH_RETURN_URL,
   getAppleAuthBrowserReturnUrl,
+  getAppleAuthCompleteUrl,
+  isAppleAuthHandoffUrl,
   isAppleAuthStartUrl,
   isForeignOAuthCallbackUrl,
   isOAuthStartUrl,
+  isAppleAuthCompleteUrl,
   toWebAppleAuthCompleteUrl,
   toWebOAuthCallbackUrl,
 } from './oauthEnv';
@@ -121,7 +124,6 @@ export default function App() {
   }, [navigateWebViewTo]);
 
   const openAppleAuthInBrowser = useCallback((url: string) => {
-    if (oauthInFlightRef.current) return;
     oauthInFlightRef.current = true;
 
     const browserOptions =
@@ -137,17 +139,14 @@ export default function App() {
       .then((result) => {
         oauthInFlightRef.current = false;
         if (result.type === 'success' && result.url) {
+          if (isAppleAuthHandoffUrl(result.url) || isAppleAuthCompleteUrl(result.url)) {
+            navigateWebViewTo(getAppleAuthCompleteUrl());
+            return;
+          }
           const webCallback = toWebAppleAuthCompleteUrl(result.url);
           if (webCallback) {
             navigateWebViewTo(webCallback);
-            return;
           }
-        }
-        if (result.type === 'dismiss' || result.type === 'cancel') {
-          void Linking.getInitialURL().then((initial) => {
-            const webCallback = initial ? toWebAppleAuthCompleteUrl(initial) : null;
-            if (webCallback) navigateWebViewTo(webCallback);
-          });
         }
       })
       .catch(() => {

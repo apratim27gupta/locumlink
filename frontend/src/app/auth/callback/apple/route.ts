@@ -14,15 +14,14 @@ function redirectToAuth(error: string): NextResponse {
   return NextResponse.redirect(signInUrl);
 }
 
-function redirectToComplete(payload: {
+function redirectToHandoff(payload: {
   id_token: string;
   code?: string;
   user?: unknown;
 }): NextResponse {
-  const completeUrl = new URL('/auth/callback/complete', getAppOrigin());
-  completeUrl.searchParams.set('provider', 'apple');
+  const handoffUrl = new URL('/auth/callback/apple/handoff', getAppOrigin());
 
-  const response = NextResponse.redirect(completeUrl);
+  const response = NextResponse.redirect(handoffUrl);
   response.cookies.set(
     APPLE_PENDING_COOKIE,
     encodeApplePendingPayload({
@@ -74,7 +73,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  return redirectToComplete({
+  return redirectToHandoff({
     id_token: idToken,
     code: code || undefined,
     user,

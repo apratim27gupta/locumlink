@@ -53,9 +53,25 @@ export function isAppleAuthStartUrl(url: string): boolean {
   return url.includes('appleid.apple.com');
 }
 
-/** ASWebAuthenticationSession return URL for Apple form_post (not the custom scheme). */
+/** ASWebAuthenticationSession return URL — must not load /complete (consumes cookie too early). */
 export function getAppleAuthBrowserReturnUrl(): string {
+  return `${APP_ORIGIN}/auth/callback/apple/handoff`;
+}
+
+export function getAppleAuthCompleteUrl(): string {
   return `${APP_ORIGIN}/auth/callback/complete?provider=apple`;
+}
+
+export function isAppleAuthHandoffUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostOk =
+      parsed.hostname === APP_HOST
+      || isAllowedMisdirectedCallback(parsed.hostname);
+    return hostOk && parsed.pathname === '/auth/callback/apple/handoff';
+  } catch {
+    return false;
+  }
 }
 
 export function isAppleAuthCompleteUrl(url: string): boolean {
