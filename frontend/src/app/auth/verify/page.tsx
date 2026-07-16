@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthSplitLayout from '@/components/AuthSplitLayout';
 import { useAuth } from '@/providers/AuthProvider';
-import { getEmail, getRole, saveRole, type Role } from '@/lib/auth';
+import { getEmail, getRole, saveRole, syncCookies, type Role } from '@/lib/auth';
 import { toUserFacingError } from '@/lib/userFacingError';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 const OTP_LEN = 6;
@@ -90,6 +90,7 @@ export default function VerifyPage(props: {
         setBusy(true);
         try {
             const { redirectTo } = await verifyOtp(email, otp);
+            syncCookies();
             router.replace(redirectTo);
         }
         catch (err: unknown) {

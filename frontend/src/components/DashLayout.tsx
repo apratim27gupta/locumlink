@@ -8,7 +8,7 @@ import Link from 'next/link';
 import Logo from '@/components/Logo';
 import { useAuth } from '@/providers/AuthProvider';
 import { computeAvatarInitials, initialsFromSupabaseUser, } from '@/lib/avatarInitials';
-import { clearProfileCompleteCookies, getRole, getToken } from '@/lib/auth';
+import { clearProfileCompleteCookies, getRole, getToken, syncCookies } from '@/lib/auth';
 import { authApi, hostApi, locumApi, messageApi, notificationsApi, uploadFile, type NotificationItem, } from '@/lib/api';
 import { notifCategory } from '@/lib/relativeTime';
 import { getSupabase } from '@/lib/supabaseClient';
@@ -867,6 +867,8 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                       }
                       href={item.href}
                       onClick={() => {
+                        syncCookies();
+                        beforeClientNavigation(item.href);
                         setAvatarMenuOpen(false);
                         setMobileNavOpen(false);
                       }}
@@ -1087,7 +1089,11 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                             : isResources
                                 ? 'nav-resources'
                                 : undefined;
-            return (<Link key={href} href={href} style={{ textDecoration: 'none' }} onClick={() => setMobileNavOpen(false)}>
+            return (<Link key={href} href={href} style={{ textDecoration: 'none' }} onClick={() => {
+                    syncCookies();
+                    beforeClientNavigation(href);
+                    setMobileNavOpen(false);
+                }}>
                     <div id={navId} style={{
                     boxSizing: 'border-box',
                     display: 'flex',

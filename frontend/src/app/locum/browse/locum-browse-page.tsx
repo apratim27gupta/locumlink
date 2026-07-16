@@ -14,8 +14,9 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { fetchAllPaginated, locumApi, type BrowseJob } from '@/lib/api';
-import { getToken } from '@/lib/auth';
+import { getToken, syncCookies } from '@/lib/auth';
 import { beforeClientNavigation } from '@/lib/topLoader';
+import { useAuth } from '@/providers/AuthProvider';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { LocumProfile } from '@/types';
 import LocumAccountNotice from '@/components/LocumAccountNotice';
@@ -359,6 +360,7 @@ export default function LocumBrowsePage(props: {
     [],
   );
   const router = useRouter();
+  const { isLoading: authLoading } = useAuth();
   const [loggedIn, setLoggedIn] = useState(false);
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState<string | null>(null);
@@ -382,8 +384,10 @@ export default function LocumBrowsePage(props: {
     loadJobs();
   }, [loadJobs]);
   useEffect(() => {
+    if (authLoading) return;
+    syncCookies();
     setLoggedIn(Boolean(getToken()));
-  }, []);
+  }, [authLoading]);
   useEffect(() => {
     if (!getToken()) return;
     locumApi
@@ -483,6 +487,7 @@ export default function LocumBrowsePage(props: {
   const cpsnsVerified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
   async function handleApply(jobId: string) {
     if (applied.has(jobId)) return;
+    syncCookies();
     if (!getToken()) {
       beforeClientNavigation('/auth');
       router.push('/auth?role=locum&next=/locum/browse');
@@ -505,6 +510,7 @@ export default function LocumBrowsePage(props: {
     setApplyError('');
     try {
       await locumApi.applyToJob(jobId);
+      syncCookies();
       setApplied((prev) => new Set([...prev, jobId]));
     } catch (e: unknown) {
       const msg =
