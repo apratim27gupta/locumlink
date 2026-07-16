@@ -1,13 +1,20 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAppOrigin } from '@/lib/appOrigin';
 import { persistAppleNameFromAppleJsUser } from '@/lib/oauthUserNames';
 import { getSupabase } from '@/lib/supabaseClient';
+import { readErrorMessage } from '@/lib/userFacingError';
 
 const APPLE_SCRIPT_SRC =
   'https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js';
 
 /** Apple Services ID for Sign in with Apple JS (same as Supabase Apple provider). */
 const DEFAULT_APPLE_SERVICES_ID = 'ca.locumlink.web';
+
+const APPLE_ERROR_HINTS: Record<string, string> = {
+  popup_closed_by_user: 'Sign-in was cancelled.',
+  user_cancelled_authorize: 'Sign-in was cancelled.',
+  invalid_request:
+    'Apple Sign-In is not configured for this domain. Add this site Return URL in Apple Developer (Services ID ca.locumlink.web).',
+};
 
 type AppleJsName = {
   firstName?: string | null;
@@ -78,37 +85,19 @@ function loadAppleScript(): Promise<void> {
   return scriptLoadPromise;
 }
 
-/** Resolve Apple Services ID — env override, else Supabase→Apple redirect, else default. */
-async function resolveAppleClientId(
-  supabase: SupabaseClient,
-  redirectTo: string,
-): Promise<string> {
+function resolveAppleClientId(): string {
   const fromEnv = (process.env.NEXT_PUBLIC_APPLE_CLIENT_ID ?? '').trim();
-  if (fromEnv) return fromEnv;
+  return fromEnv || DEFAULT_APPLE_SERVICES_ID;
+}
 
-  try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'apple',
-      options: {
-        redirectTo,
-        skipBrowserRedirect: true,
-        scopes: 'name email',
-      },
-    });
-    if (!error && data?.url) {
-      // signInWithOAuth URL is Supabase-only; follow one hop to read Apple's client_id.
-      const res = await fetch(data.url, { redirect: 'manual', credentials: 'omit' });
-      const location = res.headers.get('Location');
-      if (location) {
-        const clientId = new URL(location).searchParams.get('client_id')?.trim();
-        if (clientId) return clientId;
-      }
-    }
-  } catch {
-    /* use default Services ID */
+function toAppleSignInError(err: unknown): Error {
+  const raw = readErrorMessage(err);
+  const code = raw.toLowerCase();
+  for (const [key, hint] of Object.entries(APPLE_ERROR_HINTS)) {
+    if (code.includes(key)) return new Error(hint);
   }
-
-  return DEFAULT_APPLE_SERVICES_ID;
+  if (raw) return new Error(raw);
+  return new Error('Sign in with Apple failed.');
 }
 
 /**
@@ -125,7 +114,7 @@ export async function signInWithAppleWeb(): Promise<void> {
 
   const supabase = getSupabase();
   const redirectURI = `${getAppOrigin()}/auth/callback`;
-  const clientId = await resolveAppleClientId(supabase, redirectURI);
+  const clientId = resolveAppleClientId();
   const nonce = crypto.randomUUID();
 
   window.AppleID.auth.init({
@@ -136,7 +125,13 @@ export async function signInWithAppleWeb(): Promise<void> {
     nonce,
   });
 
-  const response = await window.AppleID.auth.signIn();
+  let response: AppleJsSignInResponse;
+  try {
+    response = await window.AppleID.auth.signIn();
+  } catch (err) {
+    throw toAppleSignInError(err);
+  }
+
   const idToken = response.authorization?.id_token;
   if (!idToken) {
     throw new Error('Apple did not return a sign-in token.');
@@ -146,6 +141,7 @@ export async function signInWithAppleWeb(): Promise<void> {
     provider: 'apple',
     token: idToken,
     nonce,
+    access_token: response.authorization.code,
   });
   if (error) throw new Error(error.message);
 

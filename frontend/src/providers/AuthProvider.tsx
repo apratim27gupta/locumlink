@@ -200,11 +200,10 @@ export function AuthProvider({ children }: {
     ): Promise<void> {
         saveRole(chosenRole);
         setRoleState(chosenRole);
-        const inNativeShell = isNativeShell();
-
         // Apple OAuth redirect never includes the user's name in Supabase metadata.
-        // Use Apple JS (popup + signInWithIdToken) on web so we can persist given_name.
-        if (provider === 'apple' && !inNativeShell) {
+        // Use Apple JS (popup + signInWithIdToken) everywhere we run this web app —
+        // including the iOS/Android WebView shell loading locumlink.ca.
+        if (provider === 'apple') {
             const { signInWithAppleWeb } = await import('@/lib/appleWebSignIn');
             await signInWithAppleWeb();
             const { redirectTo } = await completeOAuthSignIn();
@@ -212,6 +211,7 @@ export function AuthProvider({ children }: {
             return;
         }
 
+        const inNativeShell = isNativeShell();
         const supabase = getSupabase();
         const redirectTo = getOAuthCallbackRedirect(chosenRole);
         const { data, error } = await supabase.auth.signInWithOAuth({
@@ -219,9 +219,6 @@ export function AuthProvider({ children }: {
             options: {
                 redirectTo,
                 skipBrowserRedirect: inNativeShell,
-                ...(provider === 'apple' && {
-                    scopes: 'name email',
-                }),
                 ...(provider === 'azure' && {
                     scopes: 'openid profile email',
                     queryParams: {
