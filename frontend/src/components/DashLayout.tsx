@@ -20,6 +20,7 @@ import { isExternalNotificationHref, resolveNotificationAction, resolveNotificat
 import { CountBadge } from '@/components/CountBadge';
 import { isNativeShell } from '@/lib/nativeShell';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
+import SidebarFeedback from '@/components/SidebarFeedback';
 interface NavItem {
     label: string;
     href: string;
@@ -1144,6 +1145,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             </div>
           </nav>
 
+          <SidebarFeedback onNavigate={() => setMobileNavOpen(false)} />
           <SupportLegalLinks
             variant="sidebar"
             onNavigate={() => setMobileNavOpen(false)}

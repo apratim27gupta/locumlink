@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   BarChart3,
   FileCheck,
+  MessageSquare,
   Shield,
   Users,
 } from 'lucide-react';
@@ -98,6 +99,12 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
       href: '/admin/reports',
       icon: <AlertTriangle size={20} />,
       badge: openReports > 0 ? openReports : undefined,
+    },
+    {
+      id: 'feedback',
+      label: 'Feedback',
+      href: '/admin/feedback',
+      icon: <MessageSquare size={20} />,
     },
     {
       id: 'audit',

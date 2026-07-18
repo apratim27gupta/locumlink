@@ -154,6 +154,7 @@ model User {
   blocksReceived     UserBlock[]        @relation("BlocksReceived")
   reportsFiled       UserReport[]       @relation("ReportsFiled")
   reportsReceived    UserReport[]       @relation("ReportsReceived")
+  feedbackEntries    Feedback[]
 
   @@unique([email, role])
   @@map("users")
@@ -576,6 +577,19 @@ model UserReport {
   @@index([reporterId])
   @@index([status, createdAt])
   @@map("user_reports")
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  message   String   @db.VarChar(2000)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@map("feedback")
 }
 
 model ErrorLog {

@@ -11,6 +11,7 @@ import { HealthModule } from './health/health.module.js';
 import { HostModule } from './host/host.module.js';
 import { LocumModule } from './locum/locum.module.js';
 import { MessageModule } from './message/message.module.js';
+import { FeedbackModule } from './feedback/feedback.module.js';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from './auth/guards/roles.guard.js';
 import { backendDevelopmentEnvPaths } from './config/backend-env-files.js';
@@ -43,6 +44,7 @@ import { AppLoggerService } from './common/logger/app-logger.service.js';
     HostModule,
     LocumModule,
     MessageModule,
+    FeedbackModule,
     NotificationsModule,
     UploadModule,
     GcsModule,

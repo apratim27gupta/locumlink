@@ -1988,10 +1988,12 @@ export default function HostDashboard(props: {
         void loadDashboardFromApi();
     }, [mounted, authLoading, userId, loadDashboardFromApi, router]);
     useEffect(() => {
-        if (!jobPostConfirmation)
-            return;
-        const t = window.setTimeout(() => setJobPostConfirmation(null), 12000);
-        return () => window.clearTimeout(t);
+        if (!jobPostConfirmation) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setJobPostConfirmation(null);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
     }, [jobPostConfirmation]);
     const today = new Date();
     const jobStatus = (j: Job) => String(j.status ?? '').toUpperCase();
@@ -2083,62 +2085,106 @@ export default function HostDashboard(props: {
             boxSizing: 'border-box',
         }}>
           
-            {jobPostConfirmation && (<div className="host-dash-confirmation-alert" role="status" aria-live="polite" style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 14,
-                    padding: '16px 18px',
-                    borderRadius: 10,
-                    background: jobPostConfirmation === 'draft' ? '#FFFBEB' : '#ECFDF5',
-                    border: jobPostConfirmation === 'draft'
-                        ? '1px solid #FDE68A'
-                        : '1px solid #A7F3D0',
-                    boxShadow: jobPostConfirmation === 'draft'
-                        ? '0 4px 14px rgba(245, 158, 11, 0.12)'
-                        : '0 4px 14px rgba(16, 185, 129, 0.12)',
-                }}>
-              <div style={{
-                        flexShrink: 0,
-                        width: 36,
-                        height: 36,
-                        borderRadius: '50%',
-                        background: jobPostConfirmation === 'draft' ? '#FEF3C7' : '#D1FAE5',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 18,
-                        lineHeight: 1,
-                        color: jobPostConfirmation === 'draft' ? '#92400E' : '#047857',
-                    }} aria-hidden>
-                ✓
-              </div>
-              <div style={{
-                        flex: 1,
-                        minWidth: 0,
-                        fontFamily: 'Inter, sans-serif',
-                        fontWeight: 700,
-                        fontSize: 'var(--font-heading)',
-                        color: jobPostConfirmation === 'draft' ? '#92400E' : '#065F46',
-                        lineHeight: 1.35,
-                    }}>
-                {jobPostConfirmation === 'draft'
-                    ? 'Shift is saved under "Draft Locum Shifts". Please post again after profile is verified. Thanks.'
-                    : 'You have posted your locum shifts successfully.'}
-              </div>
-              <button type="button" onClick={() => setJobPostConfirmation(null)} aria-label="Dismiss confirmation" style={{
-                        flexShrink: 0,
-                        border: 'none',
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        padding: '4px 8px',
-                        fontSize: 22,
-                        lineHeight: 1,
-                        color: jobPostConfirmation === 'draft' ? '#92400E' : '#065F46',
-                        opacity: 0.75,
-                    }}>
-              ×
-            </button>
-            </div>)}
+            {jobPostConfirmation && typeof document !== 'undefined' && createPortal(
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="job-post-success-title"
+                onMouseDown={(e) => {
+                  if (e.target === e.currentTarget) setJobPostConfirmation(null);
+                }}
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(15, 23, 42, 0.45)',
+                  zIndex: 100040,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 18,
+                }}
+              >
+                <div
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    maxWidth: 420,
+                    background: '#fff',
+                    borderRadius: 14,
+                    border: '1px solid #E5E7EB',
+                    boxShadow: '0 18px 60px rgba(0,0,0,0.22)',
+                    padding: '28px 24px 24px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setJobPostConfirmation(null)}
+                    aria-label="Close"
+                    style={{
+                      position: 'absolute',
+                      top: 10,
+                      right: 12,
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      padding: '4px 8px',
+                      fontSize: 22,
+                      lineHeight: 1,
+                      color: '#6B7280',
+                    }}
+                  >
+                    ×
+                  </button>
+                  <div
+                    style={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: '50%',
+                      margin: '0 auto 14px',
+                      background: jobPostConfirmation === 'draft' ? '#FEF3C7' : '#D1FAE5',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 24,
+                      color: jobPostConfirmation === 'draft' ? '#92400E' : '#047857',
+                    }}
+                    aria-hidden
+                  >
+                    ✓
+                  </div>
+                  <h2
+                    id="job-post-success-title"
+                    style={{
+                      margin: '0 0 8px',
+                      fontFamily: 'Inter, sans-serif',
+                      fontWeight: 700,
+                      fontSize: 18,
+                      color: '#0f1523',
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {jobPostConfirmation === 'draft'
+                      ? 'Draft saved'
+                      : 'Your job is successfully posted'}
+                  </h2>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontFamily: 'Inter, sans-serif',
+                      fontSize: 14,
+                      color: '#5a6478',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {jobPostConfirmation === 'draft'
+                      ? 'Shift is saved under "Draft Locum Shifts". Please post again after profile is verified. Thanks.'
+                      : 'Your locum shift has been posted and is now visible to locums.'}
+                  </p>
+                </div>
+              </div>,
+              document.body,
+            )}
 
             <div className="host-dash-top-section" style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
               <div className="host-dash-header-row" style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
