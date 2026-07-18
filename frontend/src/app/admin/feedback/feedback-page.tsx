@@ -51,7 +51,7 @@ export default function AdminFeedbackPage() {
   return (
     <AdminLayout>
       <div className="page-header">
-        <h1 className="page-title">Feedback</h1>
+        <h1 className="page-title">Feedbacks</h1>
         <p style={{ margin: '6px 0 0', color: '#6B7280', fontSize: 14 }}>
           Feedback submitted by hosts and locums from the app sidebar.
         </p>
@@ -66,7 +66,7 @@ export default function AdminFeedbackPage() {
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: 24, color: '#6B7280' }}>Loading…</div>
-        ) : items.length === 0 ? (
+        ) : error ? null : items.length === 0 ? (
           <div style={{ padding: 24, color: '#6B7280' }}>No feedback yet.</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>

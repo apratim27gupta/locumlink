@@ -8,6 +8,7 @@ type SidebarFeedbackProps = {
 };
 
 export default function SidebarFeedback({ onNavigate }: SidebarFeedbackProps) {
+  const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -33,13 +34,51 @@ export default function SidebarFeedback({ onNavigate }: SidebarFeedbackProps) {
 
   return (
     <div className="dash-sidebar-feedback">
-      <div className="dash-sidebar-feedback-title">Feedback</div>
-      {done ? (
-        <p className="dash-sidebar-feedback-success">
-          Thank you — your feedback has been recorded.
-        </p>
+      {!open ? (
+        <button
+          type="button"
+          className="dash-sidebar-footer-link dash-sidebar-feedback-toggle"
+          onClick={() => {
+            setOpen(true);
+            setDone(false);
+            setError('');
+          }}
+        >
+          Feedback
+        </button>
+      ) : done ? (
+        <>
+          <p className="dash-sidebar-feedback-success">
+            Thank you — your feedback has been recorded.
+          </p>
+          <button
+            type="button"
+            className="dash-sidebar-footer-link dash-sidebar-feedback-toggle"
+            onClick={() => {
+              setOpen(false);
+              setDone(false);
+            }}
+          >
+            Close
+          </button>
+        </>
       ) : (
         <form onSubmit={handleSubmit} className="dash-sidebar-feedback-form">
+          <div className="dash-sidebar-feedback-title-row">
+            <div className="dash-sidebar-feedback-title">Feedback</div>
+            <button
+              type="button"
+              className="dash-sidebar-feedback-cancel"
+              onClick={() => {
+                setOpen(false);
+                setError('');
+                setMessage('');
+              }}
+              aria-label="Close feedback"
+            >
+              ×
+            </button>
+          </div>
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
@@ -48,6 +87,7 @@ export default function SidebarFeedback({ onNavigate }: SidebarFeedbackProps) {
             maxLength={2000}
             disabled={busy}
             className="dash-sidebar-feedback-input"
+            autoFocus
           />
           {error ? (
             <p className="dash-sidebar-feedback-error">{error}</p>

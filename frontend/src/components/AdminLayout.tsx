@@ -102,7 +102,7 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
     },
     {
       id: 'feedback',
-      label: 'Feedback',
+      label: 'Feedbacks',
       href: '/admin/feedback',
       icon: <MessageSquare size={20} />,
     },
