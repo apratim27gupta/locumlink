@@ -1,0 +1,29 @@
+# Dependencies — EAS installs these on the build server
+node_modules/
+
+# Generated native projects — EAS runs prebuild remotely
+android/
+ios/
+
+# Expo / Metro caches and local build output
+.expo/
+dist/
+web-build/
+.metro-health-check*
+
+# Docs and local dev notes (not needed to compile)
+*.md
+LICENSE
+.claude/
+
+# Local EAS helper scripts (build is triggered from CLI, not these)
+scripts/
+
+# Windows-only npm config
+.npmrc
+
+# Unused or source-only assets (app.json uses icon.png, adaptive-icon.png, splash.png, favicon.png)
+assets/Logo_image.png
+assets/icon-192.png
+assets/Screenshot*.png
+assets/Locum Link Full.svg

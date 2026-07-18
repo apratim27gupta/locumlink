@@ -49,7 +49,7 @@ export default function SidebarFeedback({ onNavigate }: SidebarFeedbackProps) {
       ) : done ? (
         <>
           <p className="dash-sidebar-feedback-success">
-            Thank you — your feedback has been recorded.
+            Thank you - your feedback has been recorded.
           </p>
           <button
             type="button"

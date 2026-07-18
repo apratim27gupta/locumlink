@@ -98,6 +98,7 @@ async function sendAlertEmail(pdfPath, errorCount) {
     throw new Error('Missing TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET or MAIL_FROM_ADDRESS in backend/.env');
   }
 
+  // Attachments must live under `content` (Twilio Email API schema).
   const payload = {
     from: { address: MAIL_FROM_ADDRESS, name: 'Locum Link Monitor' },
     to: toEmails,
@@ -105,14 +106,14 @@ async function sendAlertEmail(pdfPath, errorCount) {
       subject: `Locum Link - ${errorCount} New Error(s) Detected`,
       html: `<p>A new error report has been generated with ${errorCount} error(s). See the attached PDF for full details.</p>`,
       text: `A new error report has been generated with ${errorCount} error(s). See the attached PDF for full details.`,
+      attachments: [
+        {
+          content: pdfBase64,
+          contentType: 'application/pdf',
+          filename: `error-report-${Date.now()}.pdf`,
+        },
+      ],
     },
-    attachments: [
-      {
-        content: pdfBase64,
-        contentType: 'application/pdf',
-        filename: `error-report-${Date.now()}.pdf`,
-      },
-    ],
   };
 
   const credentials = Buffer.from(`${TWILIO_API_KEY_SID}:${TWILIO_API_KEY_SECRET}`).toString('base64');
