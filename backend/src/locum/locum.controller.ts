@@ -48,8 +48,10 @@ export class LocumController {
   }
   @Public()
   @Get('jobs/browse-count')
-  async browseJobsCount() {
-    const count = await this.locumService.countBrowseOpportunities();
+  async browseJobsCount(@Req() req: JwtRequest) {
+    const count = await this.locumService.countBrowseOpportunities(
+      req.user?.email,
+    );
     return { count };
   }
   @Public()
@@ -60,6 +62,7 @@ export class LocumController {
   ) {
     return this.locumService.browseJobs(query, {
       redactHostDetails: !req.user,
+      viewerEmail: req.user?.email,
     });
   }
   @Post('jobs/:jobId/apply')

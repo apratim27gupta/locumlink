@@ -1,6 +1,9 @@
 ﻿import type { ConfigService } from '@nestjs/config';
+import {
+  getReviewPlaygroundEmails,
+  isReviewPlaygroundEmail,
+} from './review-playground.util.js';
 
-const DEFAULT_REVIEW_OTP_EMAILS = ['reviewlocum@locumlink.ca'];
 const DEFAULT_REVIEW_OTP_CODE = '000000';
 
 function parseOtpDigits(raw: string | undefined, otpLength: number): string | null {
@@ -24,21 +27,17 @@ export function getFixedOtpForStaging(
 }
 
 /**
- * App Store / QA review accounts on production: fixed OTP, no outbound email.
- * Override via REVIEW_OTP_EMAILS (comma-separated) and REVIEW_OTP_CODE.
+ * App Store / QA review accounts: fixed OTP, no outbound email.
+ * Emails: DEFAULT_REVIEW_PLAYGROUND_EMAILS (+ optional REVIEW_OTP_EMAILS extras).
+ * Code: REVIEW_OTP_CODE or 000000. Same playground isolation as browse.
  */
 export function getReviewOtpForEmail(
   email: string,
   config: ConfigService,
   otpLength: number,
 ): string | null {
-  const normalized = email.trim().toLowerCase();
-  const rawList = config.get<string>('REVIEW_OTP_EMAILS')?.trim();
-  const allowed = rawList
-    ? rawList.split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean)
-    : DEFAULT_REVIEW_OTP_EMAILS;
-
-  if (!allowed.includes(normalized)) return null;
+  const allowed = getReviewPlaygroundEmails(config);
+  if (!isReviewPlaygroundEmail(email, allowed)) return null;
 
   return parseOtpDigits(
     config.get<string>('REVIEW_OTP_CODE') ?? DEFAULT_REVIEW_OTP_CODE,
