@@ -413,9 +413,13 @@ export class LocumService {
   async countBrowseOpportunities(): Promise<number> {
     return countBrowseActiveJobPostings(this.prisma);
   }
-  async browseJobs(query: Record<string, unknown> = {}) {
+  async browseJobs(
+    query: Record<string, unknown> = {},
+    options: { redactHostDetails?: boolean } = {},
+  ) {
     const pagination = parsePaginationParams(query, 20);
     pagination.direction = 'desc';
+    const redactHostDetails = Boolean(options.redactHostDetails);
 
     const page = await paginateJobPostings(
       this.prisma,
@@ -444,11 +448,33 @@ export class LocumService {
     );
 
     return {
-      items: page.items.map((j) => ({
-        ...j,
-        isDeleted: j.isDeleted,
-        applicationsCount: j._count.applications,
-      })),
+      items: page.items.map((j) => {
+        const hostProfile = redactHostDetails
+          ? {
+              city: j.hostProfile.city,
+              province: j.hostProfile.province,
+              // Keep shape stable for the frontend; omit identifying fields.
+              practiceName: '',
+              contactFirstName: null,
+              contactLastName: null,
+              cpsnsVerificationStatus: null,
+              postalCode: null,
+              address: null,
+              address1: null,
+              practiceType: null,
+              emr: null,
+              servicesOffered: [] as string[],
+              highlights: null,
+            }
+          : j.hostProfile;
+
+        return {
+          ...j,
+          hostProfile,
+          isDeleted: j.isDeleted,
+          applicationsCount: j._count.applications,
+        };
+      }),
       nextCursor: page.nextCursor,
       hasNextPage: page.hasNextPage,
     };

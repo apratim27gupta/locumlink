@@ -18,7 +18,7 @@ import { Roles } from '../auth/decorators/roles.decorator.js';
 import { LocumService } from './locum.service.js';
 import { ApplyJobDto, RespondToConfirmedPlacementDto } from './locum.dto.js';
 interface JwtRequest {
-  user: {
+  user?: {
     id: string;
     email: string;
     role: string;
@@ -37,14 +37,14 @@ export class LocumController {
     @Body()
     body: Record<string, unknown>,
   ) {
-    return this.locumService.saveProfile(req.user.id, body);
+    return this.locumService.saveProfile(req.user!.id, body);
   }
   @Get('profile')
   getProfile(
     @Req()
     req: JwtRequest,
   ) {
-    return this.locumService.getProfile(req.user.id);
+    return this.locumService.getProfile(req.user!.id);
   }
   @Public()
   @Get('jobs/browse-count')
@@ -54,8 +54,13 @@ export class LocumController {
   }
   @Public()
   @Get('jobs')
-  browseJobs(@Query() query: Record<string, unknown>) {
-    return this.locumService.browseJobs(query);
+  browseJobs(
+    @Req() req: JwtRequest,
+    @Query() query: Record<string, unknown>,
+  ) {
+    return this.locumService.browseJobs(query, {
+      redactHostDetails: !req.user,
+    });
   }
   @Post('jobs/:jobId/apply')
   applyToJob(
@@ -66,7 +71,7 @@ export class LocumController {
     @Body()
     dto: ApplyJobDto,
   ) {
-    return this.locumService.applyToJob(req.user.id, jobId, dto.coverNote);
+    return this.locumService.applyToJob(req.user!.id, jobId, dto.coverNote);
   }
   @Get('applications')
   getMyApplications(
@@ -75,14 +80,14 @@ export class LocumController {
     @Query()
     query: Record<string, unknown>,
   ) {
-    return this.locumService.getMyApplications(req.user.id, query);
+    return this.locumService.getMyApplications(req.user!.id, query);
   }
   @Get('stats')
   getDashboardStats(
     @Req()
     req: JwtRequest,
   ) {
-    return this.locumService.getDashboardStats(req.user.id);
+    return this.locumService.getDashboardStats(req.user!.id);
   }
   @Patch('applications/:applicationId/respond')
   @HttpCode(HttpStatus.OK)
@@ -95,7 +100,7 @@ export class LocumController {
     dto: RespondToConfirmedPlacementDto,
   ) {
     return this.locumService.respondToConfirmedPlacement(
-      req.user.id,
+      req.user!.id,
       applicationId,
       dto.response,
     );

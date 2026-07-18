@@ -1039,15 +1039,7 @@ export default function LocumBrowsePage(props: {
                       marginBottom: 4,
                     }}
                   >
-                    {loggedIn ? (
-                      <>
-                        {j.hostProfile.city}, {j.hostProfile.province}
-                      </>
-                    ) : (
-                      <LockedUntilSignIn>
-                        {j.hostProfile.city}, {j.hostProfile.province}
-                      </LockedUntilSignIn>
-                    )}
+                    {j.hostProfile.city}, {j.hostProfile.province}
                   </div>
                   {(j.startDate || j.endDate) && (() => {
                     const start = formatUtcDateTimeToLocal(j.startDate, j.startTime);
@@ -1205,34 +1197,18 @@ export default function LocumBrowsePage(props: {
                           marginBottom: hostDoctorName ? 4 : 0,
                         }}
                       >
-                        {loggedIn ? (
+                        {loggedIn && job.hostProfile.practiceName ? (
                           job.hostProfile.practiceName
                         ) : (
-                          <LockedUntilSignIn>
-                            {job.hostProfile.practiceName}
-                          </LockedUntilSignIn>
+                          <LockedUntilSignIn>Clinic name</LockedUntilSignIn>
                         )}
                       </div>
-                      {hostDoctorName ? (
-                        loggedIn ? (
-                          <NameWithVerifiedShield
-                            verified={hostCpsnsVerified}
-                            shieldSize={18}
-                            gap={6}
-                          >
-                            <span
-                              style={{
-                                fontFamily: 'Inter, sans-serif',
-                                fontWeight: 600,
-                                fontSize: 'var(--font-heading)',
-                                lineHeight: '120%',
-                                color: '#5a6478',
-                              }}
-                            >
-                              {hostDoctorName}
-                            </span>
-                          </NameWithVerifiedShield>
-                        ) : (
+                      {loggedIn && hostDoctorName ? (
+                        <NameWithVerifiedShield
+                          verified={hostCpsnsVerified}
+                          shieldSize={18}
+                          gap={6}
+                        >
                           <span
                             style={{
                               fontFamily: 'Inter, sans-serif',
@@ -1242,9 +1218,21 @@ export default function LocumBrowsePage(props: {
                               color: '#5a6478',
                             }}
                           >
-                            <LockedUntilSignIn>{hostDoctorName}</LockedUntilSignIn>
+                            {hostDoctorName}
                           </span>
-                        )
+                        </NameWithVerifiedShield>
+                      ) : !loggedIn ? (
+                        <span
+                          style={{
+                            fontFamily: 'Inter, sans-serif',
+                            fontWeight: 600,
+                            fontSize: 'var(--font-heading)',
+                            lineHeight: '120%',
+                            color: '#5a6478',
+                          }}
+                        >
+                          <LockedUntilSignIn>Host name</LockedUntilSignIn>
+                        </span>
                       ) : null}
                       {!loggedIn ? (
                         <div
@@ -1254,7 +1242,7 @@ export default function LocumBrowsePage(props: {
                             color: '#8892a4',
                           }}
                         >
-                          🔒 Sign in to view clinic name, host, and location
+                          🔒 Sign in to view clinic name, host, and address
                         </div>
                       ) : null}
                     </div>
@@ -1288,16 +1276,7 @@ export default function LocumBrowsePage(props: {
                     wordBreak: 'break-word',
                   }}
                 >
-                  {loggedIn ? (
-                    <>
-                      {job.hostProfile.city}, {job.hostProfile.province}
-                    </>
-                  ) : (
-                    <LockedUntilSignIn>
-                      {job.hostProfile.city}, {job.hostProfile.province}
-                    </LockedUntilSignIn>
-                  )}{' '}
-                  ·{' '}
+                  {job.hostProfile.city}, {job.hostProfile.province} ·{' '}
                   {' '}<span title={toLocalDateTime(job.createdAt)} style={{ cursor: 'help', borderBottom: '1px dotted currentColor' }}>{relativeHoursOrDaysAgo(job.createdAt)}</span> ·{' '}
                   {job.applicationsCount} applicant
                   {job.applicationsCount !== 1 ? 's' : ''}
@@ -1623,12 +1602,10 @@ export default function LocumBrowsePage(props: {
                   }}
                 >
                   About{' '}
-                  {loggedIn ? (
+                  {loggedIn && job.hostProfile.practiceName ? (
                     job.hostProfile.practiceName
                   ) : (
-                    <LockedUntilSignIn>
-                      {job.hostProfile.practiceName}
-                    </LockedUntilSignIn>
+                    <LockedUntilSignIn>Clinic</LockedUntilSignIn>
                   )}
                 </h4>
                 <div
@@ -1639,15 +1616,13 @@ export default function LocumBrowsePage(props: {
                     marginBottom: 12,
                   }}
                 >
-                  {job.hostProfile.address && (
+                  {(!loggedIn || job.hostProfile.address) && (
                     <>
                       <strong style={{ color: '#374151', fontWeight: 'var(--font-weight-bold)' }}>Location:</strong>{' '}
-                      {loggedIn ? (
+                      {loggedIn && job.hostProfile.address ? (
                         job.hostProfile.address
                       ) : (
-                        <LockedUntilSignIn>
-                          {job.hostProfile.address}
-                        </LockedUntilSignIn>
+                        <LockedUntilSignIn>Street address</LockedUntilSignIn>
                       )}
                       <br />
                     </>
