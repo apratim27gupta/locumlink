@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -17,14 +18,8 @@ import { buildNativeInjectScript, useExpoPush } from './useExpoPush';
 import {
   APP_ORIGIN,
   NATIVE_OAUTH_RETURN_URL,
-  getAppleAuthBrowserReturnUrl,
-  getAppleAuthCompleteUrl,
-  isAppleAuthHandoffUrl,
-  isAppleAuthStartUrl,
   isForeignOAuthCallbackUrl,
   isOAuthStartUrl,
-  isAppleAuthCompleteUrl,
-  toWebAppleAuthCompleteUrl,
   toWebOAuthCallbackUrl,
 } from './oauthEnv';
 import {
@@ -123,36 +118,53 @@ export default function App() {
     navigateWebViewTo(webCallback);
   }, [navigateWebViewTo]);
 
-  const openAppleAuthInBrowser = useCallback((url: string) => {
-    oauthInFlightRef.current = true;
+  const sendAppleAuthMessageToWebView = useCallback((payload: object) => {
+    webViewRef.current?.injectJavaScript(
+      `window.__LL_APPLE_AUTH_CB__ && window.__LL_APPLE_AUTH_CB__(${JSON.stringify(
+        JSON.stringify(payload),
+      )}); true;`,
+    );
+  }, []);
 
-    const browserOptions =
-      Platform.OS === 'android'
-        ? { createTask: false }
-        : { preferEphemeralSession: false };
+  /** Native Sign in with Apple — no browser; the WebView exchanges the token. */
+  const runNativeAppleSignIn = useCallback(async (hashedNonce: string) => {
+    sendAppleAuthMessageToWebView({ type: 'ack' });
 
-    void WebBrowser.openAuthSessionAsync(
-      url,
-      getAppleAuthBrowserReturnUrl(),
-      browserOptions,
-    )
-      .then((result) => {
-        oauthInFlightRef.current = false;
-        if (result.type === 'success' && result.url) {
-          if (isAppleAuthHandoffUrl(result.url) || isAppleAuthCompleteUrl(result.url)) {
-            navigateWebViewTo(getAppleAuthCompleteUrl());
-            return;
-          }
-          const webCallback = toWebAppleAuthCompleteUrl(result.url);
-          if (webCallback) {
-            navigateWebViewTo(webCallback);
-          }
-        }
-      })
-      .catch(() => {
-        oauthInFlightRef.current = false;
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+        nonce: hashedNonce,
       });
-  }, [navigateWebViewTo]);
+
+      sendAppleAuthMessageToWebView({
+        type: 'result',
+        ok: true,
+        identityToken: credential.identityToken,
+        email: credential.email,
+        fullName: credential.fullName
+          ? {
+              givenName: credential.fullName.givenName,
+              middleName: credential.fullName.middleName,
+              familyName: credential.fullName.familyName,
+            }
+          : null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Sign in with Apple failed.';
+      const canceled =
+        (err as { code?: string })?.code === 'ERR_REQUEST_CANCELED'
+        || /canceled/i.test(message);
+      sendAppleAuthMessageToWebView({
+        type: 'result',
+        ok: false,
+        canceled,
+        error: canceled ? null : message,
+      });
+    }
+  }, [sendAppleAuthMessageToWebView]);
 
   const openOAuthInBrowser = useCallback((url: string) => {
     if (oauthInFlightRef.current) return;
@@ -249,14 +261,22 @@ export default function App() {
 
   const handleWebViewMessage = useCallback((event: { nativeEvent: { data: string } }) => {
     try {
-      const msg = JSON.parse(event.nativeEvent.data) as { type?: string; url?: string };
+      const msg = JSON.parse(event.nativeEvent.data) as {
+        type?: string;
+        url?: string;
+        nonce?: string;
+      };
+      if (msg.type === 'apple-auth' && typeof msg.nonce === 'string') {
+        void runNativeAppleSignIn(msg.nonce);
+        return;
+      }
       if (msg.type === 'oauth' && typeof msg.url === 'string') {
         openOAuthInBrowser(msg.url);
       }
     } catch {
       /* ignore */
     }
-  }, [openOAuthInBrowser]);
+  }, [runNativeAppleSignIn, openOAuthInBrowser]);
 
   const interceptOAuthNavigation = useCallback((url: string): boolean => {
     if (Platform.OS === 'web') return false;
@@ -275,18 +295,13 @@ export default function App() {
       return true;
     }
 
-    if (isAppleAuthStartUrl(url)) {
-      openAppleAuthInBrowser(url);
-      return true;
-    }
-
     if (isOAuthStartUrl(url)) {
       openOAuthInBrowser(url);
       return true;
     }
 
     return false;
-  }, [navigateWebViewTo, openAppleAuthInBrowser, openOAuthInBrowser]);
+  }, [navigateWebViewTo, openOAuthInBrowser]);
 
   const handleShouldStartLoadWithRequest = useCallback((request: { url: string }) => {
     return !interceptOAuthNavigation(request.url);

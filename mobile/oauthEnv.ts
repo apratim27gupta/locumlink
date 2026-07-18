@@ -48,65 +48,6 @@ export function isOAuthStartUrl(url: string): boolean {
   );
 }
 
-/** Apple JS redirect — open in system browser (WKWebView in-app appleid breaks Face ID). */
-export function isAppleAuthStartUrl(url: string): boolean {
-  return url.includes('appleid.apple.com');
-}
-
-/** ASWebAuthenticationSession return URL — must not load /complete (consumes cookie too early). */
-export function getAppleAuthBrowserReturnUrl(): string {
-  return `${APP_ORIGIN}/auth/callback/apple/handoff`;
-}
-
-export function getAppleAuthCompleteUrl(): string {
-  return `${APP_ORIGIN}/auth/callback/complete?provider=apple`;
-}
-
-export function isAppleAuthHandoffUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    const hostOk =
-      parsed.hostname === APP_HOST
-      || isAllowedMisdirectedCallback(parsed.hostname);
-    return hostOk && parsed.pathname === '/auth/callback/apple/handoff';
-  } catch {
-    return false;
-  }
-}
-
-export function isAppleAuthCompleteUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    const hostOk =
-      parsed.hostname === APP_HOST
-      || isAllowedMisdirectedCallback(parsed.hostname);
-    return (
-      hostOk
-      && parsed.pathname === '/auth/callback/complete'
-      && parsed.searchParams.get('provider') === 'apple'
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** Map Apple auth session result into the WebView complete URL for this app origin. */
-export function toWebAppleAuthCompleteUrl(resultUrl: string): string | null {
-  if (!isAppleAuthCompleteUrl(resultUrl)) return null;
-
-  try {
-    const parsed = new URL(resultUrl);
-    const appOrigin = new URL(APP_ORIGIN);
-    if (parsed.origin === appOrigin.origin) return parsed.toString();
-
-    const target = new URL(parsed.pathname, APP_ORIGIN);
-    target.search = parsed.search;
-    return target.toString();
-  } catch {
-    return null;
-  }
-}
-
 /** Staging may receive prod HTTPS callbacks when Supabase uses Site URL instead of calocumlinkapp. */
 function isAllowedMisdirectedCallback(host: string): boolean {
   return APP_HOST === 'staging.locumlink.ca' && host === PROD_HOST;
