@@ -5,6 +5,7 @@ import AuthSplitLayout from '@/components/AuthSplitLayout';
 import { useAuth } from '@/providers/AuthProvider';
 import { toUserFacingError } from '@/lib/userFacingError';
 import { saveRole } from '@/lib/auth';
+import { completeAppleWebSignInFromStorage } from '@/lib/appleWebSignIn';
 import { getSupabase } from '@/lib/supabaseClient';
 
 function AuthCallbackCompleteInner() {
@@ -18,12 +19,20 @@ function AuthCallbackCompleteInner() {
             try {
                 const roleFromUrl = params.get('role') as 'clinic' | 'locum' | null;
                 if (roleFromUrl) saveRole(roleFromUrl);
-                const code = params.get('code');
-                if (code) {
-                    const supabase = getSupabase();
-                    const { error: exchangeError } =
-                        await supabase.auth.exchangeCodeForSession(code);
-                    if (exchangeError) throw new Error(exchangeError.message);
+                const provider = params.get('provider');
+                if (provider === 'apple') {
+                    const handled = await completeAppleWebSignInFromStorage();
+                    if (!handled) {
+                        throw new Error('Apple sign-in session expired. Please try again.');
+                    }
+                } else {
+                    const code = params.get('code');
+                    if (code) {
+                        const supabase = getSupabase();
+                        const { error: exchangeError } =
+                            await supabase.auth.exchangeCodeForSession(code);
+                        if (exchangeError) throw new Error(exchangeError.message);
+                    }
                 }
                 const { redirectTo } = await completeOAuthSignIn();
                 if (!cancelled)

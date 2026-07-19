@@ -3,7 +3,7 @@ Add-Type -AssemblyName System.Drawing
 
 $repoRoot = Join-Path $PSScriptRoot '..' | Resolve-Path
 $iconSource = Join-Path $repoRoot 'mobile\assets\icon-192.png'
-$splashSource = $iconSource
+#$splashSource = $iconSource
 $mobileAssets = Join-Path $repoRoot 'mobile\assets'
 $publicDir = Join-Path $repoRoot 'frontend\public'
 $mobileOnly = $args -contains '-MobileOnly'

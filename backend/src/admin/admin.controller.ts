@@ -22,6 +22,7 @@ import { AdminJwtAuthGuard } from '../admin-auth/guards/admin-jwt-auth.guard.js'
 import { CurrentAdmin } from '../admin-auth/decorators/current-admin.decorator.js';
 import type { AdminJwtPayload } from '../admin-auth/admin-auth.types.js';
 import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
+import { FeedbackService } from '../feedback/feedback.service.js';
 import { AdminService } from './admin.service.js';
 import { AdminReportActionDto } from './dto/admin-report-action.dto.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
@@ -34,6 +35,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly adminNotifications: AdminNotificationsService,
+    private readonly feedback: FeedbackService,
   ) {}
 
   @Get('stats')
@@ -66,6 +68,11 @@ export class AdminController {
   @Get('reports')
   async reports(@Query('status') status?: string) {
     return this.admin.listReports({ status });
+  }
+
+  @Get('feedback')
+  async listFeedback() {
+    return this.feedback.listForAdmin();
   }
 
   @Get('reports/:id')

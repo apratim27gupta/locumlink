@@ -61,6 +61,15 @@ export function requestNativeOAuth(url: string): boolean {
   return true;
 }
 
+/** Ask the app shell to run native Sign in with Apple (ASAuthorizationController). */
+export function requestNativeAppleSignIn(hashedNonce: string): boolean {
+  if (typeof window === 'undefined' || !isNativeShell()) return false;
+  const bridge = window.ReactNativeWebView;
+  if (!bridge?.postMessage) return false;
+  bridge.postMessage(JSON.stringify({ type: 'apple-auth', nonce: hashedNonce }));
+  return true;
+}
+
 function isAllowedMisdirectedCallback(host: string, appHost: string): boolean {
   return appHost === 'staging.locumlink.ca' && host === 'locumlink.ca';
 }

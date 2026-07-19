@@ -756,12 +756,116 @@
 }
 
 .dash-sidebar-footer-links {
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dash-sidebar-feedback {
   margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+}
+
+.dash-sidebar-feedback-title {
+  font-family: Gilroy-Medium, var(--font-family-display);
+  font-size: var(--font-small);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dash-sidebar-feedback-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dash-sidebar-feedback-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.dash-sidebar-feedback-cancel {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.dash-sidebar-feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-sidebar-feedback-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 64px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 10px;
+}
+
+.dash-sidebar-feedback-input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.dash-sidebar-feedback-input:focus {
+  outline: none;
+  border-color: rgba(56, 198, 198, 0.7);
+}
+
+.dash-sidebar-feedback-submit {
+  align-self: flex-start;
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  background: #38C6C6;
+  color: #0f1523;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.dash-sidebar-feedback-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dash-sidebar-feedback-success,
+.dash-sidebar-feedback-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.dash-sidebar-feedback-success {
+  color: #A7F3D0;
+}
+
+.dash-sidebar-feedback-error {
+  color: #FCA5A5;
 }
 
 .dash-sidebar-footer-link {

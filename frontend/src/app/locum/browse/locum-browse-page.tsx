@@ -11,8 +11,13 @@ import {
   type ReactNode,
 } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
+import Logo from '@/components/Logo';
 import { fetchAllPaginated, locumApi, type BrowseJob } from '@/lib/api';
+import { getToken, syncCookies } from '@/lib/auth';
+import { beforeClientNavigation } from '@/lib/topLoader';
+import { useAuth } from '@/providers/AuthProvider';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { LocumProfile } from '@/types';
 import LocumAccountNotice from '@/components/LocumAccountNotice';
@@ -73,6 +78,23 @@ const BROWSE_LIST_DEFAULT = 290;
 const LOGO_TEAL = '#309BB7';
 const LOGO_TEAL_BG = 'rgba(48, 155, 183, 0.14)';
 const LOGO_TEAL_BORDER = 'rgba(48, 155, 183, 0.28)';
+/** Cosmetic blur for host-identifying details shown to logged-out visitors. */
+function LockedUntilSignIn({ children }: { children: ReactNode }) {
+  return (
+    <span
+      title="Sign in to view"
+      aria-label="Sign in to view"
+      style={{
+        filter: 'blur(5px)',
+        userSelect: 'none',
+        pointerEvents: 'none',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 function readStoredBrowseListWidth(): number {
   if (typeof window === 'undefined') return BROWSE_LIST_DEFAULT;
   const n = parseInt(localStorage.getItem(BROWSE_LIST_WIDTH_KEY) ?? '', 10);
@@ -355,6 +377,10 @@ export default function LocumBrowsePage(props: {
     },
     [],
   );
+  const router = useRouter();
+  const { isLoading: authLoading } = useAuth();
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [authResolved, setAuthResolved] = useState(false);
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState<string | null>(null);
   const [applyError, setApplyError] = useState('');
@@ -377,6 +403,13 @@ export default function LocumBrowsePage(props: {
     loadJobs();
   }, [loadJobs]);
   useEffect(() => {
+    if (authLoading) return;
+    syncCookies();
+    setLoggedIn(Boolean(getToken()));
+    setAuthResolved(true);
+  }, [authLoading]);
+  useEffect(() => {
+    if (!getToken()) return;
     locumApi
       .getProfile()
       .then((data) => {
@@ -385,6 +418,7 @@ export default function LocumBrowsePage(props: {
       .catch(() => {});
   }, []);
   useEffect(() => {
+    if (!getToken()) return;
     fetchAllPaginated((cursor) => locumApi.getMyApplications({ cursor, limit: 100 }))
       .then((applications) => {
         const ids = new Set(
@@ -473,6 +507,12 @@ export default function LocumBrowsePage(props: {
   const cpsnsVerified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
   async function handleApply(jobId: string) {
     if (applied.has(jobId)) return;
+    syncCookies();
+    if (!getToken()) {
+      beforeClientNavigation('/auth');
+      router.push('/auth?role=locum&next=/locum/browse');
+      return;
+    }
     const targetJob = jobs.find((j) => j.id === jobId);
     if (targetJob && isJobRemovedByHost(targetJob)) {
       setApplyError('This posting has been removed by the host.');
@@ -490,6 +530,7 @@ export default function LocumBrowsePage(props: {
     setApplyError('');
     try {
       await locumApi.applyToJob(jobId);
+      syncCookies();
       setApplied((prev) => new Set([...prev, jobId]));
     } catch (e: unknown) {
       const msg =
@@ -505,8 +546,9 @@ export default function LocumBrowsePage(props: {
   }
   const isApplied = (id: string) => applied.has(id);
   const isApplying = (id: string) => applying === id;
-  const applyDisabled = (id: string) =>
-    !canApply || isApplied(id) || isApplying(id);
+  const applyAllowed =
+    !selectedJobUnavailable && !isApplied(job?.id ?? '') && !isApplying(job?.id ?? '');
+  const applyReady = loggedIn ? canApply && applyAllowed : applyAllowed;
   function onBrowseListResizeMouseDown(e: ReactMouseEvent<HTMLDivElement>) {
     e.preventDefault();
     e.stopPropagation();
@@ -539,14 +581,11 @@ export default function LocumBrowsePage(props: {
   }
   const displayName = profile?.firstName
     ? `Dr ${profile.firstName}${profile.lastName ? ` ${profile.lastName}` : ''}`
-    : 'Doctor';
-  return (
-    <DashLayout
-      navItems={NAV}
-      activeHref="/locum/browse"
-      topbarFirstName={profile?.firstName}
-      topbarLastName={profile?.lastName}
-    >
+    : loggedIn
+      ? 'Doctor'
+      : null;
+  const welcomeLine = displayName ?? 'Browse available shifts';
+  const pageContent = (
       <div
         style={{
           flex: 1,
@@ -568,16 +607,22 @@ export default function LocumBrowsePage(props: {
               gap: 6,
             }}
           >
-            <NameWithVerifiedShield verified={cpsnsVerified}>
-              <span>Welcome {displayName}</span>
+            <NameWithVerifiedShield verified={loggedIn && cpsnsVerified}>
+              <span>{loggedIn ? `Welcome ${displayName}` : welcomeLine}</span>
             </NameWithVerifiedShield>
           </h1>
           <p style={{ fontSize: 12, color: '#8892a4', marginBottom: 14 }}></p>
 
-          {!canApply && profile && accountNotice ? (
+          {!loggedIn ? (
+            <p style={{ fontSize: 12, color: '#8892a4', marginBottom: 14 }}>
+              Sign in to apply for shifts. Browsing is free — no account required.
+            </p>
+          ) : null}
+
+          {loggedIn && !canApply && profile && accountNotice ? (
             <LocumAccountNotice profile={profile} />
           ) : null}
-          {!canApply && profile && !accountNotice ? (
+          {loggedIn && !canApply && profile && !accountNotice ? (
             <div
               style={{
                 marginBottom: 14,
@@ -1152,9 +1197,13 @@ export default function LocumBrowsePage(props: {
                           marginBottom: hostDoctorName ? 4 : 0,
                         }}
                       >
-                        {job.hostProfile.practiceName}
+                        {loggedIn && job.hostProfile.practiceName ? (
+                          job.hostProfile.practiceName
+                        ) : (
+                          <LockedUntilSignIn>Clinic name</LockedUntilSignIn>
+                        )}
                       </div>
-                      {hostDoctorName ? (
+                      {loggedIn && hostDoctorName ? (
                         <NameWithVerifiedShield
                           verified={hostCpsnsVerified}
                           shieldSize={18}
@@ -1172,6 +1221,29 @@ export default function LocumBrowsePage(props: {
                             {hostDoctorName}
                           </span>
                         </NameWithVerifiedShield>
+                      ) : !loggedIn ? (
+                        <span
+                          style={{
+                            fontFamily: 'Inter, sans-serif',
+                            fontWeight: 600,
+                            fontSize: 'var(--font-heading)',
+                            lineHeight: '120%',
+                            color: '#5a6478',
+                          }}
+                        >
+                          <LockedUntilSignIn>Host name</LockedUntilSignIn>
+                        </span>
+                      ) : null}
+                      {!loggedIn ? (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            fontSize: 'var(--font-small)',
+                            color: '#8892a4',
+                          }}
+                        >
+                          🔒 Sign in to view clinic name, host, and address
+                        </div>
                       ) : null}
                     </div>
                   );
@@ -1529,7 +1601,12 @@ export default function LocumBrowsePage(props: {
                     marginBottom: 8,
                   }}
                 >
-                  About {job.hostProfile.practiceName}
+                  About{' '}
+                  {loggedIn && job.hostProfile.practiceName ? (
+                    job.hostProfile.practiceName
+                  ) : (
+                    <LockedUntilSignIn>Clinic</LockedUntilSignIn>
+                  )}
                 </h4>
                 <div
                   style={{
@@ -1539,10 +1616,14 @@ export default function LocumBrowsePage(props: {
                     marginBottom: 12,
                   }}
                 >
-                  {job.hostProfile.address && (
+                  {(!loggedIn || job.hostProfile.address) && (
                     <>
                       <strong style={{ color: '#374151', fontWeight: 'var(--font-weight-bold)' }}>Location:</strong>{' '}
-                      {job.hostProfile.address}
+                      {loggedIn && job.hostProfile.address ? (
+                        job.hostProfile.address
+                      ) : (
+                        <LockedUntilSignIn>Street address</LockedUntilSignIn>
+                      )}
                       <br />
                     </>
                   )}
@@ -1653,21 +1734,18 @@ export default function LocumBrowsePage(props: {
                         ? 'This posting was removed by the host'
                         : selectedJobPassed
                           ? 'This job has passed'
-                          : !canApply
-                            ? accountNotice?.title ?? 'Verify CPSNS to apply'
-                            : undefined
+                          : !loggedIn
+                            ? 'Sign in to apply for this shift'
+                            : !canApply
+                              ? accountNotice?.title ?? 'Verify CPSNS to apply'
+                              : undefined
                   }
                   style={{ display: 'inline-block' }}
                 >
                   <button
                     type="button"
                     onClick={() => handleApply(job.id)}
-                    disabled={
-                      !canApply ||
-                      selectedJobUnavailable ||
-                      isApplied(job.id) ||
-                      isApplying(job.id)
-                    }
+                    disabled={!applyReady}
                     style={{
                       height: 34,
                       padding: '0 14px',
@@ -1677,29 +1755,21 @@ export default function LocumBrowsePage(props: {
                       fontWeight: 'var(--font-weight-bold)',
                       fontFamily: 'inherit',
                       cursor:
-                        !canApply ||
-                        selectedJobUnavailable ||
-                        isApplied(job.id)
+                        !applyReady
                           ? 'not-allowed'
                           : isApplying(job.id)
                             ? 'wait'
                             : 'pointer',
                       background:
-                        !canApply ||
-                        selectedJobUnavailable ||
-                        isApplied(job.id)
+                        !applyReady
                           ? '#e5e7eb'
                           : 'linear-gradient(135deg, #0F2A7A 0%, #1E3FAF 100%)',
                       color:
-                        !canApply ||
-                        selectedJobUnavailable ||
-                        isApplied(job.id)
+                        !applyReady
                           ? '#9ca3af'
                           : '#fff',
                       boxShadow:
-                        !canApply ||
-                        selectedJobUnavailable ||
-                        isApplied(job.id)
+                        !applyReady
                           ? 'none'
                           : '0 2px 10px rgba(15, 42, 122, 0.22)',
                       opacity: isApplying(job.id) ? 0.88 : 1,
@@ -1711,7 +1781,9 @@ export default function LocumBrowsePage(props: {
                         ? 'Applied'
                         : selectedJobRemoved
                           ? 'Posting removed'
-                          : 'Apply'}
+                          : !loggedIn
+                            ? 'Sign in to apply'
+                            : 'Apply'}
                   </button>
                 </span>
               </div>
@@ -1736,6 +1808,117 @@ export default function LocumBrowsePage(props: {
           )}
         </div>
       </div>
+  );
+
+  if (!authResolved) {
+    return (
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#8892a4',
+          fontSize: 14,
+          fontFamily: 'Inter, sans-serif',
+        }}
+      >
+        Loading…
+      </div>
+    );
+  }
+
+  if (!loggedIn) {
+    return (
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          background: '#F7F8FA',
+        }}
+      >
+        <header
+          style={{
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '10px 20px',
+            background: '#fff',
+            borderBottom: '1px solid #e2e5ee',
+          }}
+        >
+          <Logo size="md" />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                beforeClientNavigation('/auth');
+                router.push('/auth?role=locum&next=/locum/browse');
+              }}
+              style={{
+                height: 34,
+                padding: '0 16px',
+                border: '1px solid #0F2A7A',
+                borderRadius: 6,
+                background: '#fff',
+                color: '#0F2A7A',
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                beforeClientNavigation('/auth');
+                router.push('/auth?mode=signup&role=locum&next=/locum/browse');
+              }}
+              style={{
+                height: 34,
+                padding: '0 16px',
+                border: 'none',
+                borderRadius: 6,
+                background: 'linear-gradient(135deg, #0F2A7A 0%, #1E3FAF 100%)',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              Sign up
+            </button>
+          </div>
+        </header>
+        <main
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '16px 20px 20px',
+          }}
+        >
+          {pageContent}
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <DashLayout
+      navItems={NAV}
+      activeHref="/locum/browse"
+      topbarFirstName={profile?.firstName}
+      topbarLastName={profile?.lastName}
+    >
+      {pageContent}
     </DashLayout>
   );
 }

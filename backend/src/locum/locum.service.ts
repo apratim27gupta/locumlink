@@ -36,6 +36,11 @@ import {
   mergeCredentialReviewPatchForAccountPending,
   mergeCredentialSubmittedAtPatch,
 } from '../cpsns/cpsns-verified.js';
+import {
+  getReviewPlaygroundEmails,
+  isReviewPlaygroundEmail,
+  playgroundModeForViewer,
+} from '../config/review-playground.util.js';
 import type { SaveLocumProfileDto } from './locum.dto.js';
 function mapSpecialty(raw?: string): Specialty {
   if (!raw?.trim()) return Specialty.OTHER;
@@ -410,16 +415,32 @@ export class LocumService {
       profile: profile ? this.mapProfileToApi(profile, user) : null,
     };
   }
-  async countBrowseOpportunities(): Promise<number> {
-    return countBrowseActiveJobPostings(this.prisma);
+  async countBrowseOpportunities(viewerEmail?: string | null): Promise<number> {
+    return countBrowseActiveJobPostings(
+      this.prisma,
+      playgroundModeForViewer(viewerEmail),
+    );
   }
-  async browseJobs(query: Record<string, unknown> = {}) {
+  async browseJobs(
+    query: Record<string, unknown> = {},
+    options: {
+      redactHostDetails?: boolean;
+      viewerEmail?: string | null;
+    } = {},
+  ) {
     const pagination = parsePaginationParams(query, 20);
     pagination.direction = 'desc';
+    const redactHostDetails = Boolean(options.redactHostDetails);
+    const playgroundMode = playgroundModeForViewer(options.viewerEmail);
 
     const page = await paginateJobPostings(
       this.prisma,
-      { status: 'ACTIVE', isDeleted: false, excludePassedStartDate: true },
+      {
+        status: 'ACTIVE',
+        isDeleted: false,
+        excludePassedStartDate: true,
+        playgroundMode,
+      },
       pagination,
       {
         hostProfile: {
@@ -444,17 +465,43 @@ export class LocumService {
     );
 
     return {
-      items: page.items.map((j) => ({
-        ...j,
-        isDeleted: j.isDeleted,
-        applicationsCount: j._count.applications,
-      })),
+      items: page.items.map((j) => {
+        const hostProfile = redactHostDetails
+          ? {
+              city: j.hostProfile.city,
+              province: j.hostProfile.province,
+              // Keep shape stable for the frontend; omit identifying fields.
+              practiceName: '',
+              contactFirstName: null,
+              contactLastName: null,
+              cpsnsVerificationStatus: null,
+              postalCode: null,
+              address: null,
+              address1: null,
+              practiceType: null,
+              emr: null,
+              servicesOffered: [] as string[],
+              highlights: null,
+            }
+          : j.hostProfile;
+
+        return {
+          ...j,
+          hostProfile,
+          isDeleted: j.isDeleted,
+          applicationsCount: j._count.applications,
+        };
+      }),
       nextCursor: page.nextCursor,
       hasNextPage: page.hasNextPage,
     };
   }
   async applyToJob(userId: string, jobId: string, coverNote?: string) {
     await this.assertLocumCanWrite(userId);
+    const locumUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
     const locumProfile = await this.prisma.locumProfile.findUnique({
       where: { userId },
       select: { id: true, cpsnsVerificationStatus: true },
@@ -470,8 +517,25 @@ export class LocumService {
     }
     const job = await this.prisma.jobPosting.findUnique({
       where: { id: jobId },
+      include: {
+        hostProfile: {
+          select: { user: { select: { email: true } } },
+        },
+      },
     });
     if (!job) throw new NotFoundException('Job not found.');
+    const playgroundEmails = getReviewPlaygroundEmails();
+    const locumIsReview = isReviewPlaygroundEmail(
+      locumUser?.email,
+      playgroundEmails,
+    );
+    const hostIsReview = isReviewPlaygroundEmail(
+      job.hostProfile.user.email,
+      playgroundEmails,
+    );
+    if (locumIsReview !== hostIsReview) {
+      throw new ForbiddenException('This job is not available.');
+    }
     if (job.isDeleted)
       throw new BadRequestException(
         'This posting has been removed by the host.',

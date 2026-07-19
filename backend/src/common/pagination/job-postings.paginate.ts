@@ -3,6 +3,12 @@ import { Prisma } from '@prisma/client';
 import type { PostingStatus } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service.js';
 import { browseShiftStartActiveSql } from '../../host/job-schedule.util.js';
+import {
+  getReviewPlaygroundEmails,
+  reviewPlaygroundHostSql,
+  reviewPlaygroundHostWhere,
+  type ReviewPlaygroundMode,
+} from '../../config/review-playground.util.js';
 import { buildCursorQuery, decodeCursor, toPaginatedResult } from './cursor.util.js';
 import type { PaginatedResult, PaginationParams } from './pagination.types.js';
 
@@ -12,6 +18,11 @@ export type JobPostingPaginateFilters = {
   isDeleted?: boolean;
   /** Exclude postings whose shift start (date + time) is in the past. */
   excludePassedStartDate?: boolean;
+  /**
+   * Review playground isolation: review accounts only see review-host jobs;
+   * real/anonymous viewers never see review-host jobs.
+   */
+  playgroundMode?: ReviewPlaygroundMode;
 };
 
 async function paginateJobPostingsWithShiftFilter(
@@ -39,7 +50,13 @@ async function paginateJobPostingsWithShiftFilter(
       ? Prisma.sql`AND is_deleted = ${filters.isDeleted}`
       : Prisma.empty;
   const hostClause = filters.hostProfileId
-    ? Prisma.sql`AND host_profile_id = ${filters.hostProfileId}`
+    ? Prisma.sql`AND "hostProfileId" = ${filters.hostProfileId}`
+    : Prisma.empty;
+  const playgroundClause = filters.playgroundMode
+    ? reviewPlaygroundHostSql(
+        filters.playgroundMode,
+        getReviewPlaygroundEmails(),
+      )
     : Prisma.empty;
   const cursorClause =
     cursorId && direction === 'desc'
@@ -56,6 +73,7 @@ async function paginateJobPostingsWithShiftFilter(
     ${statusClause}
     ${deletedClause}
     ${hostClause}
+    ${playgroundClause}
     ${cursorClause}
     ORDER BY id ${orderClause}
     LIMIT ${limit + 1}
@@ -100,6 +118,12 @@ export async function paginateJobPostings(
     ...(filters.hostProfileId ? { hostProfileId: filters.hostProfileId } : {}),
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.isDeleted !== undefined ? { isDeleted: filters.isDeleted } : {}),
+    ...(filters.playgroundMode
+      ? reviewPlaygroundHostWhere(
+          filters.playgroundMode,
+          getReviewPlaygroundEmails(),
+        )
+      : {}),
     ...buildCursorQuery(cursor, direction),
   };
 
@@ -115,14 +139,20 @@ export async function paginateJobPostings(
 
 export async function countBrowseActiveJobPostings(
   prisma: PrismaService,
+  playgroundMode: ReviewPlaygroundMode = 'exclude-review',
 ): Promise<number> {
   const shiftActive = browseShiftStartActiveSql();
+  const playgroundClause = reviewPlaygroundHostSql(
+    playgroundMode,
+    getReviewPlaygroundEmails(),
+  );
   const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
     SELECT COUNT(*)::bigint AS count
     FROM job_postings
     WHERE status = 'ACTIVE'::"PostingStatus"
       AND is_deleted = false
       AND ${shiftActive}
+      ${playgroundClause}
   `;
   return Number(rows[0]?.count ?? 0);
 }

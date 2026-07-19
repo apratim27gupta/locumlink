@@ -3,7 +3,7 @@ export const PROD_HOST = 'locumlink.ca';
 
 /** Web origin this mobile shell wraps — set per build via EXPO_PUBLIC_APP_URL. */
 export const APP_ORIGIN = (
-  process.env.EXPO_PUBLIC_APP_URL ?? 'https://locumlink.ca'
+  process.env.EXPO_PUBLIC_APP_URL ?? 'https://staging.locumlink.ca'
 ).replace(/\/$/, '');
 
 export const APP_HOST = new URL(APP_ORIGIN).hostname;
@@ -45,7 +45,6 @@ export function isOAuthStartUrl(url: string): boolean {
     url.includes('supabase.co/auth/v1/authorize')
     || url.includes('accounts.google.com')
     || url.includes('login.microsoftonline.com')
-    || url.includes('appleid.apple.com')
   );
 }
 

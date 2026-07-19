@@ -17,6 +17,12 @@ MODE="${1:-quick}"
 
 cd "$ROOT"
 
+# Root .npmrc may set Windows script-shell; Linux deploys must use bash.
+if [ "$(uname -s)" = "Linux" ] && [ -f .npmrc ]; then
+  export npm_config_script_shell=/bin/bash
+  sed -i '/^script-shell=/d' .npmrc
+fi
+
 load_staging_env() {
   set -a
   # shellcheck disable=SC1091

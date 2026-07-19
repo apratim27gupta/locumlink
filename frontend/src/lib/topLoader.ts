@@ -1,3 +1,5 @@
+import { syncCookies } from '@/lib/auth';
+
 type Listener = (active: boolean) => void;
 type ProgressListener = (percent: number, active: boolean) => void;
 
@@ -129,6 +131,7 @@ export function subscribeTopLoaderProgress(listener: ProgressListener): () => vo
 export function beforeClientNavigation(href: string): void {
     if (typeof window === 'undefined')
         return;
+    syncCookies();
     try {
         const next = new URL(href, window.location.origin);
         const cur = new URL(window.location.href);

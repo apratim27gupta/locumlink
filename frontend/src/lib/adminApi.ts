@@ -145,6 +145,22 @@ export type AdminReportDetail = AdminReportRow & {
   }>;
 };
 
+export async function adminListFeedback(): Promise<{
+  items: Array<{
+    id: string;
+    message: string;
+    createdAt: string;
+    user: {
+      id: string;
+      email: string;
+      role: string;
+      name: string;
+    };
+  }>;
+}> {
+  return adminFetchJson('/api/admin/feedback');
+}
+
 export async function adminListReports(status: AdminReportStatus = 'OPEN'): Promise<{ items: AdminReportRow[] }> {
   return adminFetchJson(`/api/admin/reports?${new URLSearchParams({ status }).toString()}`);
 }

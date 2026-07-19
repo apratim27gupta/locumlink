@@ -28,6 +28,7 @@ import {
 import BarWaveButton from '@/components/ui/BarWaveButton';
 import { dispatchProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { beforeClientNavigation } from '@/lib/topLoader';
+import { fetchOAuthUserNamesFromSession } from '@/lib/oauthUserNames';
 import { useAnchoredDropdownMenu } from '@/hooks/useAnchoredDropdownMenu';
 import { AnchoredDropdownPortal } from '@/components/ui/AnchoredDropdownMenu';
 import { sortStringsLocale } from '@/lib/sortLocale';
@@ -182,6 +183,7 @@ export default function HostSetupPage(props: {
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [oauthNameLocked, setOauthNameLocked] = useState(false);
   const [form, setForm] = useState<HostProfile>({
     clinicName: '',
     contactFirstName: '',
@@ -237,10 +239,11 @@ export default function HostSetupPage(props: {
   // Load saved profile on mount
   useEffect(() => {
     void (async () => {
+      let nextForm = form;
       try {
         const saved = await hostApi.getProfile();
         if (saved) {
-          setForm((f) => ({ ...f, ...saved }));
+          nextForm = { ...nextForm, ...saved };
           if (saved.speciality) {
             setSpecialityTags(parseSpecialities(saved.speciality));
           }
@@ -249,7 +252,20 @@ export default function HostSetupPage(props: {
       } catch {
         // No saved profile yet, start fresh
       }
+
+      const names = await fetchOAuthUserNamesFromSession();
+      if (names?.firstName && !(nextForm.contactFirstName ?? '').trim()) {
+        nextForm = {
+          ...nextForm,
+          contactFirstName: names.firstName,
+          contactLastName:
+            (nextForm.contactLastName ?? '').trim() || names.lastName,
+        };
+        setOauthNameLocked(true);
+      }
+      setForm(nextForm);
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only init
   }, []);
 
   // Auto-save functionality
@@ -746,6 +762,16 @@ export default function HostSetupPage(props: {
                     }}
                   >
                     <div style={sectionTitleMuted}>Host Doctor</div>
+                    {oauthNameLocked ? (
+                      <p style={{ fontSize: 14, color: '#475467', margin: 0, lineHeight: 1.5 }}>
+                        Signed in as{' '}
+                        <strong>
+                          {[form.contactFirstName, form.contactLastName]
+                            .filter(Boolean)
+                            .join(' ')}
+                        </strong>
+                      </p>
+                    ) : (
                     <div style={{ display: 'flex', gap: 12 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <label style={lbl}>First name*</label>
@@ -772,6 +798,7 @@ export default function HostSetupPage(props: {
                         />
                       </div>
                     </div>
+                    )}
 
                     <div>
                       <label style={lbl}>CPSNS Number</label>

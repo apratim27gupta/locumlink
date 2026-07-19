@@ -40,6 +40,7 @@ import {
   formatCalendarDateForApi,
   isPostingEndDatePassed,
 } from './job-schedule.util.js';
+import { getReviewPlaygroundEmails, isReviewPlaygroundEmail } from '../config/review-playground.util.js';
 
 function mapJobPostingForApi<T extends { startDate?: Date | null; endDate?: Date | null }>(
   job: T,
@@ -326,10 +327,19 @@ export class HostService {
   ): Promise<void> {
     if (job.status !== 'ACTIVE') return;
     try {
+      const reviewEmails = getReviewPlaygroundEmails();
       const hostLoc = await this.prisma.hostProfile.findUnique({
         where: { id: hostProfileId },
-        select: { city: true, province: true },
+        select: {
+          city: true,
+          province: true,
+          user: { select: { email: true } },
+        },
       });
+      const hostIsReview = isReviewPlaygroundEmail(
+        hostLoc?.user.email,
+        reviewEmails,
+      );
       const activeLocums = await this.prisma.user.findMany({
         where: {
           role: 'LOCUM',
@@ -337,6 +347,11 @@ export class HostService {
           locumProfile: {
             cpsnsVerificationStatus: VerificationStatus.VERIFIED,
           },
+          ...(reviewEmails.length > 0
+            ? hostIsReview
+              ? { email: { in: reviewEmails } }
+              : { email: { notIn: reviewEmails } }
+            : {}),
         },
         select: {
           id: true,
@@ -1120,12 +1135,16 @@ export class HostService {
   }
 
   async getRecentHostAvatarUrls(limit = 3): Promise<{ avatars: string[] }> {
+    const reviewEmails = getReviewPlaygroundEmails();
     const hosts = await this.prisma.user.findMany({
       where: {
         role: Role.HOST,
         status: { in: [UserStatus.ACTIVE, UserStatus.PENDING] },
         hostProfile: { isNot: null },
         avatarStoragePath: { not: null },
+        ...(reviewEmails.length > 0
+          ? { email: { notIn: reviewEmails } }
+          : {}),
       },
       orderBy: { updatedAt: 'desc' },
       take: 50,
@@ -1174,6 +1193,9 @@ export class HostService {
           role: Role.HOST,
           status: { in: [UserStatus.ACTIVE, UserStatus.PENDING] },
           avatarStoragePath: { not: null },
+          ...(reviewEmails.length > 0
+            ? { email: { notIn: reviewEmails } }
+            : {}),
           ...(seenUsers.size > 0 ? { id: { notIn: [...seenUsers] } } : {}),
         },
         orderBy: { updatedAt: 'desc' },

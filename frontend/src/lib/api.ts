@@ -1271,3 +1271,19 @@ export const notificationsApi = {
         if (!res.ok) throw new Error('Failed to mark notification read');
     },
 };
+
+export async function submitFeedback(message: string): Promise<{ success: boolean; id: string }> {
+    const res = await trackedFetch(apiFetchUrl('/api/feedback'), {
+        method: 'POST',
+        cache: 'no-store',
+        headers: nestHeaders(true),
+        body: JSON.stringify({ message }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { message?: string };
+        throw new Error(
+            typeof err.message === 'string' ? err.message : 'Failed to submit feedback',
+        );
+    }
+    return readJsonResponse(res, 'Submit feedback');
+}

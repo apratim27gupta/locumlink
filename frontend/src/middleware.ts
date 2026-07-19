@@ -14,6 +14,7 @@ const PUBLIC_PREFIXES = [
   '/privacy-policy',
   '/terms-of-use',
   '/offline',
+  '/locum/browse',
 ];
 
 export async function middleware(request: NextRequest) {
@@ -21,6 +22,10 @@ export async function middleware(request: NextRequest) {
 
   // OAuth PKCE: route handler must exchange code before any Supabase cookie refresh
   if (pathname === '/auth/callback') {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith('/.well-known/')) {
     return NextResponse.next();
   }
 
@@ -122,6 +127,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|manifest.json|robots.txt|sitemap.xml|auth/callback$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|json|docx|pdf)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|robots.txt|sitemap.xml|auth/callback$|\\.well-known|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|json|docx|pdf|txt)$).*)',
   ],
 };
