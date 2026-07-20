@@ -28,6 +28,7 @@ import {
   L009_LOCUM_ACCOUNT_VERIFIED,
   L010_LOCUM_VERIFICATION_REJECTED,
   L011_LOCUM_ACCOUNT_SUSPENDED,
+  L014_LOCUM_PROFILE_REMINDER,
 } from './notification-copy.js';
 import {
   resolveNotificationActionFields,
@@ -46,6 +47,7 @@ import {
   H005_HOST_ACCOUNT_VERIFIED,
   H006_HOST_VERIFICATION_REJECTED,
   H007_HOST_ACCOUNT_SUSPENDED,
+  H011_HOST_PROFILE_REMINDER,
   hostMessagesHref,
 } from './host-notification-copy.js';
 
@@ -61,6 +63,7 @@ export type NotifEventType =
   | 'H_008_POSTING_EXPIRING'
   | 'H_009_SHIFT_CANCELLED'
   | 'H_010_ACCOUNT_WARNING'
+  | 'H_011_PROFILE_REMINDER'
   // Locum
   | 'L_001_NEW_OPPORTUNITY'
   | 'L_002_HOST_CONFIRMED'
@@ -75,6 +78,7 @@ export type NotifEventType =
   | 'L_011_ACCOUNT_SUSPENDED'
   | 'L_012_SHIFT_CANCELLED'
   | 'L_013_ACCOUNT_WARNING'
+  | 'L_014_PROFILE_REMINDER'
   // Admin
   | 'A_001_NEW_HOST_REGISTRATION'
   | 'A_002_NEW_LOCUM_REGISTRATION'
@@ -611,6 +615,43 @@ export class NotificationsService {
     });
   }
 
+  /** L-014: admin reminder to complete locum profile. */
+  async notifyLocumProfileReminder(params: {
+    recipientId: string;
+    recipientEmail: string;
+    channel: 'email' | 'notification';
+    referenceId?: string;
+  }): Promise<void> {
+    const copy = L014_LOCUM_PROFILE_REMINDER;
+    if (params.channel === 'email') {
+      const emailResult = await this.email.send({
+        to: params.recipientEmail,
+        subject: copy.emailSubject,
+        text: copy.emailBody,
+      });
+      if (!emailResult.ok) {
+        this.logger.error(
+          `Profile reminder email failed for ${params.recipientEmail}: ${emailResult.error}`,
+        );
+        throw new Error(emailResult.error || 'Failed to send reminder email');
+      }
+      return;
+    }
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'L_014_PROFILE_REMINDER',
+      title: copy.inAppTitle,
+      body: copy.inAppBody,
+      href: copy.profileHref,
+      priority: copy.priority,
+      actionLabel: copy.actionLabel,
+      referenceId: params.referenceId,
+      referenceType: 'User',
+      pushTitle: copy.inAppTitle,
+      pushBody: copy.inAppBody,
+    });
+  }
+
   /** H-001: locum applied to host posting */
   async notifyHostLocumApplied(params: {
     recipientId: string;
@@ -887,6 +928,43 @@ export class NotificationsService {
       emailTo: params.recipientEmail,
       emailSubject: copy.emailSubject,
       emailBody: copy.emailBody,
+    });
+  }
+
+  /** H-011: admin reminder to complete host profile. */
+  async notifyHostProfileReminder(params: {
+    recipientId: string;
+    recipientEmail: string;
+    channel: 'email' | 'notification';
+    referenceId?: string;
+  }): Promise<void> {
+    const copy = H011_HOST_PROFILE_REMINDER;
+    if (params.channel === 'email') {
+      const emailResult = await this.email.send({
+        to: params.recipientEmail,
+        subject: copy.emailSubject,
+        text: copy.emailBody,
+      });
+      if (!emailResult.ok) {
+        this.logger.error(
+          `Profile reminder email failed for ${params.recipientEmail}: ${emailResult.error}`,
+        );
+        throw new Error(emailResult.error || 'Failed to send reminder email');
+      }
+      return;
+    }
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'H_011_PROFILE_REMINDER',
+      title: copy.inAppTitle,
+      body: copy.inAppBody,
+      href: copy.profileHref,
+      priority: copy.priority,
+      actionLabel: copy.actionLabel,
+      referenceId: params.referenceId,
+      referenceType: 'User',
+      pushTitle: copy.inAppTitle,
+      pushBody: copy.inAppBody,
     });
   }
 

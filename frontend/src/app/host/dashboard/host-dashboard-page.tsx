@@ -16,7 +16,7 @@ import type { HostProfile } from '@/types';
 import { sortByLabel, sortStringsLocale } from '@/lib/sortLocale';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { CountBadge } from '@/components/CountBadge';
-import { EmptyIllustration, PlusIcon, ReopenJobIcon, TrashIcon, UserEditIcon, } from './host-dashboard-icons';
+import { EmptyIllustration, PlusIcon, PreviewAsLocumIcon, ReopenJobIcon, TrashIcon, UserEditIcon, } from './host-dashboard-icons';
 import { ProfileStatusGlyph } from '@/components/ProfileStatusGlyph';
 import { getHostProfileStatusCard } from '@/lib/hostAccountNotice';
 import VerificationStatusPill from '@/components/VerificationStatusPill';
@@ -741,8 +741,8 @@ function canHostShowReopenJob(job: Job): boolean {
     return true;
 }
 const JOB_ACTIONS_MENU_W = 196;
-const JOB_ACTIONS_MENU_EST_H = 168;
-function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApplicants, onViewAll, onReOpen, onEdit, onPublish, onJobDeleted, }: {
+const JOB_ACTIONS_MENU_EST_H = 200;
+function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApplicants, onViewAll, onReOpen, onEdit, onPreview, onPublish, onJobDeleted, }: {
     job: Job;
     expandedJobId: string | null;
     applications: Record<string, ApplicationRecord[]>;
@@ -751,6 +751,7 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
     onViewAll: (jobId: string) => void;
     onReOpen: (job: Job) => void;
     onEdit: (job: Job) => void;
+    onPreview: (job: Job) => void;
     onPublish: (job: Job) => void;
     onJobDeleted: () => void;
 }) {
@@ -996,6 +997,19 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
                 }}>
                         <UserEditIcon stroke="#374151"/>
                         Edit job
+                      </span>
+                    </button>
+                    <button type="button" role="menuitem" style={menuItemBase} onClick={() => {
+                    onPreview(job);
+                    setMenuOpen(false);
+                }} onMouseDown={(e) => e.preventDefault()}>
+                      <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                }}>
+                        <PreviewAsLocumIcon stroke="#374151"/>
+                        Preview as locum
                       </span>
                     </button>
                     {isDraft && (<button type="button" role="menuitem" style={menuItemBase} onClick={() => {
@@ -2504,6 +2518,10 @@ export default function HostDashboard(props: {
                     router.push(href);
                 }} onReOpen={(j) => setReopenTarget(j)} onEdit={(j) => {
                     const href = `/host/jobs/${j.id}/edit`;
+                    beforeClientNavigation(href);
+                    router.push(href);
+                }} onPreview={(j) => {
+                    const href = `/host/jobs/${j.id}/preview`;
                     beforeClientNavigation(href);
                     router.push(href);
                 }} onPublish={async (j) => {

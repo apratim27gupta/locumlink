@@ -74,6 +74,14 @@ export function UserEditIcon({ stroke = '#0B0F1F' }: {
       <path d="M15.833 2.083a1.768 1.768 0 0 1 2.5 2.5L10.833 12l-3.333.833.833-3.333 7.5-7.417Z" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>);
 }
+export function PreviewAsLocumIcon({ stroke = '#374151' }: {
+    stroke?: string;
+}) {
+    return (<svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+      <path d="M1.5 9s2.75-5.25 7.5-5.25S16.5 9 16.5 9s-2.75 5.25-7.5 5.25S1.5 9 1.5 9Z" stroke={stroke} strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="9" cy="9" r="2.25" stroke={stroke} strokeWidth="1.35"/>
+    </svg>);
+}
 export function EmptyIllustration() {
     return (<svg width="100" height="100" viewBox="0 0 100 100" fill="none">
       <circle cx="50" cy="50" r="48" fill="#F3F4F6"/>

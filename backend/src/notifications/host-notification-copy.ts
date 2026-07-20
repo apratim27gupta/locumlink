@@ -145,6 +145,19 @@ export function buildH010AccountWarning(params: { warningNote: string }) {
   };
 }
 
+/** H-011 — Admin reminder to complete profile */
+export const H011_HOST_PROFILE_REMINDER = {
+  inAppTitle: 'Complete your Locum Link profile',
+  inAppBody:
+    'Your Locum Link clinic profile is incomplete. Please add your required details and CPSNS credentials so you can post locum opportunities.',
+  emailSubject: 'Action required: Complete your Locum Link profile',
+  emailBody:
+    'Your Locum Link clinic profile is incomplete. Please sign in and complete your required profile details and CPSNS credentials so you can post locum opportunities.',
+  priority: 'HIGH' as HostCopyPriority,
+  actionLabel: 'Complete Profile',
+  profileHref: '/host/profile',
+};
+
 /** H-008 — Posting expiring in 48 hours */
 export function buildH008PostingExpiring(params: {
   dateStr: string;
