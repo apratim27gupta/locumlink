@@ -329,6 +329,8 @@ export class AdminService {
           lastLoginAt: true,
           suspensionNote: true,
           suspendedAt: true,
+          lastProfileReminderAt: true,
+          lastProfileReminderChannel: true,
           locumProfile: {
             select: {
               cpsnsVerificationStatus: true,
@@ -381,6 +383,10 @@ export class AdminService {
             ? u.lastLoginAt.toISOString().slice(0, 10)
             : null,
           suspendedAt: u.suspendedAt ? u.suspendedAt.toISOString() : null,
+          lastProfileReminderAt: u.lastProfileReminderAt
+            ? u.lastProfileReminderAt.toISOString()
+            : null,
+          lastProfileReminderChannel: u.lastProfileReminderChannel ?? null,
         };
       }),
     };
@@ -602,6 +608,132 @@ export class AdminService {
     });
 
     return this.getReport(reportId);
+  }
+
+  async remindUserProfile(
+    req: Request,
+    adminPayload: AdminJwtPayload,
+    userId: string,
+    channel: 'email' | 'notification',
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        locumProfile: {
+          select: {
+            cpsnsVerificationStatus: true,
+            cpsnsId: true,
+            licenseFileName: true,
+            resumeFileName: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        hostProfile: {
+          select: {
+            cpsnsVerificationStatus: true,
+            cpsnsNumber: true,
+            practiceName: true,
+            licenseFile: true,
+            photoIdFile: true,
+          },
+        },
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role === Role.ADMIN) {
+      throw new BadRequestException('Cannot remind admin accounts');
+    }
+    if (
+      user.status === UserStatus.SUSPENDED ||
+      user.status === UserStatus.DEACTIVATED
+    ) {
+      throw new BadRequestException(
+        'Cannot remind suspended or deactivated users',
+      );
+    }
+
+    const cpsnsVerificationStatus =
+      user.role === Role.LOCUM
+        ? (user.locumProfile?.cpsnsVerificationStatus ?? null)
+        : user.role === Role.HOST
+          ? (user.hostProfile?.cpsnsVerificationStatus ?? null)
+          : null;
+
+    if (cpsnsVerificationStatus === VerificationStatus.VERIFIED) {
+      throw new BadRequestException('User profile is already verified');
+    }
+
+    try {
+      if (user.role === Role.LOCUM) {
+        await this.notifService.notifyLocumProfileReminder({
+          recipientId: user.id,
+          recipientEmail: user.email,
+          channel,
+          referenceId: user.id,
+        });
+      } else if (user.role === Role.HOST) {
+        await this.notifService.notifyHostProfileReminder({
+          recipientId: user.id,
+          recipientEmail: user.email,
+          channel,
+          referenceId: user.id,
+        });
+      } else {
+        throw new BadRequestException('Unsupported user role');
+      }
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to send reminder';
+      throw new BadRequestException(message);
+    }
+
+    const now = new Date();
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        lastProfileReminderAt: now,
+        lastProfileReminderChannel: channel,
+      },
+      select: {
+        id: true,
+        lastProfileReminderAt: true,
+        lastProfileReminderChannel: true,
+      },
+    });
+
+    this.audit.log({
+      adminActorId: adminPayload.sub,
+      subjectId: user.id,
+      action: AuditAction.UPDATE,
+      entity: 'User',
+      entityId: user.id,
+      before: {},
+      after: {
+        profileReminderChannel: channel,
+        lastProfileReminderAt: now.toISOString(),
+      },
+      ip: extractIp(req),
+      userAgent: req.headers['user-agent'],
+      endpoint: `${req.method} ${req.originalUrl}`,
+      outcome: 'SUCCESS',
+      actorRole: 'admin',
+    });
+
+    return {
+      ok: true,
+      user: {
+        id: updated.id,
+        lastProfileReminderAt:
+          updated.lastProfileReminderAt?.toISOString() ?? null,
+        lastProfileReminderChannel:
+          updated.lastProfileReminderChannel ?? null,
+      },
+    };
   }
 
   async updateUser(

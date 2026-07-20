@@ -9,6 +9,7 @@ import {
   Param,
   ParseIntPipe,
   Patch,
+  Post,
   Query,
   Req,
   Res,
@@ -25,6 +26,7 @@ import { AdminNotificationsService } from '../notifications/admin-notifications.
 import { FeedbackService } from '../feedback/feedback.service.js';
 import { AdminService } from './admin.service.js';
 import { AdminReportActionDto } from './dto/admin-report-action.dto.js';
+import { AdminRemindUserDto } from './dto/admin-remind-user.dto.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
 
@@ -130,6 +132,17 @@ export class AdminController {
     @Body() dto: AdminUpdateUserDto,
   ) {
     return this.admin.updateUser(req, admin, id, dto);
+  }
+
+  @Post('users/:id/remind')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async remindUser(
+    @Req() req: Request,
+    @CurrentAdmin() admin: AdminJwtPayload,
+    @Param('id') id: string,
+    @Body() dto: AdminRemindUserDto,
+  ) {
+    return this.admin.remindUserProfile(req, admin, id, dto.channel);
   }
 
   @Get('verifications')

@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Ban, Download, Eye, FileText, Search, UserCheck, XCircle } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Ban, Bell, Download, Eye, FileText, Mail, Search, UserCheck, XCircle } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { adminFetchJson, adminDownloadUsersCsv } from '@/lib/adminApi';
 import { formatAdminCpsnsDisplay } from '@/lib/cpsnsVerify';
@@ -12,6 +12,8 @@ type CpsnsVerificationStatus =
   | 'VERIFIED'
   | 'REJECTED';
 
+type ReminderChannel = 'email' | 'notification';
+
 type Row = {
   id: string;
   email: string;
@@ -21,6 +23,8 @@ type Row = {
   inCredentialQueue?: boolean;
   createdAt: string;
   lastLoginAt: string | null;
+  lastProfileReminderAt: string | null;
+  lastProfileReminderChannel: ReminderChannel | string | null;
 };
 
 type DisplayStatus = { label: string; className: string };
@@ -58,6 +62,20 @@ function displayStatus(row: Row): DisplayStatus {
     return { label: 'No profile', className: 'text-muted' };
   }
   return { label: 'Not submitted', className: 'text-muted' };
+}
+
+/** Available until the profile is verified (including under review / incomplete). */
+function canRemindProfile(row: Row): boolean {
+  if (row.role === 'ADMIN') return false;
+  if (row.status === 'SUSPENDED' || row.status === 'DEACTIVATED') return false;
+  if (row.cpsnsVerificationStatus === 'VERIFIED') return false;
+  return true;
+}
+
+function reminderChannelLabel(channel: string | null | undefined): string {
+  if (channel === 'email') return 'email';
+  if (channel === 'notification') return 'notification';
+  return '';
 }
 
 function matchesStatusFilter(row: Row, filter: string): boolean {
@@ -141,11 +159,24 @@ export default function AdminUsersPage() {
   const [profileErr, setProfileErr] = useState<string | null>(null);
   const [showProfileFields, setShowProfileFields] = useState(true);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
+  const [remindMenuForId, setRemindMenuForId] = useState<string | null>(null);
+  const [remindingId, setRemindingId] = useState<string | null>(null);
+  const remindMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
     return () => clearTimeout(t);
   }, [q]);
+
+  useEffect(() => {
+    if (!remindMenuForId) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (remindMenuRef.current?.contains(e.target as Node)) return;
+      setRemindMenuForId(null);
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [remindMenuForId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -277,6 +308,40 @@ export default function AdminUsersPage() {
     });
   }
 
+  async function sendProfileReminder(row: Row, channel: ReminderChannel) {
+    setRemindMenuForId(null);
+    setRemindingId(row.id);
+    setErr(null);
+    try {
+      const data = await adminFetchJson<{
+        ok: boolean;
+        user: {
+          id: string;
+          lastProfileReminderAt: string | null;
+          lastProfileReminderChannel: string | null;
+        };
+      }>(`/api/admin/users/${encodeURIComponent(row.id)}/remind`, {
+        method: 'POST',
+        body: JSON.stringify({ channel }),
+      });
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === row.id
+            ? {
+                ...r,
+                lastProfileReminderAt: data.user.lastProfileReminderAt,
+                lastProfileReminderChannel: data.user.lastProfileReminderChannel,
+              }
+            : r,
+        ),
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Failed to send reminder');
+    } finally {
+      setRemindingId(null);
+    }
+  }
+
   const filtered = rows.filter((r) => {
     const t = q.trim().toLowerCase();
     if (t && !r.email.toLowerCase().includes(t)) return false;
@@ -350,20 +415,21 @@ export default function AdminUsersPage() {
               <th>Role</th>
               <th>Status</th>
               <th>Joined</th>
-              <th>Last Login</th>
+              <th>Last activity</th>
+              <th>Last reminder</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="text-muted">
+                <td colSpan={7} className="text-muted">
                   Loading…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-muted">
+                <td colSpan={7} className="text-muted">
                   No users found.
                 </td>
               </tr>
@@ -395,8 +461,105 @@ export default function AdminUsersPage() {
                   <td className="text-muted">
                     {r.lastLoginAt ? fmtDate(r.lastLoginAt) : '—'}
                   </td>
+                  <td className="text-muted">
+                    {r.lastProfileReminderAt ? (
+                      <div>
+                        <div>{fmtDate(r.lastProfileReminderAt)}</div>
+                        {reminderChannelLabel(r.lastProfileReminderChannel) ? (
+                          <div className="text-sm text-muted">
+                            via {reminderChannelLabel(r.lastProfileReminderChannel)}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div className="action-buttons">
+                      {canRemindProfile(r) ? (
+                        <div
+                          ref={remindMenuForId === r.id ? remindMenuRef : undefined}
+                          style={{ position: 'relative' }}
+                        >
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            disabled={remindingId === r.id || savingId === r.id}
+                            title="Remind to complete profile"
+                            aria-expanded={remindMenuForId === r.id}
+                            onClick={() =>
+                              setRemindMenuForId((id) => (id === r.id ? null : r.id))
+                            }
+                          >
+                            <Bell size={16} color="#2563eb" />
+                          </button>
+                          {remindMenuForId === r.id ? (
+                            <div
+                              role="menu"
+                              style={{
+                                position: 'absolute',
+                                right: 0,
+                                top: '100%',
+                                marginTop: 4,
+                                minWidth: 180,
+                                background: '#fff',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: 8,
+                                boxShadow: '0 8px 24px rgba(15,23,42,0.12)',
+                                zIndex: 20,
+                                overflow: 'hidden',
+                              }}
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={remindingId === r.id}
+                                onClick={() => void sendProfileReminder(r, 'notification')}
+                                style={{
+                                  width: '100%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8,
+                                  padding: '10px 12px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  cursor: 'pointer',
+                                  fontSize: 13,
+                                  color: '#334155',
+                                  textAlign: 'left',
+                                }}
+                              >
+                                <Bell size={14} />
+                                Via notification
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={remindingId === r.id}
+                                onClick={() => void sendProfileReminder(r, 'email')}
+                                style={{
+                                  width: '100%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8,
+                                  padding: '10px 12px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  cursor: 'pointer',
+                                  fontSize: 13,
+                                  color: '#334155',
+                                  textAlign: 'left',
+                                  borderTop: '1px solid #F1F5F9',
+                                }}
+                              >
+                                <Mail size={14} />
+                                Via email
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {r.status === 'SUSPENDED' || r.status === 'DEACTIVATED' ? (
                         <button
                           type="button"

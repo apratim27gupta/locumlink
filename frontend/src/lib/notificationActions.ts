@@ -12,6 +12,7 @@ const EVENT_DEFAULTS: Record<string, { href: string; actionLabel: string }> = {
   H_008_POSTING_EXPIRING: { href: '/host/dashboard', actionLabel: 'Extend Opportunity' },
   H_009_SHIFT_CANCELLED: { href: '/host/dashboard?postJob=1', actionLabel: 'Repost Opportunity' },
   H_010_ACCOUNT_WARNING: { href: SUPPORT_PAGE_PATH, actionLabel: 'Contact Support' },
+  H_011_PROFILE_REMINDER: { href: '/host/profile', actionLabel: 'Complete Profile' },
   L_001_NEW_OPPORTUNITY: { href: '/locum/browse', actionLabel: 'Browse Opportunities' },
   L_002_HOST_CONFIRMED: { href: '/locum/dashboard', actionLabel: 'View Shift Details' },
   L_003_APPLICATION_ACCEPTED: { href: '/locum/dashboard', actionLabel: 'Confirm Availability' },
@@ -25,6 +26,7 @@ const EVENT_DEFAULTS: Record<string, { href: string; actionLabel: string }> = {
   L_011_ACCOUNT_SUSPENDED: { href: SUPPORT_PAGE_PATH, actionLabel: 'Contact Support' },
   L_012_SHIFT_CANCELLED: { href: '/locum/browse', actionLabel: 'Browse Opportunities' },
   L_013_ACCOUNT_WARNING: { href: SUPPORT_PAGE_PATH, actionLabel: 'Contact Support' },
+  L_014_PROFILE_REMINDER: { href: '/locum/profile', actionLabel: 'Complete Profile' },
 };
 
 const EVENT_TITLES: Record<string, string> = {
@@ -38,6 +40,7 @@ const EVENT_TITLES: Record<string, string> = {
   H_008_POSTING_EXPIRING: 'Shift Coverage Reminder',
   H_009_SHIFT_CANCELLED: 'Last-Minute Cancellation Alert',
   H_010_ACCOUNT_WARNING: 'Account warning',
+  H_011_PROFILE_REMINDER: 'Complete your Locum Link profile',
   L_001_NEW_OPPORTUNITY: 'New Locum Opportunity Available',
   L_002_HOST_CONFIRMED: 'Shift Confirmed',
   L_003_APPLICATION_ACCEPTED: 'Application Accepted — Action Required',
@@ -51,6 +54,7 @@ const EVENT_TITLES: Record<string, string> = {
   L_011_ACCOUNT_SUSPENDED: 'Account suspended',
   L_012_SHIFT_CANCELLED: 'Shift Cancelled',
   L_013_ACCOUNT_WARNING: 'Account warning',
+  L_014_PROFILE_REMINDER: 'Complete your Locum Link profile',
 };
 
 const SUPPORT_EVENT_TYPES = new Set([

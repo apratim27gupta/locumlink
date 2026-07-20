@@ -268,6 +268,19 @@ export function buildL013AccountWarning(params: { warningNote: string }) {
   };
 }
 
+/** L-014 — Admin reminder to complete profile */
+export const L014_LOCUM_PROFILE_REMINDER = {
+  inAppTitle: 'Complete your Locum Link profile',
+  inAppBody:
+    'Your Locum Link profile is incomplete. Please add your required details and CPSNS credentials so you can start applying to locum opportunities.',
+  emailSubject: 'Action required: Complete your Locum Link profile',
+  emailBody:
+    'Your Locum Link profile is incomplete. Please sign in and complete your required profile details and CPSNS credentials so you can start applying to locum opportunities.',
+  priority: 'HIGH' as LocumCopyPriority,
+  actionLabel: 'Complete Profile',
+  profileHref: '/locum/profile',
+};
+
 /** L-012 — Host cancelled confirmed shift */
 export function buildL012ShiftCancelled(params: {
   doctorName: string;

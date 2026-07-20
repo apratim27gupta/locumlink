@@ -54,6 +54,8 @@ export async function GET(req: Request) {
           photoIdFile: true,
         },
       },
+      lastProfileReminderAt: true,
+      lastProfileReminderChannel: true,
     },
   });
 
@@ -77,6 +79,8 @@ export async function GET(req: Request) {
             : false,
       createdAt: u.createdAt.toISOString(),
       lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+      lastProfileReminderAt: u.lastProfileReminderAt?.toISOString() ?? null,
+      lastProfileReminderChannel: u.lastProfileReminderChannel ?? null,
     })),
   });
 }

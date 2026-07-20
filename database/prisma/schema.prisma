@@ -138,6 +138,10 @@ model User {
   suspendedAt        DateTime?  @map("suspended_at")
   deactivatedAt      DateTime?  @map("deactivated_at")
 
+  // Admin profile-completion reminders
+  lastProfileReminderAt      DateTime? @map("last_profile_reminder_at")
+  lastProfileReminderChannel String?   @map("last_profile_reminder_channel")
+
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
