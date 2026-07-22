@@ -6,7 +6,7 @@ import {
 } from '../setup/test-app';
 import { cleanupTables, getTestDb } from '../helpers/db';
 import { authedAgent } from '../helpers/http';
-import { createLocumUser } from '../factories/user.factory';
+import { createHostUser, createLocumUser } from '../factories/user.factory';
 import { PushService } from '../../src/notifications/push.service.js';
 
 describe('Expo push tokens', () => {
@@ -53,6 +53,30 @@ describe('Expo push tokens', () => {
 
     const gone = await db.expoPushToken.findUnique({ where: { token } });
     expect(gone).toBeNull();
+  });
+
+  it('reassigns an Expo push token when another user logs in on the same device', async () => {
+    const host = await createHostUser();
+    const locum = await createLocumUser();
+    const token = 'ExponentPushToken[shared-device-token]';
+    const db = getTestDb();
+
+    await authedAgent(ctx.agent, host.token)
+      .post('/api/notifications/push/register-expo', { token, platform: 'ios' })
+      .expect(201);
+
+    await authedAgent(ctx.agent, locum.token)
+      .post('/api/notifications/push/register-expo', { token, platform: 'ios' })
+      .expect(201);
+
+    const row = await db.expoPushToken.findUnique({ where: { token } });
+    expect(row).toMatchObject({
+      userId: locum.user.id,
+      platform: 'ios',
+    });
+    expect(
+      await db.expoPushToken.count({ where: { token } }),
+    ).toBe(1);
   });
 
   it('sendExpoToUser posts to Expo Push API', async () => {
