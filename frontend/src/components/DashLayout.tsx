@@ -21,6 +21,7 @@ import { CountBadge } from '@/components/CountBadge';
 import { isNativeShell } from '@/lib/nativeShell';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
 import SidebarFeedback from '@/components/SidebarFeedback';
+import AppStoreInstallButton from '@/components/AppStoreInstallButton';
 interface NavItem {
     label: string;
     href: string;
@@ -1150,6 +1151,9 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             variant="sidebar"
             onNavigate={() => setMobileNavOpen(false)}
           />
+          <div className="dash-sidebar-app-store">
+            <AppStoreInstallButton variant="dashboard" />
+          </div>
         </aside>
 
         <div

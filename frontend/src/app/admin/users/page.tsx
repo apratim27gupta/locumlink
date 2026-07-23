@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Ban, Bell, Download, Eye, FileText, Mail, Search, UserCheck, XCircle } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { adminFetchJson, adminDownloadUsersCsv } from '@/lib/adminApi';
@@ -142,6 +143,8 @@ function fmtDate(iso: string): string {
 }
 
 export default function AdminUsersPage() {
+  const searchParams = useSearchParams();
+  const deepLinkUserId = searchParams.get('userId')?.trim() || null;
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -162,6 +165,7 @@ export default function AdminUsersPage() {
   const [remindMenuForId, setRemindMenuForId] = useState<string | null>(null);
   const [remindingId, setRemindingId] = useState<string | null>(null);
   const remindMenuRef = useRef<HTMLDivElement>(null);
+  const deepLinkHandled = useRef<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -267,6 +271,41 @@ export default function AdminUsersPage() {
       setProfileLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!deepLinkUserId || loading) return;
+    if (deepLinkHandled.current === deepLinkUserId) return;
+    const existing = rows.find((r) => r.id === deepLinkUserId);
+    if (existing) {
+      deepLinkHandled.current = deepLinkUserId;
+      void openUserProfile(existing);
+      return;
+    }
+    deepLinkHandled.current = deepLinkUserId;
+    void (async () => {
+      try {
+        const detail = await adminFetchJson<UserProfileDetail>(
+          `/api/admin/users/${encodeURIComponent(deepLinkUserId)}/profile`,
+        );
+        setProfileUser({
+          id: detail.userId,
+          email: detail.email,
+          role: detail.role,
+          status: 'ACTIVE',
+          cpsnsVerificationStatus: null,
+          createdAt: '',
+          lastLoginAt: null,
+          lastProfileReminderAt: null,
+          lastProfileReminderChannel: null,
+        });
+        setProfileDetail(detail);
+        setProfileErr(null);
+        setShowProfileFields(true);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : 'Could not open linked profile');
+      }
+    })();
+  }, [deepLinkUserId, loading, rows]);
 
   function viewDocument(doc: UserProfileDocument) {
     if (doc.signedUrl) {
