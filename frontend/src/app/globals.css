@@ -699,9 +699,11 @@
 
 .home-landing-footer-credits {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 0;
   text-align: center;
 }
 
@@ -715,8 +717,13 @@
   color: #606061;
 }
 
+.home-landing-credits-sep {
+  margin: 0 0.45em;
+  color: #8a8a8b;
+}
+
 .home-landing-powered-by {
-  font-size: 13px;
+  font-size: 14px;
   color: #8a8a8b;
 }
 

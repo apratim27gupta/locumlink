@@ -321,9 +321,12 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
           <div className="home-landing-footer-credits">
             <p className="home-landing-copyright">
               © LocumLink 2026
-            </p>
-            <p className="home-landing-powered-by">
-              Powered by Aebeolle consulting
+              <span className="home-landing-credits-sep" aria-hidden>
+                ·
+              </span>
+              <span className="home-landing-powered-by">
+                Developed by Aebeolle Consulting
+              </span>
             </p>
           </div>
           {interactive ? (
