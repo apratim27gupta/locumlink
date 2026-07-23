@@ -1,5 +1,4 @@
 import {
-  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -34,16 +33,13 @@ export class PushService implements OnModuleInit {
     userId: string,
     sub: { endpoint: string; keys: { p256dh: string; auth: string } },
   ) {
-    const existing = await this.prisma.pushSubscription.findUnique({
-      where: { endpoint: sub.endpoint },
-    });
-    if (existing && existing.userId !== userId) {
-      throw new ForbiddenException();
-    }
-
     await this.prisma.pushSubscription.upsert({
       where: { endpoint: sub.endpoint },
-      update: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+      update: {
+        userId,
+        p256dh: sub.keys.p256dh,
+        auth: sub.keys.auth,
+      },
       create: {
         userId,
         endpoint: sub.endpoint,
@@ -67,13 +63,6 @@ export class PushService implements OnModuleInit {
     token: string,
     platform: 'ios' | 'android',
   ) {
-    const existing = await this.prisma.expoPushToken.findUnique({
-      where: { token },
-    });
-    if (existing && existing.userId !== userId) {
-      throw new ForbiddenException();
-    }
-
     await this.prisma.expoPushToken.upsert({
       where: { token },
       update: { userId, platform },
