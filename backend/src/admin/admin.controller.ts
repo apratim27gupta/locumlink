@@ -78,6 +78,57 @@ export class AdminController {
     return res.status(200).send(`\uFEFF${csv}`);
   }
 
+  @Get('jobs')
+  async listJobs(
+    @Query('preset') preset?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('status') status?: string,
+    @Query('q') q?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('pageSize', new DefaultValuePipe(50), ParseIntPipe) pageSize?: number,
+  ) {
+    return this.admin.listJobs({
+      preset,
+      dateFrom,
+      dateTo,
+      status,
+      q,
+      page: page ?? 1,
+      pageSize: Math.min(Math.max(pageSize ?? 50, 1), 200),
+    });
+  }
+
+  @Get('jobs/:id')
+  async getJob(@Param('id') id: string) {
+    const detail = await this.admin.getJob(id);
+    if (!detail) {
+      throw new NotFoundException('Job not found');
+    }
+    return detail;
+  }
+
+  @Get('applications')
+  async listApplications(
+    @Query('preset') preset?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('status') status?: string,
+    @Query('q') q?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('pageSize', new DefaultValuePipe(50), ParseIntPipe) pageSize?: number,
+  ) {
+    return this.admin.listApplications({
+      preset,
+      dateFrom,
+      dateTo,
+      status,
+      q,
+      page: page ?? 1,
+      pageSize: Math.min(Math.max(pageSize ?? 50, 1), 200),
+    });
+  }
+
   @Get('reports')
   async reports(@Query('status') status?: string) {
     return this.admin.listReports({ status });

@@ -29,6 +29,11 @@ import {
   type AnalyticsSummary,
 } from './admin-analytics.js';
 import {
+  getAdminJobDetail,
+  listAdminApplications,
+  listAdminJobs,
+} from './admin-marketplace.js';
+import {
   credentialQueueSubmittedAt,
   formatAdminCpsnsDisplay,
   isEligibleForCredentialQueueHost,
@@ -290,6 +295,46 @@ export class AdminService {
     dateTo?: string;
   }): Promise<AnalyticsSummary> {
     return buildAnalyticsSummary(this.prisma, parseAnalyticsRange(query ?? {}));
+  }
+
+  async listJobs(params: {
+    preset?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    status?: string;
+    q?: string;
+    page: number;
+    pageSize: number;
+  }) {
+    return listAdminJobs(this.prisma, {
+      range: parseAnalyticsRange(params),
+      status: params.status,
+      q: params.q,
+      page: params.page,
+      pageSize: params.pageSize,
+    });
+  }
+
+  async getJob(id: string) {
+    return getAdminJobDetail(this.prisma, id);
+  }
+
+  async listApplications(params: {
+    preset?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    status?: string;
+    q?: string;
+    page: number;
+    pageSize: number;
+  }) {
+    return listAdminApplications(this.prisma, {
+      range: parseAnalyticsRange(params),
+      status: params.status,
+      q: params.q,
+      page: params.page,
+      pageSize: params.pageSize,
+    });
   }
 
   async exportAnalyticsCsv(
