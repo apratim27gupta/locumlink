@@ -88,10 +88,15 @@ export async function adminMarkNotificationRead(id: string): Promise<void> {
   });
 }
 
-export async function adminDownloadAnalyticsReport(): Promise<void> {
-  const res = await fetch(`${adminApiBase()}/api/admin/analytics/export`, {
-    credentials: 'include',
-  });
+export async function adminDownloadAnalyticsReport(
+  query?: Record<string, string>,
+): Promise<void> {
+  const qs = new URLSearchParams(query ?? {});
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  const res = await fetch(
+    `${adminApiBase()}/api/admin/analytics/export${suffix}`,
+    { credentials: 'include' },
+  );
   if (!res.ok) throw new Error(await parseError(res));
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAdminSession } from '@/lib/admin-auth-server';
-import {
-  buildAnalyticsSummary,
-  parseAnalyticsRange,
-} from '@/lib/adminAnalyticsSummary';
+import { parseAnalyticsRange } from '@/lib/adminAnalyticsSummary';
+import { listAdminApplications } from '@/lib/adminMarketplace';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -17,6 +15,12 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const range = parseAnalyticsRange(searchParams);
-  const summary = await buildAnalyticsSummary(getDb(), range);
-  return NextResponse.json(summary);
+  const result = await listAdminApplications(getDb(), {
+    range,
+    status: searchParams.get('status') ?? undefined,
+    q: searchParams.get('q') ?? undefined,
+    page: Number(searchParams.get('page') ?? 1) || 1,
+    pageSize: Number(searchParams.get('pageSize') ?? 50) || 50,
+  });
+  return NextResponse.json(result);
 }

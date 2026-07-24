@@ -25,6 +25,7 @@ import type { AdminReportActionDto } from './dto/admin-report-action.dto.js';
 import {
   analyticsSummaryToCsv,
   buildAnalyticsSummary,
+  parseAnalyticsRange,
   type AnalyticsSummary,
 } from './admin-analytics.js';
 import {
@@ -283,15 +284,27 @@ export class AdminService {
     };
   }
 
-  async analyticsSummary(): Promise<AnalyticsSummary> {
-    return buildAnalyticsSummary(this.prisma);
+  async analyticsSummary(query?: {
+    preset?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<AnalyticsSummary> {
+    return buildAnalyticsSummary(this.prisma, parseAnalyticsRange(query ?? {}));
   }
 
   async exportAnalyticsCsv(
     req: Request,
     admin: AdminJwtPayload,
+    query?: {
+      preset?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    },
   ): Promise<string> {
-    const summary = await buildAnalyticsSummary(this.prisma);
+    const summary = await buildAnalyticsSummary(
+      this.prisma,
+      parseAnalyticsRange(query ?? {}),
+    );
     this.audit.log({
       adminActorId: admin.sub,
       action: AuditAction.EXPORT,

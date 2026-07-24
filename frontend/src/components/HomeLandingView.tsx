@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
+import AppStoreInstallButton from '@/components/AppStoreInstallButton';
 import { landingApi, locumApi } from '@/lib/api';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
@@ -85,6 +86,7 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
         <Logo size="md" />
 
         <div className="home-landing-nav__auth">
+          <AppStoreInstallButton variant="landing-nav" />
           <button
             type="button"
             className={`btn-signin ${!interactive ? 'btn-signin--disabled' : ''}`}
@@ -315,6 +317,17 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
             }}>
                 {t}
               </span>))}
+          </div>
+          <div className="home-landing-footer-credits">
+            <p className="home-landing-copyright">
+              © LocumLink 2026
+              <span className="home-landing-credits-sep" aria-hidden>
+                ·
+              </span>
+              <span className="home-landing-powered-by">
+                Developed by Aebeolle Consulting
+              </span>
+            </p>
           </div>
           {interactive ? (
             <div className="home-landing-footer-bar">

@@ -514,7 +514,8 @@
 }
 
 .home-landing-nav__auth .btn-signin,
-.home-landing-nav__auth .btn-signup {
+.home-landing-nav__auth .btn-signup,
+.home-landing-nav__auth .btn-app-store {
   appearance: none;
   -webkit-appearance: none;
 }
@@ -533,6 +534,10 @@
     min-width: 88px;
     padding: 10px 14px;
     font-size: 15px;
+  }
+
+  .btn-app-store--nav .btn-app-store__badge {
+    height: 36px;
   }
 }
 
@@ -635,6 +640,91 @@
   box-shadow:
     0 0 0 2px #fff,
     0 0 0 4px rgba(59, 79, 216, 0.45);
+}
+
+.btn-app-store {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  text-decoration: none;
+  line-height: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.btn-app-store:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-app-store:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px rgba(59, 79, 216, 0.45);
+  border-radius: 6px;
+}
+
+.btn-app-store__badge {
+  display: block;
+  width: auto;
+  height: 40px;
+}
+
+.btn-app-store--nav .btn-app-store__badge {
+  height: 40px;
+  width: auto;
+}
+
+.btn-app-store--dashboard {
+  width: 100%;
+}
+
+.btn-app-store--dashboard .btn-app-store__badge {
+  height: 36px;
+  width: auto;
+  max-width: 100%;
+}
+
+.dash-sidebar-app-store {
+  margin-top: 10px;
+  padding-top: 10px;
+  display: flex;
+  justify-content: center;
+}
+
+.home-landing-footer-credits {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  text-align: center;
+}
+
+.home-landing-copyright,
+.home-landing-powered-by {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #606061;
+}
+
+.home-landing-credits-sep {
+  margin: 0 0.45em;
+  color: #8a8a8b;
+}
+
+.home-landing-powered-by {
+  font-size: 14px;
+  color: #8a8a8b;
 }
 
 .btn-landing-cta {
@@ -2186,6 +2276,10 @@ body.app-body {
     font-size: 12px !important;
     height: 32px !important;
     border-radius: 6px !important;
+  }
+
+  .home-landing-nav__auth .btn-app-store--nav .btn-app-store__badge {
+    height: 28px !important;
   }
 
   /* ── Landing CTA buttons ── */

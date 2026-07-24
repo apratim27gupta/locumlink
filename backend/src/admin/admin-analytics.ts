@@ -1,7 +1,9 @@
 import {
   ApplicationStatus,
+  LocumResponse,
   PostingStatus,
   Role,
+  type Prisma,
   type PrismaClient,
 } from '@prisma/client';
 
@@ -21,10 +23,41 @@ const MONTH_LABELS = [
 ];
 const HOURS_48_MS = 48 * 60 * 60 * 1000;
 
+export type AnalyticsDateRange = {
+  dateFrom?: Date | null;
+  dateTo?: Date | null;
+  label?: string;
+};
+
 export type AnalyticsSummary = {
+  period: { from: string | null; to: string | null; label: string };
   totalApplications: number;
   fillRatePct: number;
+  hostConfirmRatePct: number;
+  locumAcceptRatePct: number;
+  suitableLocumFoundPct: number;
+  newUsersInPeriod: number;
   activeUsers30d: number;
+  avgHoursToConfirm: number | null;
+  avgHoursToAccept: number | null;
+  applicationsByStatus: {
+    applied: number;
+    shortlisted: number;
+    confirmed: number;
+    rejected: number;
+    withdrawn: number;
+  };
+  acceptedCount: number;
+  postedJobsCount: number;
+  postingsByStatus: {
+    draft: number;
+    active: number;
+    ongoing: number;
+    completed: number;
+    expired: number;
+    cancelled: number;
+  };
+  unfilledExpiredCount: number;
   growth: { month: string; locums: number; hosts: number; total: number }[];
   locations: { name: string; pct: number; count: number }[];
   postingPerformance: {
@@ -34,67 +67,249 @@ export type AnalyticsSummary = {
   };
 };
 
+function parseIsoDate(value: string | null | undefined, endOfDay: boolean): Date | null {
+  if (!value?.trim()) return null;
+  const d = new Date(value.trim());
+  if (Number.isNaN(d.getTime())) return null;
+  if (endOfDay) d.setHours(23, 59, 59, 999);
+  else d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+export function parseAnalyticsRange(query: {
+  preset?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): AnalyticsDateRange {
+  const preset = query.preset?.trim() || '30d';
+  const now = new Date();
+
+  if (preset === 'all') {
+    return { dateFrom: null, dateTo: null, label: 'All time' };
+  }
+
+  if (preset === 'custom') {
+    const dateFrom = parseIsoDate(query.dateFrom, false);
+    const dateTo = parseIsoDate(query.dateTo, true);
+    return {
+      dateFrom,
+      dateTo,
+      label:
+        dateFrom || dateTo
+          ? `${dateFrom ? dateFrom.toISOString().slice(0, 10) : '…'} → ${dateTo ? dateTo.toISOString().slice(0, 10) : '…'}`
+          : 'Custom range',
+    };
+  }
+
+  const days = preset === '90d' ? 90 : 30;
+  const dateFrom = new Date(now);
+  dateFrom.setDate(dateFrom.getDate() - days);
+  dateFrom.setHours(0, 0, 0, 0);
+  return {
+    dateFrom,
+    dateTo: null,
+    label: preset === '90d' ? 'Last 90 days' : 'Last 30 days',
+  };
+}
+
+function createdAtFilter(range: AnalyticsDateRange): Prisma.DateTimeFilter | undefined {
+  if (!range.dateFrom && !range.dateTo) return undefined;
+  return {
+    ...(range.dateFrom ? { gte: range.dateFrom } : {}),
+    ...(range.dateTo ? { lte: range.dateTo } : {}),
+  };
+}
+
+function avgHours(rows: Array<{ start: Date; end: Date | null }>): number | null {
+  const valid = rows.filter((r): r is { start: Date; end: Date } => !!r.end);
+  if (valid.length === 0) return null;
+  const totalMs = valid.reduce((sum, r) => sum + (r.end.getTime() - r.start.getTime()), 0);
+  return Math.round((totalMs / valid.length / 3600000) * 10) / 10;
+}
+
 export async function buildAnalyticsSummary(
   db: PrismaClient,
+  range: AnalyticsDateRange = {},
 ): Promise<AnalyticsSummary> {
   const now = new Date();
-  const thirtyDaysAgo = new Date(now);
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const appliedAt = createdAtFilter(range);
+  const postingCreatedAt = createdAtFilter(range);
+  const userCreatedAt =
+    createdAtFilter(range) ??
+    (() => {
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      thirtyDaysAgo.setHours(0, 0, 0, 0);
+      return { gte: thirtyDaysAgo };
+    })();
+
   const fiveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 4, 1);
+  const growthFrom =
+    range.dateFrom && range.dateFrom > fiveMonthsAgo ? range.dateFrom : fiveMonthsAgo;
+
+  const appWhere: Prisma.ApplicationWhereInput = appliedAt ? { appliedAt } : {};
+  const postingWhereBase: Prisma.JobPostingWhereInput = {
+    isDeleted: false,
+    ...(postingCreatedAt ? { createdAt: postingCreatedAt } : {}),
+  };
 
   const [
-    totalApplications,
-    confirmedApplications,
-    activeUsers30d,
-    usersSinceFiveMonths,
+    appStatusGroups,
+    acceptedCount,
+    confirmedWithTimes,
+    acceptedWithTimes,
+    newUsersInPeriod,
+    usersForGrowth,
     hostProfiles,
-    confirmedPlacements,
+    postingStatusGroups,
     activePostings,
-    totalPostings,
+    totalPostingsInScope,
+    finishedFilled,
+    finishedUnfilled,
+    unfilledExpiredCount,
   ] = await Promise.all([
-    db.application.count(),
-    db.application.count({ where: { status: ApplicationStatus.CONFIRMED } }),
-    db.user.count({
+    db.application.groupBy({
+      by: ['status'],
+      where: appWhere,
+      _count: { id: true },
+    }),
+    db.application.count({
       where: {
-        createdAt: { gte: thirtyDaysAgo },
-        role: { in: [Role.LOCUM, Role.HOST] },
+        ...appWhere,
+        OR: [
+          { locumResponse: LocumResponse.ACCEPTED },
+          { locumAcceptedAt: { not: null } },
+        ],
       },
     }),
-    db.user.findMany({
-      where: {
-        createdAt: { gte: fiveMonthsAgo },
-        role: { in: [Role.LOCUM, Role.HOST] },
-      },
-      select: { createdAt: true, role: true },
-    }),
-    db.hostProfile.findMany({ select: { city: true } }),
     db.application.findMany({
       where: {
+        ...appWhere,
         status: ApplicationStatus.CONFIRMED,
         placedAt: { not: null },
       },
       select: { appliedAt: true, placedAt: true },
     }),
-    db.jobPosting.count({
-      where: { status: PostingStatus.ACTIVE, isDeleted: false },
+    db.application.findMany({
+      where: {
+        ...appWhere,
+        locumAcceptedAt: { not: null },
+        placedAt: { not: null },
+      },
+      select: { placedAt: true, locumAcceptedAt: true },
     }),
-    db.jobPosting.count({ where: { isDeleted: false } }),
+    db.user.count({
+      where: {
+        createdAt: userCreatedAt,
+        role: { in: [Role.LOCUM, Role.HOST] },
+      },
+    }),
+    db.user.findMany({
+      where: {
+        createdAt: {
+          gte: growthFrom,
+          ...(range.dateTo ? { lte: range.dateTo } : {}),
+        },
+        role: { in: [Role.LOCUM, Role.HOST] },
+      },
+      select: { createdAt: true, role: true },
+    }),
+    db.hostProfile.findMany({ select: { city: true } }),
+    db.jobPosting.groupBy({
+      by: ['status'],
+      where: postingWhereBase,
+      _count: { id: true },
+    }),
+    db.jobPosting.count({
+      where: { ...postingWhereBase, status: PostingStatus.ACTIVE },
+    }),
+    db.jobPosting.count({ where: postingWhereBase }),
+    db.jobPosting.count({
+      where: {
+        ...postingWhereBase,
+        status: { in: [PostingStatus.ONGOING, PostingStatus.COMPLETED] },
+      },
+    }),
+    db.jobPosting.count({
+      where: {
+        ...postingWhereBase,
+        status: { in: [PostingStatus.EXPIRED, PostingStatus.CANCELLED] },
+      },
+    }),
+    db.jobPosting.count({
+      where: {
+        ...postingWhereBase,
+        status: PostingStatus.EXPIRED,
+        applications: {
+          none: {
+            OR: [
+              { locumResponse: LocumResponse.ACCEPTED },
+              { locumAcceptedAt: { not: null } },
+            ],
+          },
+        },
+      },
+    }),
   ]);
 
-  const fillRatePct =
+  const applicationsByStatus = {
+    applied: 0,
+    shortlisted: 0,
+    confirmed: 0,
+    rejected: 0,
+    withdrawn: 0,
+  };
+  for (const g of appStatusGroups) {
+    const n = g._count.id;
+    if (g.status === ApplicationStatus.APPLIED) applicationsByStatus.applied = n;
+    else if (g.status === ApplicationStatus.SHORTLISTED)
+      applicationsByStatus.shortlisted = n;
+    else if (g.status === ApplicationStatus.CONFIRMED)
+      applicationsByStatus.confirmed = n;
+    else if (g.status === ApplicationStatus.REJECTED)
+      applicationsByStatus.rejected = n;
+    else if (g.status === ApplicationStatus.WITHDRAWN)
+      applicationsByStatus.withdrawn = n;
+  }
+
+  const totalApplications = Object.values(applicationsByStatus).reduce(
+    (a, b) => a + b,
+    0,
+  );
+  const confirmedApplications = applicationsByStatus.confirmed;
+  const hostConfirmRatePct =
     totalApplications > 0
       ? Math.round((confirmedApplications / totalApplications) * 100)
       : 0;
+  const locumAcceptRatePct =
+    confirmedApplications > 0
+      ? Math.round((acceptedCount / confirmedApplications) * 100)
+      : 0;
+  const fillRatePct = hostConfirmRatePct;
 
-  const placedWithin48h = confirmedPlacements.filter(
+  const finishedTotal = finishedFilled + finishedUnfilled;
+  const suitableLocumFoundPct =
+    finishedTotal > 0 ? Math.round((finishedFilled / finishedTotal) * 100) : 0;
+
+  const placedWithin48h = confirmedWithTimes.filter(
     (a) =>
       a.placedAt &&
       a.placedAt.getTime() - a.appliedAt.getTime() <= HOURS_48_MS,
   ).length;
   const filledWithin48hPct =
-    confirmedPlacements.length > 0
-      ? Math.round((placedWithin48h / confirmedPlacements.length) * 100)
+    confirmedWithTimes.length > 0
+      ? Math.round((placedWithin48h / confirmedWithTimes.length) * 100)
       : 0;
+
+  const avgHoursToConfirm = avgHours(
+    confirmedWithTimes.map((a) => ({ start: a.appliedAt, end: a.placedAt })),
+  );
+  const avgHoursToAccept = avgHours(
+    acceptedWithTimes.map((a) => ({
+      start: a.placedAt!,
+      end: a.locumAcceptedAt,
+    })),
+  );
 
   const monthBuckets = new Map<
     string,
@@ -111,7 +326,7 @@ export async function buildAnalyticsSummary(
     });
   }
 
-  for (const u of usersSinceFiveMonths) {
+  for (const u of usersForGrowth) {
     const key = `${u.createdAt.getFullYear()}-${u.createdAt.getMonth()}`;
     const bucket = monthBuckets.get(key);
     if (!bucket) continue;
@@ -146,13 +361,52 @@ export async function buildAnalyticsSummary(
   }));
 
   const stillOpenPct =
-    totalPostings > 0 ? Math.round((activePostings / totalPostings) * 100) : 0;
-  const closedPostingsPct = totalPostings > 0 ? 100 - stillOpenPct : 0;
+    totalPostingsInScope > 0
+      ? Math.round((activePostings / totalPostingsInScope) * 100)
+      : 0;
+  const closedPostingsPct = totalPostingsInScope > 0 ? 100 - stillOpenPct : 0;
+
+  const postingsByStatus = {
+    draft: 0,
+    active: 0,
+    ongoing: 0,
+    completed: 0,
+    expired: 0,
+    cancelled: 0,
+  };
+  for (const g of postingStatusGroups) {
+    const n = g._count.id;
+    const key = g.status.toLowerCase() as keyof typeof postingsByStatus;
+    if (key in postingsByStatus) postingsByStatus[key] = n;
+  }
+
+  const postedJobsCount =
+    postingsByStatus.active +
+    postingsByStatus.ongoing +
+    postingsByStatus.completed +
+    postingsByStatus.expired +
+    postingsByStatus.cancelled;
 
   return {
+    period: {
+      from: range.dateFrom ? range.dateFrom.toISOString() : null,
+      to: range.dateTo ? range.dateTo.toISOString() : null,
+      label: range.label ?? 'All time',
+    },
     totalApplications,
     fillRatePct,
-    activeUsers30d,
+    hostConfirmRatePct,
+    locumAcceptRatePct,
+    suitableLocumFoundPct,
+    newUsersInPeriod,
+    activeUsers30d: newUsersInPeriod,
+    avgHoursToConfirm,
+    avgHoursToAccept,
+    applicationsByStatus,
+    acceptedCount,
+    postedJobsCount,
+    postingsByStatus,
+    unfilledExpiredCount,
     growth,
     locations,
     postingPerformance: {
@@ -176,12 +430,30 @@ export function analyticsSummaryToCsv(summary: AnalyticsSummary): string {
   const lines: string[] = [
     'LocumLink Analytics Report',
     `Generated,${date}`,
+    `Period,${summary.period.label}`,
     '',
     'Summary',
     'Metric,Value',
     ['Total Applications', summary.totalApplications],
-    ['Confirmed Fill Rate (%)', summary.fillRatePct],
-    ['New Users (30 days)', summary.activeUsers30d],
+    ['Applied', summary.applicationsByStatus.applied],
+    ['Shortlisted', summary.applicationsByStatus.shortlisted],
+    ['Confirmed', summary.applicationsByStatus.confirmed],
+    ['Accepted (locum)', summary.acceptedCount],
+    ['Rejected', summary.applicationsByStatus.rejected],
+    ['Withdrawn', summary.applicationsByStatus.withdrawn],
+    ['Host Confirm Rate (%)', summary.hostConfirmRatePct],
+    ['Locum Accept Rate (%)', summary.locumAcceptRatePct],
+    ['Suitable Locum Found (%)', summary.suitableLocumFoundPct],
+    ['Avg Hours to Confirm', summary.avgHoursToConfirm ?? ''],
+    ['Avg Hours to Accept', summary.avgHoursToAccept ?? ''],
+    ['New Users (period)', summary.newUsersInPeriod],
+    ['Posted Jobs', summary.postedJobsCount],
+    ['Active Postings', summary.postingsByStatus.active],
+    ['Ongoing', summary.postingsByStatus.ongoing],
+    ['Completed', summary.postingsByStatus.completed],
+    ['Expired', summary.postingsByStatus.expired],
+    ['Cancelled', summary.postingsByStatus.cancelled],
+    ['Unfilled Expired', summary.unfilledExpiredCount],
     ['Placements Within 48h (%)', summary.postingPerformance.filledWithin48hPct],
     ['Active Job Postings (%)', summary.postingPerformance.stillOpenPct],
     ['Closed / Other Postings (%)', summary.postingPerformance.closedPostingsPct],

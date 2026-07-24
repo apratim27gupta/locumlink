@@ -47,8 +47,12 @@ export class AdminController {
   }
 
   @Get('analytics/summary')
-  async analyticsSummary() {
-    return this.admin.analyticsSummary();
+  async analyticsSummary(
+    @Query('preset') preset?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.admin.analyticsSummary({ preset, dateFrom, dateTo });
   }
 
   @Get('analytics/export')
@@ -57,8 +61,15 @@ export class AdminController {
     @Req() req: Request,
     @CurrentAdmin() admin: AdminJwtPayload,
     @Res() res: Response,
+    @Query('preset') preset?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
   ) {
-    const csv = await this.admin.exportAnalyticsCsv(req, admin);
+    const csv = await this.admin.exportAnalyticsCsv(req, admin, {
+      preset,
+      dateFrom,
+      dateTo,
+    });
     const date = new Date().toISOString().slice(0, 10);
     res.setHeader(
       'Content-Disposition',
