@@ -79,6 +79,8 @@ export type NotifEventType =
   | 'L_012_SHIFT_CANCELLED'
   | 'L_013_ACCOUNT_WARNING'
   | 'L_014_PROFILE_REMINDER'
+  // Shared / system
+  | 'U_001_ADMIN_MESSAGE'
   // Admin
   | 'A_001_NEW_HOST_REGISTRATION'
   | 'A_002_NEW_LOCUM_REGISTRATION'

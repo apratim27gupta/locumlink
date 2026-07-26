@@ -27,6 +27,7 @@ import { FeedbackService } from '../feedback/feedback.service.js';
 import { AdminService } from './admin.service.js';
 import { AdminReportActionDto } from './dto/admin-report-action.dto.js';
 import { AdminRemindUserDto } from './dto/admin-remind-user.dto.js';
+import { AdminBroadcastUsersDto } from './dto/admin-broadcast-users.dto.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
 
@@ -194,6 +195,16 @@ export class AdminController {
     @Body() dto: AdminUpdateUserDto,
   ) {
     return this.admin.updateUser(req, admin, id, dto);
+  }
+
+  @Post('users/broadcast')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async broadcastUsers(
+    @Req() req: Request,
+    @CurrentAdmin() admin: AdminJwtPayload,
+    @Body() dto: AdminBroadcastUsersDto,
+  ) {
+    return this.admin.broadcastUsers(req, admin, dto);
   }
 
   @Post('users/:id/remind')

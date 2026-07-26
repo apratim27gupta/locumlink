@@ -2,10 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Ban, Bell, Download, Eye, FileText, Mail, Search, UserCheck, XCircle } from 'lucide-react';
+import { Ban, Bell, Download, Eye, FileText, Mail, MessageSquare, Search, UserCheck, XCircle } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { adminFetchJson, adminDownloadUsersCsv } from '@/lib/adminApi';
 import { formatAdminCpsnsDisplay } from '@/lib/cpsnsVerify';
+import AdminBroadcastComposeModal, {
+  type BroadcastChannel,
+  type BroadcastResult,
+} from './AdminBroadcastComposeModal';
 
 type CpsnsVerificationStatus =
   | 'UNVERIFIED'
@@ -70,6 +74,12 @@ function canRemindProfile(row: Row): boolean {
   if (row.role === 'ADMIN') return false;
   if (row.status === 'SUSPENDED' || row.status === 'DEACTIVATED') return false;
   if (row.cpsnsVerificationStatus === 'VERIFIED') return false;
+  return true;
+}
+
+function canBroadcastUser(row: Row): boolean {
+  if (row.role === 'ADMIN') return false;
+  if (row.status === 'SUSPENDED' || row.status === 'DEACTIVATED') return false;
   return true;
 }
 
@@ -166,6 +176,11 @@ export default function AdminUsersPage() {
   const [remindingId, setRemindingId] = useState<string | null>(null);
   const remindMenuRef = useRef<HTMLDivElement>(null);
   const deepLinkHandled = useRef<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [broadcastMode, setBroadcastMode] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [broadcastSending, setBroadcastSending] = useState(false);
+  const [broadcastBanner, setBroadcastBanner] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -203,6 +218,10 @@ export default function AdminUsersPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [debouncedQ, roleFilter, statusFilter]);
 
   async function patchUser(
     id: string,
@@ -390,6 +409,96 @@ export default function AdminUsersPage() {
     return true;
   });
 
+  const eligibleFiltered = filtered.filter(canBroadcastUser);
+  const selectedCount = eligibleFiltered.filter((r) => selectedIds.has(r.id)).length;
+  const allPageSelected =
+    eligibleFiltered.length > 0 &&
+    eligibleFiltered.every((r) => selectedIds.has(r.id));
+
+  function toggleRowSelected(row: Row) {
+    if (!canBroadcastUser(row)) return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(row.id)) next.delete(row.id);
+      else next.add(row.id);
+      return next;
+    });
+  }
+
+  function toggleSelectPage() {
+    if (allPageSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(eligibleFiltered.map((r) => r.id)));
+  }
+
+  function exitBroadcastMode() {
+    setBroadcastMode(false);
+    setSelectedIds(new Set());
+    setComposeOpen(false);
+  }
+
+  const recipientLabel = `${selectedCount} selected`;
+
+  async function sendBroadcast(payload: {
+    subject: string;
+    bodyHtml: string;
+    bodyText: string;
+    channels: BroadcastChannel[];
+  }) {
+    setBroadcastSending(true);
+    setBroadcastBanner(null);
+    setErr(null);
+    try {
+      const ids = eligibleFiltered
+        .filter((r) => selectedIds.has(r.id))
+        .map((r) => r.id);
+      if (ids.length === 0) throw new Error('No recipients selected');
+
+      const result = await adminFetchJson<BroadcastResult>(
+        '/api/admin/users/broadcast',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            channels: payload.channels,
+            subject: payload.subject,
+            bodyHtml: payload.bodyHtml,
+            bodyText: payload.bodyText,
+            userIds: ids,
+          }),
+        },
+      );
+
+      const parts = [
+        `Sent to ${result.recipientCount} user${result.recipientCount === 1 ? '' : 's'}`,
+      ];
+      if (result.sentNotification > 0) {
+        parts.push(`${result.sentNotification} notification${result.sentNotification === 1 ? '' : 's'}`);
+      }
+      if (result.sentEmail > 0) {
+        parts.push(`${result.sentEmail} email${result.sentEmail === 1 ? '' : 's'}`);
+      }
+      if (result.failed.length > 0) {
+        parts.push(`${result.failed.length} failed`);
+        setBroadcastBanner(`${parts.join(' · ')}. Some deliveries failed.`);
+        setErr(
+          result.failed
+            .slice(0, 3)
+            .map((f) => f.error)
+            .join('; ') +
+            (result.failed.length > 3 ? '…' : ''),
+        );
+      } else {
+        setBroadcastBanner(parts.join(' · '));
+      }
+      setComposeOpen(false);
+      exitBroadcastMode();
+    } finally {
+      setBroadcastSending(false);
+    }
+  }
+
   return (
     <AdminLayout>
       <div className="header-with-actions">
@@ -398,6 +507,19 @@ export default function AdminUsersPage() {
           <p className="page-description">View, suspend, and reinstate user accounts</p>
         </div>
         <div className="header-actions">
+          {!broadcastMode ? (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                setBroadcastBanner(null);
+                setBroadcastMode(true);
+              }}
+            >
+              <MessageSquare size={16} />
+              Broadcast
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn-secondary"
@@ -410,6 +532,18 @@ export default function AdminUsersPage() {
       </div>
 
       {err ? <div className="error-banner">{err}</div> : null}
+      {broadcastBanner ? (
+        <div
+          className="error-banner"
+          style={{
+            background: '#ecfdf5',
+            borderColor: '#a7f3d0',
+            color: '#065f46',
+          }}
+        >
+          {broadcastBanner}
+        </div>
+      ) : null}
 
       <div className="filter-grid">
         <div className="input-group">
@@ -446,10 +580,63 @@ export default function AdminUsersPage() {
         </select>
       </div>
 
+      {broadcastMode ? (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 10,
+            marginBottom: 12,
+            padding: '10px 12px',
+            background: '#F8FAFC',
+            border: '1px solid #E5E7EB',
+            borderRadius: 8,
+          }}
+        >
+          <span className="text-sm font-medium">
+            {selectedCount > 0 ? `${selectedCount} selected` : 'Select users to message'}
+          </span>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ padding: '6px 12px', fontSize: 13 }}
+            onClick={exitBroadcastMode}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ padding: '6px 12px', fontSize: 13, marginLeft: 'auto' }}
+            disabled={selectedCount === 0}
+            onClick={() => {
+              setBroadcastBanner(null);
+              setComposeOpen(true);
+            }}
+          >
+            <MessageSquare size={14} />
+            Send message
+          </button>
+        </div>
+      ) : null}
+
       <div className="table-container">
         <table>
           <thead>
             <tr>
+              {broadcastMode ? (
+                <th style={{ width: 40 }}>
+                  <input
+                    type="checkbox"
+                    checked={allPageSelected}
+                    disabled={loading || eligibleFiltered.length === 0}
+                    onChange={toggleSelectPage}
+                    aria-label="Select all on page"
+                    title="Select all on page"
+                  />
+                </th>
+              ) : null}
               <th>User</th>
               <th>Role</th>
               <th>Status</th>
@@ -462,13 +649,13 @@ export default function AdminUsersPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="text-muted">
+                <td colSpan={broadcastMode ? 8 : 7} className="text-muted">
                   Loading…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-muted">
+                <td colSpan={broadcastMode ? 8 : 7} className="text-muted">
                   No users found.
                 </td>
               </tr>
@@ -481,6 +668,20 @@ export default function AdminUsersPage() {
                     if (r.role !== 'ADMIN') void openUserProfile(r);
                   }}
                 >
+                  {broadcastMode ? (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      {canBroadcastUser(r) ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(r.id)}
+                          onChange={() => toggleRowSelected(r)}
+                          aria-label={`Select ${r.email}`}
+                        />
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                  ) : null}
                   <td>
                     <div className="font-medium">{r.email.split('@')[0]}</div>
                     <div className="text-sm text-muted">{r.email}</div>
@@ -963,6 +1164,16 @@ export default function AdminUsersPage() {
           </div>
         ) : null}
       </div>
+
+      <AdminBroadcastComposeModal
+        open={composeOpen}
+        recipientLabel={recipientLabel}
+        sending={broadcastSending}
+        onClose={() => {
+          if (!broadcastSending) setComposeOpen(false);
+        }}
+        onSend={sendBroadcast}
+      />
     </AdminLayout>
   );
 }

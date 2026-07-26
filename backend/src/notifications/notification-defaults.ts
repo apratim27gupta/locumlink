@@ -110,6 +110,10 @@ export const NOTIFICATION_EVENT_DEFAULTS: Record<
     href: '/locum/profile',
     actionLabel: 'Complete Profile',
   },
+  U_001_ADMIN_MESSAGE: {
+    href: '/locum/dashboard',
+    actionLabel: 'Open dashboard',
+  },
 };
 
 /** Fallback in-app titles when payload.title is missing or an internal event code. */
@@ -139,10 +143,11 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   L_012_SHIFT_CANCELLED: 'Shift Cancelled',
   L_013_ACCOUNT_WARNING: 'Account warning',
   L_014_PROFILE_REMINDER: 'Complete your Locum Link profile',
+  U_001_ADMIN_MESSAGE: 'Message from Locum Link',
 };
 
 function isInternalNotificationCode(text: string): boolean {
-  return /^[HLA]_\d{3}_/i.test(text.trim());
+  return /^[HLAU]_\d{3}_/i.test(text.trim());
 }
 
 export function resolveNotificationTitle(

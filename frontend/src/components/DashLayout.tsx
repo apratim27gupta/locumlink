@@ -22,6 +22,7 @@ import { isNativeShell } from '@/lib/nativeShell';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
 import SidebarFeedback from '@/components/SidebarFeedback';
 import AppStoreInstallButton from '@/components/AppStoreInstallButton';
+import NotificationBody from '@/components/NotificationBody';
 interface NavItem {
     label: string;
     href: string;
@@ -637,14 +638,16 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                               {resolveNotificationTitle(notif)}
                             </span>
                           </div>
-                          <div style={{
-                    fontSize: 'var(--font-small)',
-                    color: '#6B7280',
-                    lineHeight: 1.45,
-                    whiteSpace: 'normal' as const,
-                }}>
-                            {notif.body}
-                          </div>
+                          <NotificationBody
+                            body={notif.body}
+                            eventType={notif.eventType}
+                            style={{
+                              fontSize: 'var(--font-small)',
+                              color: '#6B7280',
+                              lineHeight: 1.45,
+                              whiteSpace: 'normal',
+                            }}
+                          />
                           {(() => {
                             const actionLabel = notificationActionLabel(notif);
                             const href = notificationHref(notif);
@@ -1248,9 +1251,11 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
               </button>
             </div>
             <div style={{ padding: '14px 16px 16px' }}>
-              <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-                {selectedNotif.body}
-              </div>
+              <NotificationBody
+                body={selectedNotif.body}
+                eventType={selectedNotif.eventType}
+                style={{ fontSize: 13, color: '#374151', lineHeight: 1.55 }}
+              />
               {actionLabel && href ? (
                 <button
                   type="button"

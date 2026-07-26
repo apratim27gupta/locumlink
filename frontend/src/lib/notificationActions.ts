@@ -27,6 +27,7 @@ const EVENT_DEFAULTS: Record<string, { href: string; actionLabel: string }> = {
   L_012_SHIFT_CANCELLED: { href: '/locum/browse', actionLabel: 'Browse Opportunities' },
   L_013_ACCOUNT_WARNING: { href: SUPPORT_PAGE_PATH, actionLabel: 'Contact Support' },
   L_014_PROFILE_REMINDER: { href: '/locum/profile', actionLabel: 'Complete Profile' },
+  U_001_ADMIN_MESSAGE: { href: '/locum/dashboard', actionLabel: 'Open dashboard' },
 };
 
 const EVENT_TITLES: Record<string, string> = {
@@ -55,6 +56,7 @@ const EVENT_TITLES: Record<string, string> = {
   L_012_SHIFT_CANCELLED: 'Shift Cancelled',
   L_013_ACCOUNT_WARNING: 'Account warning',
   L_014_PROFILE_REMINDER: 'Complete your Locum Link profile',
+  U_001_ADMIN_MESSAGE: 'Message from Locum Link',
 };
 
 const SUPPORT_EVENT_TYPES = new Set([
@@ -65,7 +67,7 @@ const SUPPORT_EVENT_TYPES = new Set([
 ]);
 
 function isInternalNotificationCode(text: string): boolean {
-  return /^[HLA]_\d{3}_/i.test(text.trim());
+  return /^[HLAU]_\d{3}_/i.test(text.trim());
 }
 
 export function resolveNotificationTitle(notif: NotificationItem): string {

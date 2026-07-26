@@ -1,5 +1,6 @@
 import { PushService } from '../notifications/push.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { EmailService } from '../notifications/email.service.js';
 import {
   BadRequestException,
   ConflictException,
@@ -10,6 +11,7 @@ import type { Request } from 'express';
 import {
   AuditAction,
   PostingStatus,
+  Prisma,
   Role,
   UserReportStatus,
   UserStatus,
@@ -22,6 +24,7 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import type { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
 import type { AdminReportActionDto } from './dto/admin-report-action.dto.js';
+import type { AdminBroadcastUsersDto } from './dto/admin-broadcast-users.dto.js';
 import {
   analyticsSummaryToCsv,
   buildAnalyticsSummary,
@@ -34,12 +37,20 @@ import {
   listAdminJobs,
 } from './admin-marketplace.js';
 import {
+  htmlToPlainText,
+  sanitizeBroadcastHtml,
+  wrapBroadcastEmailHtml,
+} from './broadcast-html.js';
+import {
   credentialQueueSubmittedAt,
   formatAdminCpsnsDisplay,
   isEligibleForCredentialQueueHost,
   isEligibleForCredentialQueueLocum,
   mergeCredentialSubmittedAtPatch,
 } from '../cpsns/cpsns-verified.js';
+
+const BROADCAST_CONCURRENCY = 5;
+const BROADCAST_MAX_RECIPIENTS = 2000;
 const VERIFICATION_PENDING_FILTER: VerificationStatus[] = [
   VerificationStatus.UNVERIFIED,
   VerificationStatus.PENDING_REVIEW,
@@ -100,6 +111,7 @@ export class AdminService {
     private readonly gcs: GcsService,
     private readonly pushService: PushService,
     private readonly notifService: NotificationsService,
+    private readonly email: EmailService,
   ) {}
 
   private cpsnsProfileField(
@@ -794,6 +806,185 @@ export class AdminService {
     };
   }
 
+  async broadcastUsers(
+    req: Request,
+    adminPayload: AdminJwtPayload,
+    dto: AdminBroadcastUsersDto,
+  ) {
+    const wantNotification = dto.channels.includes('notification');
+    const wantEmail = dto.channels.includes('email');
+    if (!wantNotification && !wantEmail) {
+      throw new BadRequestException('Select at least one channel');
+    }
+    if (!dto.selectAllFiltered && (!dto.userIds || dto.userIds.length === 0)) {
+      throw new BadRequestException(
+        'Provide userIds or set selectAllFiltered',
+      );
+    }
+
+    const subject = dto.subject.trim();
+    if (!subject) throw new BadRequestException('Subject is required');
+
+    const sanitizedHtml = sanitizeBroadcastHtml(dto.bodyHtml);
+    const bodyText =
+      (dto.bodyText?.trim() || htmlToPlainText(sanitizedHtml)).trim() ||
+      htmlToPlainText(dto.bodyHtml);
+    if (!bodyText && !sanitizedHtml) {
+      throw new BadRequestException('Message body is required');
+    }
+
+    const emailHtml = wrapBroadcastEmailHtml(
+      sanitizedHtml || `<p>${escapeHtmlText(bodyText)}</p>`,
+    );
+
+    const recipients = await this.resolveBroadcastRecipients(dto);
+    if (recipients.length === 0) {
+      throw new BadRequestException('No eligible recipients');
+    }
+    if (recipients.length > BROADCAST_MAX_RECIPIENTS) {
+      throw new BadRequestException(
+        `Too many recipients (max ${BROADCAST_MAX_RECIPIENTS})`,
+      );
+    }
+
+    let sentNotification = 0;
+    let sentEmail = 0;
+    const failed: Array<{ userId: string; error: string }> = [];
+
+    await mapPool(recipients, BROADCAST_CONCURRENCY, async (user) => {
+      const errors: string[] = [];
+
+      if (wantNotification) {
+        try {
+          const href =
+            user.role === Role.HOST ? '/host/dashboard' : '/locum/dashboard';
+          await this.notifService.create({
+            recipientId: user.id,
+            eventType: 'U_001_ADMIN_MESSAGE',
+            title: subject,
+            // Keep B/I/U (+ size) HTML for in-app; push stays plain text.
+            body: sanitizedHtml || bodyText,
+            href,
+            priority: 'HIGH',
+            actionLabel: 'Open dashboard',
+            pushTitle: subject,
+            pushBody: bodyText.slice(0, 180),
+          });
+          sentNotification += 1;
+        } catch (err: unknown) {
+          errors.push(
+            err instanceof Error ? err.message : 'Notification failed',
+          );
+        }
+      }
+
+      if (wantEmail) {
+        if (!user.email?.trim()) {
+          errors.push('No email address');
+        } else {
+          try {
+            const result = await this.email.send({
+              to: user.email,
+              subject,
+              text: bodyText,
+              html: emailHtml,
+            });
+            if (!result.ok) {
+              errors.push(result.error);
+            } else {
+              sentEmail += 1;
+            }
+          } catch (err: unknown) {
+            errors.push(err instanceof Error ? err.message : 'Email failed');
+          }
+        }
+      }
+
+      if (errors.length > 0) {
+        failed.push({ userId: user.id, error: errors.join('; ') });
+      }
+    });
+
+    this.audit.log({
+      adminActorId: adminPayload.sub,
+      action: AuditAction.UPDATE,
+      entity: 'UserBroadcast',
+      endpoint: `${req.method} ${req.originalUrl}`,
+      ip: extractIp(req),
+      userAgent:
+        typeof req.headers['user-agent'] === 'string'
+          ? req.headers['user-agent']
+          : undefined,
+      outcome: failed.length === 0 ? 'SUCCESS' : 'PARTIAL',
+      actorRole: 'admin',
+      after: {
+        recipientCount: recipients.length,
+        channels: dto.channels,
+        selectAllFiltered: Boolean(dto.selectAllFiltered),
+        sentNotification,
+        sentEmail,
+        failedCount: failed.length,
+        subjectLength: subject.length,
+      },
+    });
+
+    return {
+      ok: failed.length === 0,
+      sentNotification,
+      sentEmail,
+      recipientCount: recipients.length,
+      failed,
+    };
+  }
+
+  private async resolveBroadcastRecipients(dto: AdminBroadcastUsersDto) {
+    const excludeStatuses: UserStatus[] = [
+      UserStatus.SUSPENDED,
+      UserStatus.DEACTIVATED,
+    ];
+    const select = {
+      id: true,
+      email: true,
+      role: true,
+      status: true,
+    } as const;
+
+    if (dto.selectAllFiltered) {
+      const q = dto.q?.trim();
+      const where: Prisma.UserWhereInput = {
+        role: { not: Role.ADMIN },
+        status: { notIn: excludeStatuses },
+      };
+      if (q) {
+        where.email = { contains: q, mode: 'insensitive' };
+      }
+      if (dto.role === 'LOCUM' || dto.role === 'HOST') {
+        where.role = dto.role;
+      }
+      return this.prisma.user.findMany({
+        where,
+        select,
+        orderBy: { createdAt: 'desc' },
+        take: BROADCAST_MAX_RECIPIENTS + 1,
+      });
+    }
+
+    const ids = [...new Set((dto.userIds ?? []).map((id) => id.trim()).filter(Boolean))];
+    if (ids.length === 0) return [];
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select,
+    });
+
+    return users.filter(
+      (u) =>
+        u.role !== Role.ADMIN &&
+        u.status !== UserStatus.SUSPENDED &&
+        u.status !== UserStatus.DEACTIVATED,
+    );
+  }
+
   async updateUser(
     req: Request,
     adminPayload: AdminJwtPayload,
@@ -1462,4 +1653,32 @@ function extractIp(req: Request): string | undefined {
 function csvEscape(s: string): string {
   if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
+}
+
+function escapeHtmlText(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function mapPool<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  if (items.length === 0) return;
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (next < items.length) {
+        const idx = next;
+        next += 1;
+        await fn(items[idx]!);
+      }
+    },
+  );
+  await Promise.all(workers);
 }
