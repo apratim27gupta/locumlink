@@ -61,6 +61,11 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
         answer:
           'The LocumLink team verifies registration with the provincial medical regulator.',
       },
+      {
+        question: 'Can I accept locum shifts if I have a work permit?',
+        answer: 'It depends on your work permit.\n\nIf you have an employer-specific work permit, you may only be able to work for the employer and/or location listed on your permit.\nIf you have an open work permit, you can generally work for different employers, provided you meet all licensing requirements.\n\nImportant: A medical licence allows you to practise medicine, but your work permit determines where and for whom you can legally work.\n\nLocumLink does not provide immigration advice. Please ensure your work authorization permits the locum position before accepting an assignment.',
+
+      }
     ],
   },
   {
