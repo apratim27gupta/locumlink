@@ -27,7 +27,10 @@ export default function LocumFaqPage(props: {
   useEffect(() => {
     void locumApi
       .getProfile()
-      .then((p) => setProfile(p))
+      .then((data) => {
+        if (data.exists && data.profile) setProfile(data.profile);
+        else setProfile(null);
+      })
       .catch(() => setProfile(null));
   }, []);
 
