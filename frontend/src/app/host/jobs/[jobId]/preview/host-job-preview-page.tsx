@@ -32,6 +32,11 @@ const HOST_DASH_NAV = [
     icon: <NavIcon name="resources" />,
   },
   {
+    label: 'FAQs',
+    href: '/host/faq',
+    icon: <NavIcon name="faq" />,
+  },
+  {
     label: 'Settings',
     href: '/host/settings',
     icon: <NavIcon name="settings" />,

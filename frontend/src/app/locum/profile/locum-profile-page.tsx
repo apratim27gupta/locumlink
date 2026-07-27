@@ -73,6 +73,11 @@ const NAV = [
     icon: <NavIcon name="resources" />,
   },
   {
+    label: 'FAQs',
+    href: '/locum/faq',
+    icon: <NavIcon name="faq" />,
+  },
+  {
     label: 'Settings',
     href: '/locum/settings',
     icon: <NavIcon name="settings" />,

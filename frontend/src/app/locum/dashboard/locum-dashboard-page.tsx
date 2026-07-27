@@ -55,6 +55,11 @@ const NAV = [
         href: '/locum/resources',
         icon: <NavIcon name="resources"/>,
     },
+    {
+        label: 'FAQs',
+        href: '/locum/faq',
+        icon: <NavIcon name="faq"/>,
+    },
     { label: 'Settings', href: '/locum/settings', icon: <NavIcon name="settings"/> },
 ];
 function fmtDate(iso: string | null): string {

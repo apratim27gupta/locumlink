@@ -32,6 +32,11 @@ const HOST_NAV = [
         icon: <NavIcon name="resources"/>,
     },
     {
+        label: 'FAQs',
+        href: '/host/faq',
+        icon: <NavIcon name="faq"/>,
+    },
+    {
         label: 'Settings',
         href: '/host/settings',
         icon: <NavIcon name="settings"/>,
@@ -62,6 +67,11 @@ const LOCUM_NAV = [
         label: 'Resources',
         href: '/locum/resources',
         icon: <NavIcon name="resources"/>,
+    },
+    {
+        label: 'FAQs',
+        href: '/locum/faq',
+        icon: <NavIcon name="faq"/>,
     },
     {
         label: 'Settings',

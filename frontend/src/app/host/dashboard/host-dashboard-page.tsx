@@ -42,6 +42,7 @@ const HOST_DASH_NAV = [
     { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile"/> },
     { label: 'Messages', href: '/host/messages', icon: <NavIcon name="messages"/> },
     { label: 'Resources', href: '/host/resources', icon: <NavIcon name="resources"/> },
+    { label: 'FAQs', href: '/host/faq', icon: <NavIcon name="faq"/> },
     { label: 'Settings', href: '/host/settings', icon: <NavIcon name="settings"/> },
 ];
 const TABS = [

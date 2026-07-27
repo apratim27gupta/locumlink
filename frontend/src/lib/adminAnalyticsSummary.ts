@@ -39,7 +39,15 @@ export type AnalyticsSummary = {
   };
   unfilledExpiredCount: number;
   growth: { month: string; locums: number; hosts: number; total: number }[];
+  /** @deprecated prefer cityAccounts */
   locations: { name: string; pct: number; count: number }[];
+  cityAccounts: {
+    city: string;
+    province: string;
+    hosts: number;
+    locums: number;
+    total: number;
+  }[];
   postingPerformance: {
     filledWithin48hPct: number;
     stillOpenPct: number;
@@ -110,6 +118,57 @@ function avgHours(
   return Math.round((totalMs / valid.length / 3600000) * 10) / 10;
 }
 
+function titleCaseWords(value: string): string {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function buildCityAccounts(
+  hosts: Array<{ city: string | null; province: string | null }>,
+  locums: Array<{ city: string | null; province: string | null }>,
+): AnalyticsSummary['cityAccounts'] {
+  const map = new Map<
+    string,
+    { city: string; province: string; hosts: number; locums: number }
+  >();
+
+  const bump = (
+    rawCity: string | null,
+    rawProvince: string | null,
+    role: 'hosts' | 'locums',
+  ) => {
+    const city = titleCaseWords(rawCity ?? '');
+    if (!city) return;
+    const province = (rawProvince ?? '').trim().toUpperCase() || '—';
+    const key = `${city.toLowerCase()}|${province}`;
+    const row = map.get(key) ?? { city, province, hosts: 0, locums: 0 };
+    row[role] += 1;
+    map.set(key, row);
+  };
+
+  for (const h of hosts) bump(h.city, h.province, 'hosts');
+  for (const l of locums) bump(l.city, l.province, 'locums');
+
+  return Array.from(map.values())
+    .map((r) => ({
+      city: r.city,
+      province: r.province,
+      hosts: r.hosts,
+      locums: r.locums,
+      total: r.hosts + r.locums,
+    }))
+    .sort(
+      (a, b) =>
+        b.total - a.total ||
+        a.city.localeCompare(b.city) ||
+        a.province.localeCompare(b.province),
+    );
+}
+
 export async function buildAnalyticsSummary(
   db: PrismaClient,
   range: AnalyticsDateRange & { label?: string } = {},
@@ -145,6 +204,7 @@ export async function buildAnalyticsSummary(
     newUsersInPeriod,
     usersForGrowth,
     hostProfiles,
+    locumProfiles,
     postingStatusGroups,
     activePostings,
     totalPostingsInScope,
@@ -198,7 +258,8 @@ export async function buildAnalyticsSummary(
       },
       select: { createdAt: true, role: true },
     }),
-    db.hostProfile.findMany({ select: { city: true } }),
+    db.hostProfile.findMany({ select: { city: true, province: true } }),
+    db.locumProfile.findMany({ select: { city: true, province: true } }),
     db.jobPosting.groupBy({
       by: ['status'],
       where: postingWhereBase,
@@ -312,27 +373,13 @@ export async function buildAnalyticsSummary(
 
   const growth = Array.from(monthBuckets.values());
 
-  const cityCounts = new Map<string, number>();
-  for (const h of hostProfiles) {
-    const city = (h.city ?? '').trim();
-    if (!city) continue;
-    const label = city
-      .split(/\s+/)
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-      .join(' ');
-    cityCounts.set(label, (cityCounts.get(label) ?? 0) + 1);
-  }
-
-  const topCities = Array.from(cityCounts.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
-
-  const cityTotal = topCities.reduce((s, c) => s + c.count, 0) || 1;
+  const cityAccounts = buildCityAccounts(hostProfiles, locumProfiles);
+  const topCities = cityAccounts.slice(0, 5);
+  const cityTotal = topCities.reduce((s, c) => s + c.hosts, 0) || 1;
   const locations = topCities.map((c) => ({
-    name: c.name,
-    count: c.count,
-    pct: Math.round((c.count / cityTotal) * 100),
+    name: c.province !== '—' ? `${c.city}, ${c.province}` : c.city,
+    count: c.hosts,
+    pct: Math.round((c.hosts / cityTotal) * 100),
   }));
 
   const stillOpenPct =
@@ -384,6 +431,7 @@ export async function buildAnalyticsSummary(
     unfilledExpiredCount,
     growth,
     locations,
+    cityAccounts,
     postingPerformance: {
       filledWithin48hPct,
       stillOpenPct,
@@ -439,9 +487,13 @@ export function analyticsSummaryToCsv(summary: AnalyticsSummary): string {
     lines.push([g.month, g.locums, g.hosts, g.total].map(escapeCsv).join(','));
   }
 
-  lines.push('', 'Top Host Cities', 'City,Count,Share (%)');
-  for (const loc of summary.locations) {
-    lines.push([loc.name, loc.count, loc.pct].map(escapeCsv).join(','));
+  lines.push('', 'Accounts by City', 'City,Province,Host Accounts,Locum Accounts,Total');
+  for (const row of summary.cityAccounts) {
+    lines.push(
+      [row.city, row.province, row.hosts, row.locums, row.total]
+        .map(escapeCsv)
+        .join(','),
+    );
   }
 
   return `${lines.join('\n')}\n`;
