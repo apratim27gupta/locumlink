@@ -11,6 +11,7 @@ const NAV = [
     { label: 'Profile', href: '/locum/profile', icon: <NavIcon name="profile"/> },
     { label: 'Messages', href: '/locum/messages', icon: <NavIcon name="messages"/> },
     { label: 'Resources', href: '/locum/resources', icon: <NavIcon name="resources"/> },
+    { label: 'FAQs', href: '/locum/faq', icon: <NavIcon name="faq"/> },
     { label: 'Settings', href: '/locum/settings', icon: <NavIcon name="settings"/> },
 ];
 

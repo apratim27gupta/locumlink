@@ -827,21 +827,36 @@ export default function AdminAnalyticsPage() {
       </div>
 
       <div className="card">
-        <h3 className="font-medium mb-4">Top host cities</h3>
+        <h3 className="font-medium mb-4">Accounts by city</h3>
         {loading ? (
           <p className="text-sm text-muted">Loading…</p>
-        ) : (data?.locations.length ?? 0) === 0 ? (
-          <p className="text-sm text-muted">No host locations yet.</p>
+        ) : (data?.cityAccounts?.length ?? 0) === 0 ? (
+          <p className="text-sm text-muted">No city data yet.</p>
         ) : (
-          data?.locations.map((loc) => (
-            <div key={loc.name} className="location-item">
-              <span className="location-name">{loc.name}</span>
-              <div className="location-bar">
-                <div className="location-fill" style={{ width: `${loc.pct}%` }} />
-              </div>
-              <span className="location-count">{loc.count}</span>
-            </div>
-          ))
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>City</th>
+                  <th>Province</th>
+                  <th>Host accounts</th>
+                  <th>Locum accounts</th>
+                  <th>Total accounts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.cityAccounts.map((row) => (
+                  <tr key={`${row.city}-${row.province}`}>
+                    <td>{row.city}</td>
+                    <td>{row.province}</td>
+                    <td>{row.hosts}</td>
+                    <td>{row.locums}</td>
+                    <td className="font-medium">{row.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </AdminLayout>
