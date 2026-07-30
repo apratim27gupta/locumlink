@@ -20,16 +20,26 @@ const DOCUMENTS = [
         title: 'GP Locum Application Form',
         description: 'Official application form for the GP Locum Program. Download and complete to apply.',
         url: 'https://msi.medavie.bluecross.ca/wp-content/uploads/sites/3/2023/10/GP-Locum-Application-Form.pdf',
+        icon: 'pdf' as const,
     },
     {
         title: 'Locum Program Guidelines',
         description: 'Comprehensive guidelines for the Locum Program, last updated April 2024.',
         url: 'https://msi.medavie.bluecross.ca/wp-content/uploads/sites/3/2024/04/FINAL-Locum-Program-Guidelines-Apr-25-2024.pdf',
+        icon: 'pdf' as const,
     },
     {
         title: 'Locum Program Claim Form',
         description: 'Claim form for the Locum Program covering Jun 15, 2026 – Mar 31, 2027.',
         url: '/documents/locum-program-claim-form-2026-2027.pdf',
+        icon: 'pdf' as const,
+    },
+    {
+        title: 'Atlantic Registry',
+        description:
+            'Find out how and when to register with your Atlantic College to practise in all four Atlantic provinces',
+        url: 'https://cpsns.ns.ca/registrants/physicians/your-practice/atlantic-registry/',
+        icon: 'link' as const,
     },
 ];
 
@@ -41,6 +51,21 @@ function PdfIcon() {
             <path d="M18 6l6 6h-6V6z" fill="#3B4FD8"/>
             <path d="M10 6h8v6h6v14a2 2 0 01-2 2H10a2 2 0 01-2-2V8a2 2 0 012-2z" stroke="#3B4FD8" strokeWidth="1.5" strokeLinejoin="round"/>
             <text x="16" y="23" textAnchor="middle" fill="#3B4FD8" fontSize="6" fontWeight="700" fontFamily="sans-serif">PDF</text>
+        </svg>
+    );
+}
+
+function LinkTileIcon() {
+    return (
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="8" fill="#E0E7FF"/>
+            <path
+                d="M14.5 17.5l3-3M12.2 15.8l-1.4 1.4a3.2 3.2 0 004.5 4.5l1.4-1.4M19.8 16.2l1.4-1.4a3.2 3.2 0 00-4.5-4.5l-1.4 1.4"
+                stroke="#3B4FD8"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
         </svg>
     );
 }
@@ -99,7 +124,7 @@ export default function LocumResourcesPage(props: {
                                 boxShadow: hoveredUrl === doc.url ? '0 0 0 3px rgba(99,102,241,0.08)' : 'none',
                             }}
                         >
-                            <PdfIcon />
+                            {doc.icon === 'link' ? <LinkTileIcon /> : <PdfIcon />}
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontWeight: 600, fontSize: 15, color: '#1e293b', marginBottom: 2 }}>
                                     {doc.title}
