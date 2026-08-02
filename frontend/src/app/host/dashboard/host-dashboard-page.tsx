@@ -23,6 +23,12 @@ import VerificationStatusPill from '@/components/VerificationStatusPill';
 import { getHostVerificationStatusBadge } from '@/lib/profileVerificationBadge';
 import { HostJobDescriptionField, HostJobTitleField, HostKeyResponsibilitiesField, MmDdYyyyDateField } from '@/components/host/HostJobPostingFormFields';
 import {
+  HostJobPracticeSections,
+  emptyJobPracticeFields,
+  jobPracticeFromProfile,
+  type JobPracticeFields,
+} from '@/components/host/HostJobPracticeSections';
+import {
     maxIsoDate,
     isPostingEndDatePassed,
     parseMmDdYyyyToIso,
@@ -224,6 +230,12 @@ function ScheduleIcon() {
     return (<svg width="18" height="18" viewBox="0 0 18 18" fill="none">
       <rect x="2" y="4" width="14" height="12" rx="2" stroke="#3B4FD8" strokeWidth="1.4"/>
       <path d="M6 2v3M12 2v3M2 8h14" stroke="#3B4FD8" strokeWidth="1.4" strokeLinecap="round"/>
+    </svg>);
+}
+function PracticeIcon() {
+    return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M8 7h8M8 12h8M8 17h5" stroke="#1C32D2" strokeWidth="1.7" strokeLinecap="round"/>
+      <path d="M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" stroke="#1C32D2" strokeWidth="1.7"/>
     </svg>);
 }
 function RequirementsIcon() {
@@ -1114,6 +1126,10 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     ]);
     const [customCredential, setCustomCredential] = useState('');
     const [travelReq, setTravelReq] = useState(false);
+    const [practice, setPractice] = useState<JobPracticeFields>(() =>
+        emptyJobPracticeFields(),
+    );
+    const [practicePrefillDone, setPracticePrefillDone] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [savingDraft, setSavingDraft] = useState(false);
     const [saveDraftPromptOpen, setSaveDraftPromptOpen] = useState(false);
@@ -1149,6 +1165,23 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         lastAutoRespJobTitleRef.current = key;
         setRespBySection(auto);
     }, [jobTitle]);
+    useEffect(() => {
+        if (practicePrefillDone) return;
+        let cancelled = false;
+        void hostApi
+            .getProfile()
+            .then((profile) => {
+                if (cancelled) return;
+                setPractice(jobPracticeFromProfile(profile));
+                setPracticePrefillDone(true);
+            })
+            .catch(() => {
+                if (!cancelled) setPracticePrefillDone(true);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [practicePrefillDone]);
     function toggle(c: string) {
         setCredentials((p) => p.includes(c) ? p.filter((x) => x !== c) : [...p, c]);
     }
@@ -1194,6 +1227,16 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             return true;
         if (travelReq)
             return true;
+        if (
+            practice.practiceType.trim() ||
+            practice.numPhysicians.trim() ||
+            practice.emr.trim() ||
+            practice.patientVol.trim() ||
+            practice.clinicDesc.trim() ||
+            practice.amenities.length > 0 ||
+            practice.accommodationProvided
+        )
+            return true;
         if (credentials.length !== 1 || credentials[0] !== 'CPSNS Full License')
             return true;
         for (const section of RESPONSIBILITY_SECTIONS) {
@@ -1236,6 +1279,13 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             requiredCredentials: credentials,
             travelRequired: travelReq,
             scheduleFlexible: false,
+            practiceType: practice.practiceType.trim() || undefined,
+            numPhysicians: practice.numPhysicians.trim() || undefined,
+            emr: practice.emr.trim() || undefined,
+            patientVol: practice.patientVol.trim() || undefined,
+            clinicDesc: practice.clinicDesc.trim() || undefined,
+            amenities: practice.amenities,
+            accommodationProvided: practice.accommodationProvided,
             status: 'DRAFT',
             saveAsDraft: true,
         };
@@ -1340,6 +1390,13 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 requiredCredentials: credentials,
                 travelRequired: travelReq,
                 scheduleFlexible: false,
+                practiceType: practice.practiceType.trim() || undefined,
+                numPhysicians: practice.numPhysicians.trim() || undefined,
+                emr: practice.emr.trim() || undefined,
+                patientVol: practice.patientVol.trim() || undefined,
+                clinicDesc: practice.clinicDesc.trim() || undefined,
+                amenities: practice.amenities,
+                accommodationProvided: practice.accommodationProvided,
                 status: verified ? 'ACTIVE' : 'DRAFT',
             };
             const { job } = await hostApi.createJob(payload);
@@ -1741,11 +1798,59 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                   <input type="checkbox" checked={travelReq} onChange={(e) => setTravelReq(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#1C32D2' }}/>
                   Locum is required to travel to Clinic
                 </label>
+              </div>
+            </div>) : step > 3 ? (<CollapsedStep icon={<RequirementsIcon />} label="Requirements" sub="List mandatory licenses and experience" onClick={() => setStep(3)}/>) : (<CollapsedStep icon={<RequirementsIcon />} label="Requirements" sub="List mandatory licenses and experience" onClick={() => setStep(3)}/>)}
+
+          {step === 4 ? (<div style={{
+                border: '1px solid #E5E7EB',
+                borderRadius: 10,
+                position: 'relative',
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '14px 16px 10px',
+            }}>
+                <div style={{
+                width: 34,
+                height: 34,
+                borderRadius: '50%',
+                background: '#EEF0FB',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+            }}>
+                  <PracticeIcon />
+                </div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#0B0F1F' }}>
+                    Practice &amp; services
+                  </div>
+                  <div style={{ fontSize: 12, color: '#9CA3AF' }}>
+                    Prefills from your profile — edit for this job
+                  </div>
+                </div>
+              </div>
+              <ActiveBadge />
+              <div style={{
+                padding: '0 16px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 16,
+            }}>
+                <HostJobPracticeSections
+                  value={practice}
+                  onChange={setPractice}
+                  inputStyle={fieldInp}
+                  labelStyle={lbl}
+                />
                 {submitError && (<p style={{ fontSize: 13, color: '#DC2626', margin: 0 }}>
                     {submitError}
                   </p>)}
               </div>
-            </div>) : (<CollapsedStep icon={<RequirementsIcon />} label="Requirements" sub="List mandatory licenses and experience" onClick={() => setStep(3)}/>)}
+            </div>) : (<CollapsedStep icon={<PracticeIcon />} label="Practice & services" sub="Prefills from your profile — edit for this job" onClick={() => setStep(4)}/>)}
         </div>
 
         
@@ -1756,7 +1861,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             justifyContent: 'flex-end',
             flexShrink: 0,
         }}>
-          {step < 3 ? (<button onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3)} style={{
+          {step < 4 ? (<button onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3 | 4)} style={{
                 padding: '10px 28px',
                 background: '#fff',
                 border: '1px solid #D0D5DD',

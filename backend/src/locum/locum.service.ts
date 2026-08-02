@@ -480,6 +480,8 @@ export class LocumService {
               address1: null,
               practiceType: null,
               emr: null,
+              numPhysicians: null,
+              patientVol: null,
               servicesOffered: [] as string[],
               highlights: null,
             }
@@ -487,7 +489,32 @@ export class LocumService {
 
         return {
           ...j,
-          hostProfile,
+          hostProfile: redactHostDetails
+            ? hostProfile
+            : (() => {
+                const hp = hostProfile;
+                const hasJobPracticeSnapshot =
+                  Boolean(j.practiceType?.trim()) ||
+                  Boolean(j.emr?.trim()) ||
+                  Boolean(j.clinicDesc?.trim()) ||
+                  Boolean(j.numPhysicians?.trim()) ||
+                  Boolean(j.patientVol?.trim()) ||
+                  (Array.isArray(j.servicesRequired) &&
+                    j.servicesRequired.length > 0);
+                return {
+                  ...hp,
+                  practiceType:
+                    j.practiceType?.trim() || hp.practiceType || null,
+                  emr: j.emr?.trim() || hp.emr || null,
+                  numPhysicians: j.numPhysicians?.trim() || null,
+                  patientVol: j.patientVol?.trim() || null,
+                  servicesOffered: hasJobPracticeSnapshot
+                    ? (j.servicesRequired ?? [])
+                    : hp.servicesOffered,
+                  highlights: j.clinicDesc?.trim() || hp.highlights || null,
+                };
+              })(),
+          accommodationProvided: j.accommodationProvided,
           isDeleted: j.isDeleted,
           applicationsCount: j._count.applications,
         };
