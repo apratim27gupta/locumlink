@@ -42,13 +42,23 @@ import {
 } from './job-schedule.util.js';
 import { getReviewPlaygroundEmails, isReviewPlaygroundEmail } from '../config/review-playground.util.js';
 
-function mapJobPostingForApi<T extends { startDate?: Date | null; endDate?: Date | null }>(
+function mapJobPostingForApi<T extends {
+  startDate?: Date | null;
+  endDate?: Date | null;
+  servicesRequired?: string[];
+  clinicDesc?: string | null;
+}>(
   job: T,
-): T & { startDate: string | null; endDate: string | null } {
+): T & {
+  startDate: string | null;
+  endDate: string | null;
+  amenities: string[];
+} {
   return {
     ...job,
     startDate: formatCalendarDateForApi(job.startDate ?? null),
     endDate: formatCalendarDateForApi(job.endDate ?? null),
+    amenities: job.servicesRequired ?? [],
   };
 }
 
@@ -478,7 +488,16 @@ export class HostService {
     const hostProfileId = await this.getHostProfileId(userId);
     const hostProfile = await this.prisma.hostProfile.findUnique({
       where: { id: hostProfileId },
-      select: { cpsnsVerificationStatus: true },
+      select: {
+        cpsnsVerificationStatus: true,
+        practiceType: true,
+        numPhysicians: true,
+        emr: true,
+        patientVol: true,
+        highlights: true,
+        servicesOffered: true,
+        accommodationProvided: true,
+      },
     });
     const isVerified = isCpsnsVerificationApproved(
       hostProfile?.cpsnsVerificationStatus,
@@ -505,16 +524,52 @@ export class HostService {
       allowPast: saveAsDraft,
     });
 
+    const amenitiesFromDto =
+      dto.amenities ?? dto.servicesRequired;
+    const practiceType =
+      dto.practiceType !== undefined
+        ? dto.practiceType.trim() || null
+        : hostProfile?.practiceType ?? null;
+    const numPhysicians =
+      dto.numPhysicians !== undefined
+        ? dto.numPhysicians.trim() || null
+        : hostProfile?.numPhysicians ?? null;
+    const emr =
+      dto.emr !== undefined
+        ? dto.emr.trim() || null
+        : hostProfile?.emr ?? null;
+    const patientVol =
+      dto.patientVol !== undefined
+        ? dto.patientVol.trim() || null
+        : hostProfile?.patientVol ?? null;
+    const clinicDesc =
+      dto.clinicDesc !== undefined
+        ? dto.clinicDesc.trim().slice(0, 1000) || null
+        : (hostProfile?.highlights ?? null);
+    const servicesRequired =
+      amenitiesFromDto !== undefined
+        ? amenitiesFromDto
+        : (hostProfile?.servicesOffered ?? []);
+    const accommodationProvided =
+      dto.accommodationProvided !== undefined
+        ? dto.accommodationProvided
+        : (hostProfile?.accommodationProvided ?? false);
+
     const job = await this.prisma.jobPosting.create({
       data: {
         hostProfileId,
         title: dto.title,
         description: dto.description ?? '',
-        servicesRequired: dto.servicesRequired ?? [],
+        servicesRequired,
         status,
         location: dto.location ?? '',
         isRural: dto.isRural ?? false,
-        accommodationProvided: dto.accommodationProvided ?? false,
+        accommodationProvided,
+        practiceType,
+        numPhysicians,
+        emr,
+        patientVol,
+        clinicDesc,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
         keyResponsibilities: dto.keyResponsibilities ?? [],
         startDate: schedule.startDate ?? null,
@@ -772,6 +827,26 @@ export class HostService {
         }),
         ...(dto.requiredCredentials != null && {
           requiredCredentials: dto.requiredCredentials,
+        }),
+        ...(dto.isRural != null && { isRural: dto.isRural }),
+        ...(dto.accommodationProvided != null && {
+          accommodationProvided: dto.accommodationProvided,
+        }),
+        ...((dto.amenities != null || dto.servicesRequired != null) && {
+          servicesRequired: dto.amenities ?? dto.servicesRequired ?? [],
+        }),
+        ...(dto.practiceType != null && {
+          practiceType: dto.practiceType.trim() || null,
+        }),
+        ...(dto.numPhysicians != null && {
+          numPhysicians: dto.numPhysicians.trim() || null,
+        }),
+        ...(dto.emr != null && { emr: dto.emr.trim() || null }),
+        ...(dto.patientVol != null && {
+          patientVol: dto.patientVol.trim() || null,
+        }),
+        ...(dto.clinicDesc != null && {
+          clinicDesc: dto.clinicDesc.trim().slice(0, 1000) || null,
         }),
         // PRD Section 2.2: allow updating leave type + full/half day
         ...(dto.leaveType != null && { leaveType: dto.leaveType }),

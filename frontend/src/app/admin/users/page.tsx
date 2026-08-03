@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Ban, Bell, Download, Eye, FileText, Mail, MessageSquare, Search, UserCheck, XCircle } from 'lucide-react';
+import { Ban, Bell, ChevronDown, Download, Eye, FileText, Mail, MessageSquare, Search, UserCheck, XCircle } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { adminFetchJson, adminDownloadUsersCsv } from '@/lib/adminApi';
 import { formatAdminCpsnsDisplay } from '@/lib/cpsnsVerify';
@@ -89,16 +89,42 @@ function reminderChannelLabel(channel: string | null | undefined): string {
   return '';
 }
 
-function matchesStatusFilter(row: Row, filter: string): boolean {
-  if (filter === 'all') return true;
-  const { label } = displayStatus(row);
+const STATUS_FILTER_OPTIONS = [
+  { value: 'verified', label: 'Verified' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'under_review', label: 'Under review' },
+  { value: 'pending', label: 'Setup incomplete' },
+  { value: 'suspended', label: 'Suspended' },
+  { value: 'deactivated', label: 'Deactivated' },
+] as const;
+
+type StatusFilterValue = (typeof STATUS_FILTER_OPTIONS)[number]['value'];
+
+function statusFilterMatchesLabel(filter: StatusFilterValue, label: string): boolean {
   if (filter === 'verified') return label === 'Verified';
   if (filter === 'rejected') return label === 'Rejected';
   if (filter === 'under_review') return label === 'Under review';
   if (filter === 'pending') return label === 'Setup incomplete';
   if (filter === 'suspended') return label === 'Suspended';
   if (filter === 'deactivated') return label === 'Deactivated';
-  return true;
+  return false;
+}
+
+/** Empty selection = all statuses. */
+function matchesStatusFilters(row: Row, filters: StatusFilterValue[]): boolean {
+  if (filters.length === 0) return true;
+  const { label } = displayStatus(row);
+  return filters.some((f) => statusFilterMatchesLabel(f, label));
+}
+
+function statusFilterSummary(filters: StatusFilterValue[]): string {
+  if (filters.length === 0) return 'All Statuses';
+  const labels = STATUS_FILTER_OPTIONS.filter((o) => filters.includes(o.value)).map(
+    (o) => o.label,
+  );
+  if (labels.length === 1) return labels[0]!;
+  if (labels.length === 2) return `${labels[0]}, ${labels[1]}`;
+  return `${labels.length} statuses`;
 }
 
 type UserProfileDocument = {
@@ -158,7 +184,9 @@ export default function AdminUsersPage() {
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilters, setStatusFilters] = useState<StatusFilterValue[]>([]);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -197,6 +225,23 @@ export default function AdminUsersPage() {
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, [remindMenuForId]);
 
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (statusMenuRef.current?.contains(e.target as Node)) return;
+      setStatusMenuOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setStatusMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [statusMenuOpen]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setErr(null);
@@ -221,7 +266,7 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [debouncedQ, roleFilter, statusFilter]);
+  }, [debouncedQ, roleFilter, statusFilters]);
 
   async function patchUser(
     id: string,
@@ -405,7 +450,7 @@ export default function AdminUsersPage() {
     if (t && !r.email.toLowerCase().includes(t)) return false;
     if (roleFilter === 'host' && r.role !== 'HOST') return false;
     if (roleFilter === 'locum' && r.role !== 'LOCUM') return false;
-    if (!matchesStatusFilter(r, statusFilter)) return false;
+    if (!matchesStatusFilters(r, statusFilters)) return false;
     return true;
   });
 
@@ -565,19 +610,50 @@ export default function AdminUsersPage() {
           <option value="host">Host Physicians</option>
           <option value="locum">Locum Physicians</option>
         </select>
-        <select
-          className="input"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="all">All Statuses</option>
-          <option value="verified">Verified</option>
-          <option value="rejected">Rejected</option>
-          <option value="under_review">Under review</option>
-          <option value="pending">Setup incomplete</option>
-          <option value="suspended">Suspended</option>
-          <option value="deactivated">Deactivated</option>
-        </select>
+        <div className="multi-select" ref={statusMenuRef}>
+          <button
+            type="button"
+            className="input multi-select-trigger"
+            aria-haspopup="listbox"
+            aria-expanded={statusMenuOpen}
+            onClick={() => setStatusMenuOpen((open) => !open)}
+          >
+            <span className="multi-select-label">{statusFilterSummary(statusFilters)}</span>
+            <ChevronDown size={16} aria-hidden />
+          </button>
+          {statusMenuOpen ? (
+            <div className="multi-select-menu" role="listbox" aria-multiselectable="true">
+              <label className="multi-select-option">
+                <input
+                  type="checkbox"
+                  checked={statusFilters.length === 0}
+                  onChange={() => setStatusFilters([])}
+                />
+                <span>All Statuses</span>
+              </label>
+              {STATUS_FILTER_OPTIONS.map((opt) => {
+                const checked = statusFilters.includes(opt.value);
+                return (
+                  <label key={opt.value} className="multi-select-option">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setStatusFilters((prev) => {
+                          if (prev.includes(opt.value)) {
+                            return prev.filter((v) => v !== opt.value);
+                          }
+                          return [...prev, opt.value];
+                        });
+                      }}
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {broadcastMode ? (

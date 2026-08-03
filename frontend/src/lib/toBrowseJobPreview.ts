@@ -55,12 +55,34 @@ export function toBrowseJobPreview(
       postalCode: profile?.postalCode?.trim() || undefined,
       address: addressFromParts || null,
       address1: profile?.address1?.trim() || null,
-      practiceType: profile?.practiceType?.trim() || null,
-      emr: profile?.emr?.trim() || null,
-      servicesOffered: Array.isArray(profile?.amenities)
-        ? profile.amenities
-        : [],
-      highlights: profile?.clinicDesc?.trim() || null,
+      practiceType:
+        asNullableString(
+          (job as { practiceType?: unknown }).practiceType,
+        ) ??
+        (profile?.practiceType?.trim() || null),
+      emr:
+        asNullableString((job as { emr?: unknown }).emr) ??
+        (profile?.emr?.trim() || null),
+      numPhysicians:
+        asNullableString(
+          (job as { numPhysicians?: unknown }).numPhysicians,
+        ) ??
+        (profile?.numPhysicians?.trim() || null),
+      patientVol:
+        asNullableString((job as { patientVol?: unknown }).patientVol) ??
+        (profile?.patientVol?.trim() || null),
+      servicesOffered: (() => {
+        const fromJob = asStringArray(
+          (job as { amenities?: unknown; servicesRequired?: unknown })
+            .amenities ??
+            (job as { servicesRequired?: unknown }).servicesRequired,
+        );
+        if (fromJob.length > 0) return fromJob;
+        return Array.isArray(profile?.amenities) ? profile.amenities : [];
+      })(),
+      highlights:
+        asNullableString((job as { clinicDesc?: unknown }).clinicDesc) ??
+        (profile?.clinicDesc?.trim() || null),
     },
     startDate: asNullableString(job.startDate),
     endDate: asNullableString(job.endDate),

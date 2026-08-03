@@ -15,6 +15,12 @@ import {
   MmDdYyyyDateField,
 } from '@/components/host/HostJobPostingFormFields';
 import {
+  HostJobPracticeSections,
+  emptyJobPracticeFields,
+  jobPracticeFromProfile,
+  type JobPracticeFields,
+} from '@/components/host/HostJobPracticeSections';
+import {
   HOST_JOB_CREDENTIAL_OPTIONS,
   autoResponsibilitiesForJobTitle,
   buildKeyResponsibilitiesPayload,
@@ -76,9 +82,10 @@ export default function HostEditJobPage(props: {
   const [endTime, setEndTime] = useState('14:00');
   const [ratePerDay, setRatePerDay] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
-  const [servicesRaw, setServicesRaw] = useState('');
+  const [practice, setPractice] = useState<JobPracticeFields>(() =>
+    emptyJobPracticeFields(),
+  );
   const [isRural, setIsRural] = useState(false);
-  const [accommodationProvided, setAccommodationProvided] = useState(false);
   const [yearsExp, setYearsExp] = useState('');
   const [credentials, setCredentials] = useState<string[]>([
     'CPSNS Full License',
@@ -112,10 +119,6 @@ export default function HostEditJobPage(props: {
   }, []);
 
   function snapshotState(): string {
-    const servicesRequired = servicesRaw
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
     const startIso = parseMmDdYyyyToIso(startDateInput);
     const endIso = parseMmDdYyyyToIso(endDateInput);
     return JSON.stringify({
@@ -134,9 +137,8 @@ export default function HostEditJobPage(props: {
       endTime: endTime || '',
       ratePerDay: ratePerDay.trim(),
       expiresAt: expiresAt || '',
-      servicesRequired,
+      practice,
       isRural: Boolean(isRural),
-      accommodationProvided: Boolean(accommodationProvided),
       yearsExp: yearsExp.trim(),
       credentials: [...credentials]
         .map((s) => s.trim())
@@ -155,8 +157,8 @@ export default function HostEditJobPage(props: {
         ? [kr]
         : [];
     const parsed = parseKeyResponsibilitiesFromLines(krLines);
-    const sr = job?.servicesRequired;
-    const servicesRequired = Array.isArray(sr)
+    const sr = job?.servicesRequired ?? job?.amenities;
+    const amenities = Array.isArray(sr)
       ? sr.map((s: unknown) => String(s).trim()).filter(Boolean)
       : typeof sr === 'string'
         ? sr
@@ -164,6 +166,15 @@ export default function HostEditJobPage(props: {
             .map((s) => s.trim())
             .filter(Boolean)
         : [];
+    const practice: JobPracticeFields = {
+      practiceType: String(job?.practiceType ?? '').trim(),
+      numPhysicians: String(job?.numPhysicians ?? '').trim(),
+      emr: String(job?.emr ?? '').trim(),
+      patientVol: String(job?.patientVol ?? '').trim(),
+      clinicDesc: String(job?.clinicDesc ?? '').trim().slice(0, 1000),
+      amenities,
+      accommodationProvided: Boolean(job?.accommodationProvided),
+    };
     const startLocal = utcPartsToLocalInputValues(
       typeof job?.startDate === 'string' ? job.startDate : null,
       typeof job?.startTime === 'string' ? job.startTime : null,
@@ -199,9 +210,8 @@ export default function HostEditJobPage(props: {
           : String(ppd).trim(),
       expiresAt:
         toDatetimeLocalValue(job?.expiresAt as string | null | undefined) || '',
-      servicesRequired,
+      practice,
       isRural: Boolean(job?.isRural),
-      accommodationProvided: Boolean(job?.accommodationProvided),
       yearsExp:
         ye === null || ye === undefined || ye === '' ? '' : String(ye).trim(),
       credentials: [...credentials].sort(),
@@ -274,8 +284,6 @@ export default function HostEditJobPage(props: {
       .then(({ job }) => {
         setJobStatus((job as { status?: string }).status ?? '');
         if (cancelled) return;
-        // Capture initial state from server payload so the "dirty" check is stable.
-        initialSnapshotRef.current = snapshotFromJob(job);
         setTitle(job.title ?? '');
         setDescription(
           typeof job.description === 'string' ? job.description : '',
@@ -326,16 +334,50 @@ export default function HostEditJobPage(props: {
           ppd === null || ppd === undefined || ppd === '' ? '' : String(ppd),
         );
         setExpiresAt(toDatetimeLocalValue(job.expiresAt as string | undefined));
-        const sr = (
-          job as {
-            servicesRequired?: unknown;
-          }
-        ).servicesRequired;
-        setServicesRaw(
-          Array.isArray(sr) ? sr.join(', ') : typeof sr === 'string' ? sr : '',
-        );
+        const sr =
+          (job as { amenities?: unknown; servicesRequired?: unknown })
+            .amenities ??
+          (job as { servicesRequired?: unknown }).servicesRequired;
+        const amenities = Array.isArray(sr)
+          ? sr.map((s) => String(s).trim()).filter(Boolean)
+          : typeof sr === 'string'
+            ? sr
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : [];
+        const fromJob: JobPracticeFields = {
+          practiceType: String(
+            (job as { practiceType?: unknown }).practiceType ?? '',
+          ).trim(),
+          numPhysicians: String(
+            (job as { numPhysicians?: unknown }).numPhysicians ?? '',
+          ).trim(),
+          emr: String((job as { emr?: unknown }).emr ?? '').trim(),
+          patientVol: String(
+            (job as { patientVol?: unknown }).patientVol ?? '',
+          ).trim(),
+          clinicDesc: String(
+            (job as { clinicDesc?: unknown }).clinicDesc ?? '',
+          )
+            .trim()
+            .slice(0, 1000),
+          amenities,
+          accommodationProvided: Boolean(job.accommodationProvided),
+        };
+        const hasJobPractice =
+          fromJob.practiceType ||
+          fromJob.numPhysicians ||
+          fromJob.emr ||
+          fromJob.patientVol ||
+          fromJob.clinicDesc ||
+          fromJob.amenities.length > 0 ||
+          fromJob.accommodationProvided;
+        const resolvedPractice = hasJobPractice
+          ? fromJob
+          : jobPracticeFromProfile(profile ?? null);
+        setPractice(resolvedPractice);
         setIsRural(Boolean(job.isRural));
-        setAccommodationProvided(Boolean(job.accommodationProvided));
         const ye = (
           job as {
             minYearsExperience?: unknown;
@@ -363,6 +405,17 @@ export default function HostEditJobPage(props: {
             ).travelRequired,
           ),
         );
+        initialSnapshotRef.current = snapshotFromJob({
+          ...job,
+          practiceType: resolvedPractice.practiceType,
+          numPhysicians: resolvedPractice.numPhysicians,
+          emr: resolvedPractice.emr,
+          patientVol: resolvedPractice.patientVol,
+          clinicDesc: resolvedPractice.clinicDesc,
+          servicesRequired: resolvedPractice.amenities,
+          amenities: resolvedPractice.amenities,
+          accommodationProvided: resolvedPractice.accommodationProvided,
+        });
         setJobLoaded(true);
         setLoadBusy(false);
       })
@@ -435,10 +488,6 @@ export default function HostEditJobPage(props: {
             endTime,
           })
         : null;
-    const servicesRequired = servicesRaw
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
     await hostApi.updateJob(jobId, {
       title: t,
       description: description.trim() || undefined,
@@ -456,9 +505,14 @@ export default function HostEditJobPage(props: {
       requiredCredentials: credentials,
       travelRequired: travelReq,
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
-      servicesRequired: servicesRequired.length ? servicesRequired : [],
+      amenities: practice.amenities,
       isRural,
-      accommodationProvided,
+      accommodationProvided: practice.accommodationProvided,
+      practiceType: practice.practiceType.trim() || '',
+      numPhysicians: practice.numPhysicians.trim() || '',
+      emr: practice.emr.trim() || '',
+      patientVol: practice.patientVol.trim() || '',
+      clinicDesc: practice.clinicDesc.trim() || '',
     });
     // Update snapshot: changes are now saved.
     initialSnapshotRef.current = snapshotState();
@@ -1006,6 +1060,16 @@ export default function HostEditJobPage(props: {
                   </label>
                 </div>
               </div>
+              <div style={sectionCard}>
+                <div style={sectionStack}>
+                  <HostJobPracticeSections
+                    value={practice}
+                    onChange={setPractice}
+                    inputStyle={inp}
+                    labelStyle={lbl}
+                  />
+                </div>
+              </div>
               {err && (
                 <p style={{ fontSize: 13, color: '#dc2626', margin: 0 }}>
                   {err}
@@ -1086,10 +1150,6 @@ export default function HostEditJobPage(props: {
                     const yearsNum = yearsExp.trim()
                       ? Number(yearsExp)
                       : NaN;
-                    const servicesRequired = servicesRaw
-                      .split(',')
-                      .map((s) => s.trim())
-                      .filter(Boolean);
                     await hostApi.updateJob(jobId, {
                       title: t,
                       description: description.trim() || undefined,
@@ -1111,11 +1171,14 @@ export default function HostEditJobPage(props: {
                       expiresAt: expiresAt
                         ? new Date(expiresAt).toISOString()
                         : undefined,
-                      servicesRequired: servicesRequired.length
-                        ? servicesRequired
-                        : [],
+                      amenities: practice.amenities,
                       isRural,
-                      accommodationProvided,
+                      accommodationProvided: practice.accommodationProvided,
+                      practiceType: practice.practiceType.trim() || '',
+                      numPhysicians: practice.numPhysicians.trim() || '',
+                      emr: practice.emr.trim() || '',
+                      patientVol: practice.patientVol.trim() || '',
+                      clinicDesc: practice.clinicDesc.trim() || '',
                       status: 'ACTIVE',
                     });
                     beforeClientNavigation('/host/dashboard');

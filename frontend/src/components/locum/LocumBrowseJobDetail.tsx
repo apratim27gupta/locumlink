@@ -635,6 +635,20 @@ export function LocumBrowseJobDetail({
               <br />
             </>
           ) : null}
+          {job.hostProfile.numPhysicians ? (
+            <>
+              <strong
+                style={{
+                  color: '#374151',
+                  fontWeight: 'var(--font-weight-bold)',
+                }}
+              >
+                No. Of Physicians:
+              </strong>{' '}
+              {job.hostProfile.numPhysicians}
+              <br />
+            </>
+          ) : null}
           {job.hostProfile.emr ? (
             <>
               <strong
@@ -646,6 +660,20 @@ export function LocumBrowseJobDetail({
                 EMR System:
               </strong>{' '}
               {job.hostProfile.emr}
+              <br />
+            </>
+          ) : null}
+          {job.hostProfile.patientVol ? (
+            <>
+              <strong
+                style={{
+                  color: '#374151',
+                  fontWeight: 'var(--font-weight-bold)',
+                }}
+              >
+                Patient Volume Per Day:
+              </strong>{' '}
+              {job.hostProfile.patientVol}
               <br />
             </>
           ) : null}

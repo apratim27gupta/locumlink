@@ -278,6 +278,13 @@ model JobPosting {
   accommodationProvided Boolean     @default(false)
   travelAllowance       Decimal?    @db.Decimal(10, 2)
 
+  // Snapshot of host practice details (editable per job; shown to locums)
+  practiceType          String?     @map("practice_type")
+  numPhysicians         String?     @map("num_physicians")
+  emr                   String?
+  patientVol            String?     @map("patient_vol")
+  clinicDesc            String?     @map("clinic_desc") @db.Text
+
   location              String
   isRural               Boolean     @default(false)
   requiredSpecialty     Specialty?

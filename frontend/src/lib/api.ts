@@ -392,6 +392,8 @@ export type BrowseJobHostProfile = {
     address1: string | null;
     practiceType: string | null;
     emr: string | null;
+    numPhysicians?: string | null;
+    patientVol?: string | null;
     servicesOffered: string[];
     highlights: string | null;
 };
@@ -674,8 +676,14 @@ export interface CreateJobPayload {
     location?: string;
     expiresAt?: string;
     servicesRequired?: string[];
+    amenities?: string[];
     isRural?: boolean;
     accommodationProvided?: boolean;
+    practiceType?: string;
+    numPhysicians?: string;
+    emr?: string;
+    patientVol?: string;
+    clinicDesc?: string;
     keyResponsibilities?: string[];
     startDate?: string;
     endDate?: string;

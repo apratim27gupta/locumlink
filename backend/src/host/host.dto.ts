@@ -166,6 +166,31 @@ export class CreateJobDto {
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
+  amenities?: string[];
+
+  @IsString()
+  @IsOptional()
+  practiceType?: string;
+
+  @IsString()
+  @IsOptional()
+  numPhysicians?: string;
+
+  @IsString()
+  @IsOptional()
+  emr?: string;
+
+  @IsString()
+  @IsOptional()
+  patientVol?: string;
+
+  @IsString()
+  @IsOptional()
+  clinicDesc?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
   keyResponsibilities?: string[];
 
   @IsString()
@@ -283,6 +308,44 @@ export class UpdateJobDto {
   @IsString({ each: true })
   @IsOptional()
   requiredCredentials?: string[];
+
+  @IsBoolean()
+  @IsOptional()
+  isRural?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  accommodationProvided?: boolean;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  servicesRequired?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  amenities?: string[];
+
+  @IsString()
+  @IsOptional()
+  practiceType?: string;
+
+  @IsString()
+  @IsOptional()
+  numPhysicians?: string;
+
+  @IsString()
+  @IsOptional()
+  emr?: string;
+
+  @IsString()
+  @IsOptional()
+  patientVol?: string;
+
+  @IsString()
+  @IsOptional()
+  clinicDesc?: string;
 
   // PRD Section 2.2: allow updating leave type and full/half day
   @IsOptional()
