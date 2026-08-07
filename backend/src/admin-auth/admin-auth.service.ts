@@ -11,6 +11,7 @@ import { randomInt } from 'node:crypto';
 import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EmailService } from '../notifications/email.service.js';
+import { buildOtpEmail } from '../notifications/otp-email.js';
 import {
   ADMIN_AUTH_COOKIE,
   ADMIN_AUTH_COOKIE_OPTS,
@@ -119,8 +120,6 @@ export class AdminAuthService {
     await this.sendAdminOtpEmail({
       to: email,
       otp,
-      subject: 'Your Locum Link admin sign-in code',
-      intro: 'Use this code to sign in to the Locum Link admin portal:',
       eventType: 'ADMIN_LOGIN_OTP',
       adminId: admin.id,
       ttlMs: ADMIN_LOGIN_OTP_TTL_MS,
@@ -264,31 +263,20 @@ export class AdminAuthService {
   private async sendAdminOtpEmail(params: {
     to: string;
     otp: string;
-    subject: string;
-    intro: string;
     eventType: string;
     adminId: string;
     ttlMs: number;
   }): Promise<void> {
-    const ttlMin = Math.round(params.ttlMs / 60_000);
-    const text = [
-      params.intro,
-      '',
-      params.otp,
-      '',
-      `This code expires in ${ttlMin} minutes.`,
-      'If you did not request this code, you can ignore this email.',
-    ].join('\n');
-    const html = `
-      <p>${params.intro}</p>
-      <p style="font-size:28px;font-weight:700;letter-spacing:4px;margin:24px 0">${params.otp}</p>
-      <p style="color:#5a6478">This code expires in ${ttlMin} minutes.</p>
-      <p style="color:#5a6478">If you did not request this code, you can ignore this email.</p>
-    `.trim();
+    const { subject, text, html } = buildOtpEmail({
+      otp: params.otp,
+      ttlMinutes: Math.round(params.ttlMs / 60_000),
+      productLabel: 'the Locum Link admin portal',
+      subject: 'Locum Link admin sign-in code',
+    });
 
     const result = await this.email.send({
       to: params.to,
-      subject: params.subject,
+      subject,
       text,
       html,
     });

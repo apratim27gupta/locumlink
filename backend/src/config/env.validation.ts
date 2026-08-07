@@ -78,6 +78,11 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   MAIL_FROM_NAME: string = 'Locum Link';
+
+  /** Comma-separated emails that must never receive SMTP (known hard bounces). */
+  @IsString()
+  @IsOptional()
+  MAIL_SUPPRESS_EMAILS?: string;
   @IsString()
   @IsOptional()
   SENTRY_DSN?: string;

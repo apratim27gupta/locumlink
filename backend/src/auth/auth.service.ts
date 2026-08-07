@@ -20,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { GcsService } from '../gcs/gcs.service.js';
 import { EmailService } from '../notifications/email.service.js';
+import { buildOtpEmail } from '../notifications/otp-email.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { JwtPayload } from './interfaces/jwt-payload.interface.js';
@@ -435,21 +436,12 @@ export class AuthService {
       return;
     }
 
-    const subject = 'Your Locum Link verification code';
-    const text = [
-      'Use this code to sign in to Locum Link:',
-      '',
+    const { subject, text, html } = buildOtpEmail({
       otp,
-      '',
-      'This code expires in 10 minutes.',
-      'If you did not request this code, you can ignore this email.',
-    ].join('\n');
-    const html = `
-      <p>Use this code to sign in to <strong>Locum Link</strong>:</p>
-      <p style="font-size:28px;font-weight:700;letter-spacing:4px;margin:24px 0">${otp}</p>
-      <p style="color:#5a6478">This code expires in 10 minutes.</p>
-      <p style="color:#5a6478">If you did not request this code, you can ignore this email.</p>
-    `.trim();
+      ttlMinutes: Math.round(OTP_TTL_MS / 60_000),
+      productLabel: 'Locum Link',
+      subject: 'Locum Link sign-in code',
+    });
 
     const result = await this.email.send({
       to: normalizedEmail,
