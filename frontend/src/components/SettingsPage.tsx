@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import DashLayout from '@/components/DashLayout';
 import { NavIcon } from '@/components/DashLayout';
 import { useAuth } from '@/providers/AuthProvider';
-import { authApi } from '@/lib/api';
+import { authApi, DEFAULT_EMAIL_PREFS, type EmailPrefs } from '@/lib/api';
 import { getRole, clearProfileCompleteCookies } from '@/lib/auth';
 import { beforeClientNavigation } from '@/lib/topLoader';
 
@@ -36,6 +36,8 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
 
   const NOTIF_KEYS = ['messages', 'applications', 'reminders', 'account'] as const;
   type NotifKey = typeof NOTIF_KEYS[number];
+  const EMAIL_KEYS = ['messages', 'applications', 'reminders', 'account'] as const;
+  type EmailKey = typeof EMAIL_KEYS[number];
   const loadPrefs = () => {
     if (typeof window === 'undefined') return { messages: true, applications: true, reminders: true, account: true };
     const saved = localStorage.getItem('notifPrefs');
@@ -43,10 +45,22 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
     return { messages: true, applications: true, reminders: true, account: true };
   };
   const [notifPrefs, setNotifPrefs] = useState<Record<NotifKey, boolean>>(loadPrefs);
+  const [emailPrefs, setEmailPrefs] = useState<EmailPrefs>(DEFAULT_EMAIL_PREFS);
+  const [emailPrefsReady, setEmailPrefsReady] = useState(false);
   const toggleNotif = (key: NotifKey) => {
     setNotifPrefs(prev => {
       const next = { ...prev, [key]: !prev[key] };
       localStorage.setItem('notifPrefs', JSON.stringify(next));
+      return next;
+    });
+  };
+  const toggleEmail = (key: EmailKey) => {
+    setEmailPrefs((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      void authApi.updateEmailPrefs({ [key]: next[key] }).catch(() => {
+        setEmailPrefs(prev);
+        window.alert('Could not save email preference. Try again.');
+      });
       return next;
     });
   };
@@ -55,8 +69,62 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
   const [email, setEmail] = useState('');
 
   useEffect(() => {
-    authApi.getMe().then((me) => setEmail(me.email ?? '')).catch(() => {});
+    authApi
+      .getMe()
+      .then((me) => {
+        setEmail(me.email ?? '');
+        setEmailPrefs(me.emailPrefs ?? DEFAULT_EMAIL_PREFS);
+        setEmailPrefsReady(true);
+      })
+      .catch(() => {
+        setEmailPrefsReady(true);
+      });
   }, []);
+
+  function prefSwitch(
+    checked: boolean,
+    onToggle: () => void,
+    opts?: { disabled?: boolean; lockedOn?: boolean },
+  ) {
+    const on = opts?.lockedOn ? true : checked;
+    const disabled = Boolean(opts?.disabled || opts?.lockedOn);
+    return (
+      <button
+        role="switch"
+        aria-checked={on}
+        onClick={() => {
+          if (!disabled) onToggle();
+        }}
+        disabled={disabled}
+        style={{
+          position: 'relative',
+          width: 44,
+          height: 24,
+          borderRadius: 12,
+          border: 'none',
+          background: on ? 'linear-gradient(270deg,#3A65DB,#1B31D2)' : '#D1D5DB',
+          cursor: disabled ? 'default' : 'pointer',
+          flexShrink: 0,
+          transition: 'background 0.2s',
+          opacity: 1,
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute',
+            top: 3,
+            left: on ? 23 : 3,
+            width: 18,
+            height: 18,
+            borderRadius: '50%',
+            background: '#fff',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+            transition: 'left 0.2s',
+          }}
+        />
+      </button>
+    );
+  }
 
   function handleLogout() {
     logout();
@@ -237,24 +305,48 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
               <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Last-minute shift cancellations</div>
               <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>Cannot be disabled</div>
             </div>
-            <button
-              role="switch"
-              aria-checked={true}
-              onClick={() => {}}
-              disabled={true}
-              style={{
-                position: 'relative', width: 44, height: 24, borderRadius: 12, border: 'none',
-                background: "linear-gradient(270deg,#3A65DB,#1B31D2)",
-                cursor: 'default', flexShrink: 0, transition: 'background 0.2s',
-                opacity: 1,
-              }}>
-              <span style={{
-                position: 'absolute', top: 3, left: 23,
-                width: 18, height: 18, borderRadius: '50%', background: '#fff',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s',
-              }} />
-            </button>
+            {prefSwitch(true, () => {}, { lockedOn: true })}
           </>, true)}
+        </>)}
+
+        {/* Email notifications — server-backed, default on */}
+        {section('Email notifications', <>
+          {row(<>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#0B0F1F' }}>Messages</div>
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Email when you receive a new message</div>
+            </div>
+            {prefSwitch(emailPrefs.messages, () => toggleEmail('messages'), { disabled: !emailPrefsReady })}
+          </>, false)}
+          {row(<>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#0B0F1F' }}>Applications & opportunities</div>
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Shortlists, application updates, and new matching opportunities</div>
+            </div>
+            {prefSwitch(emailPrefs.applications, () => toggleEmail('applications'), { disabled: !emailPrefsReady })}
+          </>)}
+          {row(<>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#0B0F1F' }}>Shift reminders</div>
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>48h, evening before, and morning of shift reminders</div>
+            </div>
+            {prefSwitch(emailPrefs.reminders, () => toggleEmail('reminders'), { disabled: !emailPrefsReady })}
+          </>)}
+          {row(<>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#0B0F1F' }}>Account updates</div>
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Verification, approval and account status changes</div>
+            </div>
+            {prefSwitch(emailPrefs.account, () => toggleEmail('account'), { disabled: !emailPrefsReady })}
+          </>)}
+          {row(<>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#0B0F1F' }}>Cancellation alerts</div>
+              <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Last-minute shift cancellations</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>Cannot be disabled</div>
+            </div>
+            {prefSwitch(true, () => {}, { lockedOn: true })}
+          </>)}
         </>)}
 
         {/* Danger Zone */}

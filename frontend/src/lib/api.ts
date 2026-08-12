@@ -266,6 +266,21 @@ export type AuthMeResponse = {
     emailVerified?: boolean;
     createdAt?: string;
     updatedAt?: string;
+    emailPrefs?: EmailPrefs;
+};
+
+export type EmailPrefs = {
+    messages: boolean;
+    applications: boolean;
+    reminders: boolean;
+    account: boolean;
+};
+
+export const DEFAULT_EMAIL_PREFS: EmailPrefs = {
+    messages: true,
+    applications: true,
+    reminders: true,
+    account: true,
 };
 export const authApi = {
     sendOtp: async (email: string, role: Role): Promise<void> => {
@@ -326,6 +341,21 @@ export const authApi = {
             throw new Error(text || `auth/me failed: ${res.status}`);
         }
         return res.json() as Promise<AuthMeResponse>;
+    },
+    updateEmailPrefs: async (
+        prefs: Partial<EmailPrefs>,
+    ): Promise<EmailPrefs> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/auth/me/email-prefs`, {
+            method: 'PATCH',
+            headers: nestHeaders(true),
+            body: JSON.stringify(prefs),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || `Could not update email preferences (${res.status})`);
+        }
+        const data = (await res.json()) as { emailPrefs: EmailPrefs };
+        return data.emailPrefs;
     },
     markTourSeen: async (tourKey: 'host' | 'locum'): Promise<void> => {
         const res = await trackedFetch(`${NEST_BASE}/api/auth/me/tour`, {

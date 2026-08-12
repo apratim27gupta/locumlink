@@ -20,7 +20,13 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { GcsService } from '../gcs/gcs.service.js';
 import { EmailService } from '../notifications/email.service.js';
+import { EmailDigestService } from '../notifications/email-digest.service.js';
 import { buildOtpEmail } from '../notifications/otp-email.js';
+import {
+  resolveEmailPrefs,
+  type EmailPrefs,
+} from '../notifications/email-prefs.js';
+import { UpdateEmailPrefsDto } from './dto/update-email-prefs.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { JwtPayload } from './interfaces/jwt-payload.interface.js';
@@ -79,6 +85,7 @@ export class AuthService {
     private readonly gcs: GcsService,
     private readonly adminNotif: AdminNotificationsService,
     private readonly email: EmailService,
+    private readonly emailDigest: EmailDigestService,
   ) {}
 
   private async assertNoAdminUserEmailBlock(
@@ -598,15 +605,51 @@ export class AuthService {
   }
 
   async presentMe(user: User): Promise<
-    Omit<User, 'passwordHash' | 'avatarStoragePath'> & {
+    Omit<User, 'passwordHash' | 'avatarStoragePath' | 'emailPrefs'> & {
       avatarUrl: string | null;
+      emailPrefs: EmailPrefs;
     }
   > {
-    const { passwordHash: _, avatarStoragePath, ...rest } = user;
+    const { passwordHash: _, avatarStoragePath, emailPrefs, ...rest } = user;
     const trimmed = avatarStoragePath?.trim() ?? '';
     const avatarUrl =
       trimmed.length > 0 ? await this.gcs.signedUrl(trimmed) : null;
-    return { ...rest, avatarUrl };
+    return {
+      ...rest,
+      avatarUrl,
+      emailPrefs: resolveEmailPrefs(emailPrefs),
+    };
+  }
+
+  async updateEmailPrefs(
+    userId: string,
+    dto: UpdateEmailPrefsDto,
+  ): Promise<EmailPrefs> {
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { emailPrefs: true },
+    });
+    if (!existing) throw new NotFoundException('User not found');
+    const current = resolveEmailPrefs(existing.emailPrefs);
+    const next: EmailPrefs = { ...current };
+    if (typeof dto.messages === 'boolean') next.messages = dto.messages;
+    if (typeof dto.applications === 'boolean')
+      next.applications = dto.applications;
+    if (typeof dto.reminders === 'boolean') next.reminders = dto.reminders;
+    if (typeof dto.account === 'boolean') next.account = dto.account;
+
+    if (dto.messages === false && current.messages) {
+      await this.emailDigest.discardPending(userId, 'messages');
+    }
+    if (dto.applications === false && current.applications) {
+      await this.emailDigest.discardPending(userId, 'applications');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { emailPrefs: next },
+    });
+    return next;
   }
 
   async markTourSeen(

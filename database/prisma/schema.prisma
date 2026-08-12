@@ -142,6 +142,12 @@ model User {
   lastProfileReminderAt      DateTime? @map("last_profile_reminder_at")
   lastProfileReminderChannel String?   @map("last_profile_reminder_channel")
 
+  /// Email notification prefs (messages/applications/reminders/account/broadcasts). Null = all on.
+  emailPrefs                 Json?     @map("email_prefs")
+
+  /// Rolling email digest timers per category (applications/messages).
+  emailDigestState           Json?     @map("email_digest_state")
+
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
@@ -420,8 +426,10 @@ model NotificationEvent {
   deliveryStatus String    @default("PENDING")
   deliveredAt    DateTime?
   sentAt         DateTime  @default(now())
+  emailDigestIncludedAt DateTime? @map("email_digest_included_at")
 
   @@index([recipientId, id], map: "notification_events_recipient_id_idx")
+  @@index([recipientId, eventType, emailDigestIncludedAt], map: "notification_events_digest_idx")
   @@map("notification_events")
 }
 
