@@ -6,4 +6,4 @@ ALTER TABLE "notification_events"
   ADD COLUMN IF NOT EXISTS "email_digest_included_at" TIMESTAMP(3);
 
 CREATE INDEX IF NOT EXISTS "notification_events_digest_idx"
-  ON "notification_events" ("recipient_id", "event_type", "email_digest_included_at");
+  ON "notification_events" ("recipientId", "eventType", "email_digest_included_at");
