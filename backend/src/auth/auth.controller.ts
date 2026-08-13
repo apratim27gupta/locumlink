@@ -23,6 +23,7 @@ import { SendOtpDto } from './dto/send-otp.dto.js';
 import { VerifyOtpDto } from './dto/verify-otp.dto.js';
 import { UpdateAvatarDto } from './dto/update-avatar.dto.js';
 import { UpdateTourDto } from './dto/update-tour.dto.js';
+import { UpdateEmailPrefsDto } from './dto/update-email-prefs.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
 import { Public } from './decorators/public.decorator.js';
@@ -112,6 +113,19 @@ export class AuthController {
   ) {
     return this.authService.presentMe(user);
   }
+
+  @Patch('me/email-prefs')
+  @UseGuards(JwtAuthGuard)
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  @HttpCode(HttpStatus.OK)
+  async updateEmailPrefs(
+    @CurrentUser() user: User,
+    @Body() dto: UpdateEmailPrefsDto,
+  ) {
+    const emailPrefs = await this.authService.updateEmailPrefs(user.id, dto);
+    return { emailPrefs };
+  }
+
   @Patch('me/tour')
   @UseGuards(JwtAuthGuard)
   @UsePipes(new ValidationPipe({ whitelist: true }))

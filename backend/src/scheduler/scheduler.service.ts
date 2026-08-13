@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { EmailDigestService } from '../notifications/email-digest.service.js';
 import { browseShiftStartActiveSql } from '../host/job-schedule.util.js';
 
 const locumReminderInclude = {
@@ -30,6 +31,7 @@ export class SchedulerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifService: NotificationsService,
+    private readonly emailDigest: EmailDigestService,
   ) {}
 
   private async shiftReminderAlreadySent(
@@ -214,6 +216,16 @@ export class SchedulerService {
       }
     } catch (err) {
       this.logger.error('Expiry reminder cron failed', err);
+    }
+  }
+
+  /** Flush rolling email digests (messages + opportunities). */
+  @Cron(CronExpression.EVERY_HOUR)
+  async handleEmailDigests() {
+    try {
+      await this.emailDigest.flushDueDigests();
+    } catch (err) {
+      this.logger.error('Email digest cron failed', err);
     }
   }
 

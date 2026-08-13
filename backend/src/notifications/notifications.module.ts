@@ -5,6 +5,7 @@ import { NotificationsController } from './notifications.controller.js';
 import { NotificationsService } from './notifications.service.js';
 import { PushService } from './push.service.js';
 import { EmailService } from './email.service.js';
+import { EmailDigestService } from './email-digest.service.js';
 import { AdminNotificationsService } from './admin-notifications.service.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
 
@@ -20,12 +21,14 @@ import { PrismaModule } from '../prisma/prisma.module.js';
     AdminNotificationsService,
     PushService,
     EmailService,
+    EmailDigestService,
   ],
   exports: [
     NotificationsService,
     AdminNotificationsService,
     PushService,
     EmailService,
+    EmailDigestService,
   ],
 })
 export class NotificationsModule {}

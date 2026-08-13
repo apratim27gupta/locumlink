@@ -6,6 +6,9 @@ import {
 } from '../common/pagination/index.js';
 import { PushService } from './push.service.js';
 import { EmailService } from './email.service.js';
+import { allowsEmailForEvent } from './email-prefs.js';
+import { isDigestEventType } from './email-digest.js';
+import { EmailDigestService } from './email-digest.service.js';
 import {
   buildL001NewOpportunity,
   buildL002HostConfirmed,
@@ -154,6 +157,7 @@ export class NotificationsService {
     private readonly prisma: PrismaService,
     private readonly push: PushService,
     private readonly email: EmailService,
+    private readonly emailDigest: EmailDigestService,
   ) {}
 
   async create(params: {
@@ -198,15 +202,33 @@ export class NotificationsService {
     });
 
     if (params.emailTo && params.emailSubject && params.emailBody) {
-      const emailResult = await this.email.send({
-        to: params.emailTo,
-        subject: params.emailSubject,
-        text: params.emailBody,
-      });
-      if (!emailResult.ok) {
-        this.logger.error(
-          `Notification email failed for ${params.emailTo} (${params.eventType}): ${emailResult.error}`,
-        );
+      if (isDigestEventType(params.eventType)) {
+        await this.emailDigest.afterDigestibleEvent({
+          recipientId: params.recipientId,
+          eventType: params.eventType,
+          emailTo: params.emailTo,
+        });
+      } else {
+        const user = await this.prisma.user.findUnique({
+          where: { id: params.recipientId },
+          select: { emailPrefs: true },
+        });
+        if (!allowsEmailForEvent(user?.emailPrefs, params.eventType)) {
+          this.logger.log(
+            `Skipping email for ${params.emailTo} (${params.eventType}): user opted out`,
+          );
+        } else {
+          const emailResult = await this.email.send({
+            to: params.emailTo,
+            subject: params.emailSubject,
+            text: params.emailBody,
+          });
+          if (!emailResult.ok) {
+            this.logger.error(
+              `Notification email failed for ${params.emailTo} (${params.eventType}): ${emailResult.error}`,
+            );
+          }
+        }
       }
     }
   }
@@ -626,6 +648,16 @@ export class NotificationsService {
   }): Promise<void> {
     const copy = L014_LOCUM_PROFILE_REMINDER;
     if (params.channel === 'email') {
+      const user = await this.prisma.user.findUnique({
+        where: { id: params.recipientId },
+        select: { emailPrefs: true },
+      });
+      if (!allowsEmailForEvent(user?.emailPrefs, 'L_014_PROFILE_REMINDER')) {
+        this.logger.log(
+          `Skipping profile reminder email for ${params.recipientEmail}: user opted out`,
+        );
+        return;
+      }
       const emailResult = await this.email.send({
         to: params.recipientEmail,
         subject: copy.emailSubject,
@@ -942,6 +974,16 @@ export class NotificationsService {
   }): Promise<void> {
     const copy = H011_HOST_PROFILE_REMINDER;
     if (params.channel === 'email') {
+      const user = await this.prisma.user.findUnique({
+        where: { id: params.recipientId },
+        select: { emailPrefs: true },
+      });
+      if (!allowsEmailForEvent(user?.emailPrefs, 'H_011_PROFILE_REMINDER')) {
+        this.logger.log(
+          `Skipping profile reminder email for ${params.recipientEmail}: user opted out`,
+        );
+        return;
+      }
       const emailResult = await this.email.send({
         to: params.recipientEmail,
         subject: copy.emailSubject,

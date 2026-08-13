@@ -1135,7 +1135,7 @@ export class HostService {
       },
     });
 
-    // Notify locum of status change (L-002, L-004). (No notification on SHORTLISTED.)
+    // Notify locum of status change (L-002 confirmed, L-003 shortlisted, L-004 declined).
     try {
       const appWithDetails = await this.prisma.application.findUnique({
         where: { id: appId },
@@ -1151,6 +1151,7 @@ export class HostService {
           jobPosting: {
             select: {
               title: true,
+              startDate: true,
               startTime: true,
               endTime: true,
               hostProfile: {
@@ -1192,6 +1193,16 @@ export class HostService {
             startTime: posting?.startTime,
             endTime: posting?.endTime,
             address: address || clinicName,
+            applicationId: appId,
+          });
+        } else if (status === 'SHORTLISTED') {
+          await this.notifService.notifyLocumApplicationAccepted({
+            recipientId: locum.userId,
+            recipientEmail: locum.user.email,
+            firstName: locum.firstName,
+            lastName: locum.lastName,
+            jobTitle,
+            startDate: posting?.startDate,
             applicationId: appId,
           });
         } else if (status === 'REJECTED') {

@@ -108,7 +108,7 @@ export function buildL002HostConfirmed(params: {
   };
 }
 
-/** L-003 — Application accepted (shortlisted) */
+/** L-003 — Application shortlisted by host */
 export function buildL003ApplicationAccepted(params: {
   doctorName: string;
   jobTitle: string;
@@ -116,12 +116,12 @@ export function buildL003ApplicationAccepted(params: {
 }) {
   const when = params.dateStr ? ` for ${params.dateStr}` : '';
   return {
-    inAppTitle: 'Application Accepted — Action Required',
-    inAppBody: `Your application for ${params.jobTitle}${when} was accepted. Please confirm your availability.`,
-    emailSubject: 'Application Accepted — Confirm Your Availability',
-    emailBody: `Hello ${params.doctorName}, Your application for ${params.jobTitle}${when} has been accepted by the host. Please log in to Locum Link to confirm your availability.`,
+    inAppTitle: 'Application Shortlisted',
+    inAppBody: `Your application for ${params.jobTitle}${when} was shortlisted. Check your dashboard for next steps.`,
+    emailSubject: 'Application Shortlisted — Locum Link',
+    emailBody: `Hello ${params.doctorName}, Your application for ${params.jobTitle}${when} has been shortlisted by the host. Log in to Locum Link to view details and next steps.`,
     priority: 'HIGH' as LocumCopyPriority,
-    actionLabel: 'Confirm Availability',
+    actionLabel: 'View Application',
   };
 }
 

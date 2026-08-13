@@ -50,6 +50,9 @@ import {
 } from '../cpsns/cpsns-verified.js';
 
 const BROADCAST_CONCURRENCY = 5;
+const BROADCAST_EMAIL_BATCH_SIZE = 5;
+/** Pause between email batches to reduce spam-filter pressure. */
+const BROADCAST_EMAIL_BATCH_DELAY_MS = 2000;
 const BROADCAST_MAX_RECIPIENTS = 2000;
 const VERIFICATION_PENDING_FILTER: VerificationStatus[] = [
   VerificationStatus.UNVERIFIED,
@@ -851,10 +854,9 @@ export class AdminService {
     let sentEmail = 0;
     const failed: Array<{ userId: string; error: string }> = [];
 
-    await mapPool(recipients, BROADCAST_CONCURRENCY, async (user) => {
-      const errors: string[] = [];
-
-      if (wantNotification) {
+    // In-app + push first (concurrency pool).
+    if (wantNotification) {
+      await mapPool(recipients, BROADCAST_CONCURRENCY, async (user) => {
         try {
           const href =
             user.role === Role.HOST ? '/host/dashboard' : '/locum/dashboard';
@@ -862,7 +864,6 @@ export class AdminService {
             recipientId: user.id,
             eventType: 'U_001_ADMIN_MESSAGE',
             title: subject,
-            // Keep B/I/U (+ size) HTML for in-app; push stays plain text.
             body: sanitizedHtml || bodyText,
             href,
             priority: 'HIGH',
@@ -872,38 +873,47 @@ export class AdminService {
           });
           sentNotification += 1;
         } catch (err: unknown) {
-          errors.push(
-            err instanceof Error ? err.message : 'Notification failed',
-          );
+          failed.push({
+            userId: user.id,
+            error: err instanceof Error ? err.message : 'Notification failed',
+          });
         }
-      }
+      });
+    }
 
-      if (wantEmail) {
-        if (!user.email?.trim()) {
-          errors.push('No email address');
-        } else {
-          try {
-            const result = await this.email.send({
-              to: user.email,
-              subject,
-              text: bodyText,
-              html: emailHtml,
-            });
-            if (!result.ok) {
-              errors.push(result.error);
-            } else {
-              sentEmail += 1;
+    // Emails in sequential batches of 5 (respect opt-out + rate limit).
+    if (wantEmail) {
+      const emailRecipients = recipients.filter((u) => Boolean(u.email?.trim()));
+
+      for (let i = 0; i < emailRecipients.length; i += BROADCAST_EMAIL_BATCH_SIZE) {
+        const batch = emailRecipients.slice(i, i + BROADCAST_EMAIL_BATCH_SIZE);
+        await Promise.all(
+          batch.map(async (user) => {
+            try {
+              const result = await this.email.send({
+                to: user.email,
+                subject,
+                text: bodyText,
+                html: emailHtml,
+              });
+              if (!result.ok) {
+                failed.push({ userId: user.id, error: result.error });
+              } else if (!result.skipped) {
+                sentEmail += 1;
+              }
+            } catch (err: unknown) {
+              failed.push({
+                userId: user.id,
+                error: err instanceof Error ? err.message : 'Email failed',
+              });
             }
-          } catch (err: unknown) {
-            errors.push(err instanceof Error ? err.message : 'Email failed');
-          }
+          }),
+        );
+        if (i + BROADCAST_EMAIL_BATCH_SIZE < emailRecipients.length) {
+          await sleep(BROADCAST_EMAIL_BATCH_DELAY_MS);
         }
       }
-
-      if (errors.length > 0) {
-        failed.push({ userId: user.id, error: errors.join('; ') });
-      }
-    });
+    }
 
     this.audit.log({
       adminActorId: adminPayload.sub,
@@ -1661,6 +1671,10 @@ function escapeHtmlText(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function mapPool<T>(
