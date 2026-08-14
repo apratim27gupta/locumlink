@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
+import ResourceGuideArticle from '@/components/ResourceGuideArticle';
 import { locumApi } from '@/lib/api';
+import { LOCUM_PHYSICIAN_GUIDE } from '@/lib/resourceGuides';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { LocumProfile } from '@/types';
 
@@ -70,10 +72,28 @@ function LinkTileIcon() {
     );
 }
 
+function GuideIcon() {
+    return (
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="8" fill="#E0E7FF"/>
+            <path d="M9 8.5h14v15H9z" fill="#3B4FD8" opacity="0.15"/>
+            <path d="M11 11.5h10M11 15h10M11 18.5h7" stroke="#3B4FD8" strokeWidth="1.6" strokeLinecap="round"/>
+        </svg>
+    );
+}
+
 function ExternalLinkIcon() {
     return (
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M6 3H3a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1v-3M9 2h5m0 0v5m0-5L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+    );
+}
+
+function ChevronIcon() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
     );
 }
@@ -85,6 +105,7 @@ export default function LocumResourcesPage(props: {
     useNextPageClientProps(props);
     const [profile, setProfile] = useState<LocumProfile | null>(null);
     const [hoveredUrl, setHoveredUrl] = useState<string | null>(null);
+    const [showGuide, setShowGuide] = useState(false);
 
     useEffect(() => {
         locumApi
@@ -98,9 +119,65 @@ export default function LocumResourcesPage(props: {
     return (
         <DashLayout navItems={NAV} activeHref="/locum/resources" topbarFirstName={profile?.firstName} topbarLastName={profile?.lastName}>
             <div style={{ maxWidth: 720 }}>
+                {showGuide ? (
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => setShowGuide(false)}
+                            style={{
+                                border: 'none',
+                                background: 'none',
+                                padding: 0,
+                                marginBottom: 16,
+                                color: '#3B4FD8',
+                                fontSize: 14,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                fontFamily: 'inherit',
+                            }}
+                        >
+                            ← Back to Resources
+                        </button>
+                        <ResourceGuideArticle guide={LOCUM_PHYSICIAN_GUIDE} />
+                    </>
+                ) : (
+                    <>
                 <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 24 }}>Resources</h1>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <button
+                        type="button"
+                        onClick={() => setShowGuide(true)}
+                        onMouseEnter={() => setHoveredUrl(LOCUM_PHYSICIAN_GUIDE.id)}
+                        onMouseLeave={() => setHoveredUrl(null)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 16,
+                            padding: '16px 20px',
+                            border: `1px solid ${hoveredUrl === LOCUM_PHYSICIAN_GUIDE.id ? '#6366f1' : '#e2e8f0'}`,
+                            borderRadius: 10,
+                            background: '#fff',
+                            textAlign: 'left',
+                            color: 'inherit',
+                            transition: 'border-color 0.15s, box-shadow 0.15s',
+                            cursor: 'pointer',
+                            boxShadow: hoveredUrl === LOCUM_PHYSICIAN_GUIDE.id ? '0 0 0 3px rgba(99,102,241,0.08)' : 'none',
+                            fontFamily: 'inherit',
+                            width: '100%',
+                        }}
+                    >
+                        <GuideIcon />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: 15, color: '#1e293b', marginBottom: 2 }}>
+                                {LOCUM_PHYSICIAN_GUIDE.title}
+                            </div>
+                            <div style={{ fontSize: 13, color: '#64748b' }}>{LOCUM_PHYSICIAN_GUIDE.description}</div>
+                        </div>
+                        <div style={{ color: '#6366f1', flexShrink: 0 }}>
+                            <ChevronIcon />
+                        </div>
+                    </button>
                     {DOCUMENTS.map((doc) => (
                         <a
                             key={doc.url}
@@ -137,6 +214,8 @@ export default function LocumResourcesPage(props: {
                         </a>
                     ))}
                 </div>
+                    </>
+                )}
             </div>
         </DashLayout>
     );
