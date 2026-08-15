@@ -11,6 +11,13 @@ export type ResourceGuide = {
   blocks: GuideBlock[];
 };
 
+/** Keep Resources lists A–Z by title when adding items. */
+export function sortResourcesByTitle<T extends { title: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) =>
+    a.title.localeCompare(b.title, 'en', { sensitivity: 'base' }),
+  );
+}
+
 export const LOCUM_PHYSICIAN_GUIDE: ResourceGuide = {
   id: 'locum-physician-guide',
   title: 'LocumLink Locum Physician Guide',

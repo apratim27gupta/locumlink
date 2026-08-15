@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import ResourceGuideArticle from '@/components/ResourceGuideArticle';
 import { hostApi } from '@/lib/api';
-import { HOST_PHYSICIAN_GUIDE } from '@/lib/resourceGuides';
+import { HOST_PHYSICIAN_GUIDE, sortResourcesByTitle } from '@/lib/resourceGuides';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { HostProfile } from '@/types';
 
@@ -63,6 +63,20 @@ const DOCUMENTS = [
         icon: 'link' as const,
     },
 ];
+
+type ResourceItem =
+    | { kind: 'guide'; id: string; title: string; description: string }
+    | { kind: 'external'; title: string; description: string; url: string; icon: 'pdf' | 'link' };
+
+const RESOURCES: ResourceItem[] = sortResourcesByTitle([
+    {
+        kind: 'guide',
+        id: HOST_PHYSICIAN_GUIDE.id,
+        title: HOST_PHYSICIAN_GUIDE.title,
+        description: HOST_PHYSICIAN_GUIDE.description,
+    },
+    ...DOCUMENTS.map((doc) => ({ kind: 'external' as const, ...doc })),
+]);
 
 function PdfIcon() {
     return (
@@ -162,74 +176,72 @@ export default function HostResourcesPage(props: {
                 <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 24 }}>Resources</h1>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <button
-                        type="button"
-                        onClick={() => setShowGuide(true)}
-                        onMouseEnter={() => setHoveredUrl(HOST_PHYSICIAN_GUIDE.id)}
-                        onMouseLeave={() => setHoveredUrl(null)}
-                        style={{
+                    {RESOURCES.map((item) => {
+                        const hoverKey = item.kind === 'guide' ? item.id : item.url;
+                        const tileStyle = {
                             display: 'flex',
                             alignItems: 'center',
                             gap: 16,
                             padding: '16px 20px',
-                            border: `1px solid ${hoveredUrl === HOST_PHYSICIAN_GUIDE.id ? '#6366f1' : '#e2e8f0'}`,
+                            border: `1px solid ${hoveredUrl === hoverKey ? '#6366f1' : '#e2e8f0'}`,
                             borderRadius: 10,
                             background: '#fff',
-                            textAlign: 'left',
                             color: 'inherit',
                             transition: 'border-color 0.15s, box-shadow 0.15s',
                             cursor: 'pointer',
-                            boxShadow: hoveredUrl === HOST_PHYSICIAN_GUIDE.id ? '0 0 0 3px rgba(99,102,241,0.08)' : 'none',
+                            boxShadow: hoveredUrl === hoverKey ? '0 0 0 3px rgba(99,102,241,0.08)' : 'none',
                             fontFamily: 'inherit',
                             width: '100%',
-                        }}
-                    >
-                        <GuideIcon />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, fontSize: 15, color: '#1e293b', marginBottom: 2 }}>
-                                {HOST_PHYSICIAN_GUIDE.title}
-                            </div>
-                            <div style={{ fontSize: 13, color: '#64748b' }}>{HOST_PHYSICIAN_GUIDE.description}</div>
-                        </div>
-                        <div style={{ color: '#6366f1', flexShrink: 0 }}>
-                            <ChevronIcon />
-                        </div>
-                    </button>
-                    {DOCUMENTS.map((doc) => (
-                        <a
-                            key={doc.url}
-                            href={doc.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onMouseEnter={() => setHoveredUrl(doc.url)}
-                            onMouseLeave={() => setHoveredUrl(null)}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 16,
-                                padding: '16px 20px',
-                                border: `1px solid ${hoveredUrl === doc.url ? '#6366f1' : '#e2e8f0'}`,
-                                borderRadius: 10,
-                                background: '#fff',
-                                textDecoration: 'none',
-                                color: 'inherit',
-                                transition: 'border-color 0.15s, box-shadow 0.15s',
-                                cursor: 'pointer',
-                                boxShadow: hoveredUrl === doc.url ? '0 0 0 3px rgba(99,102,241,0.08)' : 'none',
-                            }}
-                        >
-                            {doc.icon === 'link' ? <LinkTileIcon /> : <PdfIcon />}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontWeight: 600, fontSize: 15, color: '#1e293b', marginBottom: 2 }}>
-                                    {doc.title}
+                            textAlign: 'left' as const,
+                        };
+                        const body = (
+                            <>
+                                {item.kind === 'guide' ? (
+                                    <GuideIcon />
+                                ) : item.icon === 'link' ? (
+                                    <LinkTileIcon />
+                                ) : (
+                                    <PdfIcon />
+                                )}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 600, fontSize: 15, color: '#1e293b', marginBottom: 2 }}>
+                                        {item.title}
+                                    </div>
+                                    <div style={{ fontSize: 13, color: '#64748b' }}>{item.description}</div>
                                 </div>
-                                <div style={{ fontSize: 13, color: '#64748b' }}>{doc.description}</div>
-                            </div>
-                            <div style={{ color: '#6366f1', flexShrink: 0 }}>
-                                <ExternalLinkIcon />
-                            </div>
-                        </a>
-                    ))}
+                                <div style={{ color: '#6366f1', flexShrink: 0 }}>
+                                    {item.kind === 'guide' ? <ChevronIcon /> : <ExternalLinkIcon />}
+                                </div>
+                            </>
+                        );
+                        if (item.kind === 'guide') {
+                            return (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => setShowGuide(true)}
+                                    onMouseEnter={() => setHoveredUrl(item.id)}
+                                    onMouseLeave={() => setHoveredUrl(null)}
+                                    style={tileStyle}
+                                >
+                                    {body}
+                                </button>
+                            );
+                        }
+                        return (
+                            <a
+                                key={item.url}
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onMouseEnter={() => setHoveredUrl(item.url)}
+                                onMouseLeave={() => setHoveredUrl(null)}
+                                style={{ ...tileStyle, textDecoration: 'none' }}
+                            >
+                                {body}
+                            </a>
+                        );
+                    })}
                 </div>
                     </>
                 )}
