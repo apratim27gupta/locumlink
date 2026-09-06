@@ -47,16 +47,26 @@ export type AnalyticsSummary = {
     rejected: number;
     withdrawn: number;
   };
+  funnel: {
+    posted: number;
+    applied: number;
+    shortlisted: number;
+    confirmed: number;
+    accepted: number;
+    completed: number;
+  };
   acceptedCount: number;
+  completedPlacementsCount: number;
   postedJobsCount: number;
   postingsByStatus: {
     draft: number;
     active: number;
+    scheduled: number;
     ongoing: number;
     completed: number;
     expired: number;
-    cancelled: number;
   };
+  deletedPostingsCount: number;
   unfilledExpiredCount: number;
   growth: { month: string; locums: number; hosts: number; total: number }[];
   /** @deprecated prefer cityAccounts */
@@ -206,7 +216,19 @@ export async function buildAnalyticsSummary(
   const growthFrom =
     range.dateFrom && range.dateFrom > fiveMonthsAgo ? range.dateFrom : fiveMonthsAgo;
 
-  const appWhere: Prisma.ApplicationWhereInput = appliedAt ? { appliedAt } : {};
+  const acceptedWhere: Prisma.ApplicationWhereInput = {
+    OR: [
+      { locumResponse: LocumResponse.ACCEPTED },
+      { locumAcceptedAt: { not: null } },
+    ],
+  };
+  const startOfTodayUtc = new Date();
+  startOfTodayUtc.setUTCHours(0, 0, 0, 0);
+
+  const appWhere: Prisma.ApplicationWhereInput = {
+    ...(appliedAt ? { appliedAt } : {}),
+    jobPosting: { isDeleted: false },
+  };
   const postingWhereBase: Prisma.JobPostingWhereInput = {
     isDeleted: false,
     ...(postingCreatedAt ? { createdAt: postingCreatedAt } : {}),
@@ -215,6 +237,9 @@ export async function buildAnalyticsSummary(
   const [
     appStatusGroups,
     acceptedCount,
+    funnelShortlistedCount,
+    funnelConfirmedCount,
+    completedPlacementsCount,
     confirmedWithTimes,
     acceptedWithTimes,
     newUsersInPeriod,
@@ -227,6 +252,7 @@ export async function buildAnalyticsSummary(
     finishedFilled,
     finishedUnfilled,
     unfilledExpiredCount,
+    deletedPostingsCount,
   ] = await Promise.all([
     db.application.groupBy({
       by: ['status'],
@@ -236,10 +262,44 @@ export async function buildAnalyticsSummary(
     db.application.count({
       where: {
         ...appWhere,
+        ...acceptedWhere,
+      },
+    }),
+    db.application.count({
+      where: {
+        ...appWhere,
         OR: [
+          {
+            status: {
+              in: [ApplicationStatus.SHORTLISTED, ApplicationStatus.CONFIRMED],
+            },
+          },
+          { placedAt: { not: null } },
           { locumResponse: LocumResponse.ACCEPTED },
           { locumAcceptedAt: { not: null } },
         ],
+      },
+    }),
+    db.application.count({
+      where: {
+        ...appWhere,
+        OR: [
+          { status: ApplicationStatus.CONFIRMED },
+          { placedAt: { not: null } },
+        ],
+      },
+    }),
+    db.application.count({
+      where: {
+        ...appWhere,
+        ...acceptedWhere,
+        jobPosting: {
+          isDeleted: false,
+          OR: [
+            { status: PostingStatus.COMPLETED },
+            { endDate: { lt: startOfTodayUtc } },
+          ],
+        },
       },
     }),
     db.application.findMany({
@@ -288,27 +348,27 @@ export async function buildAnalyticsSummary(
     db.jobPosting.count({
       where: {
         ...postingWhereBase,
-        status: { in: [PostingStatus.ONGOING, PostingStatus.COMPLETED] },
-      },
-    }),
-    db.jobPosting.count({
-      where: {
-        ...postingWhereBase,
-        status: { in: [PostingStatus.EXPIRED, PostingStatus.CANCELLED] },
+        applications: { some: acceptedWhere },
       },
     }),
     db.jobPosting.count({
       where: {
         ...postingWhereBase,
         status: PostingStatus.EXPIRED,
-        applications: {
-          none: {
-            OR: [
-              { locumResponse: LocumResponse.ACCEPTED },
-              { locumAcceptedAt: { not: null } },
-            ],
-          },
-        },
+        applications: { none: acceptedWhere },
+      },
+    }),
+    db.jobPosting.count({
+      where: {
+        ...postingWhereBase,
+        status: PostingStatus.EXPIRED,
+        applications: { none: acceptedWhere },
+      },
+    }),
+    db.jobPosting.count({
+      where: {
+        isDeleted: true,
+        ...(postingCreatedAt ? { createdAt: postingCreatedAt } : {}),
       },
     }),
   ]);
@@ -337,7 +397,7 @@ export async function buildAnalyticsSummary(
     (a, b) => a + b,
     0,
   );
-  const confirmedApplications = applicationsByStatus.confirmed;
+  const confirmedApplications = funnelConfirmedCount;
   const hostConfirmRatePct =
     totalApplications > 0
       ? Math.round((confirmedApplications / totalApplications) * 100)
@@ -346,6 +406,7 @@ export async function buildAnalyticsSummary(
     confirmedApplications > 0
       ? Math.round((acceptedCount / confirmedApplications) * 100)
       : 0;
+  // Keep legacy fillRate as host confirm rate for CSV/backward compat
   const fillRatePct = hostConfirmRatePct;
 
   const finishedTotal = finishedFilled + finishedUnfilled;
@@ -416,10 +477,10 @@ export async function buildAnalyticsSummary(
   const postingsByStatus = {
     draft: 0,
     active: 0,
+    scheduled: 0,
     ongoing: 0,
     completed: 0,
     expired: 0,
-    cancelled: 0,
   };
   for (const g of postingStatusGroups) {
     const n = g._count.id;
@@ -429,10 +490,19 @@ export async function buildAnalyticsSummary(
 
   const postedJobsCount =
     postingsByStatus.active +
+    postingsByStatus.scheduled +
     postingsByStatus.ongoing +
     postingsByStatus.completed +
-    postingsByStatus.expired +
-    postingsByStatus.cancelled;
+    postingsByStatus.expired;
+
+  const funnel = {
+    posted: postedJobsCount,
+    applied: totalApplications,
+    shortlisted: funnelShortlistedCount,
+    confirmed: funnelConfirmedCount,
+    accepted: acceptedCount,
+    completed: completedPlacementsCount,
+  };
 
   return {
     period: {
@@ -450,9 +520,12 @@ export async function buildAnalyticsSummary(
     avgHoursToConfirm,
     avgHoursToAccept,
     applicationsByStatus,
+    funnel,
     acceptedCount,
+    completedPlacementsCount,
     postedJobsCount,
     postingsByStatus,
+    deletedPostingsCount,
     unfilledExpiredCount,
     growth,
     locations,
@@ -487,6 +560,7 @@ export function analyticsSummaryToCsv(summary: AnalyticsSummary): string {
     ['Shortlisted', summary.applicationsByStatus.shortlisted],
     ['Confirmed', summary.applicationsByStatus.confirmed],
     ['Accepted (locum)', summary.acceptedCount],
+    ['Completed Placements', summary.completedPlacementsCount],
     ['Rejected', summary.applicationsByStatus.rejected],
     ['Withdrawn', summary.applicationsByStatus.withdrawn],
     ['Host Confirm Rate (%)', summary.hostConfirmRatePct],
@@ -497,10 +571,11 @@ export function analyticsSummaryToCsv(summary: AnalyticsSummary): string {
     ['New Users (period)', summary.newUsersInPeriod],
     ['Posted Jobs', summary.postedJobsCount],
     ['Active Postings', summary.postingsByStatus.active],
+    ['Scheduled', summary.postingsByStatus.scheduled],
     ['Ongoing', summary.postingsByStatus.ongoing],
     ['Completed', summary.postingsByStatus.completed],
     ['Expired', summary.postingsByStatus.expired],
-    ['Cancelled', summary.postingsByStatus.cancelled],
+    ['Deleted', summary.deletedPostingsCount],
     ['Unfilled Expired', summary.unfilledExpiredCount],
     ['Placements Within 48h (%)', summary.postingPerformance.filledWithin48hPct],
     ['Active Job Postings (%)', summary.postingPerformance.stillOpenPct],

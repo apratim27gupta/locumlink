@@ -20,13 +20,17 @@ async function bootstrap(): Promise<void> {
   const nodeEnv = config.get<string>('NODE_ENV', 'development');
   let corsOrigin: boolean | string[];
   if (nodeEnv === 'production') {
-    const raw = config.get<string>('ALLOWED_ORIGINS', '');
-    corsOrigin = raw
-      ? raw
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : true;
+    const raw = config.get<string>('ALLOWED_ORIGINS', '').trim();
+    const origins = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (origins.length === 0) {
+      throw new Error(
+        'ALLOWED_ORIGINS must be set in production (comma-separated frontend URLs).',
+      );
+    }
+    corsOrigin = origins;
   } else {
     corsOrigin = true;
   }

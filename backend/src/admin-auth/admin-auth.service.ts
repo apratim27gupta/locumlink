@@ -32,6 +32,8 @@ import {
   shouldAllowAdminOtpRequest,
 } from './admin-login-rate-limit.js';
 import { getFixedOtpForStaging } from '../config/fixed-otp.util.js';
+import { hashOtpCode, verifyOtpCode } from '../common/utils/otp-hash.util.js';
+import { TurnstileService } from '../common/turnstile/turnstile.service.js';
 import type { AdminJwtPayload } from './admin-auth.types.js';
 
 @Injectable()
@@ -43,6 +45,7 @@ export class AdminAuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly email: EmailService,
+    private readonly turnstile: TurnstileService,
   ) {}
 
   async loadAdminSessionUser(adminId: string): Promise<AdminJwtPayload> {
@@ -61,7 +64,12 @@ export class AdminAuthService {
     return ADMIN_OTP_REQUEST_GENERIC;
   }
 
-  async requestLoginOtp(rawEmail: string, ip: string): Promise<void> {
+  async requestLoginOtp(
+    rawEmail: string,
+    ip: string,
+    captchaToken?: string,
+  ): Promise<void> {
+    await this.turnstile.assertValidToken(captchaToken, ip);
     const email = rawEmail?.trim().toLowerCase();
     if (!email) {
       throw new BadRequestException('Email is required.');
@@ -81,7 +89,8 @@ export class AdminAuthService {
       return;
     }
 
-    const otp = this.generateOtp();
+    const otpPlain = this.generateOtp();
+    const otpStored = await hashOtpCode(otpPlain);
     const expiresAt = new Date(Date.now() + ADMIN_LOGIN_OTP_TTL_MS);
 
     await this.prisma.$transaction([
@@ -91,7 +100,7 @@ export class AdminAuthService {
       this.prisma.otp.create({
         data: {
           email,
-          otp,
+          otp: otpStored,
           expiresAt,
           purpose: ADMIN_OTP_LOGIN,
           adminId: admin.id,
@@ -119,7 +128,7 @@ export class AdminAuthService {
 
     await this.sendAdminOtpEmail({
       to: email,
-      otp,
+      otp: otpPlain,
       eventType: 'ADMIN_LOGIN_OTP',
       adminId: admin.id,
       ttlMs: ADMIN_LOGIN_OTP_TTL_MS,
@@ -154,17 +163,26 @@ export class AdminAuthService {
       throw new UnauthorizedException(ADMIN_OTP_VERIFY_GENERIC);
     }
 
-    const record = await this.prisma.otp.findFirst({
+    const candidates = await this.prisma.otp.findMany({
       where: {
         email,
-        otp: code,
         purpose: ADMIN_OTP_LOGIN,
         adminId: admin.id,
+        expiresAt: { gt: new Date() },
       },
       orderBy: { createdAt: 'desc' },
+      take: 3,
     });
 
-    if (!record || record.expiresAt < new Date()) {
+    let record: (typeof candidates)[number] | null = null;
+    for (const candidate of candidates) {
+      if (await verifyOtpCode(code, candidate.otp)) {
+        record = candidate;
+        break;
+      }
+    }
+
+    if (!record) {
       recordAdminVerifyFailure(email, ip);
       throw new UnauthorizedException(ADMIN_OTP_VERIFY_GENERIC);
     }

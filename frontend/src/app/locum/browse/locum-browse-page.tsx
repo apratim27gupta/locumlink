@@ -35,7 +35,7 @@ import {
 import {
   isLocalPostingEndDatePassed,
 } from '@/lib/localDateTime';
-import { relativeHoursOrDaysAgo, toLocalDateTime, toLocalTime } from '@/lib/relativeTime';
+import { relativeHoursOrDaysAgo, toLocalDateTime, toLocalTime, jobPostedAtIso } from '@/lib/relativeTime';
 import {
   CANADIAN_PROVINCE_NAMES,
   filterCanadianCities,
@@ -238,8 +238,9 @@ const POSTED_WINDOW_MS: Record<Exclude<PostedTimeFilter, 'any'>, number> = {
 };
 
 function jobPostedAtMs(job: BrowseJob): number {
-  if (!job.createdAt) return 0;
-  const t = new Date(job.createdAt).getTime();
+  const iso = jobPostedAtIso(job);
+  if (!iso) return 0;
+  const t = new Date(iso).getTime();
   return Number.isNaN(t) ? 0 : t;
 }
 
@@ -426,11 +427,7 @@ export default function LocumBrowsePage(props: {
         if (title.includes(q)) return 5;
         return 6;
       };
-      const toCreatedAtMs = (j: BrowseJob): number => {
-        if (!j.createdAt) return 0;
-        const t = new Date(j.createdAt).getTime();
-        return Number.isNaN(t) ? 0 : t;
-      };
+      const toCreatedAtMs = (j: BrowseJob): number => jobPostedAtMs(j);
       const matches: BrowseJob[] = [];
       const rest: BrowseJob[] = [];
       for (const j of result) {
@@ -971,7 +968,7 @@ export default function LocumBrowsePage(props: {
                         marginLeft: 6,
                       }}
                     >
-                      <span title={toLocalDateTime(j.createdAt)} style={{ cursor: 'help', borderBottom: '1px dotted currentColor' }}>{daysAgo(j.createdAt)}d ago</span>
+                      <span title={toLocalDateTime(jobPostedAtIso(j))} style={{ cursor: 'help', borderBottom: '1px dotted currentColor' }}>{daysAgo(jobPostedAtIso(j) ?? j.createdAt)}d ago</span>
                     </span>
                   </div>
                   {removed ? (

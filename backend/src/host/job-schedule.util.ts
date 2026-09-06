@@ -167,6 +167,32 @@ export function isPostingEndDatePassed(
   return endOfStoredDay < Date.now();
 }
 
+/** True once the stored calendar start day (UTC) has begun (or there is no start date). */
+export function isPostingStartDateReached(
+  startDate: Date | null | undefined,
+): boolean {
+  if (!startDate) return true;
+  if (Number.isNaN(startDate.getTime())) return true;
+  const y = startDate.getUTCFullYear();
+  const mo = startDate.getUTCMonth();
+  const d = startDate.getUTCDate();
+  const startOfStoredDay = Date.UTC(y, mo, d, 0, 0, 0, 0);
+  return startOfStoredDay <= Date.now();
+}
+
+/**
+ * Status after a locum accepts: COMPLETED if end passed, ONGOING if in/after start,
+ * otherwise SCHEDULED (filled upcoming — applies blocked).
+ */
+export function postingStatusAfterLocumAccept(
+  startDate: Date | null | undefined,
+  endDate: Date | null | undefined,
+): 'SCHEDULED' | 'ONGOING' | 'COMPLETED' {
+  if (isPostingEndDatePassed(endDate)) return 'COMPLETED';
+  if (isPostingStartDateReached(startDate)) return 'ONGOING';
+  return 'SCHEDULED';
+}
+
 /** Combine stored UTC calendar date + HH:mm into epoch ms. */
 export function utcDateTimePartsToMs(
   dateStr: string,

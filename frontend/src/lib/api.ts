@@ -283,11 +283,19 @@ export const DEFAULT_EMAIL_PREFS: EmailPrefs = {
     account: true,
 };
 export const authApi = {
-    sendOtp: async (email: string, role: Role): Promise<void> => {
+    sendOtp: async (
+        email: string,
+        role: Role,
+        captchaToken?: string,
+    ): Promise<void> => {
         const res = await trackedFetch(apiFetchUrl('/api/auth/send-otp'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, role }),
+            body: JSON.stringify({
+                email,
+                role,
+                ...(captchaToken ? { captchaToken } : {}),
+            }),
         });
         if (!res.ok) {
             throw await parseAuthApiError(res, 'Send verification code');
@@ -433,6 +441,8 @@ export type BrowseJob = {
     description: string;
     location: string;
     createdAt: string;
+    /** When the job went live (ACTIVE). Prefer over createdAt for “posted X ago”. */
+    publishedAt?: string | null;
     applicationsCount: number;
     hostProfile: BrowseJobHostProfile;
     startDate: string | null;
@@ -600,7 +610,7 @@ export const locumApi = {
         return res.json() as Promise<{ success: boolean }>;
     },
 };
-export type PostingStatus = 'DRAFT' | 'ACTIVE' | 'ONGOING' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+export type PostingStatus = 'DRAFT' | 'ACTIVE' | 'SCHEDULED' | 'ONGOING' | 'COMPLETED' | 'EXPIRED';
 export type Job = {
     id: string;
     title: string;
@@ -621,7 +631,7 @@ export type Job = {
 };
 function normalizePostingStatus(value: unknown): PostingStatus {
     const s = String(value ?? 'DRAFT').toUpperCase();
-    if (s === 'ACTIVE' || s === 'ONGOING' || s === 'COMPLETED' || s === 'CANCELLED' || s === 'EXPIRED')
+    if (s === 'ACTIVE' || s === 'SCHEDULED' || s === 'ONGOING' || s === 'COMPLETED' || s === 'EXPIRED')
         return s;
     return 'DRAFT';
 }

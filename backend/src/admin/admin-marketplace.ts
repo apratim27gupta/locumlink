@@ -7,6 +7,7 @@ export type AdminJobListItem = {
   status: string;
   location: string;
   isRural: boolean;
+  isDeleted?: boolean;
   startDate: string | null;
   endDate: string | null;
   startTime: string | null;
@@ -107,7 +108,7 @@ export async function listAdminJobs(
     isDeleted: false,
     ...(createdAt ? { createdAt } : {}),
     ...(params.status && params.status !== 'all'
-      ? { status: params.status as 'DRAFT' | 'ACTIVE' | 'ONGOING' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED' }
+      ? { status: params.status as 'DRAFT' | 'ACTIVE' | 'SCHEDULED' | 'ONGOING' | 'COMPLETED' | 'EXPIRED' }
       : {}),
     ...(q
       ? {
@@ -212,7 +213,7 @@ export async function getAdminJobDetail(
   applications: AdminApplicationItem[];
 } | null> {
   const row = await db.jobPosting.findFirst({
-    where: { id: jobId, isDeleted: false },
+    where: { id: jobId },
     select: {
       id: true,
       title: true,
@@ -220,6 +221,7 @@ export async function getAdminJobDetail(
       status: true,
       location: true,
       isRural: true,
+      isDeleted: true,
       startDate: true,
       endDate: true,
       startTime: true,
@@ -288,6 +290,7 @@ export async function getAdminJobDetail(
     status: row.status,
     location: row.location,
     isRural: row.isRural,
+    isDeleted: row.isDeleted,
     startDate: row.startDate ? row.startDate.toISOString().slice(0, 10) : null,
     endDate: row.endDate ? row.endDate.toISOString().slice(0, 10) : null,
     startTime: row.startTime,

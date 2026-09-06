@@ -145,4 +145,39 @@ describe('Journey 3 — Messaging between locum and host', () => {
     expect(ids).toContain(kept.id);
     expect(ids).not.toContain(deleted.id);
   });
+
+  it('does not expose partner profile for unrelated user IDs', async () => {
+    const host = await createHostUser();
+    const locum = await createLocumUser();
+    const stranger = await createLocumUser();
+
+    const http = authedAgent(ctx.agent, host.token);
+    const res = await http
+      .get(`/api/messages/thread/${stranger.user.id}`)
+      .expect(200);
+
+    expect(res.body.items).toEqual([]);
+    expect(res.body.partner).toBeNull();
+    expect(JSON.stringify(res.body)).not.toContain(stranger.user.email);
+  });
+
+  it('returns partner profile when a conversation exists', async () => {
+    const host = await createHostUser();
+    const locum = await createLocumUser();
+    await createMessage({
+      senderId: host.user.id,
+      recipientId: locum.user.id,
+      body: 'hi',
+    });
+
+    const http = authedAgent(ctx.agent, host.token);
+    const res = await http
+      .get(`/api/messages/thread/${locum.user.id}`)
+      .expect(200);
+
+    expect(res.body.partner).toEqual(
+      expect.objectContaining({ id: locum.user.id }),
+    );
+    expect(res.body.partner?.email).toBeUndefined();
+  });
 });

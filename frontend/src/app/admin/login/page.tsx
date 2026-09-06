@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthSplitLayout from '@/components/AuthSplitLayout';
 import Logo from '@/components/Logo';
+import TurnstileWidget, { isTurnstileEnabled } from '@/components/TurnstileWidget';
 import { adminApiBase } from '@/lib/adminApi';
 
 const OTP_LEN = 6;
@@ -22,6 +23,8 @@ function AdminLoginInner() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const turnstileRequired = isTurnstileEnabled();
   const refs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
@@ -30,12 +33,15 @@ function AdminLoginInner() {
     return () => clearTimeout(t);
   }, [resendCooldown]);
 
-  async function requestOtp(targetEmail: string) {
+  async function requestOtp(targetEmail: string, token?: string) {
     const res = await fetch(`${adminApiBase()}/api/admin-auth/request-otp`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: targetEmail }),
+      body: JSON.stringify({
+        email: targetEmail,
+        ...(token ? { captchaToken: token } : {}),
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -51,9 +57,14 @@ function AdminLoginInner() {
     e.preventDefault();
     setFormError(null);
     setInfoMessage(null);
+    if (turnstileRequired && !captchaToken) {
+      setFormError('Please complete the captcha check.');
+      return;
+    }
     setBusy(true);
     try {
-      const msg = await requestOtp(email);
+      const msg = await requestOtp(email, captchaToken ?? undefined);
+      setCaptchaToken(null);
       setInfoMessage(msg);
       setStep('otp');
       setResendCooldown(RESEND_COOLDOWN_SEC);
@@ -98,10 +109,15 @@ function AdminLoginInner() {
 
   async function handleResend() {
     if (resendCooldown > 0 || resendBusy) return;
+    if (turnstileRequired && !captchaToken) {
+      setFormError('Please complete the captcha check before resending.');
+      return;
+    }
     setResendBusy(true);
     setFormError(null);
     try {
-      await requestOtp(email);
+      await requestOtp(email, captchaToken ?? undefined);
+      setCaptchaToken(null);
       setResendCooldown(RESEND_COOLDOWN_SEC);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Could not resend code.';
@@ -180,9 +196,12 @@ function AdminLoginInner() {
                 style={{ padding: '12px 14px', borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 15 }}
               />
             </label>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <TurnstileWidget onToken={setCaptchaToken} />
+            </div>
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || (turnstileRequired && !captchaToken)}
               style={{
                 marginTop: 4, padding: '14px 16px', borderRadius: 12, border: 'none',
                 background: '#0F2A7A', color: '#fff', fontWeight: 700, fontSize: 15,
@@ -244,6 +263,9 @@ function AdminLoginInner() {
                 />
               ))}
             </div>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <TurnstileWidget onToken={setCaptchaToken} />
+            </div>
             <button
               type="button"
               disabled={busy || digits.some((d) => !d)}
@@ -259,7 +281,7 @@ function AdminLoginInner() {
             <div style={{ textAlign: 'center', fontSize: 13, color: '#6B7280' }}>
               <button
                 type="button"
-                disabled={resendBusy || resendCooldown > 0}
+                disabled={resendBusy || resendCooldown > 0 || (turnstileRequired && !captchaToken)}
                 onClick={() => void handleResend()}
                 style={{
                   background: 'none', border: 'none', color: '#0F2A7A',

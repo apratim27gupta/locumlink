@@ -1,4 +1,4 @@
-import { IsEmail, IsIn } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString } from 'class-validator';
 
 export class SendOtpDto {
   @IsEmail()
@@ -6,4 +6,8 @@ export class SendOtpDto {
 
   @IsIn(['locum', 'clinic'])
   role: 'locum' | 'clinic';
+
+  @IsOptional()
+  @IsString()
+  captchaToken?: string;
 }

@@ -5,8 +5,10 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import type { Request } from 'express';
 import {
   AuditAction,
@@ -54,6 +56,24 @@ const BROADCAST_EMAIL_BATCH_SIZE = 5;
 /** Pause between email batches to reduce spam-filter pressure. */
 const BROADCAST_EMAIL_BATCH_DELAY_MS = 2000;
 const BROADCAST_MAX_RECIPIENTS = 2000;
+/** Suppress duplicate broadcasts (same key/content) within this window. */
+const BROADCAST_IDEMPOTENCY_WINDOW_MS = 30 * 60 * 1000;
+
+type BroadcastRecipient = {
+  id: string;
+  email: string;
+  role: Role;
+  status: UserStatus;
+};
+
+type BroadcastJobState = {
+  status: 'queued' | 'completed';
+  recipientCount: number;
+  sentNotification: number;
+  sentEmail: number;
+  failed: Array<{ userId: string; error: string }>;
+  queuedAt: number;
+};
 const VERIFICATION_PENDING_FILTER: VerificationStatus[] = [
   VerificationStatus.UNVERIFIED,
   VerificationStatus.PENDING_REVIEW,
@@ -108,6 +128,10 @@ function formatAuditDetail(params: {
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+  /** In-process dedupe for in-flight / recent broadcasts (survives proxy retries). */
+  private readonly broadcastJobs = new Map<string, BroadcastJobState>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -850,11 +874,254 @@ export class AdminService {
       );
     }
 
+    const fingerprint = this.broadcastFingerprint({
+      adminId: adminPayload.sub,
+      subject,
+      channels: dto.channels,
+      bodyText,
+      recipientIds: recipients.map((r) => r.id),
+    });
+    const idempotencyKey =
+      dto.idempotencyKey?.trim() || `fp:${fingerprint}`;
+
+    this.pruneBroadcastJobs();
+
+    const respondFromState = (state: BroadcastJobState, duplicate: boolean) => ({
+      ok: true,
+      queued: state.status === 'queued',
+      duplicate,
+      sentNotification: state.sentNotification,
+      sentEmail: state.sentEmail,
+      recipientCount: state.recipientCount,
+      failed: state.failed,
+    });
+
+    const inFlight = this.broadcastJobs.get(idempotencyKey);
+    if (
+      inFlight &&
+      Date.now() - inFlight.queuedAt < BROADCAST_IDEMPOTENCY_WINDOW_MS
+    ) {
+      return respondFromState(inFlight, true);
+    }
+
+    const prior = await this.findRecentBroadcastAudit(
+      adminPayload.sub,
+      idempotencyKey,
+      fingerprint,
+    );
+    if (prior) {
+      const after = (prior.after ?? {}) as Record<string, unknown>;
+      const state: BroadcastJobState = {
+        status: prior.outcome === 'QUEUED' ? 'queued' : 'completed',
+        recipientCount:
+          typeof after.recipientCount === 'number'
+            ? after.recipientCount
+            : recipients.length,
+        sentNotification:
+          typeof after.sentNotification === 'number'
+            ? after.sentNotification
+            : 0,
+        sentEmail: typeof after.sentEmail === 'number' ? after.sentEmail : 0,
+        failed: [],
+        queuedAt: prior.createdAt.getTime(),
+      };
+      this.broadcastJobs.set(idempotencyKey, state);
+      return respondFromState(state, true);
+    }
+
+    // Claim before any further await so concurrent retries share one job.
+    if (this.broadcastJobs.has(idempotencyKey)) {
+      return respondFromState(this.broadcastJobs.get(idempotencyKey)!, true);
+    }
+    const queuedState: BroadcastJobState = {
+      status: 'queued',
+      recipientCount: recipients.length,
+      sentNotification: 0,
+      sentEmail: 0,
+      failed: [],
+      queuedAt: Date.now(),
+    };
+    this.broadcastJobs.set(idempotencyKey, queuedState);
+
+    const auditBase = {
+      adminActorId: adminPayload.sub,
+      action: AuditAction.UPDATE,
+      entity: 'UserBroadcast',
+      endpoint: `${req.method} ${req.originalUrl}`,
+      ip: extractIp(req),
+      userAgent:
+        typeof req.headers['user-agent'] === 'string'
+          ? req.headers['user-agent']
+          : undefined,
+      actorRole: 'admin' as const,
+    };
+
+    this.audit.log({
+      ...auditBase,
+      outcome: 'QUEUED',
+      after: {
+        recipientCount: recipients.length,
+        channels: dto.channels,
+        selectAllFiltered: Boolean(dto.selectAllFiltered),
+        subjectLength: subject.length,
+        idempotencyKey,
+        fingerprint,
+        queued: true,
+      },
+    });
+
+    void this.deliverBroadcast({
+      recipients,
+      wantNotification,
+      wantEmail,
+      subject,
+      bodyText,
+      sanitizedHtml,
+      emailHtml,
+    })
+      .then((result) => {
+        const completed: BroadcastJobState = {
+          status: 'completed',
+          recipientCount: recipients.length,
+          sentNotification: result.sentNotification,
+          sentEmail: result.sentEmail,
+          failed: result.failed,
+          queuedAt: queuedState.queuedAt,
+        };
+        this.broadcastJobs.set(idempotencyKey, completed);
+        this.audit.log({
+          ...auditBase,
+          outcome: result.failed.length === 0 ? 'SUCCESS' : 'PARTIAL',
+          after: {
+            recipientCount: recipients.length,
+            channels: dto.channels,
+            selectAllFiltered: Boolean(dto.selectAllFiltered),
+            sentNotification: result.sentNotification,
+            sentEmail: result.sentEmail,
+            failedCount: result.failed.length,
+            subjectLength: subject.length,
+            idempotencyKey,
+            fingerprint,
+            queued: false,
+          },
+        });
+      })
+      .catch((err: unknown) => {
+        this.broadcastJobs.delete(idempotencyKey);
+        this.logger.error(
+          `Broadcast delivery failed (key=${idempotencyKey})`,
+          err instanceof Error ? err.stack : String(err),
+        );
+        this.audit.log({
+          ...auditBase,
+          outcome: 'FAILURE',
+          after: {
+            recipientCount: recipients.length,
+            channels: dto.channels,
+            idempotencyKey,
+            fingerprint,
+            error: err instanceof Error ? err.message : 'Broadcast failed',
+          },
+        });
+      });
+
+    return {
+      ok: true,
+      queued: true,
+      duplicate: false,
+      sentNotification: 0,
+      sentEmail: 0,
+      recipientCount: recipients.length,
+      failed: [] as Array<{ userId: string; error: string }>,
+    };
+  }
+
+  private broadcastFingerprint(params: {
+    adminId: string;
+    subject: string;
+    channels: Array<'notification' | 'email'>;
+    bodyText: string;
+    recipientIds: string[];
+  }): string {
+    const ids = [...params.recipientIds].sort().join(',');
+    const channels = [...params.channels].sort().join(',');
+    return createHash('sha256')
+      .update(
+        [
+          params.adminId,
+          params.subject,
+          channels,
+          params.bodyText.slice(0, 2000),
+          ids,
+        ].join('\n'),
+      )
+      .digest('hex');
+  }
+
+  private pruneBroadcastJobs(): void {
+    const cutoff = Date.now() - BROADCAST_IDEMPOTENCY_WINDOW_MS;
+    for (const [key, state] of this.broadcastJobs) {
+      if (state.queuedAt < cutoff) this.broadcastJobs.delete(key);
+    }
+  }
+
+  private async findRecentBroadcastAudit(
+    adminId: string,
+    idempotencyKey: string,
+    fingerprint: string,
+  ) {
+    const recent = await this.prisma.auditLog.findMany({
+      where: {
+        entity: 'UserBroadcast',
+        adminActorId: adminId,
+        createdAt: {
+          gte: new Date(Date.now() - BROADCAST_IDEMPOTENCY_WINDOW_MS),
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+    });
+    return (
+      recent.find((row) => {
+        if (
+          row.outcome !== 'QUEUED' &&
+          row.outcome !== 'SUCCESS' &&
+          row.outcome !== 'PARTIAL'
+        ) {
+          return false;
+        }
+        const after = (row.after ?? {}) as Record<string, unknown>;
+        return (
+          after.idempotencyKey === idempotencyKey ||
+          after.fingerprint === fingerprint
+        );
+      }) ?? null
+    );
+  }
+
+  private async deliverBroadcast(params: {
+    recipients: BroadcastRecipient[];
+    wantNotification: boolean;
+    wantEmail: boolean;
+    subject: string;
+    bodyText: string;
+    sanitizedHtml: string;
+    emailHtml: string;
+  }) {
+    const {
+      recipients,
+      wantNotification,
+      wantEmail,
+      subject,
+      bodyText,
+      sanitizedHtml,
+      emailHtml,
+    } = params;
+
     let sentNotification = 0;
     let sentEmail = 0;
     const failed: Array<{ userId: string; error: string }> = [];
 
-    // In-app + push first (concurrency pool).
     if (wantNotification) {
       await mapPool(recipients, BROADCAST_CONCURRENCY, async (user) => {
         try {
@@ -881,7 +1148,6 @@ export class AdminService {
       });
     }
 
-    // Emails in sequential batches of 5 (respect opt-out + rate limit).
     if (wantEmail) {
       const emailRecipients = recipients.filter((u) => Boolean(u.email?.trim()));
 
@@ -915,36 +1181,7 @@ export class AdminService {
       }
     }
 
-    this.audit.log({
-      adminActorId: adminPayload.sub,
-      action: AuditAction.UPDATE,
-      entity: 'UserBroadcast',
-      endpoint: `${req.method} ${req.originalUrl}`,
-      ip: extractIp(req),
-      userAgent:
-        typeof req.headers['user-agent'] === 'string'
-          ? req.headers['user-agent']
-          : undefined,
-      outcome: failed.length === 0 ? 'SUCCESS' : 'PARTIAL',
-      actorRole: 'admin',
-      after: {
-        recipientCount: recipients.length,
-        channels: dto.channels,
-        selectAllFiltered: Boolean(dto.selectAllFiltered),
-        sentNotification,
-        sentEmail,
-        failedCount: failed.length,
-        subjectLength: subject.length,
-      },
-    });
-
-    return {
-      ok: failed.length === 0,
-      sentNotification,
-      sentEmail,
-      recipientCount: recipients.length,
-      failed,
-    };
+    return { sentNotification, sentEmail, failed };
   }
 
   private async resolveBroadcastRecipients(dto: AdminBroadcastUsersDto) {

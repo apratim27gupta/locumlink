@@ -169,9 +169,9 @@ function dashboardTabForJob(job: Job): 'active' | 'ongoing' | 'recent' | 'draft'
     const status = String(job.status ?? '').toUpperCase();
     if (status === 'DRAFT')
         return 'draft';
-    if (status === 'EXPIRED' || status === 'COMPLETED' || status === 'CANCELLED')
+    if (status === 'EXPIRED' || status === 'COMPLETED')
         return 'recent';
-    if (status === 'ONGOING')
+    if (status === 'SCHEDULED' || status === 'ONGOING')
         return isJobPastEndDate(job) ? 'recent' : 'ongoing';
     if (status === 'ACTIVE' && isJobPastEndDate(job))
         return 'recent';
@@ -180,19 +180,23 @@ function dashboardTabForJob(job: Job): 'active' | 'ongoing' | 'recent' | 'draft'
 function jobHasAcceptedLocum(job: Job): boolean {
     if (job.hasAcceptedLocum === true)
         return true;
-    return String(job.status ?? '').toUpperCase() === 'ONGOING'
-        || String(job.status ?? '').toUpperCase() === 'COMPLETED';
+    const status = String(job.status ?? '').toUpperCase();
+    return status === 'SCHEDULED' || status === 'ONGOING' || status === 'COMPLETED';
 }
 /** Completed tab: locum accepted the placement and the shift end date has passed. */
 function isCompletedLocumShift(job: Job): boolean {
     if (!isJobPastEndDate(job) || !jobHasAcceptedLocum(job))
         return false;
     const status = String(job.status ?? '').toUpperCase();
-    return status === 'COMPLETED' || status === 'ONGOING';
+    return status === 'COMPLETED' || status === 'ONGOING' || status === 'SCHEDULED';
 }
 /** Confirmed tab: locum accepted; shift is still in progress (end date not passed). */
 function isConfirmedLocumShift(job: Job): boolean {
-    return String(job.status ?? '').toUpperCase() === 'ONGOING' && !isJobPastEndDate(job);
+    const status = String(job.status ?? '').toUpperCase();
+    return (
+        (status === 'ONGOING' || status === 'SCHEDULED') &&
+        !isJobPastEndDate(job)
+    );
 }
 function getLocumDisplayName(app: ApplicationRecord): string {
     const { firstName, lastName, user } = app.locumProfile;
@@ -823,7 +827,9 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
     }, [menuOpen]);
     const isSoftDeleted = job.isDeleted === true;
     const isExpanded = expandedJobId === job.id;
-    const isFilled = !isSoftDeleted && job.status === 'ONGOING';
+    const isFilled =
+        !isSoftDeleted &&
+        (job.status === 'ONGOING' || job.status === 'SCHEDULED');
     const isDraft = !isSoftDeleted && job.status === 'DRAFT';
     const appCount = job.applicationsCount;
     const startFmt = fmtDate(job.startDate);

@@ -5,6 +5,8 @@ import {
   DefaultValuePipe,
   Get,
   Header,
+  HttpCode,
+  HttpStatus,
   NotFoundException,
   Param,
   ParseIntPipe,
@@ -198,6 +200,7 @@ export class AdminController {
   }
 
   @Post('users/broadcast')
+  @HttpCode(HttpStatus.ACCEPTED)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async broadcastUsers(
     @Req() req: Request,

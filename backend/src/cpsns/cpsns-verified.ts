@@ -149,8 +149,21 @@ export function isInCredentialQueue(
 
 export function isEligibleForCredentialQueueLocum(profile: {
   cpsnsVerificationStatus: VerificationStatus | null | undefined;
+  cpsnsId?: string | null;
+  licenseFileName?: string | null;
+  resumeFileName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
 }): boolean {
-  return isInCredentialQueue(profile.cpsnsVerificationStatus);
+  if (!isInCredentialQueue(profile.cpsnsVerificationStatus)) return false;
+  const hasCpsns = hasCpsnsNumber(profile.cpsnsId);
+  const hasProfile = Boolean(
+    profile.licenseFileName?.trim() ||
+      profile.resumeFileName?.trim() ||
+      profile.firstName?.trim() ||
+      profile.lastName?.trim(),
+  );
+  return hasCpsns || hasProfile;
 }
 
 /** After signup (account still PENDING), push completed profiles into the review queue. */

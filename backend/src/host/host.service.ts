@@ -39,6 +39,7 @@ import {
   assertJobScheduleAcceptable,
   formatCalendarDateForApi,
   isPostingEndDatePassed,
+  postingStatusAfterLocumAccept,
 } from './job-schedule.util.js';
 import { getReviewPlaygroundEmails, isReviewPlaygroundEmail } from '../config/review-playground.util.js';
 
@@ -414,7 +415,7 @@ export class HostService {
       this.prisma.jobPosting.count({
         where: {
           hostProfileId,
-          status: { in: ['ONGOING', 'COMPLETED', 'CANCELLED', 'EXPIRED'] },
+          status: { in: ['SCHEDULED', 'ONGOING', 'COMPLETED', 'EXPIRED'] },
         },
       }),
       this.prisma.application.count({
@@ -433,7 +434,7 @@ export class HostService {
       this.prisma.jobPosting.count({
         where: {
           hostProfileId,
-          status: { in: ['ONGOING', 'COMPLETED', 'CANCELLED', 'EXPIRED'] },
+          status: { in: ['SCHEDULED', 'ONGOING', 'COMPLETED', 'EXPIRED'] },
           createdAt: { lt: lastQtr },
         },
       }),
@@ -584,6 +585,9 @@ export class HostService {
         // PRD Section 2.2: save leave type + full/half day
         leaveType: dto.leaveType ?? null,
         fullHalfDay: dto.fullHalfDay ?? null,
+        ...(status === PostingStatus.ACTIVE
+          ? { publishedAt: new Date() }
+          : {}),
       },
     });
 
@@ -604,11 +608,12 @@ export class HostService {
       where: {
         hostProfileId,
         isDeleted: false,
-        status: { in: ['ONGOING', 'ACTIVE'] },
+        status: { in: ['SCHEDULED', 'ONGOING', 'ACTIVE'] },
       },
       select: {
         id: true,
         status: true,
+        startDate: true,
         endDate: true,
         applications: {
           where: {
@@ -623,25 +628,43 @@ export class HostService {
       },
     });
 
-    const toComplete = jobs.filter(
-      (j) =>
-        j.status === 'ONGOING' &&
-        isPostingEndDatePassed(j.endDate) &&
-        j.applications.length > 0,
-    );
+    const toComplete: string[] = [];
+    const toOngoing: string[] = [];
+    const toExpire: string[] = [];
+
+    for (const j of jobs) {
+      const hasAccepted = j.applications.length > 0;
+      if (hasAccepted) {
+        const next = postingStatusAfterLocumAccept(j.startDate, j.endDate);
+        if (next === 'COMPLETED' && j.status !== 'COMPLETED') {
+          toComplete.push(j.id);
+        } else if (next === 'ONGOING' && j.status !== 'ONGOING') {
+          toOngoing.push(j.id);
+        } else if (next === 'SCHEDULED' && j.status !== 'SCHEDULED') {
+          // rare: clock skew / date edit — leave unless we need to demote
+        }
+        continue;
+      }
+      if (j.status === 'ACTIVE' && isPostingEndDatePassed(j.endDate)) {
+        toExpire.push(j.id);
+      }
+    }
+
     if (toComplete.length > 0) {
       await this.prisma.jobPosting.updateMany({
-        where: { id: { in: toComplete.map((j) => j.id) } },
+        where: { id: { in: toComplete } },
         data: { status: 'COMPLETED' },
       });
     }
-
-    const toExpire = jobs.filter(
-      (j) => j.status === 'ACTIVE' && isPostingEndDatePassed(j.endDate),
-    );
+    if (toOngoing.length > 0) {
+      await this.prisma.jobPosting.updateMany({
+        where: { id: { in: toOngoing } },
+        data: { status: 'ONGOING' },
+      });
+    }
     if (toExpire.length > 0) {
       await this.prisma.jobPosting.updateMany({
-        where: { id: { in: toExpire.map((j) => j.id) } },
+        where: { id: { in: toExpire } },
         data: { status: 'EXPIRED' },
       });
     }
@@ -755,12 +778,12 @@ export class HostService {
     const ALLOWED_TRANSITIONS: Partial<
       Record<PostingStatus, PostingStatus[]>
     > = {
-      DRAFT: ['ACTIVE', 'CANCELLED'],
-      ACTIVE: ['DRAFT', 'CANCELLED'],
-      ONGOING: ['CANCELLED'],
+      DRAFT: ['ACTIVE'],
+      ACTIVE: ['DRAFT'],
+      SCHEDULED: [],
+      ONGOING: [],
       EXPIRED: [],
       COMPLETED: [],
-      CANCELLED: [],
     };
 
     let statusToSave: PostingStatus | undefined;
@@ -801,12 +824,16 @@ export class HostService {
           })
         : {};
 
+    const newlyPublished =
+      publishingActive && job.status === PostingStatus.DRAFT;
+
     const updated = await this.prisma.jobPosting.update({
       where: { id: jobId },
       data: {
         ...(dto.title != null && { title: dto.title }),
         ...(dto.description != null && { description: dto.description }),
         ...(statusToSave != null && { status: statusToSave }),
+        ...(newlyPublished ? { publishedAt: new Date() } : {}),
         ...(dto.location != null && { location: dto.location }),
         ...(dto.keyResponsibilities != null && {
           keyResponsibilities: dto.keyResponsibilities,
@@ -853,8 +880,6 @@ export class HostService {
         ...(dto.fullHalfDay != null && { fullHalfDay: dto.fullHalfDay }),
       },
     });
-    const newlyPublished =
-      publishingActive && job.status === PostingStatus.DRAFT;
     if (newlyPublished) {
       await this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, updated);
     }
@@ -939,15 +964,15 @@ export class HostService {
 
     const pastEndDate = isPostingEndDatePassed(job.endDate);
     const eligible =
+      job.status === 'SCHEDULED' ||
       job.status === 'ONGOING' ||
       job.status === 'COMPLETED' ||
       job.status === 'EXPIRED' ||
-      job.status === 'CANCELLED' ||
       pastEndDate;
 
     if (!eligible) {
       throw new BadRequestException(
-        'This job cannot be reopened (must be filled, expired, cancelled, or past end date).',
+        'This job cannot be reopened (must be filled, expired, or past end date).',
       );
     }
 
@@ -991,6 +1016,7 @@ export class HostService {
         where: { id: jobId },
         data: {
           status: isVerified ? 'ACTIVE' : 'DRAFT',
+          ...(isVerified ? { publishedAt: new Date() } : {}),
           ...(startDateParsed != null &&
             endDateParsed != null && {
               startDate: startDateParsed,

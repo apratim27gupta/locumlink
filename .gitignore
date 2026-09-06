@@ -34,5 +34,8 @@ frontend/public/fallback-*.js
 **/.env*
 ecosystem.config.js
 backend/.env.test
+backend/renewals.json
+backend/.ops-renewal-alerts-state.json
+backend/.ops-billing-alerts-state.json
 locumlink-490817-*.json
 .staging-tmp/

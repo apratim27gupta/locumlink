@@ -31,7 +31,7 @@ export class AdminAuthController {
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async requestOtp(@Body() body: AdminRequestOtpDto, @Ip() ip: string) {
-    await this.adminAuth.requestLoginOtp(body.email, ip);
+    await this.adminAuth.requestLoginOtp(body.email, ip, body.captchaToken);
     return { ok: true, message: this.adminAuth.otpRequestGenericMessage() };
   }
 

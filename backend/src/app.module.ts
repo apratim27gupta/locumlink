@@ -24,10 +24,14 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ErrorLogInterceptor } from './common/error-log.interceptor.js';
 import { AppLoggerModule } from './common/logger/app-logger.module.js';
 import { HttpLoggingInterceptor } from './common/interceptors/http-logging.interceptor.js';
-import { AppLoggerService } from './common/logger/app-logger.service.js';
+import { SlowRequestInterceptor } from './common/interceptors/slow-request.interceptor.js';
+import { OpsAlertModule } from './common/ops-alert.module.js';
+import { TurnstileModule } from './common/turnstile/turnstile.module.js';
 @Module({
   imports: [
     AppLoggerModule,
+    OpsAlertModule,
+    TurnstileModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath:
@@ -73,6 +77,10 @@ import { AppLoggerService } from './common/logger/app-logger.service.js';
     {
       provide: APP_INTERCEPTOR,
       useClass: HttpLoggingInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: SlowRequestInterceptor,
     },
   ],
 })

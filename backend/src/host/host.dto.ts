@@ -257,14 +257,14 @@ export class UpdateJobDto {
   location?: string;
 
   @IsString()
-  @IsIn(['DRAFT', 'ACTIVE', 'ONGOING', 'COMPLETED', 'CANCELLED', 'EXPIRED'])
+  @IsIn(['DRAFT', 'ACTIVE', 'SCHEDULED', 'ONGOING', 'COMPLETED', 'EXPIRED'])
   @IsOptional()
   status?:
     | 'DRAFT'
     | 'ACTIVE'
+    | 'SCHEDULED'
     | 'ONGOING'
     | 'COMPLETED'
-    | 'CANCELLED'
     | 'EXPIRED';
 
   @IsArray()

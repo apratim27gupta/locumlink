@@ -11,7 +11,7 @@ interface AuthCtx {
     role: Role | null;
     isLoading: boolean;
     profileComplete: boolean;
-    sendOtp: (email: string, role: Role) => Promise<void>;
+    sendOtp: (email: string, role: Role, captchaToken?: string) => Promise<void>;
     verifyOtp: (email: string, otp: string) => Promise<{
         role: Role;
         redirectTo: string;
@@ -151,11 +151,15 @@ export function AuthProvider({ children }: {
         }
         return () => subscription?.unsubscribe();
     }, []);
-    async function sendOtp(email: string, chosenRole: Role): Promise<void> {
+    async function sendOtp(
+        email: string,
+        chosenRole: Role,
+        captchaToken?: string,
+    ): Promise<void> {
         saveRole(chosenRole);
         setRoleState(chosenRole);
         saveEmail(email);
-        await authApi.sendOtp(email, chosenRole);
+        await authApi.sendOtp(email, chosenRole, captchaToken);
     }
     async function verifyOtp(email: string, otp: string): Promise<{
         role: Role;

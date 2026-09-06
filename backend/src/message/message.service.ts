@@ -19,7 +19,6 @@ import { AdminNotificationsService } from '../notifications/admin-notifications.
 import type { ReportUserDto } from './message.dto.js';
 const userSelect = {
   id: true,
-  email: true,
   role: true,
   locumProfile: { select: { firstName: true, lastName: true } },
   hostProfile: {
@@ -27,6 +26,30 @@ const userSelect = {
       contactFirstName: true,
       contactLastName: true,
       practiceName: true,
+    },
+  },
+} as const;
+
+const partnerProfileSelect = {
+  id: true,
+  role: true,
+  locumProfile: {
+    select: {
+      firstName: true,
+      lastName: true,
+      specializationText: true,
+      specialty: true,
+      city: true,
+      province: true,
+    },
+  },
+  hostProfile: {
+    select: {
+      contactFirstName: true,
+      contactLastName: true,
+      practiceName: true,
+      city: true,
+      province: true,
     },
   },
 } as const;
@@ -50,7 +73,7 @@ export class MessageService {
   ) {}
 
   private displayUserName(user: {
-    email: string;
+    email?: string;
     role: string;
     locumProfile?: { firstName: string | null; lastName: string | null } | null;
     hostProfile?: {
@@ -149,6 +172,47 @@ export class MessageService {
     if (status.isMessagingBlocked) {
       throw new ForbiddenException('You cannot message this user.');
     }
+  }
+
+  /** Prevents probing arbitrary user IDs via getThread when no messages exist yet. */
+  private async hasMessagingContext(
+    userId: string,
+    partnerId: string,
+  ): Promise<boolean> {
+    const [messageLink, applicationLink] = await Promise.all([
+      this.prisma.message.findFirst({
+        where: {
+          OR: [
+            { senderId: userId, recipientId: partnerId },
+            { senderId: partnerId, recipientId: userId },
+          ],
+        },
+        select: { id: true },
+      }),
+      this.prisma.application.findFirst({
+        where: {
+          OR: [
+            {
+              locumProfile: { userId },
+              jobPosting: { hostProfile: { userId: partnerId } },
+            },
+            {
+              locumProfile: { userId: partnerId },
+              jobPosting: { hostProfile: { userId } },
+            },
+          ],
+        },
+        select: { id: true },
+      }),
+    ]);
+    return Boolean(messageLink ?? applicationLink);
+  }
+
+  private async fetchPartnerProfile(partnerId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: partnerId },
+      select: partnerProfileSelect,
+    });
   }
 
   async blockUser(blockerId: string, blockedId: string) {
@@ -543,34 +607,11 @@ export class MessageService {
     });
 
     if (!conversationExists) {
+      const canView = await this.hasMessagingContext(userId, partnerId);
       const blockStatus = await this.getBlockStatus(userId, partnerId);
-      const partner = await this.prisma.user.findUnique({
-        where: { id: partnerId },
-        select: {
-          id: true,
-          email: true,
-          role: true,
-          locumProfile: {
-            select: {
-              firstName: true,
-              lastName: true,
-              specializationText: true,
-              specialty: true,
-              city: true,
-              province: true,
-            },
-          },
-          hostProfile: {
-            select: {
-              contactFirstName: true,
-              contactLastName: true,
-              practiceName: true,
-              city: true,
-              province: true,
-            },
-          },
-        },
-      });
+      const partner = canView
+        ? await this.fetchPartnerProfile(partnerId)
+        : null;
       return {
         items: [],
         nextCursor: null,
@@ -581,33 +622,7 @@ export class MessageService {
     }
 
     const [partner, blockStatus] = await Promise.all([
-      this.prisma.user.findUnique({
-        where: { id: partnerId },
-        select: {
-          id: true,
-          email: true,
-          role: true,
-          locumProfile: {
-            select: {
-              firstName: true,
-              lastName: true,
-              specializationText: true,
-              specialty: true,
-              city: true,
-              province: true,
-            },
-          },
-          hostProfile: {
-            select: {
-              contactFirstName: true,
-              contactLastName: true,
-              practiceName: true,
-              city: true,
-              province: true,
-            },
-          },
-        },
-      }),
+      this.fetchPartnerProfile(partnerId),
       this.getBlockStatus(userId, partnerId),
     ]);
 

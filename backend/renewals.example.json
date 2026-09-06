@@ -1,0 +1,16 @@
+[
+  {
+    "id": "apple-developer",
+    "name": "Apple Developer Program",
+    "renewalDate": "2026-12-01",
+    "billingUrl": "https://developer.apple.com/account/",
+    "notes": "Annual membership — Sign in with Apple. Manual date (no public API)."
+  },
+  {
+    "id": "expo-eas",
+    "name": "Expo / EAS",
+    "renewalDate": "2026-12-01",
+    "billingUrl": "https://expo.dev/accounts/",
+    "notes": "Mobile builds / push if on paid plan. Manual date."
+  }
+]
