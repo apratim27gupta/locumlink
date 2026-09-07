@@ -11,13 +11,11 @@ import { getEmail, saveLastPath } from '@/lib/auth';
 import type { Role } from '@/lib/auth';
 import { sanitizeErrorMessage, toUserFacingError } from '@/lib/userFacingError';
 import TurnstileWidget, { isTurnstileEnabled } from '@/components/TurnstileWidget';
+import { roleAccent } from '@/lib/roleAccent';
 
 type Mode = 'create' | 'signin';
 
 const BRAND = {
-    primary: '#0F2A7A',
-    primaryHover: '#1E3FAF',
-    teal: '#0F2A7A',
     border: '#e2e5ee',
     textPrimary: '#0A0A0A',
     textSecondary: '#4A4A4A',
@@ -115,6 +113,7 @@ function AuthPageInner() {
     }
 
     const roleLabel = (r: Role) => (r === 'clinic' ? 'Host' : 'Locum');
+    const accent = roleAccent(role);
 
     return (
         <>
@@ -140,7 +139,10 @@ function AuthPageInner() {
                     role="group"
                     aria-label={mode === 'create' ? 'Account type' : 'Sign in role'}
                 >
-                    {(['clinic', 'locum'] as Role[]).map((r) => (
+                    {(['clinic', 'locum'] as Role[]).map((r) => {
+                        const selected = role === r;
+                        const pill = roleAccent(r);
+                        return (
                         <button key={r} type="button"
                             onClick={() => {
                                 if (roleLocked && r !== role) {
@@ -150,22 +152,23 @@ function AuthPageInner() {
                                 setLockWarning(null);
                                 setRole(r);
                             }}
-                            aria-pressed={role === r}
+                            aria-pressed={selected}
                             suppressHydrationWarning
                             style={{
                                 flex: 1, padding: '10px', cursor: 'pointer',
                                 fontSize: 14, fontFamily: 'inherit',
-                                fontWeight: role === r ? 600 : 400,
-                                background: role === r ? '#fff' : BRAND.bgGrey,
-                                color: role === r ? BRAND.primary : BRAND.textMuted,
-                                border: role === r ? `1px solid ${BRAND.primary}` : `1px solid ${BRAND.border}`,
+                                fontWeight: selected ? 600 : 400,
+                                background: selected ? '#fff' : BRAND.bgGrey,
+                                color: selected ? pill.primary : BRAND.textMuted,
+                                border: selected ? `1px solid ${pill.primary}` : `1px solid ${BRAND.border}`,
                                 borderRadius: 6,
                                 boxSizing: 'border-box',
                                 transition: 'all .15s',
                             }}>
                             {roleLabel(r)}
                         </button>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
@@ -202,7 +205,7 @@ function AuthPageInner() {
                             suppressHydrationWarning
                             className="auth-oauth-btn"
                             style={{
-                                border: `1px solid ${busyAction === provider ? BRAND.primary : BRAND.border}`,
+                                border: `1px solid ${busyAction === provider ? accent.primary : BRAND.border}`,
                                 opacity: busyAction === provider ? 0.6 : 1,
                             }}>
                             <span className="auth-oauth-btn__icon">{icon}</span>
@@ -227,7 +230,7 @@ function AuthPageInner() {
                             placeholder="example@gmail.com"
                             suppressHydrationWarning
                             style={emailInput}
-                            onFocus={(e) => (e.currentTarget.style.borderColor = BRAND.primary)}
+                            onFocus={(e) => (e.currentTarget.style.borderColor = accent.primary)}
                             onBlur={(e) => (e.currentTarget.style.borderColor = '#D0D5DD')}
                         />
                     </div>
@@ -243,8 +246,9 @@ function AuthPageInner() {
                             width: '100%', padding: '11px', borderRadius: 6,
                             fontSize: 18, fontWeight: 600, cursor: busyAction === 'email' ? 'not-allowed' : 'pointer',
                             fontFamily: 'inherit', border: 'none', lineHeight: '140%',
-                            background: busyAction === 'email' ? BRAND.primaryHover : BRAND.primary,
-                            color: '#fff', opacity: busyAction === 'email' ? 0.75 : 1,
+                            background: busyAction === 'email' ? accent.primaryHover : accent.primary,
+                            color: '#fff',
+                            opacity: busyAction === 'email' ? 0.75 : 1,
                             transition: 'background .15s, opacity .15s',
                         }}>
                         {busyAction === 'email' ? 'Sending code\u2026' : mode === 'create' ? 'Create account' : 'Continue'}
@@ -257,14 +261,14 @@ function AuthPageInner() {
                     <>Already have an account?{' '}
                         <button type="button" className="auth-page-signin-link"
                             onClick={() => setMode('signin')}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, fontFamily: 'inherit', color: BRAND.primaryHover }}>
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, fontFamily: 'inherit', color: accent.primaryHover }}>
                             Sign in
                         </button>
                     </>
                 ) : (
                     <>Don&apos;t have an account?{' '}
                         <button type="button" onClick={() => setMode('create')}
-                            style={{ background: 'none', border: 'none', color: BRAND.primary, cursor: 'pointer', fontSize: 18, fontFamily: 'inherit', fontWeight: 500 }}>
+                            style={{ background: 'none', border: 'none', color: accent.primary, cursor: 'pointer', fontSize: 18, fontFamily: 'inherit', fontWeight: 500 }}>
                             Sign up
                         </button>
                     </>

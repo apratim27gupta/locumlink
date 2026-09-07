@@ -4,6 +4,9 @@
   --color-primary: #0F2A7A;
   --color-primary-hover: #1E3FAF;
   --color-primary-light: #E8EDF8;
+  --color-host-accent: #0F2A7A;
+  --color-locum-accent: #38C6C6;
+  --color-locum-accent-hover: #2BB0B0;
   --color-teal: #0F2A7A;
   --color-gradient-start: #0F2A7A;
   --color-gradient-end: #1E3FAF;
@@ -924,6 +927,10 @@
   border-color: rgba(56, 198, 198, 0.7);
 }
 
+.dash-sidebar[data-role='locum'] .dash-sidebar-feedback-input:focus {
+  border-color: rgba(56, 198, 198, 0.85);
+}
+
 .dash-sidebar-feedback-submit {
   align-self: flex-start;
   height: 30px;
@@ -1654,6 +1661,10 @@ body.app-body {
 .dash-sidebar a > div:hover {
   background: rgba(56, 198, 198, 0.12) !important;
   color: #ffffff !important;
+}
+
+.dash-sidebar[data-role='locum'] a > div:hover {
+  background: rgba(56, 198, 198, 0.18) !important;
 }
 
 /* ── Sidebar nav icon color on dark bg ───────── */
@@ -3127,6 +3138,11 @@ main.dash-main-content {
   min-width: 20px;
   height: 20px;
   font-size: 11px;
+}
+
+.dash-sidebar[data-role='locum'] .count-badge--sidebar {
+  background: #38c6c6;
+  color: #0f2a7a;
 }
 
 .count-badge--tab {

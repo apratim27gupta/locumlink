@@ -95,14 +95,6 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
           >
             Sign in
           </button>
-          <button
-            type="button"
-            className="btn-signup"
-            disabled={!interactive}
-            onClick={() => goToAuth('/auth')}
-          >
-            Sign Up
-          </button>
         </div>
       </nav>
 
