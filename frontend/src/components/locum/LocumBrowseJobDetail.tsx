@@ -7,7 +7,7 @@ import type { BrowseJob } from '@/lib/api';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 import { formatHostDoctorDisplayName } from '@/lib/hostDisplayName';
 import { groupKeyResponsibilitiesForDisplay } from '@/lib/hostJobPostingForm';
-import { relativeHoursOrDaysAgo, toLocalDateTime } from '@/lib/relativeTime';
+import { jobPostedAtIso, relativeHoursOrDaysAgo, toLocalDateTime } from '@/lib/relativeTime';
 
 const LOGO_TEAL = '#309BB7';
 const LOGO_TEAL_BG = 'rgba(48, 155, 183, 0.14)';
@@ -259,10 +259,10 @@ export function LocumBrowseJobDetail({
         >
           {job.hostProfile.city}, {job.hostProfile.province} ·{' '}
           <span
-            title={toLocalDateTime(job.createdAt)}
+            title={toLocalDateTime(jobPostedAtIso(job))}
             style={{ cursor: 'help', borderBottom: '1px dotted currentColor' }}
           >
-            {relativeHoursOrDaysAgo(job.createdAt)}
+            {relativeHoursOrDaysAgo(jobPostedAtIso(job))}
           </span>{' '}
           · {job.applicationsCount} applicant
           {job.applicationsCount !== 1 ? 's' : ''}

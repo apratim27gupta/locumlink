@@ -31,6 +31,9 @@ export function sanitizeErrorMessage(
     const msg = (message ?? '').trim();
     if (!msg)
         return '';
+    if (/must be an email/i.test(msg) || /^email must be an email$/i.test(msg)) {
+        return 'Please enter a valid email address.';
+    }
     if (isTechnicalErrorMessage(msg))
         return fallback;
     return msg;

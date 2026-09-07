@@ -44,6 +44,9 @@ export function toBrowseJobPreview(
       asNullableString(job.createdAt) ??
       asNullableString(job.updatedAt) ??
       new Date().toISOString(),
+    publishedAt: asNullableString(
+      (job as { publishedAt?: unknown }).publishedAt,
+    ),
     applicationsCount: job.applicationsCount ?? 0,
     hostProfile: {
       practiceName: profile?.clinicName?.trim() || '',

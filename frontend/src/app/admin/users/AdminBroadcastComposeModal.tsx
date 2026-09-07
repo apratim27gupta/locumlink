@@ -7,6 +7,8 @@ export type BroadcastChannel = 'notification' | 'email';
 
 export type BroadcastResult = {
   ok: boolean;
+  queued?: boolean;
+  duplicate?: boolean;
   sentNotification: number;
   sentEmail: number;
   recipientCount: number;
@@ -23,6 +25,7 @@ type Props = {
     bodyHtml: string;
     bodyText: string;
     channels: BroadcastChannel[];
+    idempotencyKey: string;
   }) => Promise<void>;
 };
 
@@ -55,6 +58,7 @@ export default function AdminBroadcastComposeModal({
   onSend,
 }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const idempotencyKeyRef = useRef<string>('');
   const [subject, setSubject] = useState('');
   const [channelNotification, setChannelNotification] = useState(true);
   const [channelEmail, setChannelEmail] = useState(true);
@@ -82,6 +86,10 @@ export default function AdminBroadcastComposeModal({
     setFontSize('3');
     setFmt({ bold: false, italic: false, underline: false });
     setLocalErr(null);
+    idempotencyKeyRef.current =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `bcast-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     requestAnimationFrame(() => {
       if (editorRef.current) editorRef.current.innerHTML = '<p><br></p>';
     });
@@ -121,7 +129,13 @@ export default function AdminBroadcastComposeModal({
       return;
     }
     try {
-      await onSend({ subject: trimmedSubject, bodyHtml, bodyText, channels });
+      await onSend({
+        subject: trimmedSubject,
+        bodyHtml,
+        bodyText,
+        channels,
+        idempotencyKey: idempotencyKeyRef.current,
+      });
     } catch (e) {
       setLocalErr(e instanceof Error ? e.message : 'Failed to send');
     }

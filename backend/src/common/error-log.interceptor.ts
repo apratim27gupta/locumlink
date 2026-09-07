@@ -1,17 +1,18 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler, HttpException } from '@nestjs/common';
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+  HttpException,
+} from '@nestjs/common';
 import { Observable, throwError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
-import { PrismaService } from '../prisma/prisma.service.js';
-import { EmailService } from '../notifications/email.service.js';
-import { ConfigService } from '@nestjs/config';
+import { OpsAlertService } from './ops-alert.service.js';
+import { httpExceptionLogMessage } from './ops-alert.constants.js';
 
 @Injectable()
 export class ErrorLogInterceptor implements NestInterceptor {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly email: EmailService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly opsAlert: OpsAlertService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest();
@@ -22,21 +23,22 @@ export class ErrorLogInterceptor implements NestInterceptor {
       catchError((err) => {
         const isHttp = err instanceof HttpException;
         const statusCode = isHttp ? err.getStatus() : 500;
-        const message = err?.message ?? 'Unknown error';
+        const message = isHttp
+          ? httpExceptionLogMessage(err)
+          : (err?.message ?? 'Unknown error');
         const stack = err?.stack ?? null;
-        this.prisma.errorLog.create({
-          data: { userId, route, method, statusCode, message, stack, metadata: { userAgent: req.headers['user-agent'] ?? null, ip: req.ip ?? null } },
-        }).catch((dbErr) => console.error('[ErrorLog] DB save failed:', dbErr));
-        if (statusCode >= 500) {
-          const adminEmail = this.config.get<string>('ADMIN_ALERT_EMAIL');
-          if (adminEmail) {
-            this.email.send({
-              to: adminEmail,
-              subject: `Server Error [${statusCode}] — ${method} ${route}`,
-              text: `Error: ${message}\nUser ID: ${userId ?? 'unauthenticated'}\nRoute: ${method} ${route}\nTime: ${new Date().toISOString()}\nStack:\n${stack ?? 'N/A'}`,
-            }).catch((e) => console.error('[ErrorLog] Email failed:', e));
-          }
-        }
+        void this.opsAlert.recordError({
+          userId,
+          route,
+          method,
+          statusCode,
+          message,
+          stack,
+          metadata: {
+            userAgent: req.headers['user-agent'] ?? null,
+            ip: req.ip ?? null,
+          },
+        });
         return throwError(() => err);
       }),
     );

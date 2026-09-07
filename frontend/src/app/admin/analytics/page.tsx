@@ -228,7 +228,6 @@ export default function AdminAnalyticsPage() {
     1,
     ...growth.flatMap((g) => [g.locums, g.hosts, g.total]),
   );
-  const byStatus = data?.applicationsByStatus;
   const postings = data?.postingsByStatus;
 
   return (
@@ -326,7 +325,7 @@ export default function AdminAnalyticsPage() {
         <MetricCard
           label="Suitable locum found"
           value={loading ? '—' : `${data?.suitableLocumFoundPct ?? 0}%`}
-          meaning="Postings that reached Ongoing/Completed among finished postings"
+          meaning="Postings with an accepted locum among finished (filled vs expired/deleted unfilled)"
           icon={<TrendingUp size={24} color="#4f46e5" />}
         />
         <MetricCard
@@ -369,22 +368,27 @@ export default function AdminAnalyticsPage() {
 
       <div className="grid-2" style={{ marginBottom: 24 }}>
         <div className="card">
-          <h3 className="font-medium mb-4">Application pipeline</h3>
+          <h3 className="font-medium mb-4">Placement funnel</h3>
           <p className="text-sm text-muted" style={{ marginBottom: 12 }}>
-            Where candidates sit after applying in this period.
+            Ever-reached stages for commercialisation (not mutually exclusive
+            current-status counts).
           </p>
-          {loading || !byStatus ? (
+          {loading || !data?.funnel ? (
             <p className="text-sm text-muted">Loading…</p>
           ) : (
             <div className="pipeline-grid">
               {(
                 [
-                  ['Applied', byStatus.applied, 'Waiting for host action'],
-                  ['Shortlisted', byStatus.shortlisted, 'Host selected / shortlisted'],
-                  ['Confirmed', byStatus.confirmed, 'Host offered the placement'],
-                  ['Accepted', data?.acceptedCount ?? 0, 'Locum accepted (shift filled)'],
-                  ['Rejected', byStatus.rejected, 'Host rejected'],
-                  ['Withdrawn', byStatus.withdrawn, 'Locum withdrew or declined'],
+                  ['Posted', data.funnel.posted, 'Non-draft jobs in period'],
+                  ['Applied', data.funnel.applied, 'Applications received'],
+                  ['Shortlisted', data.funnel.shortlisted, 'Ever shortlisted or beyond'],
+                  ['Confirmed', data.funnel.confirmed, 'Host offered placement'],
+                  ['Accepted', data.funnel.accepted, 'Locum accepted'],
+                  [
+                    'Completed',
+                    data.funnel.completed,
+                    'Accepted + job end passed',
+                  ],
                 ] as const
               ).map(([label, count, hint]) => (
                 <div key={label} className="pipeline-item">
@@ -400,7 +404,8 @@ export default function AdminAnalyticsPage() {
         <div className="card">
           <h3 className="font-medium mb-4">Job outcomes</h3>
           <p className="text-sm text-muted" style={{ marginBottom: 12 }}>
-            Posting status for jobs created in this period.
+            Posting status for jobs created in this period. Scheduled = accepted
+            before start; Ongoing = in the start→end window. Deleted = host soft-delete.
           </p>
           {loading || !postings ? (
             <p className="text-sm text-muted">Loading…</p>
@@ -409,14 +414,22 @@ export default function AdminAnalyticsPage() {
               {(
                 [
                   ['Active', postings.active, 'Open for applicants'],
-                  ['Ongoing', postings.ongoing, 'Locum accepted; in progress'],
-                  ['Completed', postings.completed, 'Finished with an accepted locum'],
-                  ['Expired', postings.expired, 'Ended without fill'],
-                  ['Cancelled', postings.cancelled, 'Host cancelled'],
                   [
-                    'Unfilled expired',
-                    data?.unfilledExpiredCount ?? 0,
-                    'Expired with no accepted locum',
+                    'Scheduled',
+                    postings.scheduled ?? 0,
+                    'Accepted; before start date',
+                  ],
+                  ['Ongoing', postings.ongoing, 'Accepted; in start→end window'],
+                  [
+                    'Completed',
+                    postings.completed,
+                    'Finished after accepted placement',
+                  ],
+                  ['Expired', postings.expired, 'Ended without fill'],
+                  [
+                    'Deleted',
+                    data?.deletedPostingsCount ?? 0,
+                    'Soft-deleted by host',
                   ],
                 ] as const
               ).map(([label, count, hint]) => (
@@ -432,6 +445,9 @@ export default function AdminAnalyticsPage() {
             <p className="text-sm text-muted" style={{ marginTop: 12 }}>
               Placements confirmed within 48h of apply:{' '}
               <strong>{data.postingPerformance.filledWithin48hPct}%</strong>
+              {typeof data.unfilledExpiredCount === 'number'
+                ? ` · Unfilled expired: ${data.unfilledExpiredCount}`
+                : ''}
             </p>
           ) : null}
         </div>
@@ -453,7 +469,14 @@ export default function AdminAnalyticsPage() {
         && !jobs.some((j) => j.id === expandedJobId)
         && jobDetail.job.id === expandedJobId ? (
           <div className="job-detail-panel" style={{ marginBottom: 16 }}>
-            <p className="font-medium">{jobDetail.job.title}</p>
+            <p className="font-medium">
+              {jobDetail.job.title}
+              {jobDetail.job.isDeleted ? (
+                <span className="status-badge" style={{ marginLeft: 8 }}>
+                  Deleted
+                </span>
+              ) : null}
+            </p>
             <p className="text-sm text-muted" style={{ marginBottom: 8 }}>
               Host:{' '}
               <ProfileLink userId={jobDetail.job.host.userId}>
@@ -503,10 +526,10 @@ export default function AdminAnalyticsPage() {
             >
               <option value="all">All</option>
               <option value="ACTIVE">Active</option>
+              <option value="SCHEDULED">Scheduled</option>
               <option value="ONGOING">Ongoing</option>
               <option value="COMPLETED">Completed</option>
               <option value="EXPIRED">Expired</option>
-              <option value="CANCELLED">Cancelled</option>
               <option value="DRAFT">Draft</option>
             </select>
           </div>
@@ -599,6 +622,11 @@ export default function AdminAnalyticsPage() {
                             <p className="text-sm text-muted">Loading applicants…</p>
                           ) : jobDetail && jobDetail.job.id === job.id ? (
                             <div className="job-detail-panel">
+                              {jobDetail.job.isDeleted ? (
+                                <p className="text-sm" style={{ marginBottom: 8 }}>
+                                  <span className="status-badge">Deleted</span>
+                                </p>
+                              ) : null}
                               <p className="text-sm" style={{ marginBottom: 8 }}>
                                 {jobDetail.job.description.slice(0, 280)}
                                 {jobDetail.job.description.length > 280 ? '…' : ''}

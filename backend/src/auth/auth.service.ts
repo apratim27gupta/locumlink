@@ -40,6 +40,8 @@ import {
   recordUserOtpVerifyFailure,
 } from './user-otp-rate-limit.js';
 import { getFixedAuthOtp, getReviewOtpForEmail } from '../config/fixed-otp.util.js';
+import { hashOtpCode, verifyOtpCode } from '../common/utils/otp-hash.util.js';
+import { TurnstileService } from '../common/turnstile/turnstile.service.js';
 
 const BCRYPT_ROUNDS = 12;
 const OTP_LENGTH = 6;
@@ -86,6 +88,7 @@ export class AuthService {
     private readonly adminNotif: AdminNotificationsService,
     private readonly email: EmailService,
     private readonly emailDigest: EmailDigestService,
+    private readonly turnstile: TurnstileService,
   ) {}
 
   private async assertNoAdminUserEmailBlock(
@@ -367,7 +370,12 @@ export class AuthService {
     }
   }
 
-  async sendOtp(email: string | undefined, role: Role): Promise<void> {
+  async sendOtp(
+    email: string | undefined,
+    role: Role,
+    options: { captchaToken?: string; ip?: string } = {},
+  ): Promise<void> {
+    await this.turnstile.assertValidToken(options.captchaToken, options.ip);
     const normalizedEmail = email?.trim().toLowerCase();
     if (!normalizedEmail) {
       throw new BadRequestException('Email is required');
@@ -396,9 +404,10 @@ export class AuthService {
     }
 
     const fixedOtp = getFixedAuthOtp(normalizedEmail, this.config, OTP_LENGTH);
-    const otp =
+    const otpPlain =
       fixedOtp ??
       String(randomInt(10 ** (OTP_LENGTH - 1), 10 ** OTP_LENGTH - 1));
+    const otpStored = await hashOtpCode(otpPlain);
     const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 
     await this.prisma.$transaction([
@@ -413,7 +422,7 @@ export class AuthService {
         data: {
           email: normalizedEmail,
           role,
-          otp,
+          otp: otpStored,
           expiresAt,
           purpose: USER_OTP_PURPOSE,
         },
@@ -444,7 +453,7 @@ export class AuthService {
     }
 
     const { subject, text, html } = buildOtpEmail({
-      otp,
+      otp: otpPlain,
       ttlMinutes: Math.round(OTP_TTL_MS / 60_000),
       productLabel: 'Locum Link',
       subject: 'Locum Link sign-in code',
@@ -473,18 +482,9 @@ export class AuthService {
       const nodeEnv = this.config.get<string>('NODE_ENV') ?? 'development';
       if (nodeEnv !== 'production') {
         this.logger.warn(
-          `Email failed (${result.error}); local dev OTP for ${normalizedEmail}: ${otp}`,
+          `Email failed (${result.error}); local dev OTP for ${normalizedEmail}: ${otpPlain}`,
         );
       }
-      this.prisma.errorLog.create({
-        data: {
-          route: 'auth/sendOtp',
-          method: 'POST',
-          statusCode: 400,
-          message: `OTP email failed for ${normalizedEmail}: ${result.error}`,
-          metadata: { email: normalizedEmail, provider: 'twilio', error: result.error },
-        },
-      }).catch(() => {});
       throw new BadRequestException(
         `Could not send verification email. ${result.error}`,
       );
@@ -515,16 +515,26 @@ export class AuthService {
       throw err;
     }
 
-    const record = await this.prisma.otp.findFirst({
+    const candidates = await this.prisma.otp.findMany({
       where: {
         email: normalizedEmail,
         role: roleHint,
-        otp: code,
         purpose: USER_OTP_PURPOSE,
+        expiresAt: { gt: new Date() },
       },
       orderBy: { createdAt: 'desc' },
+      take: 3,
     });
-    if (!record || record.expiresAt < new Date()) {
+
+    let record: (typeof candidates)[number] | null = null;
+    for (const candidate of candidates) {
+      if (await verifyOtpCode(code, candidate.otp)) {
+        record = candidate;
+        break;
+      }
+    }
+
+    if (!record) {
       recordUserOtpVerifyFailure(normalizedEmail, ip);
       throw new UnauthorizedException('Invalid or expired verification code.');
     }

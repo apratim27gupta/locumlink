@@ -58,6 +58,14 @@ async function paginateJobPostingsWithShiftFilter(
         getReviewPlaygroundEmails(),
       )
     : Prisma.empty;
+  const unfilledClause = Prisma.sql`AND NOT EXISTS (
+    SELECT 1 FROM applications a
+    WHERE a."jobPostingId" = job_postings.id
+      AND (
+        a."locumResponse" = 'ACCEPTED'::"LocumResponse"
+        OR a."locum_accepted_at" IS NOT NULL
+      )
+  )`;
   const cursorClause =
     cursorId && direction === 'desc'
       ? Prisma.sql`AND id < ${cursorId}`
@@ -74,6 +82,7 @@ async function paginateJobPostingsWithShiftFilter(
     ${deletedClause}
     ${hostClause}
     ${playgroundClause}
+    ${unfilledClause}
     ${cursorClause}
     ORDER BY id ${orderClause}
     LIMIT ${limit + 1}
@@ -153,6 +162,14 @@ export async function countBrowseActiveJobPostings(
       AND is_deleted = false
       AND ${shiftActive}
       ${playgroundClause}
+      AND NOT EXISTS (
+        SELECT 1 FROM applications a
+        WHERE a."jobPostingId" = job_postings.id
+          AND (
+            a."locumResponse" = 'ACCEPTED'::"LocumResponse"
+            OR a."locum_accepted_at" IS NOT NULL
+          )
+      )
   `;
   return Number(rows[0]?.count ?? 0);
 }

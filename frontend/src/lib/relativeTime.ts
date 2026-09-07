@@ -17,6 +17,14 @@ export function relativeHoursOrDaysAgo(iso: string | null | undefined): string {
     return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
+/** Prefer publish time over draft create time for “posted X ago”. */
+export function jobPostedAtIso(job: {
+  publishedAt?: string | null;
+  createdAt?: string | null;
+}): string | null {
+  return job.publishedAt ?? job.createdAt ?? null;
+}
+
 export function toLocalDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);

@@ -10,6 +10,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { getEmail, saveLastPath } from '@/lib/auth';
 import type { Role } from '@/lib/auth';
 import { sanitizeErrorMessage, toUserFacingError } from '@/lib/userFacingError';
+import TurnstileWidget, { isTurnstileEnabled } from '@/components/TurnstileWidget';
 
 type Mode = 'create' | 'signin';
 
@@ -55,6 +56,8 @@ function AuthPageInner() {
     const [busyAction, setBusyAction] = useState<
         null | 'email' | 'apple' | 'google' | 'azure'
     >(null);
+    const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+    const turnstileRequired = isTurnstileEnabled();
 
     useEffect(() => {
         if (params.get('mode') === 'signin') setMode('signin');
@@ -71,14 +74,23 @@ function AuthPageInner() {
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-        if (!email) { setError('Please enter your email address.'); return; }
+        const trimmedEmail = email.trim();
+        if (!trimmedEmail) { setError('Please enter your email address.'); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+            setError('Please enter a valid email address.');
+            return;
+        }
+        if (turnstileRequired && !captchaToken) {
+            setError('Please complete the captcha check.');
+            return;
+        }
         setError('');
         setBusyAction('email');
         try {
             const nextParam = params.get('next');
             if (nextParam)
                 saveLastPath(nextParam, role);
-            await sendOtp(email, role);
+            await sendOtp(trimmedEmail, role, captchaToken ?? undefined);
             router.replace(`/auth/verify?role=${encodeURIComponent(role)}`);
         } catch (err: unknown) {
             setError(toUserFacingError(err));
@@ -222,7 +234,11 @@ function AuthPageInner() {
 
                     {error && <p style={{ fontSize: 12, color: BRAND.error, marginBottom: 10 }}>{error}</p>}
 
-                    <button type="submit" disabled={busyAction === 'email'} suppressHydrationWarning
+                    <div style={{ marginBottom: 14 }}>
+                        <TurnstileWidget onToken={setCaptchaToken} />
+                    </div>
+
+                    <button type="submit" disabled={busyAction === 'email' || (turnstileRequired && !captchaToken)} suppressHydrationWarning
                         style={{
                             width: '100%', padding: '11px', borderRadius: 6,
                             fontSize: 18, fontWeight: 600, cursor: busyAction === 'email' ? 'not-allowed' : 'pointer',

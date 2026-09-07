@@ -86,6 +86,11 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   SENTRY_DSN?: string;
+
+  @IsString()
+  @IsOptional()
+  TURNSTILE_SECRET_KEY?: string;
+
   @IsString()
   @IsOptional()
   ALLOWED_ORIGINS: string = 'http://localhost:3001';
@@ -125,6 +130,14 @@ export function validate(config: Record<string, unknown>) {
         .map((e) => Object.values(e.constraints ?? {}).join(', '))
         .join('\n')}`,
     );
+  }
+  if (validatedConfig.NODE_ENV === Environment.Production) {
+    const origins = (validatedConfig.ALLOWED_ORIGINS ?? '').trim();
+    if (!origins) {
+      throw new Error(
+        'ALLOWED_ORIGINS must be set in production (comma-separated frontend URLs).',
+      );
+    }
   }
   return validatedConfig;
 }

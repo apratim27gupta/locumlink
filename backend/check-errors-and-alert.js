@@ -1,12 +1,10 @@
 /**
  * check-errors-and-alert.js
  *
- * Runs every 5 minutes via cron. Checks the error_logs table for rows
- * where alerted = false. Filters out false alerts (OTP errors, rate-limit
- * messages, admin auth issues), then emails remaining errors inline to
- * the admin addresses via Twilio Email. Marks all rows as alerted = true.
+ * Runs every 5 minutes via cron. Checks error_logs for unalerted rows,
+ * filters noise, emails ops-worthy errors via Twilio Email, marks alerted.
  *
- * Run manually with: node check-errors-and-alert.js
+ * Run manually: node check-errors-and-alert.js
  */
 
 const path = require('path');
@@ -15,17 +13,36 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
-// Messages that should not trigger alerts (case-insensitive partial matches)
-const FALSE_ALERT_PATTERNS = [
+// Keep in sync with backend/src/common/ops-alert.constants.ts
+const NOISE_ERROR_PATTERNS = [
+  'invalid or expired verification code',
   'invalid otp',
   'expired otp',
   'otp has expired',
-  'resend after',
+  'invalid credentials',
+  'invalid session',
+  'unauthorized exception',
   'please wait',
-  'try again after',
-  'email not authorized for admin',
-  'not authorized for admin login',
+  'a 6-digit verification code is required',
+  'email is required',
+  'must be an email',
+  'email must be an email',
+  'invalid email',
+  'must be one of the following values',
+  'bad request exception',
+  'this email is not authorized for admin access',
+  'captcha verification',
+  'too many requests',
+  'throttler',
 ];
+
+const FORCE_ALERT_PATTERNS = [
+  'otp email failed',
+  'could not send verification email',
+];
+
+const SLOW_API_LOG_PREFIX = 'SLOW_API:';
+const HEALTH_CHECK_LOG_PREFIX = 'HEALTH_CHECK_FAILED:';
 
 const ENV_PATH = path.join(__dirname, '.env');
 const ROOT_ENV_PATH = path.join(__dirname, '..', '.env');
@@ -46,10 +63,22 @@ const TWILIO_API_KEY_SECRET = readEnvVar(ENV_PATH, 'TWILIO_API_KEY_SECRET');
 const MAIL_FROM_ADDRESS = readEnvVar(ENV_PATH, 'MAIL_FROM_ADDRESS');
 const ADMIN_ALERT_EMAIL = readEnvVar(ROOT_ENV_PATH, 'ADMIN_ALERT_EMAIL');
 
-function isFalseAlert(errorMessage) {
-  if (!errorMessage) return false;
-  const lowerMsg = errorMessage.toLowerCase();
-  return FALSE_ALERT_PATTERNS.some((pattern) => lowerMsg.includes(pattern));
+function isNoiseError(statusCode, message) {
+  if (statusCode >= 500) return false;
+  const lower = (message ?? '').toLowerCase();
+  if (statusCode === 401) return true;
+  if (statusCode === 429) return true;
+  if (statusCode === 400 && lower === 'bad request exception') return true;
+  return NOISE_ERROR_PATTERNS.some((p) => lower.includes(p));
+}
+
+function shouldOpsAlert(statusCode, message) {
+  const lower = (message ?? '').toLowerCase();
+  if (FORCE_ALERT_PATTERNS.some((p) => lower.includes(p))) return true;
+  if (statusCode >= 500) return true;
+  if (lower.startsWith(SLOW_API_LOG_PREFIX.toLowerCase())) return true;
+  if (lower.startsWith(HEALTH_CHECK_LOG_PREFIX.toLowerCase())) return true;
+  return false;
 }
 
 function escapeHtml(str) {
@@ -165,7 +194,7 @@ async function main() {
     const allErrors = await prisma.errorLog.findMany({
       where: { alerted: false },
       orderBy: { createdAt: 'asc' },
-      take: 200, // safety cap so one run can't choke on a huge backlog
+      take: 200,
     });
 
     if (allErrors.length === 0) {
@@ -173,15 +202,15 @@ async function main() {
       return;
     }
 
-    // Filter out false alerts (OTP errors, rate limit messages, admin auth issues)
-    const realErrors = allErrors.filter((err) => !isFalseAlert(err.message));
-    const falseAlertCount = allErrors.length - realErrors.length;
+    const noiseErrors = allErrors.filter((err) => isNoiseError(err.statusCode, err.message));
+    const realErrors = allErrors.filter(
+      (err) => !isNoiseError(err.statusCode, err.message) && shouldOpsAlert(err.statusCode, err.message),
+    );
 
-    if (falseAlertCount > 0) {
-      console.log(`[${timestamp}] Filtered out ${falseAlertCount} false alert(s) (OTP/rate-limit/admin-auth).`);
+    if (noiseErrors.length > 0) {
+      console.log(`[${timestamp}] Filtered out ${noiseErrors.length} noise error(s).`);
     }
 
-    // Mark ALL errors (including false alerts) as alerted so they don't pile up
     const allIds = allErrors.map((e) => e.id);
     await prisma.errorLog.updateMany({
       where: { id: { in: allIds } },
@@ -190,12 +219,11 @@ async function main() {
     console.log(`[${timestamp}] Marked ${allIds.length} error(s) as alerted.`);
 
     if (realErrors.length === 0) {
-      console.log(`[${timestamp}] No real errors to report after filtering.`);
+      console.log(`[${timestamp}] No ops-worthy errors to report after filtering.`);
       return;
     }
 
-    console.log(`[${timestamp}] Found ${realErrors.length} real error(s). Sending alert email...`);
-
+    console.log(`[${timestamp}] Found ${realErrors.length} ops-worthy error(s). Sending alert email...`);
     await sendAlertEmail(realErrors);
     console.log(`[${timestamp}] Alert email sent successfully for ${realErrors.length} error(s).`);
   } catch (err) {

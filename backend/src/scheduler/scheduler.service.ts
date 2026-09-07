@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { EmailDigestService } from '../notifications/email-digest.service.js';
-import { browseShiftStartActiveSql } from '../host/job-schedule.util.js';
+import { browseShiftStartActiveSql, postingStatusAfterLocumAccept } from '../host/job-schedule.util.js';
 
 const locumReminderInclude = {
   locumProfile: {
@@ -59,7 +59,7 @@ export class SchedulerService {
           status: 'CONFIRMED',
           jobPosting: {
             isDeleted: false,
-            status: { not: 'CANCELLED' },
+            status: { notIn: ['EXPIRED', 'COMPLETED'] },
             startDate: { not: null },
           },
         },
@@ -135,7 +135,7 @@ export class SchedulerService {
           jobPosting: {
             startDate: { not: null },
             isDeleted: false,
-            status: { not: 'CANCELLED' },
+            status: { notIn: ['EXPIRED', 'COMPLETED'] },
           },
         },
         include: locumReminderInclude,
@@ -241,6 +241,14 @@ export class SchedulerService {
           AND is_deleted = false
           AND start_date IS NOT NULL
           AND NOT (${shiftActive})
+          AND NOT EXISTS (
+            SELECT 1 FROM applications a
+            WHERE a."jobPostingId" = job_postings.id
+              AND (
+                a."locumResponse" = 'ACCEPTED'::"LocumResponse"
+                OR a."locumAcceptedAt" IS NOT NULL
+              )
+          )
       `;
       if (result > 0) {
         this.logger.log(
@@ -249,6 +257,73 @@ export class SchedulerService {
       }
     } catch (err) {
       this.logger.error('Expire passed shift start cron failed', err);
+    }
+  }
+
+  /** Promote filled jobs: ACTIVE→ONGOING in window, ONGOING/ACTIVE→COMPLETED after end. */
+  @Cron(CronExpression.EVERY_HOUR)
+  async syncFilledJobPostingStatuses() {
+    try {
+      const jobs = await this.prisma.jobPosting.findMany({
+        where: {
+          isDeleted: false,
+          status: { in: ['ACTIVE', 'SCHEDULED', 'ONGOING'] },
+          applications: {
+            some: {
+              OR: [
+                { locumResponse: 'ACCEPTED' },
+                { locumAcceptedAt: { not: null } },
+              ],
+            },
+          },
+        },
+        select: {
+          id: true,
+          status: true,
+          startDate: true,
+          endDate: true,
+        },
+      });
+
+      const toComplete: string[] = [];
+      const toOngoing: string[] = [];
+      const toScheduled: string[] = [];
+      for (const j of jobs) {
+        const next = postingStatusAfterLocumAccept(j.startDate, j.endDate);
+        if (next === 'COMPLETED' && j.status !== 'COMPLETED') {
+          toComplete.push(j.id);
+        } else if (next === 'ONGOING' && j.status !== 'ONGOING') {
+          toOngoing.push(j.id);
+        } else if (next === 'SCHEDULED' && j.status !== 'SCHEDULED') {
+          toScheduled.push(j.id);
+        }
+      }
+
+      if (toComplete.length > 0) {
+        await this.prisma.jobPosting.updateMany({
+          where: { id: { in: toComplete } },
+          data: { status: 'COMPLETED' },
+        });
+      }
+      if (toOngoing.length > 0) {
+        await this.prisma.jobPosting.updateMany({
+          where: { id: { in: toOngoing } },
+          data: { status: 'ONGOING' },
+        });
+      }
+      if (toScheduled.length > 0) {
+        await this.prisma.jobPosting.updateMany({
+          where: { id: { in: toScheduled } },
+          data: { status: 'SCHEDULED' },
+        });
+      }
+      if (toComplete.length + toOngoing.length + toScheduled.length > 0) {
+        this.logger.log(
+          `Synced filled postings: ${toScheduled.length} scheduled, ${toOngoing.length} ongoing, ${toComplete.length} completed`,
+        );
+      }
+    } catch (err) {
+      this.logger.error('Sync filled job posting statuses cron failed', err);
     }
   }
 }

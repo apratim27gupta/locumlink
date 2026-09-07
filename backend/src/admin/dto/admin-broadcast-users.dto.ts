@@ -50,4 +50,14 @@ export class AdminBroadcastUsersDto {
   @IsString()
   @MaxLength(10_000)
   bodyText?: string;
+
+  /**
+   * Client-generated key for this compose/send attempt. Retries with the same
+   * key must not start a second delivery (avoids duplicates after proxy timeouts).
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  idempotencyKey?: string;
 }

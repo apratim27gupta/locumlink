@@ -20,6 +20,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { assertOwnsStoragePath } from '../common/utils/storage-path.util.js';
+import { postingStatusAfterLocumAccept } from '../host/job-schedule.util.js';
 import {
   paginateJobPostings,
   paginateApplications,
@@ -571,6 +572,21 @@ export class LocumService {
       throw new BadRequestException(
         'This job is no longer accepting applications.',
       );
+    const acceptedPlacement = await this.prisma.application.findFirst({
+      where: {
+        jobPostingId: jobId,
+        OR: [
+          { locumResponse: 'ACCEPTED' },
+          { locumAcceptedAt: { not: null } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (acceptedPlacement) {
+      throw new BadRequestException(
+        'This job is no longer accepting applications.',
+      );
+    }
     const existing = await this.prisma.application.findFirst({
       where: { jobPostingId: jobId, locumProfileId: locumProfile.id },
     });
@@ -720,7 +736,17 @@ export class LocumService {
     if (!locumProfile) throw new ForbiddenException();
     const app = await this.prisma.application.findFirst({
       where: { id: applicationId, locumProfileId: locumProfile.id },
-      include: { jobPosting: { select: { id: true, status: true, isDeleted: true } } },
+      include: {
+        jobPosting: {
+          select: {
+            id: true,
+            status: true,
+            isDeleted: true,
+            startDate: true,
+            endDate: true,
+          },
+        },
+      },
     });
     if (!app) throw new NotFoundException('Application not found');
     if (app.status !== 'CONFIRMED')
@@ -739,13 +765,17 @@ export class LocumService {
         throw new BadRequestException(
           'You have already accepted this placement.',
         );
+      const nextStatus = postingStatusAfterLocumAccept(
+        app.jobPosting.startDate,
+        app.jobPosting.endDate,
+      );
       await this.prisma.application.update({
         where: { id: applicationId },
         data: { locumAcceptedAt: new Date(), locumResponse: 'ACCEPTED' },
       });
       await this.prisma.jobPosting.update({
         where: { id: app.jobPostingId },
-        data: { status: 'ONGOING' },
+        data: { status: nextStatus },
       });
       // H-002: Notify host that locum accepted
       try {
@@ -786,7 +816,10 @@ export class LocumService {
         where: { id: applicationId },
         data: { status: 'WITHDRAWN', locumResponse: 'REJECTED' },
       });
-      if (app.jobPosting.status === 'ONGOING') {
+      if (
+        app.jobPosting.status === 'ONGOING' ||
+        app.jobPosting.status === 'SCHEDULED'
+      ) {
         await tx.jobPosting.update({
           where: { id: app.jobPostingId },
           data: { status: 'ACTIVE' },

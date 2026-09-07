@@ -86,10 +86,16 @@ export class AuthController {
   @Post('send-otp')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   @HttpCode(HttpStatus.OK)
-  async sendOtp(@Body() dto: SendOtpDto): Promise<{ success: true }> {
+  async sendOtp(
+    @Body() dto: SendOtpDto,
+    @Ip() ip: string,
+  ): Promise<{ success: true }> {
     const prismaRole: PrismaRole =
       dto.role === 'clinic' ? PrismaRole.HOST : PrismaRole.LOCUM;
-    await this.authService.sendOtp(dto.email, prismaRole);
+    await this.authService.sendOtp(dto.email, prismaRole, {
+      captchaToken: dto.captchaToken,
+      ip,
+    });
     return { success: true };
   }
 

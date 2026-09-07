@@ -6,6 +6,15 @@ import { Ban, Bell, ChevronDown, Download, Eye, FileText, Mail, MessageSquare, S
 import AdminLayout from '@/components/AdminLayout';
 import { adminFetchJson, adminDownloadUsersCsv } from '@/lib/adminApi';
 import { formatAdminCpsnsDisplay } from '@/lib/cpsnsVerify';
+import {
+  ADMIN_USER_ACCOUNT_FILTER_OPTIONS,
+  ADMIN_USER_CREDENTIAL_FILTER_OPTIONS,
+  adminUserDisplayStatus,
+  emptyAdminUserAccountCounts,
+  emptyAdminUserCredentialCounts,
+  type AdminUserAccountFilterValue,
+  type AdminUserCredentialFilterValue,
+} from '@/lib/adminUserDisplayStatus';
 import AdminBroadcastComposeModal, {
   type BroadcastChannel,
   type BroadcastResult,
@@ -32,8 +41,6 @@ type Row = {
   lastProfileReminderChannel: ReminderChannel | string | null;
 };
 
-type DisplayStatus = { label: string; className: string };
-
 function roleLabel(role: Row['role']): string {
   if (role === 'HOST') return 'Host Physician';
   if (role === 'LOCUM') return 'Locum Physician';
@@ -41,32 +48,8 @@ function roleLabel(role: Row['role']): string {
 }
 
 /** Credential + account status for the User Management table. */
-function displayStatus(row: Row): DisplayStatus {
-  if (row.status === 'SUSPENDED') {
-    return { label: 'Suspended', className: 'status-suspended' };
-  }
-  if (row.status === 'DEACTIVATED') {
-    return { label: 'Deactivated', className: 'status-deactivated' };
-  }
-  if (row.cpsnsVerificationStatus === 'VERIFIED') {
-    return { label: 'Verified', className: 'status-verified' };
-  }
-  if (row.cpsnsVerificationStatus === 'REJECTED') {
-    return { label: 'Rejected', className: 'status-rejected' };
-  }
-  if (row.inCredentialQueue) {
-    return { label: 'Under review', className: 'status-under-review' };
-  }
-  if (row.status === 'PENDING') {
-    return { label: 'Setup incomplete', className: 'status-pending' };
-  }
-  if (row.cpsnsVerificationStatus === 'PENDING_REVIEW') {
-    return { label: 'Incomplete profile', className: 'text-muted' };
-  }
-  if (!row.cpsnsVerificationStatus) {
-    return { label: 'No profile', className: 'text-muted' };
-  }
-  return { label: 'Not submitted', className: 'text-muted' };
+function displayStatus(row: Row) {
+  return adminUserDisplayStatus(row);
 }
 
 /** Available until the profile is verified (including under review / incomplete). */
@@ -89,42 +72,21 @@ function reminderChannelLabel(channel: string | null | undefined): string {
   return '';
 }
 
-const STATUS_FILTER_OPTIONS = [
-  { value: 'verified', label: 'Verified' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'under_review', label: 'Under review' },
-  { value: 'pending', label: 'Setup incomplete' },
-  { value: 'suspended', label: 'Suspended' },
-  { value: 'deactivated', label: 'Deactivated' },
-] as const;
+type AccountFilterValue = AdminUserAccountFilterValue;
+type CredentialFilterValue = AdminUserCredentialFilterValue;
 
-type StatusFilterValue = (typeof STATUS_FILTER_OPTIONS)[number]['value'];
-
-function statusFilterMatchesLabel(filter: StatusFilterValue, label: string): boolean {
-  if (filter === 'verified') return label === 'Verified';
-  if (filter === 'rejected') return label === 'Rejected';
-  if (filter === 'under_review') return label === 'Under review';
-  if (filter === 'pending') return label === 'Setup incomplete';
-  if (filter === 'suspended') return label === 'Suspended';
-  if (filter === 'deactivated') return label === 'Deactivated';
-  return false;
-}
-
-/** Empty selection = all statuses. */
-function matchesStatusFilters(row: Row, filters: StatusFilterValue[]): boolean {
-  if (filters.length === 0) return true;
-  const { label } = displayStatus(row);
-  return filters.some((f) => statusFilterMatchesLabel(f, label));
-}
-
-function statusFilterSummary(filters: StatusFilterValue[]): string {
-  if (filters.length === 0) return 'All Statuses';
-  const labels = STATUS_FILTER_OPTIONS.filter((o) => filters.includes(o.value)).map(
-    (o) => o.label,
-  );
+function filterSummary(
+  filters: string[],
+  options: ReadonlyArray<{ value: string; label: string }>,
+  allLabel: string,
+): string {
+  if (filters.length === 0) return allLabel;
+  const labels = options
+    .filter((o) => filters.includes(o.value))
+    .map((o) => o.label);
   if (labels.length === 1) return labels[0]!;
   if (labels.length === 2) return `${labels[0]}, ${labels[1]}`;
-  return `${labels.length} statuses`;
+  return `${labels.length} selected`;
 }
 
 type UserProfileDocument = {
@@ -184,10 +146,24 @@ export default function AdminUsersPage() {
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilters, setStatusFilters] = useState<StatusFilterValue[]>([]);
-  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
-  const statusMenuRef = useRef<HTMLDivElement>(null);
+  const [accountFilters, setAccountFilters] = useState<AccountFilterValue[]>(
+    [],
+  );
+  const [credentialFilters, setCredentialFilters] = useState<
+    CredentialFilterValue[]
+  >([]);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [credentialMenuOpen, setCredentialMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const credentialMenuRef = useRef<HTMLDivElement>(null);
   const [rows, setRows] = useState<Row[]>([]);
+  const [usersTotal, setUsersTotal] = useState(0);
+  const [accountCounts, setAccountCounts] = useState(
+    emptyAdminUserAccountCounts,
+  );
+  const [credentialCounts, setCredentialCounts] = useState(
+    emptyAdminUserCredentialCounts,
+  );
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -226,13 +202,19 @@ export default function AdminUsersPage() {
   }, [remindMenuForId]);
 
   useEffect(() => {
-    if (!statusMenuOpen) return;
+    if (!accountMenuOpen && !credentialMenuOpen) return;
     function onDocMouseDown(e: MouseEvent) {
-      if (statusMenuRef.current?.contains(e.target as Node)) return;
-      setStatusMenuOpen(false);
+      const t = e.target as Node;
+      if (accountMenuRef.current?.contains(t)) return;
+      if (credentialMenuRef.current?.contains(t)) return;
+      setAccountMenuOpen(false);
+      setCredentialMenuOpen(false);
     }
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setStatusMenuOpen(false);
+      if (e.key === 'Escape') {
+        setAccountMenuOpen(false);
+        setCredentialMenuOpen(false);
+      }
     }
     document.addEventListener('mousedown', onDocMouseDown);
     document.addEventListener('keydown', onKeyDown);
@@ -240,25 +222,44 @@ export default function AdminUsersPage() {
       document.removeEventListener('mousedown', onDocMouseDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [statusMenuOpen]);
+  }, [accountMenuOpen, credentialMenuOpen]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErr(null);
     try {
-      const qs = new URLSearchParams({ page: '1', pageSize: '100' });
+      const qs = new URLSearchParams({ page: '1', pageSize: '1000' });
       if (debouncedQ.trim()) qs.set('q', debouncedQ.trim());
-      const data = await adminFetchJson<{ users: Row[] }>(
-        `/api/admin/users?${qs.toString()}`,
-      );
+      if (roleFilter === 'host') qs.set('role', 'HOST');
+      if (roleFilter === 'locum') qs.set('role', 'LOCUM');
+      if (accountFilters.length > 0) {
+        qs.set('accountStatus', accountFilters.join(','));
+      }
+      if (credentialFilters.length > 0) {
+        qs.set('credentialStatus', credentialFilters.join(','));
+      }
+      const data = await adminFetchJson<{
+        users: Row[];
+        total?: number;
+        accountCounts?: ReturnType<typeof emptyAdminUserAccountCounts>;
+        credentialCounts?: ReturnType<typeof emptyAdminUserCredentialCounts>;
+      }>(`/api/admin/users?${qs.toString()}`);
       setRows(data.users ?? []);
+      setUsersTotal(data.total ?? data.users?.length ?? 0);
+      setAccountCounts(data.accountCounts ?? emptyAdminUserAccountCounts());
+      setCredentialCounts(
+        data.credentialCounts ?? emptyAdminUserCredentialCounts(),
+      );
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to load users');
       setRows([]);
+      setUsersTotal(0);
+      setAccountCounts(emptyAdminUserAccountCounts());
+      setCredentialCounts(emptyAdminUserCredentialCounts());
     } finally {
       setLoading(false);
     }
-  }, [debouncedQ]);
+  }, [debouncedQ, roleFilter, accountFilters, credentialFilters]);
 
   useEffect(() => {
     load();
@@ -266,7 +267,7 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [debouncedQ, roleFilter, statusFilters]);
+  }, [debouncedQ, roleFilter, accountFilters, credentialFilters]);
 
   async function patchUser(
     id: string,
@@ -445,14 +446,7 @@ export default function AdminUsersPage() {
     }
   }
 
-  const filtered = rows.filter((r) => {
-    const t = q.trim().toLowerCase();
-    if (t && !r.email.toLowerCase().includes(t)) return false;
-    if (roleFilter === 'host' && r.role !== 'HOST') return false;
-    if (roleFilter === 'locum' && r.role !== 'LOCUM') return false;
-    if (!matchesStatusFilters(r, statusFilters)) return false;
-    return true;
-  });
+  const filtered = rows;
 
   const eligibleFiltered = filtered.filter(canBroadcastUser);
   const selectedCount = eligibleFiltered.filter((r) => selectedIds.has(r.id)).length;
@@ -491,6 +485,7 @@ export default function AdminUsersPage() {
     bodyHtml: string;
     bodyText: string;
     channels: BroadcastChannel[];
+    idempotencyKey: string;
   }) {
     setBroadcastSending(true);
     setBroadcastBanner(null);
@@ -511,31 +506,45 @@ export default function AdminUsersPage() {
             bodyHtml: payload.bodyHtml,
             bodyText: payload.bodyText,
             userIds: ids,
+            idempotencyKey: payload.idempotencyKey,
           }),
         },
       );
 
-      const parts = [
-        `Sent to ${result.recipientCount} user${result.recipientCount === 1 ? '' : 's'}`,
-      ];
-      if (result.sentNotification > 0) {
-        parts.push(`${result.sentNotification} notification${result.sentNotification === 1 ? '' : 's'}`);
-      }
-      if (result.sentEmail > 0) {
-        parts.push(`${result.sentEmail} email${result.sentEmail === 1 ? '' : 's'}`);
-      }
-      if (result.failed.length > 0) {
-        parts.push(`${result.failed.length} failed`);
-        setBroadcastBanner(`${parts.join(' · ')}. Some deliveries failed.`);
-        setErr(
-          result.failed
-            .slice(0, 3)
-            .map((f) => f.error)
-            .join('; ') +
-            (result.failed.length > 3 ? '…' : ''),
+      if (result.duplicate) {
+        setBroadcastBanner(
+          `Already sent — duplicate blocked for ${result.recipientCount} user${result.recipientCount === 1 ? '' : 's'} (no extra messages were queued).`,
+        );
+      } else if (result.queued) {
+        setBroadcastBanner(
+          `Sent successfully — message queued for ${result.recipientCount} user${result.recipientCount === 1 ? '' : 's'}. Delivery continues in the background.`,
         );
       } else {
-        setBroadcastBanner(parts.join(' · '));
+        const parts = [
+          `Sent successfully to ${result.recipientCount} user${result.recipientCount === 1 ? '' : 's'}`,
+        ];
+        if (result.sentNotification > 0) {
+          parts.push(
+            `${result.sentNotification} notification${result.sentNotification === 1 ? '' : 's'}`,
+          );
+        }
+        if (result.sentEmail > 0) {
+          parts.push(
+            `${result.sentEmail} email${result.sentEmail === 1 ? '' : 's'}`,
+          );
+        }
+        if (result.failed.length > 0) {
+          parts.push(`${result.failed.length} failed`);
+          setBroadcastBanner(`${parts.join(' · ')}. Some deliveries failed.`);
+          setErr(
+            result.failed
+              .slice(0, 3)
+              .map((f) => f.error)
+              .join('; ') + (result.failed.length > 3 ? '…' : ''),
+          );
+        } else {
+          setBroadcastBanner(parts.join(' · '));
+        }
       }
       setComposeOpen(false);
       exitBroadcastMode();
@@ -610,36 +619,50 @@ export default function AdminUsersPage() {
           <option value="host">Host Physicians</option>
           <option value="locum">Locum Physicians</option>
         </select>
-        <div className="multi-select" ref={statusMenuRef}>
+        <div className="multi-select" ref={accountMenuRef}>
           <button
             type="button"
             className="input multi-select-trigger"
             aria-haspopup="listbox"
-            aria-expanded={statusMenuOpen}
-            onClick={() => setStatusMenuOpen((open) => !open)}
+            aria-expanded={accountMenuOpen}
+            onClick={() => {
+              setAccountMenuOpen((open) => !open);
+              setCredentialMenuOpen(false);
+            }}
           >
-            <span className="multi-select-label">{statusFilterSummary(statusFilters)}</span>
+            <span className="multi-select-label">
+              {filterSummary(
+                accountFilters,
+                ADMIN_USER_ACCOUNT_FILTER_OPTIONS,
+                'All accounts',
+              )}
+            </span>
             <ChevronDown size={16} aria-hidden />
           </button>
-          {statusMenuOpen ? (
-            <div className="multi-select-menu" role="listbox" aria-multiselectable="true">
+          {accountMenuOpen ? (
+            <div
+              className="multi-select-menu"
+              role="listbox"
+              aria-multiselectable="true"
+            >
               <label className="multi-select-option">
                 <input
                   type="checkbox"
-                  checked={statusFilters.length === 0}
-                  onChange={() => setStatusFilters([])}
+                  checked={accountFilters.length === 0}
+                  onChange={() => setAccountFilters([])}
                 />
-                <span>All Statuses</span>
+                <span>All accounts</span>
               </label>
-              {STATUS_FILTER_OPTIONS.map((opt) => {
-                const checked = statusFilters.includes(opt.value);
+              {ADMIN_USER_ACCOUNT_FILTER_OPTIONS.map((opt) => {
+                const checked = accountFilters.includes(opt.value);
+                const count = accountCounts[opt.value] ?? 0;
                 return (
                   <label key={opt.value} className="multi-select-option">
                     <input
                       type="checkbox"
                       checked={checked}
                       onChange={() => {
-                        setStatusFilters((prev) => {
+                        setAccountFilters((prev) => {
                           if (prev.includes(opt.value)) {
                             return prev.filter((v) => v !== opt.value);
                           }
@@ -647,7 +670,69 @@ export default function AdminUsersPage() {
                         });
                       }}
                     />
-                    <span>{opt.label}</span>
+                    <span>
+                      {opt.label} ({count})
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+        <div className="multi-select" ref={credentialMenuRef}>
+          <button
+            type="button"
+            className="input multi-select-trigger"
+            aria-haspopup="listbox"
+            aria-expanded={credentialMenuOpen}
+            onClick={() => {
+              setCredentialMenuOpen((open) => !open);
+              setAccountMenuOpen(false);
+            }}
+          >
+            <span className="multi-select-label">
+              {filterSummary(
+                credentialFilters,
+                ADMIN_USER_CREDENTIAL_FILTER_OPTIONS,
+                'All credentials',
+              )}
+            </span>
+            <ChevronDown size={16} aria-hidden />
+          </button>
+          {credentialMenuOpen ? (
+            <div
+              className="multi-select-menu"
+              role="listbox"
+              aria-multiselectable="true"
+            >
+              <label className="multi-select-option">
+                <input
+                  type="checkbox"
+                  checked={credentialFilters.length === 0}
+                  onChange={() => setCredentialFilters([])}
+                />
+                <span>All credentials</span>
+              </label>
+              {ADMIN_USER_CREDENTIAL_FILTER_OPTIONS.map((opt) => {
+                const checked = credentialFilters.includes(opt.value);
+                const count = credentialCounts[opt.value] ?? 0;
+                return (
+                  <label key={opt.value} className="multi-select-option">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setCredentialFilters((prev) => {
+                          if (prev.includes(opt.value)) {
+                            return prev.filter((v) => v !== opt.value);
+                          }
+                          return [...prev, opt.value];
+                        });
+                      }}
+                    />
+                    <span>
+                      {opt.label} ({count})
+                    </span>
                   </label>
                 );
               })}
@@ -655,6 +740,11 @@ export default function AdminUsersPage() {
           ) : null}
         </div>
       </div>
+      <p className="text-sm text-muted" style={{ marginTop: -8, marginBottom: 16 }}>
+        Account and credentials are separate filters (AND). Multi-select within
+        each is OR
+        {!loading ? ` · showing ${filtered.length} of ${usersTotal}` : ''}.
+      </p>
 
       {broadcastMode ? (
         <div

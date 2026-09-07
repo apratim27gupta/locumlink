@@ -6,6 +6,7 @@ import AuthSplitLayout from '@/components/AuthSplitLayout';
 import { useAuth } from '@/providers/AuthProvider';
 import { getEmail, getRole, saveRole, syncCookies, type Role } from '@/lib/auth';
 import { toUserFacingError } from '@/lib/userFacingError';
+import TurnstileWidget, { isTurnstileEnabled } from '@/components/TurnstileWidget';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 const OTP_LEN = 6;
 const RESEND_COOLDOWN_SEC = 30;
@@ -27,6 +28,8 @@ export default function VerifyPage(props: {
     const [busy, setBusy] = useState(false);
     const [resendBusy, setResendBusy] = useState(false);
     const [resendCooldown, setResendCooldown] = useState(0);
+    const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+    const turnstileRequired = isTurnstileEnabled();
     const refs = useRef<(HTMLInputElement | null)[]>([]);
     useEffect(() => {
         if (resendCooldown <= 0)
@@ -109,11 +112,17 @@ export default function VerifyPage(props: {
             router.replace('/auth');
             return;
         }
+        if (turnstileRequired && !captchaToken) {
+            setError('Please complete the captcha check before resending.');
+            setResendCooldown(0);
+            return;
+        }
         setResendBusy(true);
         setError('');
         setResendCooldown(RESEND_COOLDOWN_SEC);
         try {
-            await sendOtp(email, role);
+            await sendOtp(email, role, captchaToken ?? undefined);
+            setCaptchaToken(null);
         }
         catch (err: unknown) {
             const raw = err instanceof Error ? err.message : '';
@@ -195,6 +204,10 @@ export default function VerifyPage(props: {
           {busy ? 'Verifying…' : 'Verify'}
         </button>
 
+        <div style={{ marginBottom: 12 }}>
+          <TurnstileWidget onToken={setCaptchaToken} />
+        </div>
+
         {resendCooldown > 0 ? (<p style={{
                   textAlign: 'center',
                   fontSize: 14,
@@ -207,7 +220,7 @@ export default function VerifyPage(props: {
               }}>
             You can resend the code in {resendCooldown}{' '}
             {resendCooldown === 1 ? 'second' : 'seconds'}.
-          </p>) : (<button type="button" onClick={handleResend} disabled={resendBusy} style={{
+          </p>) : (<button type="button" onClick={handleResend} disabled={resendBusy || (turnstileRequired && !captchaToken)} style={{
                   display: 'block',
                   width: '100%',
                   textAlign: 'center',

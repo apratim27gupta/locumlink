@@ -57,9 +57,9 @@ enum ShiftType {
 enum PostingStatus {
   DRAFT
   ACTIVE
+  SCHEDULED
   ONGOING
   COMPLETED
-  CANCELLED
   EXPIRED
 }
 
@@ -297,6 +297,8 @@ model JobPosting {
 
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
+  /** Set when the posting first becomes (or is republished as) ACTIVE. */
+  publishedAt           DateTime?   @map("published_at")
   expiresAt             DateTime?
 
   keyResponsibilities   String[]    @default([]) @map("key_responsibilities")
