@@ -184,14 +184,14 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
                 <Link href="/auth?role=clinic&locked=true" className="btn-landing-cta">
                   Post a Locum Request
                 </Link>
-                <Link href="/locum/browse" className="btn-signin">
+                <Link href="/locum/browse" className="btn-landing-cta btn-landing-cta--teal">
                   Browse Locum Shifts
                 </Link>
               </>) : (<>
                 <span className="btn-landing-cta" style={{ pointerEvents: 'none' }}>
                   Post a Locum Request
                 </span>
-                <span className="btn-signin" style={{ pointerEvents: 'none' }}>
+                <span className="btn-landing-cta btn-landing-cta--teal" style={{ pointerEvents: 'none' }}>
                   Browse Locum Shifts
                 </span>
               </>)}
