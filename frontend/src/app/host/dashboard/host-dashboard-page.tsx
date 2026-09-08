@@ -1028,7 +1028,7 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
                     gap: 8,
                 }}>
                         <PreviewAsLocumIcon stroke="#374151"/>
-                        Preview as locum
+                        Preview
                       </span>
                     </button>
                     {isDraft && (<button type="button" role="menuitem" style={menuItemBase} onClick={() => {

@@ -8,6 +8,7 @@ import AppStoreInstallButton from '@/components/AppStoreInstallButton';
 import { landingApi, locumApi } from '@/lib/api';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
+import { ROLE_GUIDE } from '@/lib/roleAccent';
 
 const LANDING_AVATAR_FALLBACKS = [
     '/avatar-1.jpeg',
@@ -181,18 +182,26 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
             gap: 32,
         }} className="home-landing-actions">
             {interactive ? (<>
-                <Link href="/auth?role=clinic&locked=true" className="btn-landing-cta">
-                  Post a Locum Request
-                </Link>
-                <Link href="/locum/browse" className="btn-landing-cta btn-landing-cta--teal">
-                  Browse Locum Shifts
-                </Link>
-              </>) : (<>
-                <span className="btn-landing-cta" style={{ pointerEvents: 'none' }}>
-                  Post a Locum Request
+                <span className="role-guide" data-tip={ROLE_GUIDE.clinic}>
+                  <Link href="/auth?role=clinic&locked=true" className="btn-landing-cta" aria-label={`Post a Locum Request. ${ROLE_GUIDE.clinic}`}>
+                    Post a Locum Request
+                  </Link>
                 </span>
-                <span className="btn-landing-cta btn-landing-cta--teal" style={{ pointerEvents: 'none' }}>
-                  Browse Locum Shifts
+                <span className="role-guide" data-tip={ROLE_GUIDE.locum}>
+                  <Link href="/locum/browse" className="btn-landing-cta btn-landing-cta--teal" aria-label={`Browse Locum Shifts. ${ROLE_GUIDE.locum}`}>
+                    Browse Locum Shifts
+                  </Link>
+                </span>
+              </>) : (<>
+                <span className="role-guide" data-tip={ROLE_GUIDE.clinic}>
+                  <span className="btn-landing-cta" style={{ pointerEvents: 'none' }}>
+                    Post a Locum Request
+                  </span>
+                </span>
+                <span className="role-guide" data-tip={ROLE_GUIDE.locum}>
+                  <span className="btn-landing-cta btn-landing-cta--teal" style={{ pointerEvents: 'none' }}>
+                    Browse Locum Shifts
+                  </span>
                 </span>
               </>)}
           </div>

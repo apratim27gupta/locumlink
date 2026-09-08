@@ -1,5 +1,11 @@
 import type { Role } from '@/lib/auth';
 
+/** Short hover guides for Host vs Locum entry points. */
+export const ROLE_GUIDE = {
+  clinic: 'I need a doctor to cover my practice',
+  locum: 'I am a doctor looking for locum work',
+} as const;
+
 /** Host = brand navy; Locum = logo “Link” cyan (#38C6C6). */
 export const ROLE_ACCENT = {
   clinic: {

@@ -126,7 +126,7 @@ export default function HostJobPreviewPage(props: {
                 color: '#0B0F1F',
               }}
             >
-              Preview as locum
+              Preview
             </div>
             <div
               style={{

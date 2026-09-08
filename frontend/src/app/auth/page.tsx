@@ -11,7 +11,7 @@ import { getEmail, saveLastPath } from '@/lib/auth';
 import type { Role } from '@/lib/auth';
 import { sanitizeErrorMessage, toUserFacingError } from '@/lib/userFacingError';
 import TurnstileWidget, { isTurnstileEnabled } from '@/components/TurnstileWidget';
-import { roleAccent } from '@/lib/roleAccent';
+import { roleAccent, ROLE_GUIDE } from '@/lib/roleAccent';
 
 type Mode = 'create' | 'signin';
 
@@ -143,7 +143,8 @@ function AuthPageInner() {
                         const selected = role === r;
                         const pill = roleAccent(r);
                         return (
-                        <button key={r} type="button"
+                        <span key={r} className="role-guide role-guide--auth" data-tip={ROLE_GUIDE[r]} style={{ flex: 1, display: 'flex' }}>
+                        <button type="button"
                             onClick={() => {
                                 if (roleLocked && r !== role) {
                                     setLockWarning(role === 'clinic' ? 'You are posting a job — your role is set to Host.' : 'You are exploring opportunities — your role is set to Locum.');
@@ -153,9 +154,10 @@ function AuthPageInner() {
                                 setRole(r);
                             }}
                             aria-pressed={selected}
+                            aria-label={`${roleLabel(r)}. ${ROLE_GUIDE[r]}`}
                             suppressHydrationWarning
                             style={{
-                                flex: 1, padding: '10px', cursor: 'pointer',
+                                flex: 1, width: '100%', padding: '10px', cursor: 'pointer',
                                 fontSize: 14, fontFamily: 'inherit',
                                 fontWeight: selected ? 600 : 400,
                                 background: selected ? '#fff' : BRAND.bgGrey,
@@ -167,6 +169,7 @@ function AuthPageInner() {
                             }}>
                             {roleLabel(r)}
                         </button>
+                        </span>
                         );
                     })}
                 </div>
