@@ -566,6 +566,11 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
           <Link href="/home" style={{ textDecoration: 'none' }}>
             <Logo size="md" />
           </Link>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {topbarRight}
+
           {rolesLoaded && (
             <div
               className="role-switch"
@@ -643,12 +648,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
               })}
             </div>
           )}
-        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {topbarRight}
-
-          
           <div ref={bellRef} style={{ position: 'relative' }}>
             <button onClick={() => setBellOpen((v) => !v)} id="header-notifications" style={{
             background: 'none',
