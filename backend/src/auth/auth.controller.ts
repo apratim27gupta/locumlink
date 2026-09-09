@@ -24,6 +24,7 @@ import { VerifyOtpDto } from './dto/verify-otp.dto.js';
 import { UpdateAvatarDto } from './dto/update-avatar.dto.js';
 import { UpdateTourDto } from './dto/update-tour.dto.js';
 import { UpdateEmailPrefsDto } from './dto/update-email-prefs.dto.js';
+import { SwitchRoleDto } from './dto/switch-role.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
 import { Public } from './decorators/public.decorator.js';
@@ -118,6 +119,23 @@ export class AuthController {
     user: User,
   ) {
     return this.authService.presentMe(user);
+  }
+
+  @Get('roles')
+  @UseGuards(JwtAuthGuard)
+  listRoles(@CurrentUser() user: User) {
+    return this.authService.listRolesForUser(user);
+  }
+
+  @Post('switch-role')
+  @UseGuards(JwtAuthGuard)
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  @HttpCode(HttpStatus.OK)
+  switchRole(
+    @CurrentUser() user: User,
+    @Body() dto: SwitchRoleDto,
+  ): Promise<AuthTokens> {
+    return this.authService.switchRole(user, dto.role);
   }
 
   @Patch('me/email-prefs')

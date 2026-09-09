@@ -872,6 +872,16 @@
   border-bottom-color: #0f1523;
 }
 
+.role-switch {
+  flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  .role-switch button {
+    padding: 5px 8px !important;
+    font-size: 12px !important;
+  }
+}
+
 .home-landing-doc-links--fixed {
   position: fixed;
   left: 20px;

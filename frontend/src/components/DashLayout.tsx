@@ -8,7 +8,7 @@ import Link from 'next/link';
 import Logo from '@/components/Logo';
 import { useAuth } from '@/providers/AuthProvider';
 import { computeAvatarInitials, initialsFromSupabaseUser, } from '@/lib/avatarInitials';
-import { clearProfileCompleteCookies, getRole, getToken, syncCookies } from '@/lib/auth';
+import { clearProfileCompleteCookies, getRole, getToken, syncCookies, type Role } from '@/lib/auth';
 import { authApi, hostApi, locumApi, messageApi, notificationsApi, uploadFile, type NotificationItem, } from '@/lib/api';
 import { notifCategory } from '@/lib/relativeTime';
 import { getSupabase } from '@/lib/supabaseClient';
@@ -23,7 +23,7 @@ import { SupportLegalLinks } from '@/components/SupportLegalLinks';
 import SidebarFeedback from '@/components/SidebarFeedback';
 import AppStoreInstallButton from '@/components/AppStoreInstallButton';
 import NotificationBody from '@/components/NotificationBody';
-import { roleAccent, roleFromPathname } from '@/lib/roleAccent';
+import { roleAccent, roleFromPathname, ROLE_GUIDE } from '@/lib/roleAccent';
 interface NavItem {
     label: string;
     href: string;
@@ -145,7 +145,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     const router = useRouter();
     const pathname = usePathname();
     const accent = roleAccent(roleFromPathname(pathname));
-    const { logout, userId } = useAuth();
+    const { logout, userId, switchRole } = useAuth();
     const sidebarNavItems = navItems.filter((n) => !isAccountNavItem(n));
     const accountNavItems = navItems.filter(isAccountNavItem);
     const activeNavIndex = sidebarNavItems.findIndex((n) => n.href === activeHref);
@@ -156,9 +156,60 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     const NAV_GAP = 18;
     const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [availableRoles, setAvailableRoles] = useState<{
+        host: boolean;
+        locum: boolean;
+    }>({ host: false, locum: false });
+    const [rolesLoaded, setRolesLoaded] = useState(false);
+    const [roleSwitchBusy, setRoleSwitchBusy] = useState(false);
+    const activeDashRole: Role = roleFromPathname(pathname);
+
+    useEffect(() => {
+        let cancelled = false;
+        void authApi
+            .listRoles()
+            .then((res) => {
+                if (cancelled) return;
+                setAvailableRoles({
+                    host: res.roles.includes('HOST'),
+                    locum: res.roles.includes('LOCUM'),
+                });
+                setRolesLoaded(true);
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setAvailableRoles({ host: false, locum: false });
+                    setRolesLoaded(true);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [userId]);
+
+    async function handleRoleSwitch(target: Role) {
+        const hasTarget =
+            target === 'clinic' ? availableRoles.host : availableRoles.locum;
+        if (roleSwitchBusy || target === activeDashRole || !hasTarget) return;
+        setRoleSwitchBusy(true);
+        try {
+            const result = await switchRole(target);
+            if (!result.ok) {
+                setRoleSwitchBusy(false);
+                return;
+            }
+            syncCookies();
+            beforeClientNavigation(result.redirectTo);
+            router.push(result.redirectTo);
+        } catch (err) {
+            console.error(err);
+            setRoleSwitchBusy(false);
+        }
+    }
 
     useEffect(() => {
         setMobileNavOpen(false);
+        setRoleSwitchBusy(false);
     }, [pathname]);
 
     useEffect(() => {
@@ -515,6 +566,83 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
           <Link href="/home" style={{ textDecoration: 'none' }}>
             <Logo size="md" />
           </Link>
+          {rolesLoaded && (
+            <div
+              className="role-switch"
+              role="group"
+              aria-label="Switch between Host and Locum"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0,
+                padding: 3,
+                borderRadius: 8,
+                background: '#F1F3F7',
+                border: '1px solid #e2e5ee',
+                opacity: roleSwitchBusy ? 0.65 : 1,
+              }}
+            >
+              {([
+                {
+                  key: 'clinic' as Role,
+                  label: 'Host',
+                  tip: ROLE_GUIDE.clinic,
+                  available: availableRoles.host,
+                  missingTip: 'No Host profile for this email yet',
+                },
+                {
+                  key: 'locum' as Role,
+                  label: 'Locum',
+                  tip: ROLE_GUIDE.locum,
+                  available: availableRoles.locum,
+                  missingTip: 'No Locum profile for this email yet',
+                },
+              ]).map(({ key, label, tip, available, missingTip }) => {
+                const selected = activeDashRole === key;
+                const pill = roleAccent(key);
+                const disabled =
+                  roleSwitchBusy || (!available && !selected);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={disabled}
+                    title={available || selected ? tip : missingTip}
+                    aria-pressed={selected}
+                    aria-disabled={disabled}
+                    onClick={() => void handleRoleSwitch(key)}
+                    style={{
+                      border: 'none',
+                      cursor: disabled
+                        ? 'not-allowed'
+                        : roleSwitchBusy
+                          ? 'wait'
+                          : 'pointer',
+                      padding: '6px 12px',
+                      borderRadius: 6,
+                      fontSize: 13,
+                      fontWeight: selected ? 600 : 500,
+                      fontFamily: 'inherit',
+                      background: selected ? '#fff' : 'transparent',
+                      color: selected
+                        ? pill.primary
+                        : available
+                          ? '#5a6478'
+                          : '#B8C4D6',
+                      boxShadow: selected
+                        ? '0 1px 3px rgba(15,21,35,0.08)'
+                        : 'none',
+                      opacity: !available && !selected ? 0.55 : 1,
+                      transition:
+                        'background .15s, color .15s, box-shadow .15s, opacity .15s',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
