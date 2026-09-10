@@ -63,7 +63,8 @@ export function emailPrefKeyForEventType(
     eventType.includes('ACCEPTED') ||
     eventType.includes('DECLINED') ||
     eventType.includes('CONFIRMED') ||
-    eventType.includes('OPPORTUNITY')
+    eventType.includes('OPPORTUNITY') ||
+    eventType.includes('JOB_POSTED')
   ) {
     return 'applications';
   }

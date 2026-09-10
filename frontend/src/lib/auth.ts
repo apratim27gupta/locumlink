@@ -47,6 +47,39 @@ export function saveToken(token: string): void {
     localStorage.setItem(key, token);
     setCookie('ll_access', token, 365);
 }
+
+/** Persist JWT for a specific role and make it the active session (no clearSession). */
+export function activateRole(role: Role, token: string): void {
+    if (typeof window === 'undefined')
+        return;
+    const key = role === 'clinic' ? TOKEN_KEY_CLINIC : TOKEN_KEY_LOCUM;
+    localStorage.setItem(key, token);
+    localStorage.setItem(ROLE_KEY, role);
+    setCookie(ROLE_KEY, role, 365);
+    setCookie('ll_access', token, 365);
+    syncProfileCompleteCookies();
+}
+
+export function hasStoredToken(role: Role): boolean {
+    if (typeof window === 'undefined')
+        return false;
+    const key = role === 'clinic' ? TOKEN_KEY_CLINIC : TOKEN_KEY_LOCUM;
+    return Boolean(localStorage.getItem(key));
+}
+
+/** Peek last path for a role without clearing it. */
+export function peekLastPath(role?: Role | null): string | null {
+    if (typeof window === 'undefined')
+        return null;
+    const resolvedRole = role ?? getRole();
+    if (!resolvedRole)
+        return null;
+    const path = localStorage.getItem(lastPathStorageKey(resolvedRole));
+    if (path && isStorableLastPath(path) && roleForPath(path) === resolvedRole)
+        return path;
+    return null;
+}
+
 export function getToken(): string | null {
     if (typeof window === 'undefined')
         return null;

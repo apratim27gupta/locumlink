@@ -796,4 +796,66 @@ export class AuthService {
     });
     return { accessToken, refreshToken };
   }
+
+  /** Roles that exist for this email (HOST / LOCUM only). */
+  async listRolesForUser(user: User): Promise<{
+    roles: Array<'HOST' | 'LOCUM'>;
+    activeRole: 'HOST' | 'LOCUM';
+  }> {
+    const rows = await this.prisma.user.findMany({
+      where: {
+        email: user.email,
+        role: { in: [Role.HOST, Role.LOCUM] },
+        status: { not: UserStatus.SUSPENDED },
+      },
+      select: { role: true, status: true, deactivatedAt: true },
+    });
+    const roles = [
+      ...new Set(
+        rows
+          .filter((r) => {
+            if (r.status === UserStatus.DEACTIVATED) {
+              return isWithinDeactivationRetention(r.deactivatedAt);
+            }
+            return true;
+          })
+          .map((r) => r.role)
+          .filter(
+            (r): r is 'HOST' | 'LOCUM' => r === Role.HOST || r === Role.LOCUM,
+          ),
+      ),
+    ];
+    const activeRole: 'HOST' | 'LOCUM' =
+      user.role === Role.HOST ? 'HOST' : 'LOCUM';
+    return { roles, activeRole };
+  }
+
+  /** Issue tokens for the same email under a different HOST/LOCUM user row. */
+  async switchRole(
+    user: User,
+    targetRaw: 'HOST' | 'LOCUM' | 'clinic' | 'locum',
+  ): Promise<AuthTokens> {
+    const target: Role =
+      targetRaw === 'HOST' || targetRaw === 'clinic' ? Role.HOST : Role.LOCUM;
+    if (user.role === target) {
+      return this.issueTokens(user);
+    }
+    const other = await this.prisma.user.findUnique({
+      where: { email_role: { email: user.email, role: target } },
+    });
+    if (!other) {
+      throw new NotFoundException(
+        `No ${target === Role.HOST ? 'Host' : 'Locum'} account for this email.`,
+      );
+    }
+    if (other.status === UserStatus.SUSPENDED) {
+      throw new ForbiddenException('That account is not available.');
+    }
+    if (other.status === UserStatus.DEACTIVATED) {
+      if (!isWithinDeactivationRetention(other.deactivatedAt)) {
+        throw new ForbiddenException('That account is not available.');
+      }
+    }
+    return this.issueTokens(other);
+  }
 }

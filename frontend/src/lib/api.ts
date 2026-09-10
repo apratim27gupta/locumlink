@@ -350,6 +350,46 @@ export const authApi = {
         }
         return res.json() as Promise<AuthMeResponse>;
     },
+    listRoles: async (): Promise<{
+        roles: Array<'HOST' | 'LOCUM'>;
+        activeRole: 'HOST' | 'LOCUM';
+    }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/auth/roles`, {
+            cache: 'no-store',
+            headers: nestHeaders(false),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || `auth/roles failed: ${res.status}`);
+        }
+        return res.json() as Promise<{
+            roles: Array<'HOST' | 'LOCUM'>;
+            activeRole: 'HOST' | 'LOCUM';
+        }>;
+    },
+    switchRole: async (
+        role: Role | 'HOST' | 'LOCUM',
+    ): Promise<{ accessToken: string; refreshToken: string }> => {
+        const nestRole =
+            role === 'clinic' || role === 'HOST' ? 'HOST' : 'LOCUM';
+        const res = await trackedFetch(`${NEST_BASE}/api/auth/switch-role`, {
+            method: 'POST',
+            headers: nestHeaders(true),
+            body: JSON.stringify({ role: nestRole }),
+        });
+        if (res.status === 404) {
+            const err = new Error('needsSignup') as Error & { code?: string };
+            err.code = 'needsSignup';
+            throw err;
+        }
+        if (!res.ok) {
+            throw await parseAuthApiError(res, 'Switch role');
+        }
+        return readJsonResponse<{ accessToken: string; refreshToken: string }>(
+            res,
+            'Switch role',
+        );
+    },
     updateEmailPrefs: async (
         prefs: Partial<EmailPrefs>,
     ): Promise<EmailPrefs> => {

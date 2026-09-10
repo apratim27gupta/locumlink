@@ -177,6 +177,24 @@ export function buildH008PostingExpiring(params: {
   };
 }
 
+/** H-012 — Job posting is live */
+export function buildH012JobPosted(params: {
+  jobTitle: string;
+  dateStr: string;
+}) {
+  const when = params.dateStr ? ` for ${params.dateStr}` : '';
+  const title = params.jobTitle?.trim() || 'your locum opportunity';
+  const emailSubject = `Your locum request is live: ${title}`;
+  return {
+    inAppTitle: 'Job posted',
+    inAppBody: `Your opportunity "${title}"${when} is now live and visible to verified locums.`,
+    emailSubject,
+    emailBody: `Your locum opportunity "${title}"${when} has been posted on Locum Link and is now visible to verified locum physicians. You will be notified when doctors apply.`,
+    priority: 'MEDIUM' as HostCopyPriority,
+    actionLabel: 'View Posting',
+  };
+}
+
 /** H-009 — Last-minute shift cancellation (<24h) */
 export function buildH009ShiftCancelled(params: {
   dateStr: string;

@@ -8,6 +8,7 @@ import { getEmail, getRole, saveRole, syncCookies, type Role } from '@/lib/auth'
 import { toUserFacingError } from '@/lib/userFacingError';
 import TurnstileWidget, { isTurnstileEnabled } from '@/components/TurnstileWidget';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
+import { roleAccent } from '@/lib/roleAccent';
 const OTP_LEN = 6;
 const RESEND_COOLDOWN_SEC = 30;
 export default function VerifyPage(props: {
@@ -23,6 +24,14 @@ export default function VerifyPage(props: {
         if (r === 'clinic' || r === 'locum')
             saveRole(r as Role);
     }, [searchParams]);
+    const roleParam = searchParams.get('role');
+    const accentRole: Role =
+        roleParam === 'clinic' || roleParam === 'locum'
+            ? roleParam
+            : getRole() === 'clinic'
+              ? 'clinic'
+              : 'locum';
+    const accent = roleAccent(accentRole);
     const [digits, setDigits] = useState<string[]>(Array(OTP_LEN).fill(''));
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
@@ -170,9 +179,9 @@ export default function VerifyPage(props: {
                   textAlign: 'center',
                   fontSize: 22,
                   fontWeight: 700,
-                  border: `2px solid ${d ? '#3B4FD8' : '#d0d4e4'}`,
+                  border: `2px solid ${d ? accent.primary : '#d0d4e4'}`,
                   borderRadius: 6,
-                  background: d ? '#eef0fb' : '#fff',
+                  background: d ? accent.light : '#fff',
                   color: '#0f1523',
                   outline: 'none',
                   fontFamily: 'inherit',
@@ -193,7 +202,7 @@ export default function VerifyPage(props: {
               fontSize: 14,
               fontWeight: 500,
               cursor: busy || !otpComplete ? 'default' : 'pointer',
-              background: busy || !otpComplete ? '#8892a4' : '#3B4FD8',
+              background: busy || !otpComplete ? '#8892a4' : accent.primary,
               color: '#fff',
               fontFamily: 'inherit',
               marginBottom: 12,
@@ -228,11 +237,11 @@ export default function VerifyPage(props: {
                   fontWeight: 500,
                   marginBottom: 10,
                   padding: '11px 12px',
-                  border: '1px solid rgba(59, 79, 216, 0.35)',
+                  border: `1px solid ${accent.primary}59`,
                   borderRadius: 6,
                   background: '#fff',
                   fontFamily: 'inherit',
-                  color: '#3B4FD8',
+                  color: accent.primary,
                   cursor: resendBusy ? 'wait' : 'pointer',
                   outline: 'none',
                   WebkitTapHighlightColor: 'transparent',
@@ -248,11 +257,11 @@ export default function VerifyPage(props: {
               textAlign: 'center',
               fontSize: 14,
               fontWeight: 500,
-              color: '#3B4FD8',
+              color: accent.primary,
               cursor: 'pointer',
               margin: 0,
               padding: '11px 12px',
-              border: '1px solid rgba(59, 79, 216, 0.35)',
+              border: `1px solid ${accent.primary}59`,
               borderRadius: 6,
               background: '#fff',
               fontFamily: 'inherit',

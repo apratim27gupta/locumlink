@@ -45,6 +45,7 @@ import {
   buildH010AccountWarning,
   buildH008PostingExpiring,
   buildH009ShiftCancelled,
+  buildH012JobPosted,
   formatHostDoctorName,
   formatHostRejectionReason,
   H005_HOST_ACCOUNT_VERIFIED,
@@ -67,6 +68,7 @@ export type NotifEventType =
   | 'H_009_SHIFT_CANCELLED'
   | 'H_010_ACCOUNT_WARNING'
   | 'H_011_PROFILE_REMINDER'
+  | 'H_012_JOB_POSTED'
   // Locum
   | 'L_001_NEW_OPPORTUNITY'
   | 'L_002_HOST_CONFIRMED'
@@ -1009,6 +1011,34 @@ export class NotificationsService {
       referenceType: 'User',
       pushTitle: copy.inAppTitle,
       pushBody: copy.inAppBody,
+    });
+  }
+
+  /** H-012: host confirmation that their job posting is live */
+  async notifyHostJobPosted(params: {
+    recipientId: string;
+    recipientEmail: string;
+    jobId: string;
+    jobTitle: string;
+    startDate?: Date | string | null;
+  }): Promise<void> {
+    const copy = buildH012JobPosted({
+      jobTitle: params.jobTitle,
+      dateStr: formatJobDate(params.startDate),
+    });
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'H_012_JOB_POSTED',
+      title: copy.inAppTitle,
+      body: copy.inAppBody,
+      href: `/host/jobs/${params.jobId}/edit`,
+      priority: copy.priority,
+      actionLabel: copy.actionLabel,
+      referenceId: params.jobId,
+      referenceType: 'JobPosting',
+      emailTo: params.recipientEmail,
+      emailSubject: copy.emailSubject,
+      emailBody: copy.emailBody,
     });
   }
 

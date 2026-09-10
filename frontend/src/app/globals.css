@@ -4,6 +4,9 @@
   --color-primary: #0F2A7A;
   --color-primary-hover: #1E3FAF;
   --color-primary-light: #E8EDF8;
+  --color-host-accent: #0F2A7A;
+  --color-locum-accent: #38C6C6;
+  --color-locum-accent-hover: #2BB0B0;
   --color-teal: #0F2A7A;
   --color-gradient-start: #0F2A7A;
   --color-gradient-end: #1E3FAF;
@@ -774,6 +777,111 @@
     0 0 0 4px rgba(59, 79, 216, 0.45);
 }
 
+.btn-landing-cta--teal {
+  background: linear-gradient(135deg, #2BB0B0 0%, #38C6C6 100%);
+  box-shadow:
+    0 2px 12px rgba(56, 198, 198, 0.35),
+    0 0 0 1px rgba(56, 198, 198, 0.22) inset;
+}
+.btn-landing-cta--teal:hover {
+  background: linear-gradient(135deg, #38C6C6 0%, #5AD4D4 100%);
+  box-shadow:
+    0 10px 28px rgba(56, 198, 198, 0.42),
+    0 0 0 1px rgba(90, 212, 212, 0.3) inset;
+}
+.btn-landing-cta--teal:active {
+  background: linear-gradient(135deg, #249999 0%, #2BB0B0 100%);
+  box-shadow: 0 3px 10px rgba(56, 198, 198, 0.32);
+}
+.btn-landing-cta--teal:focus-visible {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px rgba(56, 198, 198, 0.5);
+}
+
+/* Guide tooltips for Host / Locum entry points */
+.role-guide {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+}
+.role-guide::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(4px);
+  width: max-content;
+  max-width: min(280px, 80vw);
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #0f1523;
+  color: #fff;
+  font-family: Inter, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(15, 21, 35, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 40;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    visibility 0.15s ease;
+}
+.role-guide::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  transform: translateX(-50%) translateY(4px);
+  border: 6px solid transparent;
+  border-top-color: #0f1523;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 41;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    visibility 0.15s ease;
+}
+.role-guide:hover::after,
+.role-guide:focus-within::after,
+.role-guide:hover::before,
+.role-guide:focus-within::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+.role-guide--auth {
+  width: 100%;
+}
+.role-guide--auth::after {
+  bottom: auto;
+  top: calc(100% + 10px);
+  max-width: min(240px, 90vw);
+}
+.role-guide--auth::before {
+  bottom: auto;
+  top: calc(100% + 4px);
+  border-top-color: transparent;
+  border-bottom-color: #0f1523;
+}
+
+.role-switch {
+  flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  .role-switch button {
+    padding: 5px 8px !important;
+    font-size: 12px !important;
+  }
+}
+
 .home-landing-doc-links--fixed {
   position: fixed;
   left: 20px;
@@ -922,6 +1030,10 @@
 .dash-sidebar-feedback-input:focus {
   outline: none;
   border-color: rgba(56, 198, 198, 0.7);
+}
+
+.dash-sidebar[data-role='locum'] .dash-sidebar-feedback-input:focus {
+  border-color: rgba(56, 198, 198, 0.85);
 }
 
 .dash-sidebar-feedback-submit {
@@ -1656,6 +1768,10 @@ body.app-body {
   color: #ffffff !important;
 }
 
+.dash-sidebar[data-role='locum'] a > div:hover {
+  background: rgba(56, 198, 198, 0.18) !important;
+}
+
 /* ── Sidebar nav icon color on dark bg ───────── */
 .dash-sidebar svg {
   color: inherit;
@@ -1678,22 +1794,6 @@ body.app-body {
   text-transform: uppercase;
   color: #9CA3AF;
   margin-bottom: 12px;
-}
-
-/* Landing page btn-signin override — match btn-landing-cta size */
-.home-landing-actions .btn-signin {
-  padding: 16px 24px;
-  min-width: 234px;
-  height: 59px;
-  font-size: 20px;
-}
-
-.home-landing-actions .btn-signin {
-  padding: 16px 24px;
-  min-width: 234px;
-  height: 59px;
-  font-size: 20px;
-  letter-spacing: 0.04em;
 }
 
 /* ══════════════════════════════════════════════
@@ -2284,13 +2384,6 @@ body.app-body {
 
   /* ── Landing CTA buttons ── */
   .btn-landing-cta {
-    width: 100% !important;
-    min-width: unset !important;
-    height: 52px !important;
-    font-size: 16px !important;
-    padding: 14px 20px !important;
-  }
-  .home-landing-actions .btn-signin {
     width: 100% !important;
     min-width: unset !important;
     height: 52px !important;
@@ -3127,6 +3220,11 @@ main.dash-main-content {
   min-width: 20px;
   height: 20px;
   font-size: 11px;
+}
+
+.dash-sidebar[data-role='locum'] .count-badge--sidebar {
+  background: #38c6c6;
+  color: #0f2a7a;
 }
 
 .count-badge--tab {

@@ -54,6 +54,10 @@ export const NOTIFICATION_EVENT_DEFAULTS: Record<
     href: '/host/profile',
     actionLabel: 'Complete Profile',
   },
+  H_012_JOB_POSTED: {
+    href: '/host/dashboard',
+    actionLabel: 'View Posting',
+  },
   L_001_NEW_OPPORTUNITY: {
     href: '/locum/browse',
     actionLabel: 'Browse Opportunities',
@@ -129,6 +133,7 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   H_009_SHIFT_CANCELLED: 'Last-Minute Cancellation Alert',
   H_010_ACCOUNT_WARNING: 'Account warning',
   H_011_PROFILE_REMINDER: 'Complete your Locum Link profile',
+  H_012_JOB_POSTED: 'Job posted',
   L_001_NEW_OPPORTUNITY: 'New Locum Opportunity Available',
   L_002_HOST_CONFIRMED: 'Shift Confirmed',
   L_003_APPLICATION_ACCEPTED: 'Application Shortlisted',

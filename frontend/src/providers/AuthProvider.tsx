@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState, ReactNode, } from 'reac
 import { authApi } from '@/lib/api';
 import { getSupabase } from '@/lib/supabaseClient';
 import { toUserFacingError } from '@/lib/userFacingError';
-import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, popLastPath, clearLastPath, type Role, } from '@/lib/auth';
+import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, popLastPath, peekLastPath, clearLastPath, activateRole, type Role, } from '@/lib/auth';
 import { checkProfileExistsOnServer, ensureProfileMarkedCompleteFromServer, } from '@/lib/profileCompleteSync';
 import { getOAuthCallbackRedirect, isNativeShell, requestNativeOAuth } from '@/lib/nativeShell';
 interface AuthCtx {
@@ -23,6 +23,10 @@ interface AuthCtx {
         role: Role,
     ) => Promise<void>;
     completeOAuthSignIn: () => Promise<{ role: Role; redirectTo: string }>;
+    switchRole: (target: Role) => Promise<
+        | { ok: true; redirectTo: string }
+        | { ok: false; needsSignup: true }
+    >;
 }
 const Ctx = createContext<AuthCtx | null>(null);
 
@@ -278,6 +282,50 @@ export function AuthProvider({ children }: {
         setRoleState(null);
         setProfileComplete(false);
     }
+    async function switchRole(target: Role): Promise<
+        | { ok: true; redirectTo: string }
+        | { ok: false; needsSignup: true }
+    > {
+        try {
+            const tokens = await authApi.switchRole(target);
+            activateRole(target, tokens.accessToken);
+            setRoleState(target);
+            setUserId(getJwtSubject(tokens.accessToken));
+            syncCookies();
+            const profileExists = await checkProfileExistsOnServer(
+                target,
+                tokens.accessToken,
+            );
+            if (profileExists) {
+                markProfileComplete();
+                syncCookies();
+                syncProfileCompleteCookies();
+                setProfileComplete(true);
+                const lastPath = peekLastPath(target);
+                return {
+                    ok: true,
+                    redirectTo:
+                        lastPath ??
+                        (target === 'clinic'
+                            ? '/host/dashboard'
+                            : '/locum/dashboard'),
+                };
+            }
+            clearLastPath(target);
+            setProfileComplete(false);
+            return {
+                ok: true,
+                redirectTo:
+                    target === 'clinic' ? '/host/setup' : '/locum/setup',
+            };
+        } catch (err) {
+            const code = (err as { code?: string })?.code;
+            if (code === 'needsSignup' || (err instanceof Error && err.message === 'needsSignup')) {
+                return { ok: false, needsSignup: true };
+            }
+            throw err;
+        }
+    }
     return (<Ctx.Provider value={{
             userId,
             role,
@@ -289,6 +337,7 @@ export function AuthProvider({ children }: {
             logout,
             signInWithOAuth,
             completeOAuthSignIn,
+            switchRole,
         }}>
       {children}
     </Ctx.Provider>);

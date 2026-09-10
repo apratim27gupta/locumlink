@@ -8,7 +8,7 @@ import Link from 'next/link';
 import Logo from '@/components/Logo';
 import { useAuth } from '@/providers/AuthProvider';
 import { computeAvatarInitials, initialsFromSupabaseUser, } from '@/lib/avatarInitials';
-import { clearProfileCompleteCookies, getRole, getToken, syncCookies } from '@/lib/auth';
+import { clearProfileCompleteCookies, getRole, getToken, syncCookies, type Role } from '@/lib/auth';
 import { authApi, hostApi, locumApi, messageApi, notificationsApi, uploadFile, type NotificationItem, } from '@/lib/api';
 import { notifCategory } from '@/lib/relativeTime';
 import { getSupabase } from '@/lib/supabaseClient';
@@ -23,6 +23,7 @@ import { SupportLegalLinks } from '@/components/SupportLegalLinks';
 import SidebarFeedback from '@/components/SidebarFeedback';
 import AppStoreInstallButton from '@/components/AppStoreInstallButton';
 import NotificationBody from '@/components/NotificationBody';
+import { roleAccent, roleFromPathname, ROLE_GUIDE } from '@/lib/roleAccent';
 interface NavItem {
     label: string;
     href: string;
@@ -38,8 +39,6 @@ interface Props {
     topbarAvatarText?: string;
     children: ReactNode;
 }
-const SIDEBAR_ACTIVE = '#38C6C6';
-
 function isAccountNavItem(item: NavItem) {
     const { href, label } = item;
     return (
@@ -145,7 +144,8 @@ function applyNotifPrefs(items: NotificationItem[], prefs: Record<string, boolea
 export default function DashLayout({ navItems, activeHref, topbarRight, topbarFirstName, topbarLastName, topbarAvatarText, children, }: Props) {
     const router = useRouter();
     const pathname = usePathname();
-    const { logout, userId } = useAuth();
+    const accent = roleAccent(roleFromPathname(pathname));
+    const { logout, userId, switchRole } = useAuth();
     const sidebarNavItems = navItems.filter((n) => !isAccountNavItem(n));
     const accountNavItems = navItems.filter(isAccountNavItem);
     const activeNavIndex = sidebarNavItems.findIndex((n) => n.href === activeHref);
@@ -156,9 +156,60 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     const NAV_GAP = 18;
     const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [availableRoles, setAvailableRoles] = useState<{
+        host: boolean;
+        locum: boolean;
+    }>({ host: false, locum: false });
+    const [rolesLoaded, setRolesLoaded] = useState(false);
+    const [roleSwitchBusy, setRoleSwitchBusy] = useState(false);
+    const activeDashRole: Role = roleFromPathname(pathname);
+
+    useEffect(() => {
+        let cancelled = false;
+        void authApi
+            .listRoles()
+            .then((res) => {
+                if (cancelled) return;
+                setAvailableRoles({
+                    host: res.roles.includes('HOST'),
+                    locum: res.roles.includes('LOCUM'),
+                });
+                setRolesLoaded(true);
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setAvailableRoles({ host: false, locum: false });
+                    setRolesLoaded(true);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [userId]);
+
+    async function handleRoleSwitch(target: Role) {
+        const hasTarget =
+            target === 'clinic' ? availableRoles.host : availableRoles.locum;
+        if (roleSwitchBusy || target === activeDashRole || !hasTarget) return;
+        setRoleSwitchBusy(true);
+        try {
+            const result = await switchRole(target);
+            if (!result.ok) {
+                setRoleSwitchBusy(false);
+                return;
+            }
+            syncCookies();
+            beforeClientNavigation(result.redirectTo);
+            router.push(result.redirectTo);
+        } catch (err) {
+            console.error(err);
+            setRoleSwitchBusy(false);
+        }
+    }
 
     useEffect(() => {
         setMobileNavOpen(false);
+        setRoleSwitchBusy(false);
     }, [pathname]);
 
     useEffect(() => {
@@ -507,7 +558,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             type="button"
             className="dash-hamburger"
             onClick={() => setMobileNavOpen(v => !v)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, color: '#0F2A7A' }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6, color: accent.primary }}
             aria-label="Toggle navigation menu"
             aria-expanded={mobileNavOpen}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -520,14 +571,91 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           {topbarRight}
 
-          
+          {rolesLoaded && (
+            <div
+              className="role-switch"
+              role="group"
+              aria-label="Switch between Host and Locum"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0,
+                padding: 3,
+                borderRadius: 8,
+                background: '#F1F3F7',
+                border: '1px solid #e2e5ee',
+                opacity: roleSwitchBusy ? 0.65 : 1,
+              }}
+            >
+              {([
+                {
+                  key: 'clinic' as Role,
+                  label: 'Host',
+                  tip: ROLE_GUIDE.clinic,
+                  available: availableRoles.host,
+                  missingTip: 'No Host profile for this email yet',
+                },
+                {
+                  key: 'locum' as Role,
+                  label: 'Locum',
+                  tip: ROLE_GUIDE.locum,
+                  available: availableRoles.locum,
+                  missingTip: 'No Locum profile for this email yet',
+                },
+              ]).map(({ key, label, tip, available, missingTip }) => {
+                const selected = activeDashRole === key;
+                const pill = roleAccent(key);
+                const disabled =
+                  roleSwitchBusy || (!available && !selected);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={disabled}
+                    title={available || selected ? tip : missingTip}
+                    aria-pressed={selected}
+                    aria-disabled={disabled}
+                    onClick={() => void handleRoleSwitch(key)}
+                    style={{
+                      border: 'none',
+                      cursor: disabled
+                        ? 'not-allowed'
+                        : roleSwitchBusy
+                          ? 'wait'
+                          : 'pointer',
+                      padding: '6px 12px',
+                      borderRadius: 6,
+                      fontSize: 13,
+                      fontWeight: selected ? 600 : 500,
+                      fontFamily: 'inherit',
+                      background: selected ? '#fff' : 'transparent',
+                      color: selected
+                        ? pill.primary
+                        : available
+                          ? '#5a6478'
+                          : '#B8C4D6',
+                      boxShadow: selected
+                        ? '0 1px 3px rgba(15,21,35,0.08)'
+                        : 'none',
+                      opacity: !available && !selected ? 0.55 : 1,
+                      transition:
+                        'background .15s, color .15s, box-shadow .15s, opacity .15s',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div ref={bellRef} style={{ position: 'relative' }}>
             <button onClick={() => setBellOpen((v) => !v)} id="header-notifications" style={{
             background: 'none',
             border: 'none',
             cursor: 'pointer',
             padding: 4,
-            color: '#38C6C6',
+            color: accent.sidebarActive,
             position: 'relative',
         }} title="Notifications">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
@@ -1037,12 +1165,15 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             onClick={() => setMobileNavOpen(false)}
           />
         )}
-        <aside className={mobileNavOpen ? 'dash-sidebar dash-sidebar--open' : 'dash-sidebar'} style={{
+        <aside
+          className={mobileNavOpen ? 'dash-sidebar dash-sidebar--open' : 'dash-sidebar'}
+          data-role={roleFromPathname(pathname) === 'clinic' ? 'host' : 'locum'}
+          style={{
             position: 'relative',
             width: 242,
             flexShrink: 0,
-            background: 'linear-gradient(180deg, #0F2A7A 0%, #1E3FAF 100%)',
-            boxShadow: '4px 0 24px rgba(15,42,122,0.18)',
+            background: accent.sidebarGradient,
+            boxShadow: accent.sidebarShadow,
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
@@ -1060,7 +1191,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                   activeNavIndex * (NAV_ITEM_H + NAV_GAP),
               width: 6,
               height: NAV_ITEM_H,
-              background: SIDEBAR_ACTIVE,
+              background: accent.sidebarActive,
               borderRadius: '0px 8px 8px 0px',
               transition: 'top 0.2s ease',
             }}/>
@@ -1116,11 +1247,11 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     height: 44,
                     padding: '10px 12px 10px 8px',
                     background: active
-                        ? 'rgba(56, 198, 198, 0.15)'
+                        ? accent.sidebarActiveBg
                         : 'transparent',
                     borderRadius: 10,
                     cursor: 'pointer',
-                    color: active ? SIDEBAR_ACTIVE : 'rgba(255,255,255,0.85)',
+                    color: active ? accent.sidebarActive : 'rgba(255,255,255,0.85)',
                     transition: 'background 0.15s, color 0.15s',
                 }}>
                       <span style={{
@@ -1143,7 +1274,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
-                    color: active ? SIDEBAR_ACTIVE : 'rgba(255,255,255,0.85)',
+                    color: active ? accent.sidebarActive : 'rgba(255,255,255,0.85)',
                     fontWeight: active ? 600 : 400,
                 }}>
                         {label}
