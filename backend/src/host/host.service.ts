@@ -325,6 +325,33 @@ export class HostService {
     return profile.id;
   }
 
+  /** H-012: confirm to the host that their ACTIVE posting is live. */
+  private async notifyHostJobPosted(
+    userId: string,
+    job: {
+      id: string;
+      title: string;
+      status: string;
+      startDate: Date | null;
+    },
+  ): Promise<void> {
+    if (job.status !== 'ACTIVE') return;
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true },
+      });
+      if (!user?.email) return;
+      await this.notifService.notifyHostJobPosted({
+        recipientId: user.id,
+        recipientEmail: user.email,
+        jobId: job.id,
+        jobTitle: job.title,
+        startDate: job.startDate,
+      });
+    } catch {}
+  }
+
   /** L-001: broadcast new ACTIVE posting to verified locums. */
   private async notifyVerifiedLocumsOfNewOpportunity(
     hostProfileId: string,
@@ -591,7 +618,10 @@ export class HostService {
       },
     });
 
-    await this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, job);
+    await Promise.all([
+      this.notifyHostJobPosted(userId, job),
+      this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, job),
+    ]);
     return {
       success: true,
       job: {
@@ -881,7 +911,10 @@ export class HostService {
       },
     });
     if (newlyPublished) {
-      await this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, updated);
+      await Promise.all([
+        this.notifyHostJobPosted(userId, updated),
+        this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, updated),
+      ]);
     }
     return { success: true, job: updated };
   }
@@ -1026,7 +1059,10 @@ export class HostService {
       });
     });
     if (updated.status === 'ACTIVE') {
-      await this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, updated);
+      await Promise.all([
+        this.notifyHostJobPosted(userId, updated),
+        this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, updated),
+      ]);
     }
     return { success: true, job: updated };
   }

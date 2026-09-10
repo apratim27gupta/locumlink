@@ -8,17 +8,16 @@ export const DIGEST_CATEGORIES = ['applications', 'messages'] as const;
 export type DigestCategory = (typeof DIGEST_CATEGORIES)[number];
 
 export type DigestEventType =
-  | 'L_001_NEW_OPPORTUNITY'
   | 'L_008_NEW_MESSAGE'
   | 'H_004_NEW_MESSAGE';
 
 export const DIGEST_EVENT_TYPES = new Set<DigestEventType>([
-  'L_001_NEW_OPPORTUNITY',
   'L_008_NEW_MESSAGE',
   'H_004_NEW_MESSAGE',
 ]);
 
-const CATEGORY_EVENT_TYPES: Record<DigestCategory, DigestEventType[]> = {
+/** Includes legacy L_001 so any pre-instant queued opportunity digests still flush. */
+const CATEGORY_EVENT_TYPES: Record<DigestCategory, string[]> = {
   applications: ['L_001_NEW_OPPORTUNITY'],
   messages: ['L_008_NEW_MESSAGE', 'H_004_NEW_MESSAGE'],
 };
@@ -39,7 +38,6 @@ export function isDigestEventType(eventType: string): eventType is DigestEventTy
 export function digestCategoryForEventType(
   eventType: string,
 ): DigestCategory | null {
-  if (eventType === 'L_001_NEW_OPPORTUNITY') return 'applications';
   if (eventType === 'L_008_NEW_MESSAGE' || eventType === 'H_004_NEW_MESSAGE') {
     return 'messages';
   }
@@ -48,7 +46,7 @@ export function digestCategoryForEventType(
 
 export function eventTypesForDigestCategory(
   category: DigestCategory,
-): DigestEventType[] {
+): string[] {
   return CATEGORY_EVENT_TYPES[category];
 }
 

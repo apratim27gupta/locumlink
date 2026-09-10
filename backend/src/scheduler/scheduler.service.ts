@@ -219,7 +219,7 @@ export class SchedulerService {
     }
   }
 
-  /** Flush rolling email digests (messages + opportunities). */
+  /** Flush rolling email digests (messages; legacy opportunity digests still flushed). */
   @Cron(CronExpression.EVERY_HOUR)
   async handleEmailDigests() {
     try {
