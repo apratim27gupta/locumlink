@@ -1258,27 +1258,6 @@ export default function LocumBrowsePage(props: {
             >
               Sign in
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                beforeClientNavigation('/auth');
-                router.push('/auth?mode=signup&role=locum&next=/locum/browse');
-              }}
-              style={{
-                height: 34,
-                padding: '0 16px',
-                border: 'none',
-                borderRadius: 6,
-                background: 'linear-gradient(135deg, #0F2A7A 0%, #1E3FAF 100%)',
-                color: '#fff',
-                fontSize: 13,
-                fontWeight: 600,
-                fontFamily: 'inherit',
-                cursor: 'pointer',
-              }}
-            >
-              Sign up
-            </button>
           </div>
         </header>
         <main
