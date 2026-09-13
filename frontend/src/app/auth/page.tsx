@@ -7,7 +7,7 @@ import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
 import MicrosoftIcon from '@/components/icons/MicrosoftIcon';
 import { useAuth } from '@/providers/AuthProvider';
-import { getEmail, saveLastPath } from '@/lib/auth';
+import { getEmail, saveLastPath, saveRole } from '@/lib/auth';
 import type { Role } from '@/lib/auth';
 import { sanitizeErrorMessage, toUserFacingError } from '@/lib/userFacingError';
 import TurnstileWidget, { isTurnstileEnabled } from '@/components/TurnstileWidget';
@@ -62,6 +62,11 @@ function AuthPageInner() {
         else if (params.get('role') === 'locum') setRole('locum');
         setError(sanitizeErrorMessage(params.get('error')));
     }, [params]);
+
+    // Keep ll_role aligned with the URL so verify never falls back to locum.
+    useEffect(() => {
+        if (role === 'clinic' || role === 'locum') saveRole(role);
+    }, [role]);
 
     useEffect(() => {
         if (mode === 'signin') {

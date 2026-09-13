@@ -128,14 +128,17 @@ export default function VerifyPage(props: {
             router.replace(authHref());
             return;
         }
+        // Lock role from the URL before calling the API (avoids Host→Locum drift).
+        saveRole(accentRole);
         setError('');
         setBusy(true);
         try {
-            const { redirectTo } = await verifyOtp(email, otp);
+            const { redirectTo } = await verifyOtp(email, otp, accentRole);
             syncCookies();
             router.replace(redirectTo);
         }
         catch (err: unknown) {
+            saveRole(accentRole);
             setError(toUserFacingError(err, 'Could not verify the code. Please try again.'));
         }
         finally {
@@ -146,8 +149,7 @@ export default function VerifyPage(props: {
         if (resendCooldown > 0 || resendBusy)
             return;
         const email = getEmail();
-        const role = getRole() ?? accentRole;
-        if (!email || !role) {
+        if (!email) {
             router.replace(authHref());
             return;
         }
@@ -156,11 +158,12 @@ export default function VerifyPage(props: {
             setResendCooldown(0);
             return;
         }
+        saveRole(accentRole);
         setResendBusy(true);
         setError('');
         setResendCooldown(RESEND_COOLDOWN_SEC);
         try {
-            await sendOtp(email, role, captchaToken ?? undefined);
+            await sendOtp(email, accentRole, captchaToken ?? undefined);
             setCaptchaToken(null);
         }
         catch (err: unknown) {
