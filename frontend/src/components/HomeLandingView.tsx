@@ -2,11 +2,10 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
 import AppStoreInstallButton from '@/components/AppStoreInstallButton';
+import SignInRoleDropdown from '@/components/SignInRoleDropdown';
 import { landingApi, locumApi } from '@/lib/api';
-import { beforeClientNavigation } from '@/lib/topLoader';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
 import { ROLE_GUIDE } from '@/lib/roleAccent';
 
@@ -33,16 +32,11 @@ export type HomeLandingViewProps = {
     initialActiveJobCount?: number;
 };
 export function HomeLandingView({ interactive = true, rootStyle, initialActiveJobCount, }: HomeLandingViewProps) {
-    const router = useRouter();
     const [browseOpportunityCount, setBrowseOpportunityCount] = useState<number | null>(
         initialActiveJobCount ?? null,
     );
     const [recentHostAvatars, setRecentHostAvatars] = useState<string[]>([]);
 
-    const goToAuth = (href: string) => {
-        beforeClientNavigation(href);
-        router.push(href);
-    };
     useEffect(() => {
         let cancelled = false;
         locumApi
@@ -88,14 +82,7 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
 
         <div className="home-landing-nav__auth">
           <AppStoreInstallButton variant="landing-nav" />
-          <button
-            type="button"
-            className={`btn-signin ${!interactive ? 'btn-signin--disabled' : ''}`}
-            disabled={!interactive}
-            onClick={() => goToAuth('/auth?mode=signin')}
-          >
-            Sign in
-          </button>
+          <SignInRoleDropdown interactive={interactive} />
         </div>
       </nav>
 
@@ -183,7 +170,7 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
         }} className="home-landing-actions">
             {interactive ? (<>
                 <span className="role-guide" data-tip={ROLE_GUIDE.clinic}>
-                  <Link href="/auth?role=clinic&locked=true" className="btn-landing-cta" aria-label={`Post a Locum Request. ${ROLE_GUIDE.clinic}`}>
+                  <Link href="/auth?mode=signin&role=clinic&locked=true" className="btn-landing-cta" aria-label={`Post a Locum Request. ${ROLE_GUIDE.clinic}`}>
                     Post a Locum Request
                   </Link>
                 </span>

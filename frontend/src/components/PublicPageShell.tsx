@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Logo from '@/components/Logo';
+import SignInRoleDropdown from '@/components/SignInRoleDropdown';
 
 type PublicPageShellProps = {
     children: React.ReactNode;
@@ -16,9 +17,7 @@ export function PublicPageShell({ children, showSignIn = true }: PublicPageShell
                 </Link>
                 {showSignIn ? (
                     <div className="home-landing-nav__auth">
-                        <Link href="/auth" className="btn-signin">
-                            Sign in
-                        </Link>
+                        <SignInRoleDropdown />
                     </div>
                 ) : null}
             </nav>

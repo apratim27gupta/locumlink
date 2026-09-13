@@ -47,8 +47,6 @@ function AuthPageInner() {
     const { sendOtp, signInWithOAuth } = useAuth();
     const [mode, setMode] = useState<Mode>(() => params.get('mode') === 'signin' ? 'signin' : 'create');
     const [role, setRole] = useState<Role>(() => params.get('role') === 'clinic' ? 'clinic' : 'locum');
-    const roleLocked = params.get('locked') === 'true';
-    const [lockWarning, setLockWarning] = useState<string | null>(null);
     const [email, setEmail] = useState('');
     const [error, setError] = useState(() => sanitizeErrorMessage(params.get('error')));
     const [busyAction, setBusyAction] = useState<
@@ -59,7 +57,9 @@ function AuthPageInner() {
 
     useEffect(() => {
         if (params.get('mode') === 'signin') setMode('signin');
+        else if (params.get('mode') === 'create') setMode('create');
         if (params.get('role') === 'clinic') setRole('clinic');
+        else if (params.get('role') === 'locum') setRole('locum');
         setError(sanitizeErrorMessage(params.get('error')));
     }, [params]);
 
@@ -112,8 +112,8 @@ function AuthPageInner() {
         }
     }
 
-    const roleLabel = (r: Role) => (r === 'clinic' ? 'Host' : 'Locum');
     const accent = roleAccent(role);
+    const roleLabel = role === 'clinic' ? 'Host' : 'Locum';
 
     return (
         <>
@@ -125,63 +125,17 @@ function AuthPageInner() {
             }}>
                 {mode === 'create' ? 'Create an account' : 'Sign in'}
             </h2>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', marginBottom: 32 }}>
-                <p style={{
-                    width: '100%', fontFamily: 'Inter, sans-serif', fontWeight: 400,
-                    fontSize: 20, lineHeight: '140%', color: BRAND.textSecondary, margin: 0,
-                }}>
-                    {mode === 'create' ? 'I\u2019m a' : 'I\u2019m a'}
-                </p>
-
-                <div
-                    style={{ display: 'flex', width: '100%', gap: 12 }}
-                    role="group"
-                    aria-label={mode === 'create' ? 'Account type' : 'Sign in role'}
-                >
-                    {(['clinic', 'locum'] as Role[]).map((r) => {
-                        const selected = role === r;
-                        const pill = roleAccent(r);
-                        return (
-                        <span key={r} className="role-guide role-guide--auth" data-tip={ROLE_GUIDE[r]} style={{ flex: 1, display: 'flex' }}>
-                        <button type="button"
-                            onClick={() => {
-                                if (roleLocked && r !== role) {
-                                    setLockWarning(role === 'clinic' ? 'You are posting a job — your role is set to Host.' : 'You are exploring opportunities — your role is set to Locum.');
-                                    return;
-                                }
-                                setLockWarning(null);
-                                setRole(r);
-                            }}
-                            aria-pressed={selected}
-                            aria-label={`${roleLabel(r)}. ${ROLE_GUIDE[r]}`}
-                            suppressHydrationWarning
-                            style={{
-                                flex: 1, width: '100%', padding: '10px', cursor: 'pointer',
-                                fontSize: 14, fontFamily: 'inherit',
-                                fontWeight: selected ? 600 : 400,
-                                background: selected ? '#fff' : BRAND.bgGrey,
-                                color: selected ? pill.primary : BRAND.textMuted,
-                                border: selected ? `1px solid ${pill.primary}` : `1px solid ${BRAND.border}`,
-                                borderRadius: 6,
-                                boxSizing: 'border-box',
-                                transition: 'all .15s',
-                            }}>
-                            {roleLabel(r)}
-                        </button>
-                        </span>
-                        );
-                    })}
-                </div>
-            </div>
+            <p style={{
+                width: '100%', fontFamily: 'Inter, sans-serif', fontWeight: 400,
+                fontSize: 16, lineHeight: '140%', color: BRAND.textSecondary,
+                margin: '8px 0 28px',
+            }}>
+                Continuing as <strong style={{ color: accent.primary }}>{roleLabel}</strong>
+                {' · '}
+                <span style={{ color: BRAND.textMuted }}>{ROLE_GUIDE[role]}</span>
+            </p>
 
             <div className="auth-signup-form-stack">
-
-                {lockWarning && (
-                    <div style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '8px 12px' }}>
-                        {lockWarning}
-                    </div>
-                )}
 
                 <div className="auth-oauth-row">
                     {([

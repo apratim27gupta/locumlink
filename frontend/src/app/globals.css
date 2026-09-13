@@ -589,6 +589,50 @@
     0 0 0 4px rgba(59, 79, 216, 0.45);
 }
 
+.signin-role-dropdown__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 148px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #e2e5ee;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(15, 42, 122, 0.12);
+  box-sizing: border-box;
+}
+
+.signin-role-dropdown__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.signin-role-dropdown__item:hover {
+  background: #f7f8fa;
+}
+
+.signin-role-dropdown__item:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px rgba(56, 198, 198, 0.35);
+}
+
 
 .auth-page-signin-link {
   color: #1e3faf;
