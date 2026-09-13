@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { Ban, Bell, ChevronDown, Download, Eye, FileText, Mail, MessageSquare, Search, UserCheck, XCircle } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
@@ -58,6 +59,23 @@ function canRemindProfile(row: Row): boolean {
   if (row.status === 'SUSPENDED' || row.status === 'DEACTIVATED') return false;
   if (row.cpsnsVerificationStatus === 'VERIFIED') return false;
   return true;
+}
+
+type BroadcastConfirm = {
+  recipientCount: number;
+  channels: BroadcastChannel[];
+  duplicate?: boolean;
+  failedCount?: number;
+};
+
+function formatBroadcastModes(channels: BroadcastChannel[]): string {
+  const labels = [
+    channels.includes('email') ? 'email' : null,
+    channels.includes('notification') ? 'notification' : null,
+  ].filter((label): label is string => Boolean(label));
+  const word = labels.length > 1 ? 'Modes' : 'Mode';
+  const list = labels.length === 2 ? 'email and notification' : (labels[0] ?? '');
+  return `${word}: ${list}`;
 }
 
 function canBroadcastUser(row: Row): boolean {
@@ -184,7 +202,7 @@ export default function AdminUsersPage() {
   const [broadcastMode, setBroadcastMode] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [broadcastSending, setBroadcastSending] = useState(false);
-  const [broadcastBanner, setBroadcastBanner] = useState<string | null>(null);
+  const [broadcastConfirm, setBroadcastConfirm] = useState<BroadcastConfirm | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -488,7 +506,7 @@ export default function AdminUsersPage() {
     idempotencyKey: string;
   }) {
     setBroadcastSending(true);
-    setBroadcastBanner(null);
+    setBroadcastConfirm(null);
     setErr(null);
     try {
       const ids = eligibleFiltered
@@ -511,40 +529,20 @@ export default function AdminUsersPage() {
         },
       );
 
-      if (result.duplicate) {
-        setBroadcastBanner(
-          `Already sent — duplicate blocked for ${result.recipientCount} user${result.recipientCount === 1 ? '' : 's'} (no extra messages were queued).`,
+      const confirm: BroadcastConfirm = {
+        recipientCount: result.recipientCount,
+        channels: payload.channels,
+        duplicate: Boolean(result.duplicate),
+        failedCount: result.failed.length,
+      };
+      setBroadcastConfirm(confirm);
+      if (result.failed.length > 0) {
+        setErr(
+          result.failed
+            .slice(0, 3)
+            .map((f) => f.error)
+            .join('; ') + (result.failed.length > 3 ? '…' : ''),
         );
-      } else if (result.queued) {
-        setBroadcastBanner(
-          `Sent successfully — message queued for ${result.recipientCount} user${result.recipientCount === 1 ? '' : 's'}. Delivery continues in the background.`,
-        );
-      } else {
-        const parts = [
-          `Sent successfully to ${result.recipientCount} user${result.recipientCount === 1 ? '' : 's'}`,
-        ];
-        if (result.sentNotification > 0) {
-          parts.push(
-            `${result.sentNotification} notification${result.sentNotification === 1 ? '' : 's'}`,
-          );
-        }
-        if (result.sentEmail > 0) {
-          parts.push(
-            `${result.sentEmail} email${result.sentEmail === 1 ? '' : 's'}`,
-          );
-        }
-        if (result.failed.length > 0) {
-          parts.push(`${result.failed.length} failed`);
-          setBroadcastBanner(`${parts.join(' · ')}. Some deliveries failed.`);
-          setErr(
-            result.failed
-              .slice(0, 3)
-              .map((f) => f.error)
-              .join('; ') + (result.failed.length > 3 ? '…' : ''),
-          );
-        } else {
-          setBroadcastBanner(parts.join(' · '));
-        }
       }
       setComposeOpen(false);
       exitBroadcastMode();
@@ -566,7 +564,7 @@ export default function AdminUsersPage() {
               type="button"
               className="btn btn-primary"
               onClick={() => {
-                setBroadcastBanner(null);
+                setBroadcastConfirm(null);
                 setBroadcastMode(true);
               }}
             >
@@ -586,18 +584,114 @@ export default function AdminUsersPage() {
       </div>
 
       {err ? <div className="error-banner">{err}</div> : null}
-      {broadcastBanner ? (
-        <div
-          className="error-banner"
-          style={{
-            background: '#ecfdf5',
-            borderColor: '#a7f3d0',
-            color: '#065f46',
-          }}
-        >
-          {broadcastBanner}
-        </div>
-      ) : null}
+      {broadcastConfirm && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="broadcast-success-title"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setBroadcastConfirm(null);
+              }}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(15, 23, 42, 0.45)',
+                zIndex: 100040,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 18,
+              }}
+            >
+              <div
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  maxWidth: 420,
+                  background: '#fff',
+                  borderRadius: 14,
+                  border: '1px solid #E5E7EB',
+                  boxShadow: '0 18px 60px rgba(0,0,0,0.22)',
+                  padding: '28px 24px 24px',
+                  textAlign: 'center',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setBroadcastConfirm(null)}
+                  aria-label="Close"
+                  style={{
+                    position: 'absolute',
+                    top: 10,
+                    right: 12,
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    padding: '4px 8px',
+                    fontSize: 22,
+                    lineHeight: 1,
+                    color: '#6B7280',
+                  }}
+                >
+                  ×
+                </button>
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: '50%',
+                    margin: '0 auto 14px',
+                    background: broadcastConfirm.duplicate ? '#FEF3C7' : '#D1FAE5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 24,
+                    color: broadcastConfirm.duplicate ? '#92400E' : '#047857',
+                  }}
+                  aria-hidden
+                >
+                  ✓
+                </div>
+                <h2
+                  id="broadcast-success-title"
+                  style={{
+                    margin: '0 0 8px',
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 700,
+                    fontSize: 18,
+                    color: '#0f1523',
+                    lineHeight: 1.35,
+                  }}
+                >
+                  {broadcastConfirm.duplicate
+                    ? 'Message already sent'
+                    : 'Message broadcast successful'}
+                </h2>
+                <p
+                  style={{
+                    margin: 0,
+                    fontFamily: 'Inter, sans-serif',
+                    fontSize: 14,
+                    color: '#5a6478',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {broadcastConfirm.recipientCount} user
+                  {broadcastConfirm.recipientCount === 1 ? '' : 's'}.{' '}
+                  {formatBroadcastModes(broadcastConfirm.channels)}
+                  {broadcastConfirm.duplicate
+                    ? '. No extra messages were queued.'
+                    : '.'}
+                  {broadcastConfirm.failedCount
+                    ? ` ${broadcastConfirm.failedCount} failed.`
+                    : ''}
+                </p>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       <div className="filter-grid">
         <div className="input-group">
@@ -777,7 +871,7 @@ export default function AdminUsersPage() {
             style={{ padding: '6px 12px', fontSize: 13, marginLeft: 'auto' }}
             disabled={selectedCount === 0}
             onClick={() => {
-              setBroadcastBanner(null);
+              setBroadcastConfirm(null);
               setComposeOpen(true);
             }}
           >
