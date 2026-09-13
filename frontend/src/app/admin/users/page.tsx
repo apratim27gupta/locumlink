@@ -63,20 +63,9 @@ function canRemindProfile(row: Row): boolean {
 
 type BroadcastConfirm = {
   recipientCount: number;
-  channels: BroadcastChannel[];
   duplicate?: boolean;
   failedCount?: number;
 };
-
-function formatBroadcastModes(channels: BroadcastChannel[]): string {
-  const labels = [
-    channels.includes('email') ? 'email' : null,
-    channels.includes('notification') ? 'notification' : null,
-  ].filter((label): label is string => Boolean(label));
-  const word = labels.length > 1 ? 'Modes' : 'Mode';
-  const list = labels.length === 2 ? 'email and notification' : (labels[0] ?? '');
-  return `${word}: ${list}`;
-}
 
 function canBroadcastUser(row: Row): boolean {
   if (row.role === 'ADMIN') return false;
@@ -531,7 +520,6 @@ export default function AdminUsersPage() {
 
       const confirm: BroadcastConfirm = {
         recipientCount: result.recipientCount,
-        channels: payload.channels,
         duplicate: Boolean(result.duplicate),
         failedCount: result.failed.length,
       };
@@ -677,12 +665,10 @@ export default function AdminUsersPage() {
                     lineHeight: 1.5,
                   }}
                 >
-                  {broadcastConfirm.recipientCount} user
-                  {broadcastConfirm.recipientCount === 1 ? '' : 's'}.{' '}
-                  {formatBroadcastModes(broadcastConfirm.channels)}
+                  No. of users: {broadcastConfirm.recipientCount}
                   {broadcastConfirm.duplicate
                     ? '. No extra messages were queued.'
-                    : '.'}
+                    : ''}
                   {broadcastConfirm.failedCount
                     ? ` ${broadcastConfirm.failedCount} failed.`
                     : ''}
