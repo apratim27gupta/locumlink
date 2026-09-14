@@ -1898,6 +1898,7 @@ export class AdminService {
       include: {
         actor: { select: { email: true } },
         adminActor: { select: { email: true } },
+        subject: { select: { email: true } },
       },
     });
 
@@ -1913,6 +1914,7 @@ export class AdminService {
         entity: r.entity,
         before: r.before,
         after: r.after,
+        subjectEmail: r.subject?.email,
       }),
     }));
   }

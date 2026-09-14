@@ -125,14 +125,18 @@ function formatDiff(
     const right = JSON.stringify(after[key]);
     if (left === right) continue;
     const label = KEY_LABELS[key] ?? humanizeToken(key);
-    const hadBefore = before[key] !== undefined && before[key] !== null && before[key] !== '';
+    const hadBefore =
+      before[key] !== undefined && before[key] !== null && before[key] !== '';
     if (hadBefore) {
       parts.push(
         `${label} changed from ${formatValue(before[key])} to ${formatValue(after[key])}`,
       );
-    } else {
-      parts.push(formatLabeled(key, after[key]));
+      continue;
     }
+    if (after[key] === null || after[key] === undefined || after[key] === '') {
+      continue;
+    }
+    parts.push(formatLabeled(key, after[key]));
   }
   return parts.join('. ');
 }
@@ -141,30 +145,38 @@ export function formatAuditDetail(params: {
   entity?: string;
   before?: unknown;
   after?: unknown;
+  subjectEmail?: string | null;
 }): string {
   const after = isRecord(params.after) ? params.after : null;
   const before = isRecord(params.before) ? params.before : null;
+  let text = '';
 
   if (params.entity === 'UserBroadcast' && after) {
-    return formatBroadcastDetail(after);
-  }
-
-  if (before && after) {
+    text = formatBroadcastDetail(after);
+  } else if (before && after) {
     const diff = formatDiff(before, after);
-    if (diff) return diff.endsWith('.') ? diff : `${diff}.`;
+    if (diff) text = diff.endsWith('.') ? diff : `${diff}.`;
   }
 
-  if (after) {
+  if (!text && after) {
     const parts = Object.keys(after)
       .filter((key) => !SKIP_KEYS.has(key))
+      .filter((key) => after[key] !== null && after[key] !== undefined && after[key] !== '')
       .map((key) => formatLabeled(key, after[key]));
     if (parts.length) {
-      const text = parts.join('. ');
-      return text.endsWith('.') ? text : `${text}.`;
+      const joined = parts.join('. ');
+      text = joined.endsWith('.') ? joined : `${joined}.`;
     }
   }
 
-  return '';
+  const email = params.subjectEmail?.trim();
+  if (email && !text.includes(email)) {
+    text = text
+      ? `${text.replace(/\.$/, '')} for ${email}.`
+      : `User: ${email}.`;
+  }
+
+  return text;
 }
 
 export function formatAuditEntity(entity: string): string {

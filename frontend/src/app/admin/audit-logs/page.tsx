@@ -163,7 +163,7 @@ export default function AdminAuditLogsPage() {
                       {r.outcome || 'Success'}
                     </span>
                   </td>
-                  <td className="text-muted">{r.detail || 'No extra details'}</td>
+                  <td className="text-muted">{r.detail}</td>
                 </tr>
               ))
             )}
