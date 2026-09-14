@@ -92,22 +92,27 @@ export default function SignInRoleDropdown({
           {OPTIONS.map(({ role, label }) => {
             const accent = ROLE_ACCENT[role];
             return (
-              <button
+              <span
                 key={role}
-                type="button"
-                role="menuitem"
-                className="signin-role-dropdown__item"
-                title={ROLE_GUIDE[role]}
-                aria-label={`${label}. ${ROLE_GUIDE[role]}`}
-                onClick={() => go(role)}
-                style={{
-                  color: accent.primary,
-                  borderColor: accent.primary,
-                  background: '#fff',
-                }}
+                className="tip-left"
+                data-tip={ROLE_GUIDE[role]}
+                style={{ display: 'flex', width: '100%' }}
               >
-                {label}
-              </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="signin-role-dropdown__item"
+                  aria-label={`${label}. ${ROLE_GUIDE[role]}`}
+                  onClick={() => go(role)}
+                  style={{
+                    color: accent.primary,
+                    borderColor: accent.primary,
+                    background: '#fff',
+                  }}
+                >
+                  {label}
+                </button>
+              </span>
             );
           })}
         </div>

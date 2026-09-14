@@ -645,12 +645,16 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 const menuOpen = missingRoleMenu === key;
                 const disabled = roleSwitchBusy && !selected;
                 return (
-                  <button
+                  <span
                     key={key}
+                    className={available || selected ? 'tip-left' : undefined}
+                    data-tip={available || selected ? tip : undefined}
+                  >
+                  <button
                     type="button"
                     disabled={disabled}
-                    title={available || selected ? tip : undefined}
                     aria-pressed={selected}
+                    aria-label={available || selected ? `${label}. ${tip}` : label}
                     aria-expanded={!available && !selected ? menuOpen : undefined}
                     aria-haspopup={!available && !selected ? 'dialog' : undefined}
                     onClick={() => void handleRoleSwitch(key)}
@@ -677,6 +681,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                   >
                     {label}
                   </button>
+                  </span>
                 );
               })}
               {missingRoleMenu ? (

@@ -633,6 +633,59 @@
     0 0 0 4px rgba(56, 198, 198, 0.35);
 }
 
+/* Hover guide placed to the left so top-right controls are not clipped. */
+.tip-left {
+  position: relative;
+  display: inline-flex;
+}
+
+.tip-left::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #0f1523;
+  color: #fff;
+  font-family: Inter, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 8px 24px rgba(15, 21, 35, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 80;
+}
+
+.tip-left::before {
+  content: '';
+  position: absolute;
+  right: calc(100% + 4px);
+  top: 50%;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-left-color: #0f1523;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 81;
+}
+
+.tip-left:hover::after,
+.tip-left:focus-within::after,
+.tip-left:hover::before,
+.tip-left:focus-within::before {
+  opacity: 1;
+  visibility: visible;
+}
+
 
 .auth-page-signin-link {
   color: #1e3faf;
