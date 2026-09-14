@@ -972,7 +972,6 @@
 .role-switch {
   flex-shrink: 0;
 }
-
 .role-switch-menu {
   position: absolute;
   top: calc(100% + 8px);

@@ -214,7 +214,6 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             setRoleSwitchBusy(false);
         }
     }
-
     function createMissingProfile(target: Role) {
         setMissingRoleMenu(null);
         const href = `/auth?mode=signin&role=${encodeURIComponent(target)}&locked=true`;
