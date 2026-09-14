@@ -919,6 +919,49 @@
 .role-switch {
   flex-shrink: 0;
 }
+
+.role-switch-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 50;
+  width: 240px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e5ee;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(15, 42, 122, 0.12);
+  box-sizing: border-box;
+}
+
+.role-switch-menu__text {
+  margin: 0 0 10px;
+  font-family: Inter, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #3d4658;
+  text-align: left;
+}
+
+.role-switch-menu__cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.role-switch-menu__cta:hover {
+  filter: brightness(0.95);
+}
+
 @media (max-width: 480px) {
   .role-switch button {
     padding: 5px 8px !important;

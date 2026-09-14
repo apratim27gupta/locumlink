@@ -162,6 +162,8 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     }>({ host: false, locum: false });
     const [rolesLoaded, setRolesLoaded] = useState(false);
     const [roleSwitchBusy, setRoleSwitchBusy] = useState(false);
+    const [missingRoleMenu, setMissingRoleMenu] = useState<Role | null>(null);
+    const roleSwitchRef = useRef<HTMLDivElement>(null);
     const activeDashRole: Role = roleFromPathname(pathname);
 
     useEffect(() => {
@@ -190,11 +192,17 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     async function handleRoleSwitch(target: Role) {
         const hasTarget =
             target === 'clinic' ? availableRoles.host : availableRoles.locum;
-        if (roleSwitchBusy || target === activeDashRole || !hasTarget) return;
+        if (roleSwitchBusy || target === activeDashRole) return;
+        if (!hasTarget) {
+            setMissingRoleMenu((current) => (current === target ? null : target));
+            return;
+        }
+        setMissingRoleMenu(null);
         setRoleSwitchBusy(true);
         try {
             const result = await switchRole(target);
             if (!result.ok) {
+                setMissingRoleMenu(target);
                 setRoleSwitchBusy(false);
                 return;
             }
@@ -207,10 +215,39 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         }
     }
 
+    function createMissingProfile(target: Role) {
+        setMissingRoleMenu(null);
+        const href = `/auth?mode=signin&role=${encodeURIComponent(target)}&locked=true`;
+        beforeClientNavigation(href);
+        router.push(href);
+    }
+
     useEffect(() => {
         setMobileNavOpen(false);
         setRoleSwitchBusy(false);
+        setMissingRoleMenu(null);
     }, [pathname]);
+
+    useEffect(() => {
+        if (!missingRoleMenu) return;
+        function onPointerDown(e: MouseEvent | TouchEvent) {
+            const el = roleSwitchRef.current;
+            if (el && e.target instanceof Node && !el.contains(e.target)) {
+                setMissingRoleMenu(null);
+            }
+        }
+        function onKeyDown(e: KeyboardEvent) {
+            if (e.key === 'Escape') setMissingRoleMenu(null);
+        }
+        document.addEventListener('mousedown', onPointerDown);
+        document.addEventListener('touchstart', onPointerDown);
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', onPointerDown);
+            document.removeEventListener('touchstart', onPointerDown);
+            document.removeEventListener('keydown', onKeyDown);
+        };
+    }, [missingRoleMenu]);
 
     useEffect(() => {
         if (!mobileNavOpen)
@@ -573,10 +610,12 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
 
           {rolesLoaded && (
             <div
+              ref={roleSwitchRef}
               className="role-switch"
               role="group"
               aria-label="Switch between Host and Locum"
               style={{
+                position: 'relative',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 0,
@@ -593,51 +632,45 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                   label: 'Host',
                   tip: ROLE_GUIDE.clinic,
                   available: availableRoles.host,
-                  missingTip: 'No Host profile for this email yet',
                 },
                 {
                   key: 'locum' as Role,
                   label: 'Locum',
                   tip: ROLE_GUIDE.locum,
                   available: availableRoles.locum,
-                  missingTip: 'No Locum profile for this email yet',
                 },
-              ]).map(({ key, label, tip, available, missingTip }) => {
+              ]).map(({ key, label, tip, available }) => {
                 const selected = activeDashRole === key;
                 const pill = roleAccent(key);
-                const disabled =
-                  roleSwitchBusy || (!available && !selected);
+                const menuOpen = missingRoleMenu === key;
+                const disabled = roleSwitchBusy && !selected;
                 return (
                   <button
                     key={key}
                     type="button"
                     disabled={disabled}
-                    title={available || selected ? tip : missingTip}
+                    title={available || selected ? tip : undefined}
                     aria-pressed={selected}
-                    aria-disabled={disabled}
+                    aria-expanded={!available && !selected ? menuOpen : undefined}
+                    aria-haspopup={!available && !selected ? 'dialog' : undefined}
                     onClick={() => void handleRoleSwitch(key)}
                     style={{
                       border: 'none',
-                      cursor: disabled
-                        ? 'not-allowed'
-                        : roleSwitchBusy
-                          ? 'wait'
-                          : 'pointer',
+                      cursor: disabled ? 'wait' : 'pointer',
                       padding: '6px 12px',
                       borderRadius: 6,
                       fontSize: 13,
                       fontWeight: selected ? 600 : 500,
                       fontFamily: 'inherit',
-                      background: selected ? '#fff' : 'transparent',
-                      color: selected
+                      background: selected || menuOpen ? '#fff' : 'transparent',
+                      color: selected || menuOpen
                         ? pill.primary
                         : available
                           ? '#5a6478'
-                          : '#B8C4D6',
-                      boxShadow: selected
+                          : '#7b8798',
+                      boxShadow: selected || menuOpen
                         ? '0 1px 3px rgba(15,21,35,0.08)'
                         : 'none',
-                      opacity: !available && !selected ? 0.55 : 1,
                       transition:
                         'background .15s, color .15s, box-shadow .15s, opacity .15s',
                     }}
@@ -646,6 +679,36 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                   </button>
                 );
               })}
+              {missingRoleMenu ? (
+                <div
+                  className="role-switch-menu"
+                  role="dialog"
+                  aria-label={
+                    missingRoleMenu === 'clinic'
+                      ? 'Create Host profile'
+                      : 'Create Locum profile'
+                  }
+                  style={{
+                    right: missingRoleMenu === 'locum' ? 0 : 'auto',
+                    left: missingRoleMenu === 'clinic' ? 0 : 'auto',
+                  }}
+                >
+                  <p className="role-switch-menu__text">
+                    You don&apos;t have a{' '}
+                    {missingRoleMenu === 'clinic' ? 'Host' : 'Locum'} profile yet.
+                  </p>
+                  <button
+                    type="button"
+                    className="role-switch-menu__cta"
+                    onClick={() => createMissingProfile(missingRoleMenu)}
+                    style={{
+                      background: roleAccent(missingRoleMenu).primary,
+                    }}
+                  >
+                    Create Profile
+                  </button>
+                </div>
+              ) : null}
             </div>
           )}
 

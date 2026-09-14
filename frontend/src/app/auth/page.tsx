@@ -218,24 +218,16 @@ function AuthPageInner() {
                 </form>
             </div>
 
+            {mode === 'create' ? (
             <p style={{ textAlign: 'center', fontSize: 18, color: BRAND.textMuted, marginTop: 16 }}>
-                {mode === 'create' ? (
-                    <>Already have an account?{' '}
-                        <button type="button" className="auth-page-signin-link"
-                            onClick={() => setMode('signin')}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, fontFamily: 'inherit', color: accent.primaryHover }}>
-                            Sign in
-                        </button>
-                    </>
-                ) : (
-                    <>Don&apos;t have an account?{' '}
-                        <button type="button" onClick={() => setMode('create')}
-                            style={{ background: 'none', border: 'none', color: accent.primary, cursor: 'pointer', fontSize: 18, fontFamily: 'inherit', fontWeight: 500 }}>
-                            Sign up
-                        </button>
-                    </>
-                )}
+                Already have an account?{' '}
+                <button type="button" className="auth-page-signin-link"
+                    onClick={() => setMode('signin')}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, fontFamily: 'inherit', color: accent.primaryHover }}>
+                    Sign in
+                </button>
             </p>
+            ) : null}
         </AuthSplitLayout>
         <Link href="/home?skipSetup=1" className="home-admin-login-btn">Home</Link>
         </>
