@@ -12,7 +12,11 @@ interface AuthCtx {
     isLoading: boolean;
     profileComplete: boolean;
     sendOtp: (email: string, role: Role, captchaToken?: string) => Promise<void>;
-    verifyOtp: (email: string, otp: string) => Promise<{
+    verifyOtp: (
+        email: string,
+        otp: string,
+        roleHint?: Role,
+    ) => Promise<{
         role: Role;
         redirectTo: string;
     }>;
@@ -165,18 +169,29 @@ export function AuthProvider({ children }: {
         saveEmail(email);
         await authApi.sendOtp(email, chosenRole, captchaToken);
     }
-    async function verifyOtp(email: string, otp: string): Promise<{
+    async function verifyOtp(
+        email: string,
+        otp: string,
+        roleHint?: Role,
+    ): Promise<{
         role: Role;
         redirectTo: string;
     }> {
-        const role = (getRole() ?? 'locum') as Role;
+        // Prefer the role from the verify URL / caller — never silently fall back to
+        // locum while a Host OTP is pending (that makes a valid code look "invalid").
+        const role: Role =
+            roleHint === 'clinic' || roleHint === 'locum'
+                ? roleHint
+                : getRole() === 'clinic'
+                  ? 'clinic'
+                  : getRole() === 'locum'
+                    ? 'locum'
+                    : 'locum';
+        saveRole(role);
+        setRoleState(role);
         let tokens: { accessToken: string; refreshToken: string };
         try {
-            tokens = await authApi.verifyOtp(
-                email,
-                otp,
-                role === 'clinic' ? 'clinic' : 'locum',
-            );
+            tokens = await authApi.verifyOtp(email, otp, role);
         }
         catch (err) {
             throw new Error(toUserFacingError(err, 'Could not verify the code. Please try again.'));

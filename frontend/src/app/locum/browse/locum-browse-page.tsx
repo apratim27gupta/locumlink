@@ -469,7 +469,7 @@ export default function LocumBrowsePage(props: {
     syncCookies();
     if (!getToken()) {
       beforeClientNavigation('/auth');
-      router.push('/auth?role=locum&next=/locum/browse');
+      router.push('/auth?mode=signin&role=locum&locked=true&next=/locum/browse');
       return;
     }
     const targetJob = jobs.find((j) => j.id === jobId);
@@ -1241,7 +1241,7 @@ export default function LocumBrowsePage(props: {
               type="button"
               onClick={() => {
                 beforeClientNavigation('/auth');
-                router.push('/auth?role=locum&next=/locum/browse');
+                router.push('/auth?mode=signin&role=locum&locked=true&next=/locum/browse');
               }}
               style={{
                 height: 34,

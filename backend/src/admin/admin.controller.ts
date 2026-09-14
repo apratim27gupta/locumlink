@@ -163,11 +163,17 @@ export class AdminController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('pageSize', new DefaultValuePipe(50), ParseIntPipe) pageSize: number,
     @Query('q') q?: string,
+    @Query('role') role?: string,
+    @Query('accountStatus') accountStatus?: string,
+    @Query('credentialStatus') credentialStatus?: string,
   ) {
     return this.admin.listUsers({
       q,
+      role,
+      accountStatus,
+      credentialStatus,
       page,
-      pageSize: Math.min(Math.max(pageSize, 1), 200),
+      pageSize: Math.min(Math.max(pageSize, 1), 1000),
     });
   }
 

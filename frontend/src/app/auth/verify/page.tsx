@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState, useEffect, KeyboardEvent } from 'react';
+import { useRef, useState, useEffect, KeyboardEvent, ClipboardEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthSplitLayout from '@/components/AuthSplitLayout';
@@ -40,6 +40,8 @@ export default function VerifyPage(props: {
     const [captchaToken, setCaptchaToken] = useState<string | null>(null);
     const turnstileRequired = isTurnstileEnabled();
     const refs = useRef<(HTMLInputElement | null)[]>([]);
+    const digitsRef = useRef(digits);
+    digitsRef.current = digits;
     useEffect(() => {
         if (resendCooldown <= 0)
             return;
@@ -48,32 +50,56 @@ export default function VerifyPage(props: {
         }, 1000);
         return () => clearTimeout(t);
     }, [resendCooldown]);
+
+    function authHref() {
+        return `/auth?mode=signin&role=${encodeURIComponent(accentRole)}&locked=true`;
+    }
+
+    function applyOtpDigits(raw: string, startIdx = 0) {
+        const nums = raw.replace(/\D/g, '').slice(0, OTP_LEN - startIdx);
+        if (!nums) return;
+        const next = [...digitsRef.current];
+        for (let i = 0; i < nums.length; i++) {
+            next[startIdx + i] = nums[i]!;
+        }
+        setDigits(next);
+        if (error) setError('');
+        const focusIdx = Math.min(startIdx + nums.length, OTP_LEN - 1);
+        refs.current[focusIdx]?.focus();
+        if (next.every((d) => d.length === 1)) {
+            void handleVerify(next.join(''));
+        }
+    }
+
     function handleChange(val: string, idx: number) {
-        const d = val.replace(/\D/g, '').slice(-1);
-        const next = [...digits];
+        const cleaned = val.replace(/\D/g, '');
+        if (cleaned.length > 1) {
+            applyOtpDigits(cleaned, idx);
+            return;
+        }
+        const d = cleaned.slice(-1);
+        const next = [...digitsRef.current];
         next[idx] = d;
         setDigits(next);
         if (error)
             setError('');
         if (d && idx < OTP_LEN - 1)
             refs.current[idx + 1]?.focus();
+        if (d && idx === OTP_LEN - 1 && next.every((x) => x.length === 1)) {
+            void handleVerify(next.join(''));
+        }
     }
     function handleKey(e: KeyboardEvent<HTMLInputElement>, idx: number) {
+        // Allow clipboard shortcuts (Ctrl/Cmd+V, etc.)
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
         if (/^\d$/.test(e.key)) {
             e.preventDefault();
-            const next = [...digits];
-            next[idx] = e.key;
-            setDigits(next);
-            if (error)
-                setError('');
-            if (idx < OTP_LEN - 1) {
-                refs.current[idx + 1]?.focus();
-            }
+            handleChange(e.key, idx);
             return;
         }
         if (e.key === 'Backspace') {
             e.preventDefault();
-            const next = [...digits];
+            const next = [...digitsRef.current];
             next[idx] = '';
             setDigits(next);
             if (error)
@@ -87,25 +113,32 @@ export default function VerifyPage(props: {
             e.preventDefault();
         }
     }
+    function handlePaste(e: ClipboardEvent<HTMLInputElement>, idx: number) {
+        e.preventDefault();
+        applyOtpDigits(e.clipboardData.getData('text') || '', idx);
+    }
     async function handleVerify(otpOverride?: string) {
-        const otp = otpOverride ?? digits.join('');
+        const otp = otpOverride ?? digitsRef.current.join('');
         if (otp.length < OTP_LEN) {
             setError('Please enter the full 6-digit code.');
             return;
         }
         const email = getEmail();
         if (!email) {
-            router.replace('/auth');
+            router.replace(authHref());
             return;
         }
+        // Lock role from the URL before calling the API (avoids Host→Locum drift).
+        saveRole(accentRole);
         setError('');
         setBusy(true);
         try {
-            const { redirectTo } = await verifyOtp(email, otp);
+            const { redirectTo } = await verifyOtp(email, otp, accentRole);
             syncCookies();
             router.replace(redirectTo);
         }
         catch (err: unknown) {
+            saveRole(accentRole);
             setError(toUserFacingError(err, 'Could not verify the code. Please try again.'));
         }
         finally {
@@ -116,9 +149,8 @@ export default function VerifyPage(props: {
         if (resendCooldown > 0 || resendBusy)
             return;
         const email = getEmail();
-        const role = getRole();
-        if (!email || !role) {
-            router.replace('/auth');
+        if (!email) {
+            router.replace(authHref());
             return;
         }
         if (turnstileRequired && !captchaToken) {
@@ -126,11 +158,12 @@ export default function VerifyPage(props: {
             setResendCooldown(0);
             return;
         }
+        saveRole(accentRole);
         setResendBusy(true);
         setError('');
         setResendCooldown(RESEND_COOLDOWN_SEC);
         try {
-            await sendOtp(email, role, captchaToken ?? undefined);
+            await sendOtp(email, accentRole, captchaToken ?? undefined);
             setCaptchaToken(null);
         }
         catch (err: unknown) {
@@ -173,7 +206,7 @@ export default function VerifyPage(props: {
         <div className="auth-verify-otp-row">
           {digits.map((d, i) => (<input key={i} ref={(el) => {
                   refs.current[i] = el;
-              }} type="text" inputMode="numeric" maxLength={1} value={d} onFocus={(e) => e.target.select()} onChange={(e) => handleChange(e.target.value, i)} onKeyDown={(e) => handleKey(e, i)} style={{
+              }} type="text" inputMode="numeric" pattern="[0-9]*" autoComplete={i === 0 ? 'one-time-code' : 'off'} maxLength={i === 0 ? OTP_LEN : 1} value={d} onFocus={(e) => e.target.select()} onChange={(e) => handleChange(e.target.value, i)} onKeyDown={(e) => handleKey(e, i)} onPaste={(e) => handlePaste(e, i)} aria-label={`Digit ${i + 1} of ${OTP_LEN}`} style={{
                   width: 44,
                   height: 52,
                   textAlign: 'center',
@@ -251,7 +284,7 @@ export default function VerifyPage(props: {
             Resend Code
           </button>)}
 
-        <button type="button" onClick={() => router.push('/auth')} style={{
+        <button type="button" onClick={() => router.push(authHref())} style={{
               display: 'block',
               width: '100%',
               textAlign: 'center',

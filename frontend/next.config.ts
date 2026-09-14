@@ -67,6 +67,7 @@ const nextConfig: NextConfig = {
       { source: '/api/admin/feedback', destination: `${apiBase}/api/admin/feedback` },
       { source: '/api/admin/verifications', destination: `${apiBase}/api/admin/verifications` },
       { source: '/api/admin/verifications/:path*', destination: `${apiBase}/api/admin/verifications/:path*` },
+      { source: '/api/admin/audit-logs', destination: `${apiBase}/api/admin/audit-logs` },
       { source: '/api/admin/users/:id/profile', destination: `${apiBase}/api/admin/users/:id/profile` },
       { source: '/api/admin/users/:id/remind', destination: `${apiBase}/api/admin/users/:id/remind` },
       { source: '/api/admin/users/broadcast', destination: `${apiBase}/api/admin/users/broadcast` },

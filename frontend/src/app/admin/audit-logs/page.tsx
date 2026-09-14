@@ -10,6 +10,7 @@ type LogRow = {
   actor: string;
   action: string;
   entity: string;
+  outcome?: string;
   createdAt: string;
   detail: string;
 };
@@ -157,12 +158,12 @@ export default function AdminAuditLogsPage() {
                   </td>
                   <td style={{ color: '#475569' }}>{r.entity}</td>
                   <td>
-                    <span className="outcome-success">
-                      <CheckCircle size={12} />
-                      Success
+                    <span className={r.outcome === 'Failed' ? 'text-muted' : 'outcome-success'}>
+                      {r.outcome === 'Failed' ? null : <CheckCircle size={12} />}
+                      {r.outcome || 'Success'}
                     </span>
                   </td>
-                  <td className="text-muted">{r.detail || '—'}</td>
+                  <td className="text-muted">{r.detail}</td>
                 </tr>
               ))
             )}

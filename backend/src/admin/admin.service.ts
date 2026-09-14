@@ -50,6 +50,21 @@ import {
   isEligibleForCredentialQueueLocum,
   mergeCredentialSubmittedAtPatch,
 } from '../cpsns/cpsns-verified.js';
+import {
+  adminUserAccountFilterKey,
+  adminUserCredentialFilterKey,
+  computeInCredentialQueue,
+  emptyAdminUserAccountCounts,
+  emptyAdminUserCredentialCounts,
+  parseAdminUserAccountFilters,
+  parseAdminUserCredentialFilters,
+} from './admin-user-filters.js';
+import {
+  formatAuditAction,
+  formatAuditDetail,
+  formatAuditEntity,
+  formatAuditOutcome,
+} from './audit-detail.js';
 
 const BROADCAST_CONCURRENCY = 5;
 const BROADCAST_EMAIL_BATCH_SIZE = 5;
@@ -97,34 +112,6 @@ const reportUserSelect = {
   },
 } as const;
 
-function formatAuditDetail(params: {
-  before?: unknown;
-  after?: unknown;
-}): string {
-  const before = params.before;
-  const after = params.after;
-  if (
-    before &&
-    after &&
-    typeof before === 'object' &&
-    typeof after === 'object' &&
-    !Array.isArray(before) &&
-    !Array.isArray(after)
-  ) {
-    const b = before as Record<string, unknown>;
-    const a = after as Record<string, unknown>;
-    const keys = new Set([...Object.keys(b), ...Object.keys(a)]);
-    const parts: string[] = [];
-    for (const k of keys) {
-      const bv = JSON.stringify(b[k]);
-      const av = JSON.stringify(a[k]);
-      if (bv !== av) parts.push(`${k}: ${bv} → ${av}`);
-    }
-    if (parts.length) return parts.join('; ');
-  }
-  if (typeof after === 'object' && after !== null) return JSON.stringify(after);
-  return '';
-}
 
 @Injectable()
 export class AdminService {
@@ -404,88 +391,128 @@ export class AdminService {
     return analyticsSummaryToCsv(summary);
   }
 
-  async listUsers(params: { q?: string; page: number; pageSize: number }) {
-    const skip = Math.max(0, (params.page - 1) * params.pageSize);
+  async listUsers(params: {
+    q?: string;
+    page: number;
+    pageSize: number;
+    role?: string;
+    accountStatus?: string;
+    credentialStatus?: string;
+  }) {
     const q = params.q?.trim();
-    const where = q
-      ? { email: { contains: q, mode: 'insensitive' as const } }
-      : undefined;
-    const [total, users] = await Promise.all([
-      this.prisma.user.count({ where }),
-      this.prisma.user.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: params.pageSize,
-        select: {
-          id: true,
-          email: true,
-          role: true,
-          status: true,
-          createdAt: true,
-          lastLoginAt: true,
-          suspensionNote: true,
-          suspendedAt: true,
-          lastProfileReminderAt: true,
-          lastProfileReminderChannel: true,
-          locumProfile: {
-            select: {
-              cpsnsVerificationStatus: true,
-              cpsnsId: true,
-              licenseFileName: true,
-              resumeFileName: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-          hostProfile: {
-            select: {
-              cpsnsVerificationStatus: true,
-              cpsnsNumber: true,
-              practiceName: true,
-              licenseFile: true,
-              photoIdFile: true,
-            },
+    const roleRaw = params.role?.trim().toUpperCase();
+    const roleFilter =
+      roleRaw === Role.LOCUM || roleRaw === Role.HOST ? roleRaw : undefined;
+    const accountFilters = parseAdminUserAccountFilters(params.accountStatus);
+    const credentialFilters = parseAdminUserCredentialFilters(
+      params.credentialStatus,
+    );
+    const where: Prisma.UserWhereInput = {
+      role: roleFilter ?? { not: Role.ADMIN },
+      ...(q ? { email: { contains: q, mode: 'insensitive' } } : {}),
+    };
+    const users = await this.prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        lastLoginAt: true,
+        suspensionNote: true,
+        suspendedAt: true,
+        lastProfileReminderAt: true,
+        lastProfileReminderChannel: true,
+        locumProfile: {
+          select: {
+            cpsnsVerificationStatus: true,
+            cpsnsId: true,
+            licenseFileName: true,
+            resumeFileName: true,
+            firstName: true,
+            lastName: true,
           },
         },
-      }),
-    ]);
+        hostProfile: {
+          select: {
+            cpsnsVerificationStatus: true,
+            cpsnsNumber: true,
+            practiceName: true,
+            licenseFile: true,
+            photoIdFile: true,
+          },
+        },
+      },
+    });
+
+    const mapped = users.map((u) => {
+      const cpsnsVerificationStatus =
+        u.role === Role.LOCUM
+          ? (u.locumProfile?.cpsnsVerificationStatus ?? null)
+          : u.role === Role.HOST
+            ? (u.hostProfile?.cpsnsVerificationStatus ?? null)
+            : null;
+      const inCredentialQueue = computeInCredentialQueue(u);
+      const row = {
+        id: u.id,
+        email: u.email,
+        role: u.role,
+        status: u.status,
+        cpsnsVerificationStatus,
+        inCredentialQueue,
+        createdAt: u.createdAt.toISOString(),
+        lastLoginAt: u.lastLoginAt
+          ? u.lastLoginAt.toISOString().slice(0, 10)
+          : null,
+        suspendedAt: u.suspendedAt ? u.suspendedAt.toISOString() : null,
+        lastProfileReminderAt: u.lastProfileReminderAt
+          ? u.lastProfileReminderAt.toISOString()
+          : null,
+        lastProfileReminderChannel: u.lastProfileReminderChannel ?? null,
+      };
+      return {
+        ...row,
+        accountFilterKey: adminUserAccountFilterKey(row.status),
+        credentialFilterKey: adminUserCredentialFilterKey({
+          cpsnsVerificationStatus,
+          inCredentialQueue,
+        }),
+      };
+    });
+
+    const accountCounts = emptyAdminUserAccountCounts();
+    const credentialCounts = emptyAdminUserCredentialCounts();
+    for (const row of mapped) {
+      accountCounts[row.accountFilterKey] += 1;
+      credentialCounts[row.credentialFilterKey] += 1;
+    }
+
+    const filtered = mapped.filter((row) => {
+      const accountOk =
+        accountFilters.length === 0 ||
+        accountFilters.includes(row.accountFilterKey);
+      const credentialOk =
+        credentialFilters.length === 0 ||
+        credentialFilters.includes(row.credentialFilterKey);
+      return accountOk && credentialOk;
+    });
+
+    const total = filtered.length;
+    const start = Math.max(0, (params.page - 1) * params.pageSize);
+    const pageRows = filtered.slice(start, start + params.pageSize);
+
     return {
       total,
       page: params.page,
       pageSize: params.pageSize,
-      users: users.map((u) => {
-        const cpsnsVerificationStatus =
-          u.role === Role.LOCUM
-            ? (u.locumProfile?.cpsnsVerificationStatus ?? null)
-            : u.role === Role.HOST
-              ? (u.hostProfile?.cpsnsVerificationStatus ?? null)
-              : null;
-        const inCredentialQueue =
-          u.role === Role.LOCUM && u.locumProfile
-            ? isEligibleForCredentialQueueLocum(u.locumProfile)
-            : u.role === Role.HOST && u.hostProfile
-              ? isEligibleForCredentialQueueHost(u.hostProfile)
-              : false;
-
-        return {
-          id: u.id,
-          email: u.email,
-          role: u.role,
-          status: u.status,
-          cpsnsVerificationStatus,
-          inCredentialQueue,
-          createdAt: u.createdAt.toISOString(),
-          lastLoginAt: u.lastLoginAt
-            ? u.lastLoginAt.toISOString().slice(0, 10)
-            : null,
-          suspendedAt: u.suspendedAt ? u.suspendedAt.toISOString() : null,
-          lastProfileReminderAt: u.lastProfileReminderAt
-            ? u.lastProfileReminderAt.toISOString()
-            : null,
-          lastProfileReminderChannel: u.lastProfileReminderChannel ?? null,
-        };
-      }),
+      accountCounts,
+      credentialCounts,
+      users: pageRows.map(
+        ({ accountFilterKey: _account, credentialFilterKey: _credential, ...rest }) =>
+          rest,
+      ),
     };
   }
 
@@ -1871,18 +1898,24 @@ export class AdminService {
       include: {
         actor: { select: { email: true } },
         adminActor: { select: { email: true } },
+        subject: { select: { email: true } },
       },
     });
 
     return rows.map((r) => ({
       id: r.id,
-      actor: r.adminActor?.email ?? r.actor?.email ?? '—',
-      actorRole: r.actorRole ?? '—',
-      action: r.action,
-      entity: r.entity,
-      outcome: r.outcome,
+      actor: r.adminActor?.email ?? r.actor?.email ?? 'System',
+      actorRole: r.actorRole ?? '',
+      action: formatAuditAction(r.action),
+      entity: formatAuditEntity(r.entity),
+      outcome: formatAuditOutcome(r.outcome),
       createdAt: r.createdAt.toISOString(),
-      detail: formatAuditDetail({ before: r.before, after: r.after }),
+      detail: formatAuditDetail({
+        entity: r.entity,
+        before: r.before,
+        after: r.after,
+        subjectEmail: r.subject?.email,
+      }),
     }));
   }
 }

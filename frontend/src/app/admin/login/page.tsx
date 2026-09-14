@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Suspense, useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthSplitLayout from '@/components/AuthSplitLayout';
@@ -26,6 +26,8 @@ function AdminLoginInner() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRequired = isTurnstileEnabled();
   const refs = useRef<(HTMLInputElement | null)[]>([]);
+  const digitsRef = useRef(digits);
+  digitsRef.current = digits;
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -129,9 +131,30 @@ function AdminLoginInner() {
     }
   }
 
+  function applyOtpDigits(raw: string, startIdx = 0) {
+    const nums = raw.replace(/\D/g, '').slice(0, OTP_LEN - startIdx);
+    if (!nums) return;
+    const next = [...digitsRef.current];
+    for (let i = 0; i < nums.length; i++) {
+      next[startIdx + i] = nums[i]!;
+    }
+    setDigits(next);
+    if (formError) setFormError(null);
+    const focusIdx = Math.min(startIdx + nums.length, OTP_LEN - 1);
+    refs.current[focusIdx]?.focus();
+    if (next.every((d) => d.length === 1)) {
+      void handleVerify(next.join(''));
+    }
+  }
+
   function handleDigitChange(val: string, idx: number) {
-    const d = val.replace(/\D/g, '').slice(-1);
-    const next = [...digits];
+    const cleaned = val.replace(/\D/g, '');
+    if (cleaned.length > 1) {
+      applyOtpDigits(cleaned, idx);
+      return;
+    }
+    const d = cleaned.slice(-1);
+    const next = [...digitsRef.current];
     next[idx] = d;
     setDigits(next);
     if (formError) setFormError(null);
@@ -142,6 +165,7 @@ function AdminLoginInner() {
   }
 
   function handleDigitKey(e: KeyboardEvent<HTMLInputElement>, idx: number) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (/^\d$/.test(e.key)) {
       e.preventDefault();
       handleDigitChange(e.key, idx);
@@ -149,12 +173,17 @@ function AdminLoginInner() {
     }
     if (e.key === 'Backspace') {
       e.preventDefault();
-      const next = [...digits];
+      const next = [...digitsRef.current];
       next[idx] = '';
       setDigits(next);
       if (formError) setFormError(null);
       if (idx > 0) refs.current[idx - 1]?.focus();
     }
+  }
+
+  function handlePaste(e: ClipboardEvent<HTMLInputElement>, idx: number) {
+    e.preventDefault();
+    applyOtpDigits(e.clipboardData.getData('text') || '', idx);
   }
 
   const masked = email.replace(/(.{2}).+(@.+)/, '$1…$2');
@@ -251,11 +280,14 @@ function AdminLoginInner() {
                   ref={(el) => { refs.current[idx] = el; }}
                   type="text"
                   inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={1}
+                  pattern="[0-9]*"
+                  autoComplete={idx === 0 ? 'one-time-code' : 'off'}
+                  maxLength={idx === 0 ? OTP_LEN : 1}
                   value={digit}
+                  aria-label={`Digit ${idx + 1} of ${OTP_LEN}`}
                   onChange={(e) => handleDigitChange(e.target.value, idx)}
                   onKeyDown={(e) => handleDigitKey(e, idx)}
+                  onPaste={(e) => handlePaste(e, idx)}
                   style={{
                     width: 44, height: 52, textAlign: 'center', fontSize: 22, fontWeight: 700,
                     borderRadius: 12, border: '1px solid #E5E7EB',
