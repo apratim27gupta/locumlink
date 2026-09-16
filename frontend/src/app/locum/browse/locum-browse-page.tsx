@@ -574,7 +574,7 @@ export default function LocumBrowsePage(props: {
 
           {!loggedIn ? (
             <p style={{ fontSize: 12, color: '#8892a4', marginBottom: 14 }}>
-              Sign in to apply for shifts. Browsing is free — no account required.
+              Sign in to apply for shifts. Browsing is free - no account required.
             </p>
           ) : null}
 
