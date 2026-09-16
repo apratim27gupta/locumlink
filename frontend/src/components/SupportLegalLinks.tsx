@@ -46,7 +46,7 @@ export function SupportLegalLinks({ variant, onNavigate }: SupportLegalLinksProp
     }
 
     return (
-        <>
+        <nav className="home-landing-doc-links" aria-label="Support and legal">
             <Link href={SUPPORT_PAGE_PATH} className="home-landing-doc-link" onClick={onNavigate}>
                 Support
             </Link>
@@ -56,6 +56,6 @@ export function SupportLegalLinks({ variant, onNavigate }: SupportLegalLinksProp
             <Link href={PRIVACY_POLICY_PATH} className="home-landing-doc-link">
                 Privacy Policy
             </Link>
-        </>
+        </nav>
     );
 }

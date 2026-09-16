@@ -1022,36 +1022,85 @@
 }
 
 .home-landing-doc-links--fixed {
-  position: fixed;
-  left: 20px;
-  bottom: 20px;
-  z-index: 15;
+  display: none;
+}
+
+.home-landing-doc-links {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 6px 0;
 }
 
-.home-landing-doc-links--inline {
-  display: none;
-  position: static;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
+.home-landing-doc-links .home-landing-doc-link + .home-landing-doc-link::before {
+  content: '·';
+  margin: 0 10px;
+  color: #a0a4b0;
+  pointer-events: none;
 }
 
 .home-landing-footer-bar {
-  display: none;
+  display: flex;
   box-sizing: border-box;
   width: 100%;
   max-width: 934px;
+  flex-direction: column;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px 16px;
+  justify-content: center;
+  gap: 14px;
   padding-top: 16px;
   margin-top: 4px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+@media (min-width: 640px) {
+  .home-landing-footer-bar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px 20px;
+  }
+
+  .home-landing-footer-bar .home-landing-doc-links {
+    order: 0;
+    flex: 1 1 auto;
+  }
+
+  .home-landing-footer-bar .site-social-links {
+    order: -1;
+  }
+}
+
+.site-social-links {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.site-social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #4a5168;
+  text-decoration: none;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.site-social-link:hover {
+  color: #0f2a7a;
+  transform: translateY(-1px);
+}
+
+.site-social-link:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px rgba(15, 42, 122, 0.35);
+  border-radius: 4px;
 }
 
 .home-admin-login-btn--fixed,
@@ -1380,6 +1429,10 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 20px;
+}
+
+.support-legal-links .home-landing-doc-links {
+  justify-content: flex-start;
 }
 
 .support-page__back {
@@ -3098,10 +3151,17 @@ body.app-body {
 
   .home-landing-footer-bar {
     display: flex !important;
+    gap: 12px;
   }
 
-  .home-landing-doc-links--inline {
-    display: flex !important;
+  .home-landing-doc-links {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .home-landing-doc-links .home-landing-doc-link + .home-landing-doc-link::before {
+    content: none;
+    margin: 0;
   }
 
   .setup-page-shell {
