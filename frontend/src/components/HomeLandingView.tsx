@@ -6,6 +6,7 @@ import Logo from '@/components/Logo';
 import AppStoreInstallButton from '@/components/AppStoreInstallButton';
 import SignInRoleDropdown from '@/components/SignInRoleDropdown';
 import { landingApi, locumApi } from '@/lib/api';
+import { SocialLinks } from '@/components/SocialLinks';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
 import { ROLE_GUIDE } from '@/lib/roleAccent';
 
@@ -319,9 +320,8 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
           </div>
           {interactive ? (
             <div className="home-landing-footer-bar">
-              <div className="home-landing-doc-links home-landing-doc-links--inline">
-                <HomeLandingLegalLinks />
-              </div>
+              <SocialLinks />
+              <HomeLandingLegalLinks />
               <Link href="/admin/login" className="home-admin-login-btn home-admin-login-btn--inline">
                 Admin login
               </Link>
@@ -329,16 +329,5 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
           ) : null}
         </footer>
       </main>
-
-      {interactive ? (
-        <>
-          <div className="home-landing-doc-links home-landing-doc-links--fixed">
-            <HomeLandingLegalLinks />
-          </div>
-          <Link href="/admin/login" className="home-admin-login-btn home-admin-login-btn--fixed">
-            Admin login
-          </Link>
-        </>
-      ) : null}
     </div>);
 }

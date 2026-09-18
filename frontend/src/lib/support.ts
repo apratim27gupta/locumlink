@@ -7,6 +7,11 @@ export const SUPPORT_PAGE_PATH = '/support';
 export const PRIVACY_POLICY_PATH = '/privacy-policy';
 export const TERMS_OF_USE_PATH = '/terms-of-use';
 
+export const LINKEDIN_URL =
+    'https://www.linkedin.com/company/locumlinkcanada/about/';
+export const FACEBOOK_URL =
+    'https://www.facebook.com/share/1PtaXWzGYj/?mibextid=wwXIfr';
+
 /** @deprecated Use PRIVACY_POLICY_PATH — kept for existing imports. */
 export const PRIVACY_POLICY_URL = PRIVACY_POLICY_PATH;
 /** @deprecated Use TERMS_OF_USE_PATH — kept for existing imports. */
