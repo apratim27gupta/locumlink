@@ -62,7 +62,7 @@ export function JobScheduleDates({
   if (shifts.length === 0) return null;
   const t = TONES[tone];
 
-  // "Multiple date ranges" posting: show grouped ranges, each with its time.
+  // Multiple periods posting: show grouped ranges, each with its time.
   if (getJobScheduleType(job) === 'RANGES') {
     const ranges = getJobDateRanges(job);
     const rangeTimes = ranges.map((r) =>

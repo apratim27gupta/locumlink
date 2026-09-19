@@ -356,6 +356,28 @@ export type CoverageApplication = {
 };
 
 /**
+ * Days one application claims against the posting schedule. FULL (or missing
+ * PARTIAL dates) claims every required day; PARTIAL claims availableDates ∩ required.
+ */
+export function applicationClaimedDates(
+  app: CoverageApplication,
+  requiredDates: string[],
+): string[] {
+  const required = new Set(requiredDates);
+  const isPartial =
+    app.availabilityKind === 'PARTIAL' &&
+    Array.isArray(app.availableDates) &&
+    app.availableDates.length > 0;
+  if (!isPartial) return [...requiredDates].sort();
+  const out = new Set<string>();
+  for (const d of app.availableDates as string[]) {
+    const cal = extractCalendarDatePart(d);
+    if (cal && required.has(cal)) out.add(cal);
+  }
+  return [...out].sort();
+}
+
+/**
  * Days covered by the given (accepted) applications. A FULL application covers
  * every required day; a PARTIAL one covers its availableDates intersected with
  * the required set. Anything without PARTIAL + dates is treated as FULL.
@@ -364,24 +386,39 @@ export function computeCoveredDates(
   apps: CoverageApplication[],
   requiredDates: string[],
 ): Set<string> {
-  const required = new Set(requiredDates);
   const covered = new Set<string>();
   for (const app of apps) {
-    const isPartial =
-      app.availabilityKind === 'PARTIAL' &&
-      Array.isArray(app.availableDates) &&
-      app.availableDates.length > 0;
-    if (!isPartial) {
-      // FULL (or unspecified) covers everything.
-      for (const d of required) covered.add(d);
-      return covered;
-    }
-    for (const d of app.availableDates as string[]) {
-      const cal = extractCalendarDatePart(d);
-      if (cal && required.has(cal)) covered.add(cal);
+    for (const d of applicationClaimedDates(app, requiredDates)) {
+      covered.add(d);
     }
   }
   return covered;
+}
+
+/**
+ * Days the accepting locum is finalized for: their claim minus days already
+ * taken by earlier acceptances (first to accept wins overlapping days).
+ */
+export function finalizeAcceptDates(
+  app: CoverageApplication,
+  requiredDates: string[],
+  alreadyAcceptedApps: CoverageApplication[],
+): string[] {
+  const taken = computeCoveredDates(alreadyAcceptedApps, requiredDates);
+  return applicationClaimedDates(app, requiredDates).filter((d) => !taken.has(d));
+}
+
+/** Persist shape after accept: FULL only when every required day is kept. */
+export function availabilityAfterFinalize(
+  requiredDates: string[],
+  finalizedDates: string[],
+): { availabilityKind: 'FULL' | 'PARTIAL'; availableDates: string[] } {
+  const all =
+    requiredDates.length > 0 &&
+    requiredDates.length === finalizedDates.length &&
+    requiredDates.every((d) => finalizedDates.includes(d));
+  if (all) return { availabilityKind: 'FULL', availableDates: [] };
+  return { availabilityKind: 'PARTIAL', availableDates: [...finalizedDates].sort() };
 }
 
 /** True when every required day is covered by the given accepted applications. */

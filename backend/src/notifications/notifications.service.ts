@@ -12,6 +12,7 @@ import { EmailDigestService } from './email-digest.service.js';
 import {
   buildL001NewOpportunity,
   buildL002HostConfirmed,
+  buildLocumPlacementDatesCopy,
   buildL003ApplicationAccepted,
   buildL004ApplicationDeclined,
   buildL005ShiftReminder48h,
@@ -288,6 +289,43 @@ export class NotificationsService {
     await this.create({
       recipientId: params.recipientId,
       eventType: 'L_002_HOST_CONFIRMED',
+      title: copy.inAppTitle,
+      body: copy.inAppBody,
+      href: '/locum/dashboard',
+      priority: copy.priority,
+      actionLabel: copy.actionLabel,
+      referenceId: params.applicationId,
+      referenceType: 'Application',
+      emailTo: params.recipientEmail,
+      emailSubject: copy.emailSubject,
+      emailBody: copy.emailBody,
+    });
+  }
+
+  /** Notify locum of finalized / updated / cleared placement dates after accept races. */
+  async notifyLocumPlacementDates(params: {
+    recipientId: string;
+    recipientEmail: string;
+    jobTitle: string;
+    dates: string[];
+    kind: 'finalized' | 'updated' | 'cleared';
+    applicationId: string;
+  }): Promise<void> {
+    const dateList = params.dates
+      .map((d) => {
+        const cal = d.slice(0, 10);
+        return formatJobDate(/^\d{4}-\d{2}-\d{2}$/.test(cal) ? `${cal}T12:00:00` : d);
+      })
+      .filter(Boolean)
+      .join(', ');
+    const copy = buildLocumPlacementDatesCopy({
+      jobTitle: params.jobTitle,
+      dateList: dateList || 'none',
+      kind: params.kind,
+    });
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'L_002_PLACEMENT_DATES',
       title: copy.inAppTitle,
       body: copy.inAppBody,
       href: '/locum/dashboard',

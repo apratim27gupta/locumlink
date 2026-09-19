@@ -9,6 +9,8 @@ import {
   expandCalendarDateRange,
   getPostingRequiredDates,
   isPostingFullyCovered,
+  finalizeAcceptDates,
+  availabilityAfterFinalize,
 } from './job-schedule.util';
 
 const utcDate = (iso: string) => {
@@ -177,6 +179,34 @@ describe('job-schedule.util', () => {
       const partialB = { availabilityKind: 'PARTIAL', availableDates: ['2999-06-03'] };
       expect(isPostingFullyCovered(posting, [partialA])).toBe(false);
       expect(isPostingFullyCovered(posting, [partialA, partialB])).toBe(true);
+    });
+
+    it('gives overlapping days to the first accepter', () => {
+      const required = ['2999-06-01', '2999-06-02', '2999-06-03'];
+      const first = {
+        availabilityKind: 'PARTIAL',
+        availableDates: ['2999-06-01', '2999-06-02'],
+      };
+      const second = {
+        availabilityKind: 'PARTIAL',
+        availableDates: ['2999-06-02', '2999-06-03'],
+      };
+      expect(finalizeAcceptDates(first, required, [])).toEqual([
+        '2999-06-01',
+        '2999-06-02',
+      ]);
+      expect(finalizeAcceptDates(second, required, [first])).toEqual([
+        '2999-06-03',
+      ]);
+      expect(finalizeAcceptDates(second, required, [first, { ...second, availableDates: ['2999-06-03'] }])).toEqual([]);
+      expect(availabilityAfterFinalize(required, ['2999-06-03'])).toEqual({
+        availabilityKind: 'PARTIAL',
+        availableDates: ['2999-06-03'],
+      });
+      expect(availabilityAfterFinalize(required, required)).toEqual({
+        availabilityKind: 'FULL',
+        availableDates: [],
+      });
     });
   });
 

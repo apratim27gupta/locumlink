@@ -26,6 +26,10 @@ import {
   getPostingRequiredDates,
   isPostingFullyCovered,
   postingStatusAfterLocumAccept,
+  finalizeAcceptDates,
+  availabilityAfterFinalize,
+  applicationClaimedDates,
+  computeCoveredDates,
 } from '../host/job-schedule.util.js';
 import {
   paginateJobPostings,
@@ -890,12 +894,172 @@ export class LocumService {
         throw new BadRequestException(
           'You have already accepted this placement.',
         );
+
+      // First to accept wins overlapping days: finalize against already-accepted coverage.
+      const postingForCoverage = await this.prisma.jobPosting.findUnique({
+        where: { id: app.jobPostingId },
+        select: {
+          id: true,
+          title: true,
+          startDate: true,
+          endDate: true,
+          shifts: { select: { date: true } },
+          applications: {
+            where: {
+              id: { not: applicationId },
+              OR: [
+                { locumResponse: 'ACCEPTED' },
+                { locumAcceptedAt: { not: null } },
+              ],
+            },
+            select: {
+              id: true,
+              availabilityKind: true,
+              availableDates: true,
+            },
+          },
+        },
+      });
+      if (!postingForCoverage) throw new NotFoundException('Job not found');
+      const requiredDates = getPostingRequiredDates(postingForCoverage);
+      const finalizedDates = finalizeAcceptDates(
+        {
+          availabilityKind: app.availabilityKind,
+          availableDates: app.availableDates,
+        },
+        requiredDates,
+        postingForCoverage.applications,
+      );
+      if (requiredDates.length > 0 && finalizedDates.length === 0) {
+        throw new BadRequestException(
+          'No remaining days are available on this posting. Another locum already accepted the overlapping dates.',
+        );
+      }
+      const availability =
+        requiredDates.length === 0
+          ? {
+              availabilityKind: (app.availabilityKind === 'PARTIAL'
+                ? 'PARTIAL'
+                : 'FULL') as 'FULL' | 'PARTIAL',
+              availableDates: app.availableDates ?? [],
+            }
+          : availabilityAfterFinalize(requiredDates, finalizedDates);
+
       await this.prisma.application.update({
         where: { id: applicationId },
-        data: { locumAcceptedAt: new Date(), locumResponse: 'ACCEPTED' },
+        data: {
+          locumAcceptedAt: new Date(),
+          locumResponse: 'ACCEPTED',
+          availabilityKind: availability.availabilityKind,
+          availableDates: availability.availableDates,
+        },
       });
+
+      // Trim other host-confirmed (not yet accepted) locums off days just taken.
+      const taken = computeCoveredDates(
+        [
+          ...postingForCoverage.applications,
+          {
+            availabilityKind: availability.availabilityKind,
+            availableDates: availability.availableDates,
+          },
+        ],
+        requiredDates,
+      );
+      const pendingConfirmed = await this.prisma.application.findMany({
+        where: {
+          jobPostingId: app.jobPostingId,
+          id: { not: applicationId },
+          status: 'CONFIRMED',
+          locumAcceptedAt: null,
+        },
+        select: {
+          id: true,
+          availabilityKind: true,
+          availableDates: true,
+          locumProfile: {
+            select: {
+              userId: true,
+              firstName: true,
+              lastName: true,
+              user: { select: { email: true } },
+            },
+          },
+        },
+      });
+      for (const other of pendingConfirmed) {
+        const claimed = applicationClaimedDates(other, requiredDates);
+        const remaining = claimed.filter((d) => !taken.has(d));
+        if (remaining.length === claimed.length) continue;
+        if (remaining.length === 0) {
+          await this.prisma.application.update({
+            where: { id: other.id },
+            data: {
+              status: 'WITHDRAWN',
+              locumResponse: 'REJECTED',
+              availableDates: [],
+            },
+          });
+          try {
+            const email = other.locumProfile.user.email;
+            if (email) {
+              await this.notifService.notifyLocumPlacementDates({
+                recipientId: other.locumProfile.userId,
+                recipientEmail: email,
+                jobTitle: postingForCoverage.title,
+                dates: [],
+                kind: 'cleared',
+                applicationId: other.id,
+              });
+            }
+          } catch {}
+        } else {
+          const trimmed = availabilityAfterFinalize(requiredDates, remaining);
+          await this.prisma.application.update({
+            where: { id: other.id },
+            data: {
+              availabilityKind: trimmed.availabilityKind,
+              availableDates: trimmed.availableDates,
+            },
+          });
+          try {
+            const email = other.locumProfile.user.email;
+            if (email) {
+              await this.notifService.notifyLocumPlacementDates({
+                recipientId: other.locumProfile.userId,
+                recipientEmail: email,
+                jobTitle: postingForCoverage.title,
+                dates: remaining,
+                kind: 'updated',
+                applicationId: other.id,
+              });
+            }
+          } catch {}
+        }
+      }
+
       // Only fill/close the posting once accepted locums cover every day.
       await this.applyCoverageStatus(app.jobPostingId);
+
+      try {
+        const email = (
+          await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true },
+          })
+        )?.email;
+        if (email && finalizedDates.length > 0) {
+          await this.notifService.notifyLocumPlacementDates({
+            recipientId: userId,
+            recipientEmail: email,
+            jobTitle: postingForCoverage.title,
+            dates: finalizedDates,
+            kind: 'finalized',
+            applicationId,
+          });
+        }
+      } catch {}
+
       // H-002: Notify host that locum accepted
       try {
         const jobWithHost = await this.prisma.jobPosting.findUnique({
@@ -926,7 +1090,11 @@ export class LocumService {
           });
         }
       } catch {}
-      return { success: true };
+      return {
+        success: true,
+        finalizedDates:
+          requiredDates.length === 0 ? undefined : finalizedDates,
+      };
     }
     if (app.locumAcceptedAt)
       throw new BadRequestException('You already accepted this placement.');

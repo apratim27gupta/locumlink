@@ -1115,9 +1115,9 @@ export default function HostEditJobPage(props: {
                     <label style={lbl}>Scheduling</label>
                     <div style={{ display: 'flex', gap: 8 }}>
                       {([
-                        { id: 'range', label: 'Single date range' },
-                        { id: 'list', label: 'Multiple dates' },
-                        { id: 'ranges', label: 'Multiple date ranges' },
+                        { id: 'range', label: 'Continuous dates' },
+                        { id: 'list', label: 'Specific days' },
+                        { id: 'ranges', label: 'Multiple periods' },
                       ] as const).map((opt) => {
                         const on = scheduleKind === opt.id;
                         return (
@@ -1146,10 +1146,10 @@ export default function HostEditJobPage(props: {
                     </div>
                     <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6 }}>
                       {scheduleKind === 'list'
-                        ? 'Pick each day you need a locum - they do not have to be consecutive.'
+                        ? 'Pick each day you need a locum. They do not have to be consecutive.'
                         : scheduleKind === 'ranges'
-                        ? 'Add one or more date ranges, each with its own time.'
-                        : 'A single continuous stretch of days from a start to an end date.'}
+                        ? 'Add one or more date periods, each with its own start, end, and time.'
+                        : 'One continuous stretch of days from a start to an end date.'}
                     </div>
                   </div>
                   {scheduleKind === 'range' ? (

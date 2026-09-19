@@ -108,6 +108,45 @@ export function buildL002HostConfirmed(params: {
   };
 }
 
+/** Placement dates finalized or trimmed after another locum accepted overlapping days. */
+export function buildLocumPlacementDatesCopy(params: {
+  jobTitle: string;
+  dateList: string;
+  kind: 'finalized' | 'updated' | 'cleared';
+}) {
+  if (params.kind === 'cleared') {
+    const body = `Your confirmed placement for ${params.jobTitle} no longer has available days. Another locum accepted overlapping dates first.`;
+    return {
+      inAppTitle: 'Placement update',
+      inAppBody: body,
+      emailSubject: `Placement update: ${params.jobTitle}`,
+      emailBody: body,
+      priority: 'HIGH' as LocumCopyPriority,
+      actionLabel: 'View dashboard',
+    };
+  }
+  if (params.kind === 'updated') {
+    const body = `Your confirmed dates for ${params.jobTitle} were updated to: ${params.dateList}. Some days were filled by another locum who accepted first.`;
+    return {
+      inAppTitle: 'Confirmed dates updated',
+      inAppBody: body,
+      emailSubject: `Confirmed dates updated: ${params.jobTitle}`,
+      emailBody: body,
+      priority: 'HIGH' as LocumCopyPriority,
+      actionLabel: 'View Shift Details',
+    };
+  }
+  const body = `Your placement for ${params.jobTitle} is confirmed for: ${params.dateList}.`;
+  return {
+    inAppTitle: 'Placement dates confirmed',
+    inAppBody: body,
+    emailSubject: `Placement dates confirmed: ${params.jobTitle}`,
+    emailBody: body,
+    priority: 'CRITICAL' as LocumCopyPriority,
+    actionLabel: 'View Shift Details',
+  };
+}
+
 /** L-003 — Application shortlisted by host */
 export function buildL003ApplicationAccepted(params: {
   doctorName: string;
