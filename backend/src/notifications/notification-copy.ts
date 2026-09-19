@@ -63,7 +63,7 @@ export function locumMessagesHref(partnerId: string): string {
   return `/locum/messages?partnerId=${encodeURIComponent(partnerId)}`;
 }
 
-/** L-001 — New opportunity posted */
+/** L-001 - New opportunity posted */
 export function buildL001NewOpportunity(params: {
   jobTitle: string;
   payPerDay?: number | null;
@@ -92,7 +92,7 @@ export function formatClinicAddress(parts: {
     .join(', ');
 }
 
-/** L-002 — Host confirms/books locum for opportunity */
+/** L-002 - Host confirms/books locum for opportunity */
 export function buildL002HostConfirmed(params: {
   jobTitle: string;
   clinicName: string;
@@ -147,7 +147,7 @@ export function buildLocumPlacementDatesCopy(params: {
   };
 }
 
-/** L-003 — Application shortlisted by host */
+/** L-003 - Application shortlisted by host */
 export function buildL003ApplicationAccepted(params: {
   doctorName: string;
   jobTitle: string;
@@ -157,14 +157,14 @@ export function buildL003ApplicationAccepted(params: {
   return {
     inAppTitle: 'Application Shortlisted',
     inAppBody: `Your application for ${params.jobTitle}${when} was shortlisted. Check your dashboard for next steps.`,
-    emailSubject: 'Application Shortlisted — Locum Link',
+    emailSubject: 'Application Shortlisted - Locum Link',
     emailBody: `Hello ${params.doctorName}, Your application for ${params.jobTitle}${when} has been shortlisted by the host. Log in to Locum Link to view details and next steps.`,
     priority: 'HIGH' as LocumCopyPriority,
     actionLabel: 'View Application',
   };
 }
 
-/** L-004 — Application declined */
+/** L-004 - Application declined */
 export function buildL004ApplicationDeclined(params: {
   doctorName: string;
   jobTitle: string;
@@ -172,14 +172,14 @@ export function buildL004ApplicationDeclined(params: {
   return {
     inAppTitle: 'Application Update',
     inAppBody: `Your application for ${params.jobTitle} was not selected. Browse other opportunities.`,
-    emailSubject: 'Application Update — Locum Link',
+    emailSubject: 'Application Update - Locum Link',
     emailBody: `Hello ${params.doctorName}, Thank you for your interest. Your application for ${params.jobTitle} was not selected at this time. Log in to Locum Link to browse other opportunities across Nova Scotia.`,
     priority: 'NORMAL' as LocumCopyPriority,
     actionLabel: 'Browse Opportunities',
   };
 }
 
-/** L-005 — Shift reminder 48 hours */
+/** L-005 - Shift reminder 48 hours */
 export function buildL005ShiftReminder48h(params: {
   doctorName: string;
   clinicName: string;
@@ -200,7 +200,7 @@ export function buildL005ShiftReminder48h(params: {
   };
 }
 
-/** L-006 — Evening before shift */
+/** L-006 - Evening before shift */
 export function buildL006ShiftReminderEvening(params: {
   doctorName: string;
   clinicName: string;
@@ -218,7 +218,7 @@ export function buildL006ShiftReminderEvening(params: {
   };
 }
 
-/** L-007 — Shift reminder 2 hours */
+/** L-007 - Shift reminder 2 hours */
 export function buildL007ShiftReminder2h(params: {
   doctorName: string;
   clinicName: string;
@@ -228,14 +228,14 @@ export function buildL007ShiftReminder2h(params: {
   return {
     inAppTitle: 'Shift Starting Soon',
     inAppBody,
-    emailSubject: `Your shift starts in 2 hours — ${params.clinicName}`,
+    emailSubject: `Your shift starts in 2 hours - ${params.clinicName}`,
     emailBody: inAppBody,
     priority: 'HIGH' as LocumCopyPriority,
     actionLabel: 'View Shift',
   };
 }
 
-/** L-008 — New message */
+/** L-008 - New message */
 export function buildL008NewMessage(params: {
   hostName: string;
   jobTitle: string;
@@ -253,7 +253,7 @@ export function buildL008NewMessage(params: {
   };
 }
 
-/** L-009 — Locum account verified */
+/** L-009 - Locum account verified */
 const L009_BODY =
   'Welcome to Locum Link! Your account is verified. Start browsing opportunities.';
 
@@ -267,7 +267,7 @@ export const L009_LOCUM_ACCOUNT_VERIFIED = {
   browseHref: '/locum/browse',
 };
 
-/** L-010 — Locum account verification rejected */
+/** L-010 - Locum account verification rejected */
 const L010_BODY =
   'Account verification incomplete. Additional documentation required.';
 
@@ -281,7 +281,7 @@ export const L010_LOCUM_VERIFICATION_REJECTED = {
   profileHref: '/locum/profile',
 };
 
-/** L-011 — Locum account suspended */
+/** L-011 - Locum account suspended */
 const L011_BODY =
   'Your account has been suspended. Contact support immediately.';
 
@@ -294,7 +294,7 @@ export const L011_LOCUM_ACCOUNT_SUSPENDED = {
   actionLabel: 'Contact Support',
 };
 
-/** L-013 — Locum account warning */
+/** L-013 - Locum account warning */
 export function buildL013AccountWarning(params: { warningNote: string }) {
   const body = `A Locum Link admin has sent you an account warning: ${params.warningNote}`;
   return {
@@ -307,7 +307,7 @@ export function buildL013AccountWarning(params: { warningNote: string }) {
   };
 }
 
-/** L-014 — Admin reminder to complete profile */
+/** L-014 - Admin reminder to complete profile */
 export const L014_LOCUM_PROFILE_REMINDER = {
   inAppTitle: 'Complete your Locum Link profile',
   inAppBody:
@@ -320,7 +320,7 @@ export const L014_LOCUM_PROFILE_REMINDER = {
   profileHref: '/locum/profile',
 };
 
-/** L-012 — Host cancelled confirmed shift */
+/** L-012 - Host cancelled confirmed shift */
 export function buildL012ShiftCancelled(params: {
   doctorName: string;
   clinicName: string;

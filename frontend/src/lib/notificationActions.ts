@@ -48,7 +48,7 @@ const EVENT_TITLES: Record<string, string> = {
   L_001_NEW_OPPORTUNITY: 'New Locum Opportunity Available',
   L_002_HOST_CONFIRMED: 'Shift Confirmed',
   L_002_PLACEMENT_DATES: 'Placement dates',
-  L_003_APPLICATION_ACCEPTED: 'Application Accepted — Action Required',
+  L_003_APPLICATION_ACCEPTED: 'Application Accepted - Action Required',
   L_004_APPLICATION_DECLINED: 'Application Update',
   L_005_SHIFT_REMINDER_48H: 'Upcoming Shift Reminder',
   L_006_SHIFT_REMINDER_EVENING: "Tomorrow's Shift Reminder",
