@@ -3,21 +3,22 @@ type LinkedInIconProps = {
   className?: string;
 };
 
-/** Official LinkedIn mark (rounded square + in). */
-export default function LinkedInIcon({ size = 28, className }: LinkedInIconProps) {
+/** LinkedIn app icon: brand blue rounded square with white "in". */
+export default function LinkedInIcon({ size = 32, className }: LinkedInIconProps) {
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 24 24"
+      viewBox="0 0 40 40"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       className={className}
       style={{ display: 'block', flexShrink: 0 }}
     >
+      <rect width="40" height="40" rx="10" fill="#0A66C2" />
       <path
-        fill="#0A66C2"
-        d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45zM22.23 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.23 0z"
+        fill="#fff"
+        d="M12.1 16.35H8.55V31.1h3.55V16.35zM10.32 9.5a2.06 2.06 0 1 0 0 4.12 2.06 2.06 0 0 0 0-4.12zM31.45 31.1h-3.55v-7.3c0-1.74-.03-3.97-2.42-3.97-2.42 0-2.79 1.89-2.79 3.84V31.1h-3.55V16.35h3.41v2.01h.05c.48-1.14 1.87-2.34 3.85-2.34 4.12 0 4.88 2.71 4.88 6.23V31.1z"
       />
     </svg>
   );
