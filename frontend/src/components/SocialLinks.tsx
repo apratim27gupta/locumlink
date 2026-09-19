@@ -7,7 +7,7 @@ type SocialLinksProps = {
   iconSize?: number;
 };
 
-export function SocialLinks({ className, iconSize = 20 }: SocialLinksProps) {
+export function SocialLinks({ className, iconSize = 32 }: SocialLinksProps) {
   return (
     <div className={className ?? 'site-social-links'} role="group" aria-label="Social media">
       <a
