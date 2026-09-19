@@ -719,18 +719,43 @@ export class LocumService {
               title: true,
               description: true,
               isDeleted: true,
+              status: true,
+              createdAt: true,
+              publishedAt: true,
               startDate: true,
               endDate: true,
               startTime: true,
               endTime: true,
               scheduleType: true,
+              payPerDay: true,
+              requiredCredentials: true,
+              keyResponsibilities: true,
+              minYearsExperience: true,
+              isRural: true,
+              accommodationProvided: true,
+              practiceType: true,
+              emr: true,
+              clinicDesc: true,
+              numPhysicians: true,
+              patientVol: true,
+              servicesRequired: true,
               shifts: { select: { date: true, startTime: true, endTime: true } },
               hostProfile: {
                 select: {
                   userId: true,
                   practiceName: true,
+                  contactFirstName: true,
+                  contactLastName: true,
+                  cpsnsVerificationStatus: true,
                   city: true,
                   province: true,
+                  postalCode: true,
+                  address: true,
+                  address1: true,
+                  practiceType: true,
+                  emr: true,
+                  servicesOffered: true,
+                  highlights: true,
                 },
               },
             },
@@ -785,6 +810,19 @@ export class LocumService {
               id?: string;
               startDate?: Date | null;
               endDate?: Date | null;
+              practiceType?: string | null;
+              emr?: string | null;
+              clinicDesc?: string | null;
+              numPhysicians?: string | null;
+              patientVol?: string | null;
+              servicesRequired?: string[] | null;
+              payPerDay?: unknown;
+              hostProfile?: {
+                practiceType?: string | null;
+                emr?: string | null;
+                servicesOffered?: string[];
+                highlights?: string | null;
+              };
               shifts?: { date: Date; startTime: Date | null; endTime: Date | null }[];
             };
           }
@@ -842,10 +880,47 @@ export class LocumService {
           acceptPreview = { proposedDates, takenDates, remainingDates };
         }
 
+        const hp = jp?.hostProfile;
+        const hasJobPracticeSnapshot =
+          Boolean(jp?.practiceType?.trim()) ||
+          Boolean(jp?.emr?.trim()) ||
+          Boolean(jp?.clinicDesc?.trim()) ||
+          Boolean(jp?.numPhysicians?.trim()) ||
+          Boolean(jp?.patientVol?.trim()) ||
+          (Array.isArray(jp?.servicesRequired) &&
+            (jp?.servicesRequired?.length ?? 0) > 0);
+        const hostProfile = hp
+          ? {
+              ...hp,
+              practiceType: jp?.practiceType?.trim() || hp.practiceType || null,
+              emr: jp?.emr?.trim() || hp.emr || null,
+              numPhysicians: jp?.numPhysicians?.trim() || null,
+              patientVol: jp?.patientVol?.trim() || null,
+              servicesOffered: hasJobPracticeSnapshot
+                ? (jp?.servicesRequired ?? [])
+                : (hp.servicesOffered ?? []),
+              highlights: jp?.clinicDesc?.trim() || hp.highlights || null,
+            }
+          : undefined;
+
         return {
           ...app,
           ...(acceptPreview ? { acceptPreview } : {}),
-          ...(jp ? { jobPosting: { ...jp, dates, shifts } } : {}),
+          ...(jp
+            ? {
+                jobPosting: {
+                  ...jp,
+                  dates,
+                  shifts,
+                  payPerDay:
+                    jp.payPerDay != null ? Number(jp.payPerDay) : null,
+                  ...(hostProfile ? { hostProfile } : {}),
+                  location: [hostProfile?.city, hostProfile?.province]
+                    .filter(Boolean)
+                    .join(', '),
+                },
+              }
+            : {}),
         };
       }),
       nextCursor: page.nextCursor,

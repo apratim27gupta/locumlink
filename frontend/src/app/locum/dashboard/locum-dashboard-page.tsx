@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import LocumProfileStatusBanner from '@/components/LocumProfileStatusBanner';
-import { fetchAllPaginated, locumApi, type MyApplication } from '@/lib/api';
+import { LocumBrowseJobDetail } from '@/components/locum/LocumBrowseJobDetail';
+import { fetchAllPaginated, locumApi, type BrowseJob, type MyApplication } from '@/lib/api';
 import { getToken } from '@/lib/auth';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { useAuth } from '@/providers/AuthProvider';
@@ -22,6 +23,85 @@ import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
 import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, getPostingDays, formatSpecificDate } from '@/lib/jobSchedule';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { CountBadge } from '@/components/CountBadge';
+
+function applicationToBrowseJob(app: MyApplication): BrowseJob {
+    const jp = app.jobPosting;
+    const hp = jp.hostProfile;
+    return {
+        id: jp.id,
+        title: jp.title,
+        description: jp.description ?? '',
+        location: jp.location ?? [hp.city, hp.province].filter(Boolean).join(', '),
+        createdAt: jp.createdAt ?? app.appliedAt,
+        publishedAt: jp.publishedAt ?? null,
+        applicationsCount: 0,
+        hostProfile: {
+            practiceName: hp.practiceName,
+            contactFirstName: hp.contactFirstName ?? null,
+            contactLastName: hp.contactLastName ?? null,
+            cpsnsVerificationStatus: hp.cpsnsVerificationStatus ?? null,
+            city: hp.city,
+            province: hp.province,
+            postalCode: hp.postalCode ?? undefined,
+            address: hp.address ?? null,
+            address1: hp.address1 ?? null,
+            practiceType: hp.practiceType ?? null,
+            emr: hp.emr ?? null,
+            numPhysicians: hp.numPhysicians ?? null,
+            patientVol: hp.patientVol ?? null,
+            servicesOffered: hp.servicesOffered ?? [],
+            highlights: hp.highlights ?? null,
+        },
+        startDate: jp.startDate,
+        endDate: jp.endDate,
+        dates: jp.dates ?? null,
+        shifts: jp.shifts ?? null,
+        scheduleType: jp.scheduleType ?? null,
+        startTime: jp.startTime,
+        endTime: jp.endTime,
+        payPerDay: jp.payPerDay ?? null,
+        requiredCredentials: jp.requiredCredentials ?? [],
+        keyResponsibilities: jp.keyResponsibilities ?? [],
+        minYearsExperience: jp.minYearsExperience ?? null,
+        isRural: jp.isRural ?? false,
+        accommodationProvided: jp.accommodationProvided ?? false,
+        isDeleted: jp.isDeleted,
+    };
+}
+
+/** Dates the locum should focus on for this application stage. */
+function myShiftDatesForApp(app: MyApplication): { label: string; dates: string[] } {
+    const postingDays = getPostingDays(app.jobPosting);
+    const accepted = app.locumResponse === 'ACCEPTED' || !!app.locumAcceptedAt;
+    if (accepted) {
+        return {
+            label: 'Your confirmed shift dates',
+            dates: applicationCoveredDays(app, postingDays),
+        };
+    }
+    if (app.acceptPreview) {
+        if (app.acceptPreview.takenDates.length > 0) {
+            return {
+                label: 'Dates you can still accept',
+                dates: app.acceptPreview.remainingDates,
+            };
+        }
+        return {
+            label: 'Your proposed availability',
+            dates: app.acceptPreview.proposedDates,
+        };
+    }
+    if (isPartialAvailability(app)) {
+        return {
+            label: 'Your proposed availability',
+            dates: applicationCoveredDays(app, postingDays),
+        };
+    }
+    return {
+        label: 'Posting schedule',
+        dates: postingDays,
+    };
+}
 
 const LOCUM_TABS = [
     { id: 'recent' as const, label: 'Recent Applications' },
@@ -163,6 +243,7 @@ export default function LocumDashboard(props: {
     const [respondingAppId, setRespondingAppId] = useState<string | null>(null);
     const [rejectConfirmAppId, setRejectConfirmAppId] = useState<string | null>(null);
     const [acceptConfirmAppId, setAcceptConfirmAppId] = useState<string | null>(null);
+    const [detailAppId, setDetailAppId] = useState<string | null>(null);
     const [respondError, setRespondError] = useState<string | null>(null);
     const respondingRef = useRef(false);
     useEffect(() => {
@@ -635,6 +716,25 @@ export default function LocumDashboard(props: {
                   {relativeHoursOrDaysAgo(app.appliedAt)}
                 </span>
               </div>
+              <div style={{ marginTop: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => setDetailAppId(app.id)}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    border: '1px solid #D0D5DD',
+                    background: '#fff',
+                    color: '#0F2A7A',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                  }}
+                >
+                  View shift details
+                </button>
+              </div>
               {needsLocumResponse ? (<div style={{
                         marginTop: 14,
                         paddingTop: 14,
@@ -679,6 +779,136 @@ export default function LocumDashboard(props: {
             </div>);
             })}
       </div>
+
+      {detailAppId ? (() => {
+        const app = applications.find((a) => a.id === detailAppId);
+        if (!app) return null;
+        const st = applicationStatusPresentation(app);
+        const myDates = myShiftDatesForApp(app);
+        const preview = app.acceptPreview;
+        const formatList = (days: string[]) =>
+          days.map((d) => formatSpecificDate(d)).filter(Boolean).join(', ');
+        return (
+          <div
+            role="presentation"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.45)',
+              zIndex: 10000,
+              display: 'flex',
+              justifyContent: 'flex-end',
+            }}
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setDetailAppId(null);
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Shift details"
+              style={{
+                width: 'min(520px, 100%)',
+                height: '100%',
+                background: '#fff',
+                boxShadow: '-8px 0 32px rgba(0,0,0,0.18)',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderBottom: '1px solid #E5E7EB',
+                flexShrink: 0,
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setDetailAppId(null)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: '#0F2A7A',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                    <path d="M19 12H5M12 5l-7 7 7 7" />
+                  </svg>
+                  Back to applications
+                </button>
+              </div>
+              <LocumBrowseJobDetail
+                job={applicationToBrowseJob(app)}
+                revealHostDetails
+                open
+                style={{ flex: 1, minHeight: 0 }}
+                banner={(
+                  <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: st.color,
+                        padding: '6px 12px',
+                        background: st.bg,
+                        borderRadius: 8,
+                        border: `1px solid ${st.border}`,
+                      }}>
+                        {st.label}
+                      </span>
+                      {app.jobPosting.isDeleted ? (
+                        <span style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: '#6B7280',
+                          padding: '6px 10px',
+                          background: '#E5E7EB',
+                          borderRadius: 8,
+                        }}>
+                          Posting removed
+                        </span>
+                      ) : null}
+                    </div>
+                    {myDates.dates.length > 0 ? (
+                      <div style={{
+                        background: '#F0FDFA',
+                        border: '1px solid #99F6E4',
+                        borderRadius: 10,
+                        padding: '12px 14px',
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#0F766E', marginBottom: 6 }}>
+                          {myDates.label}
+                        </div>
+                        <div style={{ fontSize: 14, color: '#134E4A', lineHeight: 1.45, fontWeight: 600 }}>
+                          {formatList(myDates.dates)}
+                        </div>
+                        {preview && preview.takenDates.length > 0 ? (
+                          <div style={{ fontSize: 12, color: '#9A3412', marginTop: 8, lineHeight: 1.4 }}>
+                            Already filled by another locum: {formatList(preview.takenDates)}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              />
+            </div>
+          </div>
+        );
+      })() : null}
 
       {acceptConfirmAppId ? (() => {
         const accepting = respondingAppId === acceptConfirmAppId;
