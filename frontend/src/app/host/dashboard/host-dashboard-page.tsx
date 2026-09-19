@@ -28,6 +28,8 @@ import {
   jobPracticeFromProfile,
   type JobPracticeFields,
 } from '@/components/host/HostJobPracticeSections';
+import { AvailabilityStrip } from '@/components/AvailabilityStrip';
+import { getPostingDays } from '@/lib/jobSchedule';
 import {
     maxIsoDate,
     isPostingEndDatePassed,
@@ -586,15 +588,18 @@ function ReOpenModal({ job, onConfirm, onCancel, }: {
       </div>
     </>);
 }
-function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewAll, }: {
-    jobId: string;
-    jobTitle: string;
+function InlineApplicantsTable({ job, applications, loading, onViewAll, }: {
+    job: Job;
     applications: ApplicationRecord[];
     loading: boolean;
     onViewAll: () => void;
 }) {
     const router = useRouter();
     const preview = applications.slice(0, 7);
+    const postingDays = useMemo(() => getPostingDays(job), [job]);
+    const gridCols = postingDays.length > 0
+        ? '32px minmax(120px, 1.1fr) minmax(150px, 1.4fr) 70px minmax(100px, 1fr) 110px 80px'
+        : '32px 1fr 90px 1fr 130px 80px';
     return (<div style={{
             marginTop: 12,
             border: '1px solid #E5E7EB',
@@ -611,7 +616,7 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
             borderBottom: '1px solid #F3F4F6',
         }}>
         <span style={{ fontSize: 'var(--font-heading)', color: '#6B7280', fontWeight: 'var(--font-weight-bold)' }}>
-          {jobTitle}
+          {job.title}
         </span>
         <button onClick={onViewAll} style={{
             all: 'unset',
@@ -633,12 +638,16 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
       
       <div style={{
             display: 'grid',
-            gridTemplateColumns: '32px 1fr 90px 1fr 130px 80px',
+            gridTemplateColumns: gridCols,
             gap: '0 8px',
             padding: '10px 16px',
             borderBottom: '1px solid #F3F4F6',
+            alignItems: 'center',
         }}>
-        {['', 'NAME', 'YRS EXP', 'SPECIALIZATION', 'STATUS', 'LOCUM RESPONSE'].map((h, i) => (<span key={i} style={{
+        {(postingDays.length > 0
+          ? ['', 'NAME', 'AVAILABILITY', 'YRS EXP', 'SPECIALIZATION', 'STATUS', 'LOCUM RESPONSE']
+          : ['', 'NAME', 'YRS EXP', 'SPECIALIZATION', 'STATUS', 'LOCUM RESPONSE']
+        ).map((h, i) => (<span key={i} style={{
                 fontSize: 'var(--font-small)',
                 fontWeight: 'var(--font-weight-bold)',
                 color: '#9CA3AF',
@@ -678,22 +687,28 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
                         ? fromSpecText
                         : ['-'];
                 return (<div key={app.id} onClick={() => {
-                        const href = `/host/applicants/${jobId}`;
+                        const href = `/host/applicants/${job.id}`;
                         beforeClientNavigation(href);
                         router.push(href);
                     }} style={{
                         display: 'grid',
-                        gridTemplateColumns: '32px 1fr 90px 1fr 130px 80px',
+                        gridTemplateColumns: gridCols,
                         gap: '0 8px',
                         padding: '10px 16px',
                         borderBottom: idx < preview.length - 1 ? '1px solid #F9FAFB' : 'none',
                         cursor: 'pointer',
                         alignItems: 'center',
+                        minHeight: postingDays.length > 0 ? 56 : undefined,
                     }}>
               <span style={{ fontSize: 'var(--font-small)', color: '#9CA3AF' }}>{idx + 1}</span>
               <span style={{ fontSize: 'var(--font-heading)', color: '#0B0F1F', fontWeight: 'var(--font-weight-bold)' }}>
                 {getLocumDisplayName(app)}
               </span>
+              {postingDays.length > 0 && (
+                <div style={{ minWidth: 0 }}>
+                  <AvailabilityStrip postingDays={postingDays} app={app} cell={10} />
+                </div>
+              )}
               <span style={{ fontSize: 'var(--font-body)', color: '#6B7280', textAlign: 'center' }}>
                 {app.locumProfile.yearsOfExperience ?? '-'}
               </span>
@@ -1120,7 +1135,7 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
       </div>
 
       
-      {isExpanded && !isDraft && !isSoftDeleted && (<InlineApplicantsTable jobId={job.id} jobTitle={job.title} applications={applications[job.id] ?? []} loading={loadingAppsFor === job.id} onViewAll={() => onViewAll(job.id)}/>)}
+      {isExpanded && !isDraft && !isSoftDeleted && (<InlineApplicantsTable job={job} applications={applications[job.id] ?? []} loading={loadingAppsFor === job.id} onViewAll={() => onViewAll(job.id)}/>)}
     </div>);
 }
 function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false, }: {

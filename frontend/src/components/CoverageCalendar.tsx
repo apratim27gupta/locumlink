@@ -10,10 +10,11 @@ export type CoverageApplicant = {
   availableDates?: string[] | null;
 };
 
-type Stage = 'accepted' | 'confirmed' | 'applied';
+type Stage = 'accepted' | 'confirmed' | 'shortlisted' | 'applied';
 const STAGE_STYLE: Record<Stage, { bg: string; color: string; label: string }> = {
   accepted: { bg: '#ECFDF5', color: '#047857', label: 'Accepted' },
   confirmed: { bg: '#EEF0FB', color: '#4338CA', label: 'Confirmed' },
+  shortlisted: { bg: '#ECFDF5', color: '#0D9488', label: 'Shortlisted' },
   applied: { bg: '#F3F4F6', color: '#4B5563', label: 'Applied' },
 };
 
@@ -23,7 +24,8 @@ function stageOf(a: CoverageApplicant): Stage | null {
   }
   if (a.locumResponse === 'ACCEPTED') return 'accepted';
   if (a.status === 'CONFIRMED') return 'confirmed';
-  return 'applied'; // APPLIED / SHORTLISTED
+  if (a.status === 'SHORTLISTED') return 'shortlisted';
+  return 'applied';
 }
 
 function initials(name: string): string {
@@ -156,7 +158,7 @@ export function CoverageCalendar({
         })}
       </div>
       <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
-        {(['accepted', 'confirmed', 'applied'] as Stage[]).map((s) => (
+        {(['accepted', 'confirmed', 'shortlisted', 'applied'] as Stage[]).map((s) => (
           <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6B7280' }}>
             <span style={{ width: 9, height: 9, borderRadius: '50%', background: STAGE_STYLE[s].color }} />
             {STAGE_STYLE[s].label}

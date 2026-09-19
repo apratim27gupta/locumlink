@@ -10,7 +10,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { useHostProfile } from '@/hooks/useHostProfile';
-import { getPostingDays, applicationCoveredDays, isPartialAvailability } from '@/lib/jobSchedule';
+import { getPostingDays } from '@/lib/jobSchedule';
 import { AvailabilityStrip } from '@/components/AvailabilityStrip';
 import { CoverageCalendar } from '@/components/CoverageCalendar';
 const NAV = [
@@ -888,13 +888,13 @@ export default function HostApplicantsPage(props: {
           
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(260px, 1.4fr) minmax(90px, 0.6fr) minmax(220px, 2fr) minmax(130px, 0.9fr) minmax(110px, 0.7fr)',
+            gridTemplateColumns: 'minmax(200px, 1.2fr) minmax(180px, 1.4fr) minmax(70px, 0.5fr) minmax(160px, 1.2fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)',
             padding: '12px 18px',
             alignItems: 'center',
-            gap: 18,
+            gap: 14,
             boxSizing: 'border-box',
         }}>
-            {['NAME', 'YEARS OF EXP', 'SPECIALIZATION', 'STATUS', 'LOCUM RESPONSE'].map((h) => (<div key={h} style={{
+            {['NAME', 'AVAILABILITY', 'YEARS OF EXP', 'SPECIALIZATION', 'STATUS', 'LOCUM RESPONSE'].map((h) => (<div key={h} style={{
                 fontFamily: 'Hanken Grotesk, Inter, sans-serif',
                 fontWeight: 600,
                 fontSize: 13,
@@ -919,11 +919,11 @@ export default function HostApplicantsPage(props: {
                             setSelected(a);
                     }} style={{
                         display: 'grid',
-                        gridTemplateColumns: 'minmax(260px, 1.4fr) minmax(90px, 0.6fr) minmax(220px, 2fr) minmax(130px, 0.9fr) minmax(110px, 0.7fr)',
-                        padding: '0 18px',
-                        height: 51,
+                        gridTemplateColumns: 'minmax(200px, 1.2fr) minmax(180px, 1.4fr) minmax(70px, 0.5fr) minmax(160px, 1.2fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)',
+                        padding: '10px 18px',
+                        minHeight: 64,
                         alignItems: 'center',
-                        gap: 18,
+                        gap: 14,
                         borderTop: idx === 0 ? '1px solid #DEDEDE' : '1px solid #DEDEDE',
                         boxSizing: 'border-box',
                         cursor: 'pointer',
@@ -960,26 +960,15 @@ export default function HostApplicantsPage(props: {
                     }}>
                         {a.locumProfile.user.email}
                       </div>
-                      {postingDays.length > 0 && (() => {
-                        const partial = isPartialAvailability(a);
-                        const n = applicationCoveredDays(a, postingDays).length;
-                        return (
-                          <span style={{
-                            display: 'inline-block',
-                            marginTop: 3,
-                            fontSize: 10,
-                            fontWeight: 700,
-                            borderRadius: 999,
-                            padding: '1px 7px',
-                            background: partial ? '#FFFBEB' : 'rgba(48,155,183,0.14)',
-                            color: partial ? '#B45309' : '#1B6F86',
-                            border: `1px solid ${partial ? '#FDE68A' : 'rgba(48,155,183,0.28)'}`,
-                          }}>
-                            {partial ? `Partial ${n}/${postingDays.length}` : 'Full availability'}
-                          </span>
-                        );
-                      })()}
                     </div>
+                  </div>
+
+                  <div style={{ minWidth: 0 }}>
+                    {postingDays.length > 0 ? (
+                      <AvailabilityStrip postingDays={postingDays} app={a} cell={11} />
+                    ) : (
+                      <span style={{ fontSize: 12, color: '#9CA3AF' }}>—</span>
+                    )}
                   </div>
 
                   

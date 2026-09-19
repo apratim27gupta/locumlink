@@ -45,10 +45,11 @@ export function AvailabilityStrip({
             border: `1px solid ${badge.border}`,
             color: badge.color,
             borderRadius: 999,
-            padding: '2px 9px',
-            fontSize: 11,
+            padding: '3px 10px',
+            fontSize: 12,
             fontWeight: 700,
             whiteSpace: 'nowrap',
+            lineHeight: 1.3,
           }}
         >
           {badge.label}
