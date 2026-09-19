@@ -1078,21 +1078,32 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .site-social-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #4a5168;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: #fff;
   text-decoration: none;
-  transition: color 0.15s ease, transform 0.15s ease;
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.site-social-link--linkedin {
+  background: #0a66c2;
+}
+
+.site-social-link--facebook {
+  background: #1877f2;
 }
 
 .site-social-link:hover {
-  color: #0f2a7a;
   transform: translateY(-1px);
+  filter: brightness(1.06);
 }
 
 .site-social-link:focus-visible {
@@ -1100,7 +1111,6 @@
   box-shadow:
     0 0 0 2px #fff,
     0 0 0 4px rgba(15, 42, 122, 0.35);
-  border-radius: 4px;
 }
 
 .home-admin-login-btn--fixed,
