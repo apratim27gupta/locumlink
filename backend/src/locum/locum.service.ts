@@ -20,7 +20,13 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { assertOwnsStoragePath } from '../common/utils/storage-path.util.js';
-import { postingStatusAfterLocumAccept } from '../host/job-schedule.util.js';
+import {
+  dbTimeToClockString,
+  formatCalendarDateForApi,
+  getPostingRequiredDates,
+  isPostingFullyCovered,
+  postingStatusAfterLocumAccept,
+} from '../host/job-schedule.util.js';
 import {
   paginateJobPostings,
   paginateApplications,
@@ -461,6 +467,7 @@ export class LocumService {
             highlights: true,
           },
         },
+        shifts: { select: { date: true, startTime: true, endTime: true } },
         _count: { select: { applications: true } },
       },
     );
@@ -518,13 +525,34 @@ export class LocumService {
           accommodationProvided: j.accommodationProvided,
           isDeleted: j.isDeleted,
           applicationsCount: j._count.applications,
+          dates: (j.shifts ?? [])
+            .map((s) => formatCalendarDateForApi(s.date))
+            .filter((d): d is string => d != null)
+            .sort(),
+          shifts: (j.shifts ?? [])
+            .map((s) => ({
+              date: formatCalendarDateForApi(s.date),
+              startTime: dbTimeToClockString(s.startTime),
+              endTime: dbTimeToClockString(s.endTime),
+            }))
+            .filter((s): s is { date: string; startTime: string | null; endTime: string | null } => s.date != null)
+            .sort((a, b) => a.date.localeCompare(b.date)),
         };
       }),
       nextCursor: page.nextCursor,
       hasNextPage: page.hasNextPage,
     };
   }
-  async applyToJob(userId: string, jobId: string, coverNote?: string) {
+  async applyToJob(
+    userId: string,
+    jobId: string,
+    opts: {
+      coverNote?: string;
+      availabilityKind?: 'FULL' | 'PARTIAL';
+      availableDates?: string[];
+    } = {},
+  ) {
+    const { coverNote } = opts;
     await this.assertLocumCanWrite(userId);
     const locumUser = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -546,6 +574,7 @@ export class LocumService {
     const job = await this.prisma.jobPosting.findUnique({
       where: { id: jobId },
       include: {
+        shifts: { select: { date: true } },
         hostProfile: {
           select: { user: { select: { email: true } } },
         },
@@ -568,36 +597,53 @@ export class LocumService {
       throw new BadRequestException(
         'This posting has been removed by the host.',
       );
+    // A fully-covered posting is moved out of ACTIVE, so this also blocks apply
+    // once every day is filled. Partially-covered postings stay ACTIVE and open.
     if (job.status !== 'ACTIVE')
       throw new BadRequestException(
         'This job is no longer accepting applications.',
       );
-    const acceptedPlacement = await this.prisma.application.findFirst({
-      where: {
-        jobPostingId: jobId,
-        OR: [
-          { locumResponse: 'ACCEPTED' },
-          { locumAcceptedAt: { not: null } },
-        ],
-      },
-      select: { id: true },
-    });
-    if (acceptedPlacement) {
-      throw new BadRequestException(
-        'This job is no longer accepting applications.',
-      );
-    }
     const existing = await this.prisma.application.findFirst({
       where: { jobPostingId: jobId, locumProfileId: locumProfile.id },
     });
     if (existing)
       throw new BadRequestException('You have already applied to this job.');
+
+    // Validate declared availability against the posting's required days.
+    const requiredDates = getPostingRequiredDates(job);
+    const isPartial = opts.availabilityKind === 'PARTIAL';
+    let availableDates: string[] = [];
+    if (isPartial) {
+      const requiredSet = new Set(requiredDates);
+      const picked = [
+        ...new Set(
+          (opts.availableDates ?? [])
+            .map((d) => d.slice(0, 10))
+            .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
+        ),
+      ].sort();
+      if (picked.length === 0) {
+        throw new BadRequestException(
+          'Select at least one day you are available for.',
+        );
+      }
+      if (requiredDates.length > 0 && picked.some((d) => !requiredSet.has(d))) {
+        throw new BadRequestException(
+          'Selected days must be within the posting schedule.',
+        );
+      }
+      availableDates = picked;
+    }
+    const availabilityKind = isPartial ? 'PARTIAL' : 'FULL';
+
     const application = await this.prisma.application.create({
       data: {
         jobPostingId: jobId,
         locumProfileId: locumProfile.id,
         status: 'APPLIED',
         coverNote: coverNote ?? null,
+        availabilityKind,
+        availableDates,
       },
     });
     // H-001: Notify host of new application
@@ -673,6 +719,8 @@ export class LocumService {
               endDate: true,
               startTime: true,
               endTime: true,
+              scheduleType: true,
+              shifts: { select: { date: true, startTime: true, endTime: true } },
               hostProfile: {
                 select: {
                   userId: true,
@@ -688,7 +736,32 @@ export class LocumService {
     );
 
     return {
-      items: page.items,
+      items: page.items.map((app) => {
+        const jp = (
+          app as {
+            jobPosting?: {
+              shifts?: { date: Date; startTime: Date | null; endTime: Date | null }[];
+            };
+          }
+        ).jobPosting;
+        const shiftRows = jp?.shifts ?? [];
+        const dates = shiftRows
+          .map((s) => formatCalendarDateForApi(s.date))
+          .filter((d): d is string => d != null)
+          .sort();
+        const shifts = shiftRows
+          .map((s) => ({
+            date: formatCalendarDateForApi(s.date),
+            startTime: dbTimeToClockString(s.startTime),
+            endTime: dbTimeToClockString(s.endTime),
+          }))
+          .filter((s): s is { date: string; startTime: string | null; endTime: string | null } => s.date != null)
+          .sort((a, b) => a.date.localeCompare(b.date));
+        return {
+          ...app,
+          ...(jp ? { jobPosting: { ...jp, dates, shifts } } : {}),
+        };
+      }),
       nextCursor: page.nextCursor,
       hasNextPage: page.hasNextPage,
     };
@@ -722,6 +795,58 @@ export class LocumService {
     ]);
     return { totalAcceptedShifts, completedShifts };
   }
+
+  /**
+   * Recompute a posting's status from the coverage of its accepted applications.
+   * Fully covered -> promote an ACTIVE posting to SCHEDULED/ONGOING/COMPLETED (so
+   * it leaves browse); not fully covered -> reopen a filled posting back to ACTIVE
+   * so remaining days can still be applied for. Terminal states are left alone.
+   */
+  private async applyCoverageStatus(jobPostingId: string): Promise<void> {
+    const posting = await this.prisma.jobPosting.findUnique({
+      where: { id: jobPostingId },
+      select: {
+        id: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        shifts: { select: { date: true } },
+        applications: {
+          where: {
+            OR: [
+              { locumResponse: 'ACCEPTED' },
+              { locumAcceptedAt: { not: null } },
+            ],
+          },
+          select: { availabilityKind: true, availableDates: true },
+        },
+      },
+    });
+    if (!posting) return;
+    const covered = isPostingFullyCovered(posting, posting.applications);
+    if (covered) {
+      if (posting.status === 'ACTIVE') {
+        await this.prisma.jobPosting.update({
+          where: { id: jobPostingId },
+          data: {
+            status: postingStatusAfterLocumAccept(
+              posting.startDate,
+              posting.endDate,
+            ),
+          },
+        });
+      }
+    } else if (
+      posting.status === 'SCHEDULED' ||
+      posting.status === 'ONGOING'
+    ) {
+      await this.prisma.jobPosting.update({
+        where: { id: jobPostingId },
+        data: { status: 'ACTIVE' },
+      });
+    }
+  }
+
   async respondToConfirmedPlacement(
     userId: string,
     applicationId: string,
@@ -765,18 +890,12 @@ export class LocumService {
         throw new BadRequestException(
           'You have already accepted this placement.',
         );
-      const nextStatus = postingStatusAfterLocumAccept(
-        app.jobPosting.startDate,
-        app.jobPosting.endDate,
-      );
       await this.prisma.application.update({
         where: { id: applicationId },
         data: { locumAcceptedAt: new Date(), locumResponse: 'ACCEPTED' },
       });
-      await this.prisma.jobPosting.update({
-        where: { id: app.jobPostingId },
-        data: { status: nextStatus },
-      });
+      // Only fill/close the posting once accepted locums cover every day.
+      await this.applyCoverageStatus(app.jobPostingId);
       // H-002: Notify host that locum accepted
       try {
         const jobWithHost = await this.prisma.jobPosting.findUnique({
@@ -811,21 +930,12 @@ export class LocumService {
     }
     if (app.locumAcceptedAt)
       throw new BadRequestException('You already accepted this placement.');
-    await this.prisma.$transaction(async (tx) => {
-      await tx.application.update({
-        where: { id: applicationId },
-        data: { status: 'WITHDRAWN', locumResponse: 'REJECTED' },
-      });
-      if (
-        app.jobPosting.status === 'ONGOING' ||
-        app.jobPosting.status === 'SCHEDULED'
-      ) {
-        await tx.jobPosting.update({
-          where: { id: app.jobPostingId },
-          data: { status: 'ACTIVE' },
-        });
-      }
+    await this.prisma.application.update({
+      where: { id: applicationId },
+      data: { status: 'WITHDRAWN', locumResponse: 'REJECTED' },
     });
+    // Reopen the posting if the remaining accepted locums no longer cover it.
+    await this.applyCoverageStatus(app.jobPostingId);
     // H-009 when shift is within 24h; otherwise H-003 (Application Update).
     try {
       const jobWithHost = await this.prisma.jobPosting.findUnique({

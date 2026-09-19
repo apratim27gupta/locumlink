@@ -4,12 +4,15 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
-import { hostApi, messageApi, type ApplicationRecord } from '@/lib/api';
+import { hostApi, messageApi, normalizeHostJob, type ApplicationRecord, type Job } from '@/lib/api';
 import { getToken } from '@/lib/auth';
 import { useAuth } from '@/providers/AuthProvider';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { useHostProfile } from '@/hooks/useHostProfile';
+import { getPostingDays, applicationCoveredDays, isPartialAvailability } from '@/lib/jobSchedule';
+import { AvailabilityStrip } from '@/components/AvailabilityStrip';
+import { CoverageCalendar } from '@/components/CoverageCalendar';
 const NAV = [
     {
         label: 'My Postings',
@@ -404,6 +407,7 @@ export default function HostApplicantsPage(props: {
     const { profile: headerProfile } = useHostProfile();
     const { isLoading: authLoading, userId } = useAuth();
     const [jobId, setJobId] = useState<string | null>(null);
+    const [job, setJob] = useState<Job | null>(null);
     const [apps, setApps] = useState<ApplicationRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -498,6 +502,16 @@ export default function HostApplicantsPage(props: {
         setLoading(true);
         setError(null);
         hostApi
+            .getJob(jobId)
+            .then((res) => {
+            if (!cancelled)
+                setJob(normalizeHostJob(res.job));
+        })
+            .catch(() => {
+            if (!cancelled)
+                setJob(null);
+        });
+        hostApi
             .getApplications(jobId, { limit: 100 })
             .then((res) => {
             if (!cancelled)
@@ -533,6 +547,19 @@ export default function HostApplicantsPage(props: {
         }
         return groups;
     }, [apps]);
+    const postingDays = useMemo(() => getPostingDays(job ?? undefined), [job]);
+    const coverageApplicants = useMemo(
+        () =>
+            apps.map((a) => ({
+                id: a.id,
+                name: displayName(a),
+                status: a.status,
+                locumResponse: a.locumResponse,
+                availabilityKind: a.availabilityKind ?? null,
+                availableDates: a.availableDates ?? null,
+            })),
+        [apps],
+    );
     async function handleShortlistAndMessage(a: ApplicationRecord) {
         if (!jobId)
             return;
@@ -821,6 +848,12 @@ export default function HostApplicantsPage(props: {
           {error}
         </div>)}
 
+      {!loading && apps.length > 0 && postingDays.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <CoverageCalendar postingDays={postingDays} applicants={coverageApplicants} />
+        </div>
+      )}
+
       {loading ? (<div style={{ fontSize: 13, color: '#8892a4' }}>Loading…</div>) : apps.length === 0 ? (<div style={{ fontSize: 13, color: '#8892a4' }}>No applicants yet.</div>) : (<div style={{
             fontFamily: 'Inter, sans-serif',
             background: '#fff',
@@ -927,6 +960,25 @@ export default function HostApplicantsPage(props: {
                     }}>
                         {a.locumProfile.user.email}
                       </div>
+                      {postingDays.length > 0 && (() => {
+                        const partial = isPartialAvailability(a);
+                        const n = applicationCoveredDays(a, postingDays).length;
+                        return (
+                          <span style={{
+                            display: 'inline-block',
+                            marginTop: 3,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            borderRadius: 999,
+                            padding: '1px 7px',
+                            background: partial ? '#FFFBEB' : 'rgba(48,155,183,0.14)',
+                            color: partial ? '#B45309' : '#1B6F86',
+                            border: `1px solid ${partial ? '#FDE68A' : 'rgba(48,155,183,0.28)'}`,
+                          }}>
+                            {partial ? `Partial ${n}/${postingDays.length}` : 'Full availability'}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -1074,6 +1126,20 @@ export default function HostApplicantsPage(props: {
                     CPSNS Number: {selected.locumProfile.cpsnsId}
                   </span>
                 </div>
+
+                {postingDays.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: 13, color: '#374151' }}>
+                      Availability
+                    </span>
+                    <AvailabilityStrip postingDays={postingDays} app={selected} />
+                    {selected.coverNote ? (
+                      <div style={{ fontSize: 13, color: '#4B5563', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>
+                        {selected.coverNote}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                   <button type="button" disabled={!jobId || selected.status !== 'APPLIED' || actioning.has(selected.id)} onClick={async () => {

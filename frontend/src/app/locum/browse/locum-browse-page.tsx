@@ -18,6 +18,7 @@ import {
   LocumBrowseJobDetail,
   formatBrowseJobUtcDateTimeToLocal,
 } from '@/components/locum/LocumBrowseJobDetail';
+import { LocumApplyModal } from '@/components/locum/LocumApplyModal';
 import { fetchAllPaginated, locumApi, type BrowseJob } from '@/lib/api';
 import { getToken, syncCookies } from '@/lib/auth';
 import { beforeClientNavigation } from '@/lib/topLoader';
@@ -35,6 +36,7 @@ import {
 import {
   isLocalPostingEndDatePassed,
 } from '@/lib/localDateTime';
+import { getJobScheduleMode, formatScheduleSummaryText } from '@/lib/jobSchedule';
 import { relativeHoursOrDaysAgo, toLocalDateTime, toLocalTime, jobPostedAtIso } from '@/lib/relativeTime';
 import {
   CANADIAN_PROVINCE_NAMES,
@@ -347,6 +349,8 @@ export default function LocumBrowsePage(props: {
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState<string | null>(null);
   const [applyError, setApplyError] = useState('');
+  // Apply modal (collects availability + optional cover note before submitting).
+  const [applyModalJobId, setApplyModalJobId] = useState<string | null>(null);
   const [profile, setProfile] = useState<LocumProfile | null>(null);
   const [listPanelWidth, setListPanelWidth] = useState(readStoredBrowseListWidth);
   const loadJobs = useCallback(async () => {
@@ -485,17 +489,27 @@ export default function LocumBrowsePage(props: {
       setApplyError(getLocumApplyBlockedMessage(profile));
       return;
     }
+    // Open the availability modal; the actual apply happens in submitApply.
+    setApplyError('');
+    setApplyModalJobId(jobId);
+  }
+  async function submitApply(
+    jobId: string,
+    opts: { availabilityKind: 'FULL' | 'PARTIAL'; availableDates: string[]; coverNote?: string },
+  ) {
     setApplying(jobId);
     setApplyError('');
     try {
-      await locumApi.applyToJob(jobId);
+      await locumApi.applyToJob(jobId, opts);
       syncCookies();
       setApplied((prev) => new Set([...prev, jobId]));
+      setApplyModalJobId(null);
     } catch (e: unknown) {
       const msg =
         e instanceof Error ? e.message : 'Failed to apply. Please try again.';
       if (msg.toLowerCase().includes('already')) {
         setApplied((prev) => new Set([...prev, jobId]));
+        setApplyModalJobId(null);
       } else {
         setApplyError(msg);
       }
@@ -544,6 +558,9 @@ export default function LocumBrowsePage(props: {
       ? 'Doctor'
       : null;
   const welcomeLine = displayName ?? 'Browse available shifts';
+  const applyModalJob = applyModalJobId
+    ? jobs.find((j) => j.id === applyModalJobId) ?? null
+    : null;
   const pageContent = (
       <div
         style={{
@@ -553,6 +570,18 @@ export default function LocumBrowsePage(props: {
           flexDirection: 'column',
         }}
       >
+        {applyModalJob && (
+          <LocumApplyModal
+            job={applyModalJob}
+            applying={applying === applyModalJob.id}
+            error={applyError}
+            onSubmit={(opts) => submitApply(applyModalJob.id, opts)}
+            onClose={() => {
+              setApplyModalJobId(null);
+              setApplyError('');
+            }}
+          />
+        )}
         <div style={{ flexShrink: 0 }}>
           <h1
             style={{
@@ -1000,10 +1029,16 @@ export default function LocumBrowsePage(props: {
                   >
                     {j.hostProfile.city}, {j.hostProfile.province}
                   </div>
-                  {(j.startDate || j.endDate) && (() => {
-                    const start = formatBrowseJobUtcDateTimeToLocal(j.startDate, j.startTime);
-                    const end = formatBrowseJobUtcDateTimeToLocal(j.endDate, j.endTime);
-                    if (!start && !end) return null;
+                  {(getJobScheduleMode(j) !== 'none') && (() => {
+                    let label: string;
+                    if (getJobScheduleMode(j) === 'list') {
+                      label = formatScheduleSummaryText(j, '');
+                    } else {
+                      const start = formatBrowseJobUtcDateTimeToLocal(j.startDate, j.startTime);
+                      const end = formatBrowseJobUtcDateTimeToLocal(j.endDate, j.endTime);
+                      if (!start && !end) return null;
+                      label = `${start?.localDate ?? '-'} - ${end?.localDate ?? '-'}`;
+                    }
                     return (
                     <div
                       style={{
@@ -1024,7 +1059,7 @@ export default function LocumBrowsePage(props: {
                         height={12}
                         style={{ flexShrink: 0, objectFit: 'contain' }}
                       />
-                      {start?.localDate ?? '—'} – {end?.localDate ?? '—'}
+                      {label}
                     </div>
                     );
                   })()}

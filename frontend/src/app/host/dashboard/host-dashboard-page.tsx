@@ -43,6 +43,7 @@ import {
     toTimezoneAwareIso,
     compareLocalCalendarDates,
 } from '@/lib/hostJobPostingForm';
+import { getJobScheduleMode, formatScheduleSummaryText } from '@/lib/jobSchedule';
 const HOST_DASH_NAV = [
     { label: 'My Postings', href: '/host/dashboard', icon: <NavIcon name="postings"/> },
     { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile"/> },
@@ -148,6 +149,21 @@ const lbl: React.CSSProperties = {
 };
 function fmtDate(iso: string | null | undefined): string {
     return fmtJobCalendarDate(iso);
+}
+/** Inclusive list of ISO days (YYYY-MM-DD) from start to end; capped for safety. */
+function expandIsoDateRange(startIso: string, endIso: string): string[] {
+    const out: string[] = [];
+    const [sy, sm, sd] = startIso.split('-').map(Number);
+    const [ey, em, ed] = endIso.split('-').map(Number);
+    if ([sy, sm, sd, ey, em, ed].some(Number.isNaN)) return out;
+    let cur = Date.UTC(sy, sm - 1, sd);
+    const last = Date.UTC(ey, em - 1, ed);
+    if (last < cur) return out;
+    for (let i = 0; cur <= last && i < 400; i++) {
+        out.push(new Date(cur).toISOString().slice(0, 10));
+        cur += 86400000;
+    }
+    return out;
 }
 function isoToDateInputLocal(iso: string | null | undefined): string {
     if (!iso)
@@ -660,7 +676,7 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
                     ? [rawSpec.replace(/_/g, ' ')]
                     : fromSpecText.length > 0
                         ? fromSpecText
-                        : ['—'];
+                        : ['-'];
                 return (<div key={app.id} onClick={() => {
                         const href = `/host/applicants/${jobId}`;
                         beforeClientNavigation(href);
@@ -679,7 +695,7 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
                 {getLocumDisplayName(app)}
               </span>
               <span style={{ fontSize: 'var(--font-body)', color: '#6B7280', textAlign: 'center' }}>
-                {app.locumProfile.yearsOfExperience ?? '—'}
+                {app.locumProfile.yearsOfExperience ?? '-'}
               </span>
               <div style={{
                         display: 'flex',
@@ -735,7 +751,7 @@ function InlineApplicantsTable({ jobId, jobTitle, applications, loading, onViewA
                         background: app.locumResponse === 'ACCEPTED' ? '#D1FAE5' : app.locumResponse === 'REJECTED' ? '#FEE2E2' : '#F3F4F6',
                         color: app.locumResponse === 'ACCEPTED' ? '#065F46' : app.locumResponse === 'REJECTED' ? '#991B1B' : '#6B7280',
                     }}>
-                  {app.locumResponse === 'ACCEPTED' ? 'Accepted' : app.locumResponse === 'REJECTED' ? 'Rejected' : '—'}
+                  {app.locumResponse === 'ACCEPTED' ? 'Accepted' : app.locumResponse === 'REJECTED' ? 'Rejected' : '-'}
                 </span>
               </div>
             </div>);
@@ -834,6 +850,7 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
     const appCount = job.applicationsCount;
     const startFmt = fmtDate(job.startDate);
     const endFmt = fmtDate(job.endDate);
+    const scheduleMode = getJobScheduleMode(job);
     const pay = job.payPerDay
         ? `$${Number(job.payPerDay).toLocaleString()}/day`
         : null;
@@ -940,12 +957,12 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
             gap: 12,
             flexWrap: 'wrap',
         }}>
-            {(startFmt || endFmt) && (<div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            {scheduleMode !== 'none' && (<div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <CalendarIcon />
                 <span style={{ fontSize: 'var(--font-body)', color: dimJobUi ? '#78716C' : '#374151' }}>
-                  {startFmt}
-                  {startFmt && endFmt && ' – '}
-                  {endFmt}
+                  {scheduleMode === 'list'
+                    ? formatScheduleSummaryText(job, '')
+                    : `${startFmt}${startFmt && endFmt ? ' - ' : ''}${endFmt}`}
                 </span>
               </div>)}
             {pay && (<span style={{ fontWeight: 'var(--font-weight-bold)', fontSize: 'var(--font-heading)', color: dimJobUi ? '#78716C' : '#0B0F1F' }}>
@@ -1121,8 +1138,31 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     const [respBySection, setRespBySection] = useState<Record<string, Set<string>>>(() => emptyResponsibilitySelection());
     const lastAutoRespJobTitleRef = useRef<string | null>(null);
     const [respCustom, setRespCustom] = useState('');
+    const [scheduleKind, setScheduleKind] = useState<'range' | 'list' | 'ranges'>('range');
     const [startDateInput, setStartDateInput] = useState('');
     const [endDateInput, setEndDateInput] = useState('');
+    // Multiple date ranges: each has its own date span + time range.
+    const [dateRanges, setDateRanges] = useState<
+        { startDate: string; endDate: string; startTime: string; endTime: string }[]
+    >([{ startDate: '', endDate: '', startTime: '05:00', endTime: '14:00' }]);
+    function addDateRange() {
+        setDateRanges((prev) => [...prev, { startDate: '', endDate: '', startTime: '05:00', endTime: '14:00' }]);
+    }
+    function updateDateRange(i: number, field: 'startDate' | 'endDate' | 'startTime' | 'endTime', value: string) {
+        setDateRanges((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)));
+    }
+    function removeDateRange(i: number) {
+        setDateRanges((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
+    }
+    // Specific-dates mode: individually chosen local calendar days (YYYY-MM-DD), ascending.
+    const [specificDates, setSpecificDates] = useState<string[]>([]);
+    const [newDateInput, setNewDateInput] = useState('');
+    // When true, every specific date uses the shared start/end time below.
+    const [sameTimeForAll, setSameTimeForAll] = useState(true);
+    // Per-date times (local HH:mm), used only when sameTimeForAll is false.
+    const [perDateTimes, setPerDateTimes] = useState<
+        Record<string, { start: string; end: string }>
+    >({});
     const [startTime, setStartTime] = useState('05:00');
     const [endTime, setEndTime] = useState('14:00');
     const [ratePerDay, setRatePerDay] = useState('');
@@ -1188,6 +1228,49 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             cancelled = true;
         };
     }, [practicePrefillDone]);
+    function addSpecificDate(iso: string) {
+        const cal = calendarDatePartFromInput(iso);
+        if (!cal)
+            return;
+        setSpecificDates((prev) =>
+            prev.includes(cal) ? prev : [...prev, cal].sort(),
+        );
+        // Seed a per-date time when the host is setting times individually.
+        if (!sameTimeForAll) {
+            setPerDateTimes((prev) =>
+                cal in prev ? prev : { ...prev, [cal]: { start: startTime, end: endTime } },
+            );
+        }
+        setNewDateInput('');
+    }
+    function removeSpecificDate(iso: string) {
+        setSpecificDates((prev) => prev.filter((d) => d !== iso));
+        setPerDateTimes((prev) => {
+            if (!(iso in prev)) return prev;
+            const next = { ...prev };
+            delete next[iso];
+            return next;
+        });
+    }
+    function setPerDateTime(iso: string, field: 'start' | 'end', value: string) {
+        setPerDateTimes((prev) => {
+            const current = prev[iso] ?? { start: startTime, end: endTime };
+            return { ...prev, [iso]: { ...current, [field]: value } };
+        });
+    }
+    function handleSameTimeForAll(next: boolean) {
+        setSameTimeForAll(next);
+        if (!next) {
+            // Switching to per-date times: seed each date from the shared time.
+            setPerDateTimes((prev) => {
+                const seeded = { ...prev };
+                for (const d of specificDates) {
+                    if (!(d in seeded)) seeded[d] = { start: startTime, end: endTime };
+                }
+                return seeded;
+            });
+        }
+    }
     function toggle(c: string) {
         setCredentials((p) => p.includes(c) ? p.filter((x) => x !== c) : [...p, c]);
     }
@@ -1229,7 +1312,9 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     function hasDraftContent(): boolean {
         if (jobTitle.trim() || jobDescription.trim() || respCustom.trim())
             return true;
-        if (startDateInput.trim() || endDateInput.trim() || ratePerDay.trim() || yearsExp.trim())
+        if (startDateInput.trim() || endDateInput.trim() || specificDates.length > 0 || ratePerDay.trim() || yearsExp.trim())
+            return true;
+        if (dateRanges.some((r) => r.startDate.trim() || r.endDate.trim()))
             return true;
         if (travelReq)
             return true;
@@ -1251,14 +1336,53 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         }
         return false;
     }
+    // Multiple date ranges: expand each range into per-day shifts (UTC times),
+    // de-duplicating days (later ranges win). Dates are ISO (YYYY-MM-DD).
+    function buildRangeShiftsPayload(): { date: string; startTime: string; endTime: string }[] {
+        const byDate = new Map<string, { date: string; startTime: string; endTime: string }>();
+        for (const r of dateRanges) {
+            const start = r.startDate.trim();
+            const end = r.endDate.trim();
+            if (!start || !end) continue;
+            for (const day of expandIsoDateRange(start, end)) {
+                byDate.set(day, {
+                    date: day,
+                    startTime: localDateTimeToUtcParts(day, r.startTime || '00:00').utcTime,
+                    endTime: localDateTimeToUtcParts(day, r.endTime || '23:59').utcTime,
+                });
+            }
+        }
+        return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+    }
+    // Specific-dates payload: each chosen day + its time (shared or per-date), UTC.
+    function buildShiftsPayload(): { date: string; startTime: string; endTime: string }[] {
+        return [...specificDates].sort().map((d) => {
+            const o = sameTimeForAll
+                ? { start: startTime, end: endTime }
+                : perDateTimes[d] ?? { start: startTime, end: endTime };
+            return {
+                date: d,
+                startTime: localDateTimeToUtcParts(d, o.start || '00:00').utcTime,
+                endTime: localDateTimeToUtcParts(d, o.end || '23:59').utcTime,
+            };
+        });
+    }
     function buildDraftPayload(): CreateJobPayload {
         const startIso = parseMmDdYyyyToIso(startDateInput);
         const endIso = parseMmDdYyyyToIso(endDateInput);
         const rateNum = ratePerDay.trim() ? Number(ratePerDay) : NaN;
         const yearsNum = yearsExp.trim() ? Number(yearsExp) : NaN;
         const keyResponsibilities = buildKeyResponsibilitiesPayload();
+        const listMode = scheduleKind === 'list';
+        const rangesMode = scheduleKind === 'ranges';
+        const shiftsMode = listMode || rangesMode;
+        const shiftsForDraft = rangesMode
+            ? buildRangeShiftsPayload()
+            : listMode
+                ? buildShiftsPayload()
+                : [];
         const scheduleFields =
-            startIso && endIso && startTime && endTime
+            !shiftsMode && startIso && endIso && startTime && endTime
                 ? buildJobScheduleApiFields({
                     startDateIso: startIso,
                     endDateIso: endIso,
@@ -1276,10 +1400,12 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             title: jobTitle.trim() || 'Draft locum shift',
             description: jobDescription.trim() || undefined,
             keyResponsibilities: keyResponsibilities.length ? keyResponsibilities : undefined,
-            startDate: scheduleFields?.startDate ?? partialStart?.utcDate,
-            endDate: scheduleFields?.endDate ?? partialEnd?.utcDate,
-            startTime: scheduleFields?.startTime ?? partialStart?.utcTime ?? (startTime || undefined),
-            endTime: scheduleFields?.endTime ?? partialEnd?.utcTime ?? (endTime || undefined),
+            shifts: shiftsMode && shiftsForDraft.length ? shiftsForDraft : undefined,
+            scheduleType: rangesMode ? 'RANGES' : listMode ? 'DATES' : undefined,
+            startDate: shiftsMode ? undefined : scheduleFields?.startDate ?? partialStart?.utcDate,
+            endDate: shiftsMode ? undefined : scheduleFields?.endDate ?? partialEnd?.utcDate,
+            startTime: shiftsMode ? undefined : scheduleFields?.startTime ?? partialStart?.utcTime ?? (startTime || undefined),
+            endTime: shiftsMode ? undefined : scheduleFields?.endTime ?? partialEnd?.utcTime ?? (endTime || undefined),
             payPerDay: Number.isFinite(rateNum) && rateNum > 0 ? rateNum : undefined,
             minYearsExperience: yearsExp.trim() && Number.isFinite(yearsNum) ? yearsNum : undefined,
             requiredCredentials: credentials,
@@ -1332,43 +1458,107 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             setSubmitError('Please enter a job title.');
             return;
         }
-        if (!startDateInput.trim()) {
-            setSubmitError('Start date is required.');
-            return;
+        const listMode = scheduleKind === 'list';
+        const rangesMode = scheduleKind === 'ranges';
+        const shiftsMode = listMode || rangesMode;
+        const sortedDates = [...specificDates].sort();
+        const todayIso = todayIsoDateLocal();
+        let scheduleFields: { startDate: string; endDate: string; startTime: string; endTime: string } | null = null;
+        let outShifts: { date: string; startTime: string; endTime: string }[] = [];
+        if (rangesMode) {
+            const filled = dateRanges.filter((r) => r.startDate.trim() || r.endDate.trim());
+            if (filled.length === 0) {
+                setSubmitError('Add at least one date range.');
+                return;
+            }
+            for (const r of filled) {
+                if (!r.startDate.trim() || !r.endDate.trim()) {
+                    setSubmitError('Each range needs a start and end date.');
+                    return;
+                }
+                if (compareLocalCalendarDates(r.endDate, r.startDate) < 0) {
+                    setSubmitError('Each range end date must be on or after its start date.');
+                    return;
+                }
+                if (compareLocalCalendarDates(r.startDate, todayIso) < 0) {
+                    setSubmitError('Dates cannot be in the past.');
+                    return;
+                }
+                if (!r.startTime.trim() || !r.endTime.trim()) {
+                    setSubmitError('Set a start and end time for each range.');
+                    return;
+                }
+            }
+            outShifts = buildRangeShiftsPayload();
+            if (outShifts.length === 0) {
+                setSubmitError('Add at least one date range.');
+                return;
+            }
         }
-        if (!endDateInput.trim()) {
-            setSubmitError('End date is required.');
-            return;
+        else if (listMode) {
+            if (sortedDates.length === 0) {
+                setSubmitError('Add at least one date.');
+                return;
+            }
+            if (sortedDates.some((d) => compareLocalCalendarDates(d, todayIso) < 0)) {
+                setSubmitError('Dates cannot be in the past.');
+                return;
+            }
+            if (sameTimeForAll) {
+                if (!startTime.trim() || !endTime.trim()) {
+                    setSubmitError('Set the start and end time.');
+                    return;
+                }
+            } else {
+                for (const d of sortedDates) {
+                    const o = perDateTimes[d] ?? { start: startTime, end: endTime };
+                    if (!o.start.trim() || !o.end.trim()) {
+                        setSubmitError(`Set a start and end time for ${fmtJobCalendarDate(d)}.`);
+                        return;
+                    }
+                }
+            }
+            outShifts = buildShiftsPayload();
         }
-        const startIso = parseMmDdYyyyToIso(startDateInput);
-        const endIso = parseMmDdYyyyToIso(endDateInput);
-        if (!startIso) {
-            setSubmitError('Start date must be a valid date in MM-DD-YYYY format.');
-            return;
-        }
-        if (!endIso) {
-            setSubmitError('End date must be a valid date in MM-DD-YYYY format.');
-            return;
-        }
-        const scheduleCheck = validateJobPostingSchedule({
-            startDateIso: startIso,
-            endDateIso: endIso,
-            startTime,
-            endTime,
-        });
-        if (!scheduleCheck.valid) {
-            setSubmitError(scheduleCheck.message);
-            return;
-        }
-        const scheduleFields = buildJobScheduleApiFields({
-            startDateIso: startIso,
-            endDateIso: endIso,
-            startTime,
-            endTime,
-        });
-        if (!scheduleFields) {
-            setSubmitError('Schedule could not be encoded. Check dates and times.');
-            return;
+        else {
+            if (!startDateInput.trim()) {
+                setSubmitError('Start date is required.');
+                return;
+            }
+            if (!endDateInput.trim()) {
+                setSubmitError('End date is required.');
+                return;
+            }
+            const startIso = parseMmDdYyyyToIso(startDateInput);
+            const endIso = parseMmDdYyyyToIso(endDateInput);
+            if (!startIso) {
+                setSubmitError('Start date must be a valid date in MM-DD-YYYY format.');
+                return;
+            }
+            if (!endIso) {
+                setSubmitError('End date must be a valid date in MM-DD-YYYY format.');
+                return;
+            }
+            const scheduleCheck = validateJobPostingSchedule({
+                startDateIso: startIso,
+                endDateIso: endIso,
+                startTime,
+                endTime,
+            });
+            if (!scheduleCheck.valid) {
+                setSubmitError(scheduleCheck.message);
+                return;
+            }
+            scheduleFields = buildJobScheduleApiFields({
+                startDateIso: startIso,
+                endDateIso: endIso,
+                startTime,
+                endTime,
+            });
+            if (!scheduleFields) {
+                setSubmitError('Schedule could not be encoded. Check dates and times.');
+                return;
+            }
         }
         const rateNum = ratePerDay.trim() ? Number(ratePerDay) : NaN;
         if (!Number.isFinite(rateNum) || rateNum <= 0) {
@@ -1387,10 +1577,12 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 title: jobTitle.trim(),
                 description: jobDescription.trim() || undefined,
                 keyResponsibilities: buildKeyResponsibilitiesPayload(),
-                startDate: scheduleFields.startDate,
-                endDate: scheduleFields.endDate,
-                startTime: scheduleFields.startTime,
-                endTime: scheduleFields.endTime,
+                shifts: shiftsMode ? outShifts : undefined,
+                scheduleType: rangesMode ? 'RANGES' : listMode ? 'DATES' : undefined,
+                startDate: shiftsMode ? undefined : scheduleFields!.startDate,
+                endDate: shiftsMode ? undefined : scheduleFields!.endDate,
+                startTime: shiftsMode ? undefined : scheduleFields!.startTime,
+                endTime: shiftsMode ? undefined : scheduleFields!.endTime,
                 payPerDay: rateNum,
                 minYearsExperience: yearsExp.trim() && Number.isFinite(yearsNum) ? yearsNum : undefined,
                 requiredCredentials: credentials,
@@ -1465,7 +1657,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             lineHeight: 1.4,
             boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
         }}>
-          ⚠️  CPSNS is not  verified — this job will be saved as a Draft.
+          ⚠️  CPSNS is not verified - this job will be saved as a Draft.
         </div>)}
       <div onClick={handleAttemptClose} style={{
             position: 'fixed',
@@ -1638,6 +1830,49 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 flexDirection: 'column',
                 gap: 14,
             }}>
+                <div>
+                  <label style={lbl}>Scheduling</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {([
+                      { id: 'range', label: 'Single date range' },
+                      { id: 'list', label: 'Multiple dates' },
+                      { id: 'ranges', label: 'Multiple date ranges' },
+                    ] as const).map((opt) => {
+                      const on = scheduleKind === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setScheduleKind(opt.id)}
+                          style={{
+                            flex: 1,
+                            padding: '9px 10px',
+                            borderRadius: 8,
+                            border: `1px solid ${on ? '#309BB7' : '#D0D5DD'}`,
+                            background: on ? 'rgba(48, 155, 183, 0.10)' : '#fff',
+                            color: on ? '#1B6F86' : '#374151',
+                            fontWeight: on ? 700 : 500,
+                            fontSize: 12,
+                            fontFamily: 'inherit',
+                            cursor: 'pointer',
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6 }}>
+                    {scheduleKind === 'list'
+                      ? 'Pick each day you need a locum - they do not have to be consecutive.'
+                      : scheduleKind === 'ranges'
+                      ? 'Add one or more date ranges, each with its own time.'
+                      : 'A single continuous stretch of days from a start to an end date.'}
+                  </div>
+                </div>
+                {scheduleKind === 'range' ? (
+                <>
                 <div className="host-job-schedule-grid" style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
@@ -1666,6 +1901,159 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                     <input type="time" style={fieldInp} value={endTime} onChange={(e) => setEndTime(e.target.value)}/>
                   </div>
                 </div>
+                </>
+                ) : scheduleKind === 'ranges' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {dateRanges.map((r, i) => (
+                    <div key={i} style={{ border: '1px solid rgba(48, 155, 183, 0.24)', background: 'rgba(48, 155, 183, 0.06)', borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#1B6F86' }}>Range {i + 1}</span>
+                        {dateRanges.length > 1 && (
+                          <button type="button" aria-label={`Remove range ${i + 1}`} onClick={() => removeDateRange(i)} style={{ border: 'none', background: 'transparent', color: '#1B6F86', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: 0 }}>×</button>
+                        )}
+                      </div>
+                      <div className="host-job-schedule-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div>
+                          <label style={lbl}>Start Date *</label>
+                          <input type="date" style={fieldInp} min={jobDateMinIso} value={r.startDate} onChange={(e) => updateDateRange(i, 'startDate', e.target.value)} />
+                        </div>
+                        <div>
+                          <label style={lbl}>End Date *</label>
+                          <input type="date" style={fieldInp} min={r.startDate || jobDateMinIso} value={r.endDate} onChange={(e) => updateDateRange(i, 'endDate', e.target.value)} />
+                        </div>
+                      </div>
+                      <div className="host-job-schedule-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div>
+                          <label style={lbl}>Start Time *</label>
+                          <input type="time" style={fieldInp} value={r.startTime} onChange={(e) => updateDateRange(i, 'startTime', e.target.value)} />
+                        </div>
+                        <div>
+                          <label style={lbl}>End Time *</label>
+                          <input type="time" style={fieldInp} value={r.endTime} onChange={(e) => updateDateRange(i, 'endTime', e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button" onClick={addDateRange} style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: '1px solid #309BB7', background: '#fff', color: '#1B6F86', fontWeight: 600, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>+ Add range</button>
+                </div>
+                ) : (
+                <>
+                <div>
+                  <label style={lbl}>Dates *</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      style={{ ...fieldInp, flex: 1 }}
+                      value={newDateInput}
+                      min={jobDateMinIso}
+                      onChange={(e) => setNewDateInput(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addSpecificDate(newDateInput)}
+                      disabled={!newDateInput}
+                      style={{
+                        padding: '9px 16px',
+                        borderRadius: 8,
+                        border: '1px solid #309BB7',
+                        background: newDateInput ? '#309BB7' : '#E5E7EB',
+                        color: newDateInput ? '#fff' : '#9CA3AF',
+                        fontWeight: 600,
+                        fontSize: 13,
+                        fontFamily: 'inherit',
+                        cursor: newDateInput ? 'pointer' : 'not-allowed',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Add date
+                    </button>
+                  </div>
+                </div>
+                {(sameTimeForAll || specificDates.length === 0) && (
+                  <div className="host-job-schedule-grid" style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: 12,
+                  }}>
+                    <div>
+                      <label style={lbl}>Start Time *</label>
+                      <input type="time" style={fieldInp} value={startTime} onChange={(e) => setStartTime(e.target.value)}/>
+                    </div>
+                    <div>
+                      <label style={lbl}>End Time *</label>
+                      <input type="time" style={fieldInp} value={endTime} onChange={(e) => setEndTime(e.target.value)}/>
+                    </div>
+                  </div>
+                )}
+                {specificDates.length >= 1 && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={sameTimeForAll}
+                      onChange={(e) => handleSameTimeForAll(e.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: '#309BB7', flexShrink: 0 }}
+                    />
+                    Use the same time for every date
+                  </label>
+                )}
+                {specificDates.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {specificDates.map((d) => {
+                        const t = perDateTimes[d] ?? { start: startTime, end: endTime };
+                        return (
+                        <div
+                          key={d}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            flexWrap: 'nowrap',
+                            background: 'rgba(48, 155, 183, 0.06)',
+                            border: '1px solid rgba(48, 155, 183, 0.24)',
+                            borderRadius: 8,
+                            padding: '8px 10px',
+                          }}
+                        >
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1B6F86', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                            {fmtJobCalendarDate(d)}
+                          </span>
+                          {!sameTimeForAll && (
+                            <>
+                              <input
+                                type="time"
+                                aria-label={`Start time for ${d}`}
+                                style={{ ...fieldInp, flex: '1 1 0', minWidth: 0, width: 'auto', padding: '9px 6px' }}
+                                value={t.start}
+                                onChange={(e) => setPerDateTime(d, 'start', e.target.value)}
+                              />
+                              <span style={{ color: '#9CA3AF', fontSize: 12, flexShrink: 0 }}>-</span>
+                              <input
+                                type="time"
+                                aria-label={`End time for ${d}`}
+                                style={{ ...fieldInp, flex: '1 1 0', minWidth: 0, width: 'auto', padding: '9px 6px' }}
+                                value={t.end}
+                                onChange={(e) => setPerDateTime(d, 'end', e.target.value)}
+                              />
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            aria-label={`Remove ${d}`}
+                            onClick={() => removeSpecificDate(d)}
+                            style={{
+                              marginLeft: 'auto', flexShrink: 0, border: 'none', background: 'transparent',
+                              color: '#1B6F86', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: '0 2px',
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+                )}
                 {scheduleValidationError && (<p style={{ fontSize: 13, color: '#DC2626', margin: 0 }}>
                     {scheduleValidationError}
                   </p>)}
@@ -1835,7 +2223,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                     Practice &amp; services
                   </div>
                   <div style={{ fontSize: 12, color: '#9CA3AF' }}>
-                    Prefills from your profile — edit for this job
+                    Prefills from your profile - edit for this job
                   </div>
                 </div>
               </div>
@@ -1856,7 +2244,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                     {submitError}
                   </p>)}
               </div>
-            </div>) : (<CollapsedStep icon={<PracticeIcon />} label="Practice & services" sub="Prefills from your profile — edit for this job" onClick={() => setStep(4)}/>)}
+            </div>) : (<CollapsedStep icon={<PracticeIcon />} label="Practice & services" sub="Prefills from your profile - edit for this job" onClick={() => setStep(4)}/>)}
         </div>
 
         
@@ -2507,7 +2895,7 @@ export default function HostDashboard(props: {
                       wordBreak: 'break-word',
                     }}>
                       {stat.label} :{' '}
-                      <span style={{ color: '#000' }}>{loadingData ? '–' : stat.value}</span>
+                      <span style={{ color: '#000' }}>{loadingData ? '-' : stat.value}</span>
                     </p>
                   </div>
                 ))}

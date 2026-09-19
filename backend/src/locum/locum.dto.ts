@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsInt, Min, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min, IsIn, IsArray } from 'class-validator';
 export class SaveLocumProfileDto {
   @IsString()
   firstName!: string;
@@ -58,6 +58,17 @@ export class ApplyJobDto {
   @IsString()
   @IsOptional()
   coverNote?: string;
+
+  // FULL = available for the whole schedule; PARTIAL = only the listed days.
+  @IsIn(['FULL', 'PARTIAL'])
+  @IsOptional()
+  availabilityKind?: 'FULL' | 'PARTIAL';
+
+  // Days the locum is available for (YYYY-MM-DD), required when PARTIAL.
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  availableDates?: string[];
 }
 export class RespondToConfirmedPlacementDto {
   @IsIn(['accept', 'decline'])

@@ -17,6 +17,7 @@ import {
   Prisma,
   PostingStatus,
   Role,
+  ShiftType,
   UserStatus,
   VerificationStatus,
   type HostProfile as HostProfileRow,
@@ -37,30 +38,67 @@ import {
 } from '../cpsns/cpsns-verified.js';
 import {
   assertJobScheduleAcceptable,
+  clockTimeToDbTime,
+  dbTimeToClockString,
   formatCalendarDateForApi,
   isPostingEndDatePassed,
+  isPostingFullyCovered,
+  parseJobDates,
+  parseJobShifts,
   postingStatusAfterLocumAccept,
+  type ParsedJobShift,
 } from './job-schedule.util.js';
 import { getReviewPlaygroundEmails, isReviewPlaygroundEmail } from '../config/review-playground.util.js';
+
+export type ApiJobShift = {
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+};
 
 function mapJobPostingForApi<T extends {
   startDate?: Date | null;
   endDate?: Date | null;
   servicesRequired?: string[];
   clinicDesc?: string | null;
+  shifts?: { date: Date; startTime?: Date | null; endTime?: Date | null }[];
 }>(
   job: T,
-): T & {
+): Omit<T, 'shifts'> & {
   startDate: string | null;
   endDate: string | null;
   amenities: string[];
+  dates: string[];
+  shifts: ApiJobShift[];
 } {
+  const apiShifts: ApiJobShift[] = (job.shifts ?? [])
+    .map((s) => ({
+      date: formatCalendarDateForApi(s.date),
+      startTime: dbTimeToClockString(s.startTime ?? null),
+      endTime: dbTimeToClockString(s.endTime ?? null),
+    }))
+    .filter((s): s is ApiJobShift => s.date != null)
+    .sort((a, b) => a.date.localeCompare(b.date));
   return {
     ...job,
     startDate: formatCalendarDateForApi(job.startDate ?? null),
     endDate: formatCalendarDateForApi(job.endDate ?? null),
     amenities: job.servicesRequired ?? [],
+    dates: apiShifts.map((s) => s.date),
+    shifts: apiShifts,
   };
+}
+
+/** Job-level FULL/HALF day designation → Shift.shiftType enum (falls back to full day). */
+function shiftTypeFromFullHalfDay(value: string | null | undefined): ShiftType {
+  switch (value) {
+    case 'HALF_DAY_AM':
+      return ShiftType.HALF_DAY_AM;
+    case 'HALF_DAY_PM':
+      return ShiftType.HALF_DAY_PM;
+    default:
+      return ShiftType.FULL_DAY;
+  }
 }
 
 export type HostProfileApi = {
@@ -544,13 +582,38 @@ export class HostService {
           ? PostingStatus.ACTIVE
           : PostingStatus.DRAFT;
 
-    const schedule = assertJobScheduleAcceptable({
-      startDate: dto.startDate,
-      endDate: dto.endDate,
-      startTime: dto.startTime,
-      endTime: dto.endTime,
-      allowPast: saveAsDraft,
-    });
+    // Schedule can arrive three ways (most specific wins): per-day `shifts`
+    // (each with its own time), plain `dates` (shared job-level time), or the
+    // classic start/end `range`. Individual days drive the derived span; the
+    // posting-level startTime/endTime stays populated as the fallback that
+    // reminders, browse filters and emails still read.
+    let parsedShifts: ParsedJobShift[] | null = null;
+    let schedule: { startDate?: Date; endDate?: Date };
+    let scheduleStartTime: string | null = dto.startTime ?? null;
+    let scheduleEndTime: string | null = dto.endTime ?? null;
+    if (Array.isArray(dto.shifts) && dto.shifts.length > 0) {
+      const parsed = parseJobShifts(dto.shifts, { allowPast: saveAsDraft });
+      parsedShifts = parsed.shifts;
+      schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
+      scheduleStartTime = parsed.startTime ?? dto.startTime ?? null;
+      scheduleEndTime = parsed.endTime ?? dto.endTime ?? null;
+    } else if (Array.isArray(dto.dates) && dto.dates.length > 0) {
+      const parsed = parseJobDates(dto.dates, { allowPast: saveAsDraft });
+      parsedShifts = parsed.dates.map((date) => ({
+        date,
+        startTime: null,
+        endTime: null,
+      }));
+      schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
+    } else {
+      schedule = assertJobScheduleAcceptable({
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        allowPast: saveAsDraft,
+      });
+    }
 
     const amenitiesFromDto =
       dto.amenities ?? dto.servicesRequired;
@@ -602,8 +665,8 @@ export class HostService {
         keyResponsibilities: dto.keyResponsibilities ?? [],
         startDate: schedule.startDate ?? null,
         endDate: schedule.endDate ?? null,
-        startTime: dto.startTime ?? null,
-        endTime: dto.endTime ?? null,
+        startTime: scheduleStartTime,
+        endTime: scheduleEndTime,
         payPerDay: dto.payPerDay ?? null,
         minYearsExperience: dto.minYearsExperience ?? null,
         travelRequired: dto.travelRequired ?? false,
@@ -612,10 +675,24 @@ export class HostService {
         // PRD Section 2.2: save leave type + full/half day
         leaveType: dto.leaveType ?? null,
         fullHalfDay: dto.fullHalfDay ?? null,
+        scheduleType: parsedShifts ? (dto.scheduleType ?? 'DATES') : null,
+        ...(parsedShifts
+          ? {
+              shifts: {
+                create: parsedShifts.map((s) => ({
+                  date: s.date,
+                  shiftType: shiftTypeFromFullHalfDay(dto.fullHalfDay),
+                  startTime: clockTimeToDbTime(s.startTime),
+                  endTime: clockTimeToDbTime(s.endTime),
+                })),
+              },
+            }
+          : {}),
         ...(status === PostingStatus.ACTIVE
           ? { publishedAt: new Date() }
           : {}),
       },
+      include: { shifts: true },
     });
 
     await Promise.all([
@@ -645,6 +722,7 @@ export class HostService {
         status: true,
         startDate: true,
         endDate: true,
+        shifts: { select: { date: true } },
         applications: {
           where: {
             OR: [
@@ -652,8 +730,7 @@ export class HostService {
               { locumAcceptedAt: { not: null } },
             ],
           },
-          select: { id: true },
-          take: 1,
+          select: { availabilityKind: true, availableDates: true },
         },
       },
     });
@@ -661,21 +738,24 @@ export class HostService {
     const toComplete: string[] = [];
     const toOngoing: string[] = [];
     const toExpire: string[] = [];
+    const toReopen: string[] = [];
 
     for (const j of jobs) {
-      const hasAccepted = j.applications.length > 0;
-      if (hasAccepted) {
+      // A posting is filled only when accepted locums cover every day.
+      const fullyCovered = isPostingFullyCovered(j, j.applications);
+      if (fullyCovered) {
         const next = postingStatusAfterLocumAccept(j.startDate, j.endDate);
         if (next === 'COMPLETED' && j.status !== 'COMPLETED') {
           toComplete.push(j.id);
         } else if (next === 'ONGOING' && j.status !== 'ONGOING') {
           toOngoing.push(j.id);
-        } else if (next === 'SCHEDULED' && j.status !== 'SCHEDULED') {
-          // rare: clock skew / date edit — leave unless we need to demote
         }
         continue;
       }
-      if (j.status === 'ACTIVE' && isPostingEndDatePassed(j.endDate)) {
+      // No longer fully covered (e.g. a locum withdrew): reopen for applications.
+      if (j.status === 'SCHEDULED' || j.status === 'ONGOING') {
+        toReopen.push(j.id);
+      } else if (j.status === 'ACTIVE' && isPostingEndDatePassed(j.endDate)) {
         toExpire.push(j.id);
       }
     }
@@ -690,6 +770,12 @@ export class HostService {
       await this.prisma.jobPosting.updateMany({
         where: { id: { in: toOngoing } },
         data: { status: 'ONGOING' },
+      });
+    }
+    if (toReopen.length > 0) {
+      await this.prisma.jobPosting.updateMany({
+        where: { id: { in: toReopen } },
+        data: { status: 'ACTIVE' },
       });
     }
     if (toExpire.length > 0) {
@@ -765,8 +851,7 @@ export class HostService {
 
     return {
       items: sortedItems.map((j) => {
-        const { _count, shifts: _shifts, applications: acceptedApps, ...rest } =
-          j;
+        const { _count, applications: acceptedApps, ...rest } = j;
         return {
           ...mapJobPostingForApi(rest),
           status: j.status,
@@ -843,16 +928,38 @@ export class HostService {
     }
 
     const publishingActive = statusToSave === PostingStatus.ACTIVE;
-    const schedule =
-      dto.startDate != null || dto.endDate != null
-        ? assertJobScheduleAcceptable({
-            startDate: dto.startDate,
-            endDate: dto.endDate,
-            startTime: dto.startTime,
-            endTime: dto.endTime,
-            allowPast: !publishingActive && job.status === PostingStatus.DRAFT,
-          })
-        : {};
+    const allowPastEdit =
+      !publishingActive && job.status === PostingStatus.DRAFT;
+    // Same precedence as createJob: per-day `shifts` > plain `dates` > range.
+    let parsedShifts: ParsedJobShift[] | null = null;
+    let schedule: { startDate?: Date; endDate?: Date };
+    let scheduleStartTime: string | null | undefined = dto.startTime;
+    let scheduleEndTime: string | null | undefined = dto.endTime;
+    if (Array.isArray(dto.shifts) && dto.shifts.length > 0) {
+      const parsed = parseJobShifts(dto.shifts, { allowPast: allowPastEdit });
+      parsedShifts = parsed.shifts;
+      schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
+      scheduleStartTime = parsed.startTime ?? dto.startTime ?? null;
+      scheduleEndTime = parsed.endTime ?? dto.endTime ?? null;
+    } else if (Array.isArray(dto.dates) && dto.dates.length > 0) {
+      const parsed = parseJobDates(dto.dates, { allowPast: allowPastEdit });
+      parsedShifts = parsed.dates.map((date) => ({
+        date,
+        startTime: null,
+        endTime: null,
+      }));
+      schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
+    } else if (dto.startDate != null || dto.endDate != null) {
+      schedule = assertJobScheduleAcceptable({
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        allowPast: allowPastEdit,
+      });
+    } else {
+      schedule = {};
+    }
 
     const newlyPublished =
       publishingActive && job.status === PostingStatus.DRAFT;
@@ -870,8 +977,8 @@ export class HostService {
         }),
         ...(schedule.startDate != null && { startDate: schedule.startDate }),
         ...(schedule.endDate != null && { endDate: schedule.endDate }),
-        ...(dto.startTime != null && { startTime: dto.startTime }),
-        ...(dto.endTime != null && { endTime: dto.endTime }),
+        ...(scheduleStartTime !== undefined && { startTime: scheduleStartTime }),
+        ...(scheduleEndTime !== undefined && { endTime: scheduleEndTime }),
         ...(dto.payPerDay != null && { payPerDay: dto.payPerDay }),
         ...(dto.minYearsExperience != null && {
           minYearsExperience: dto.minYearsExperience,
@@ -908,7 +1015,28 @@ export class HostService {
         // PRD Section 2.2: allow updating leave type + full/half day
         ...(dto.leaveType != null && { leaveType: dto.leaveType }),
         ...(dto.fullHalfDay != null && { fullHalfDay: dto.fullHalfDay }),
+        // Replace the chosen days wholesale when a new set is supplied; when the
+        // host switches back to a single continuous range, clear any old shifts.
+        ...(parsedShifts
+          ? {
+              scheduleType: dto.scheduleType ?? 'DATES',
+              shifts: {
+                deleteMany: {},
+                create: parsedShifts.map((s) => ({
+                  date: s.date,
+                  shiftType: shiftTypeFromFullHalfDay(
+                    dto.fullHalfDay ?? job.fullHalfDay,
+                  ),
+                  startTime: clockTimeToDbTime(s.startTime),
+                  endTime: clockTimeToDbTime(s.endTime),
+                })),
+              },
+            }
+          : dto.startDate != null || dto.endDate != null
+            ? { scheduleType: null, shifts: { deleteMany: {} } }
+            : {}),
       },
+      include: { shifts: true },
     });
     if (newlyPublished) {
       await Promise.all([
@@ -916,7 +1044,7 @@ export class HostService {
         this.notifyVerifiedLocumsOfNewOpportunity(hostProfileId, updated),
       ]);
     }
-    return { success: true, job: updated };
+    return { success: true, job: mapJobPostingForApi(updated) };
   }
 
   async deleteJob(userId: string, jobId: string) {
@@ -1103,6 +1231,9 @@ export class HostService {
           locumResponse: true,
           appliedAt: true,
           placedAt: true,
+          coverNote: true,
+          availabilityKind: true,
+          availableDates: true,
           locumProfile: {
             select: {
               id: true,

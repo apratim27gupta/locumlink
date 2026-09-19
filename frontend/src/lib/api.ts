@@ -475,6 +475,12 @@ export type BrowseJobHostProfile = {
     servicesOffered: string[];
     highlights: string | null;
 };
+/** One individually chosen day with its own start/end time (UTC HH:mm strings). */
+export type JobShift = {
+    date: string;
+    startTime: string | null;
+    endTime: string | null;
+};
 export type BrowseJob = {
     id: string;
     title: string;
@@ -487,6 +493,12 @@ export type BrowseJob = {
     hostProfile: BrowseJobHostProfile;
     startDate: string | null;
     endDate: string | null;
+    /** Individually chosen days (YYYY-MM-DD). Non-empty => specific-dates posting. */
+    dates?: string[] | null;
+    /** Individually chosen days, each with its own optional start/end time (UTC HH:mm). */
+    shifts?: JobShift[] | null;
+    /** 'DATES' or 'RANGES' when the posting used individual days / multiple ranges. */
+    scheduleType?: string | null;
     startTime: string | null;
     endTime: string | null;
     payPerDay: string | number | null;
@@ -503,6 +515,8 @@ export type MyApplication = {
     locumResponse: 'ACCEPTED' | 'REJECTED' | null;
     appliedAt: string;
     coverNote?: string | null;
+    availabilityKind?: 'FULL' | 'PARTIAL' | null;
+    availableDates?: string[] | null;
     locumAcceptedAt?: string | null;
     jobPosting: {
         id: string;
@@ -511,6 +525,9 @@ export type MyApplication = {
         isDeleted?: boolean;
         startDate: string | null;
         endDate: string | null;
+        dates?: string[] | null;
+        shifts?: JobShift[] | null;
+        scheduleType?: string | null;
         startTime: string | null;
         endTime: string | null;
         hostProfile: {
@@ -595,11 +612,22 @@ export const locumApi = {
         }
         return res.json() as Promise<PaginatedResult<BrowseJob>>;
     },
-    applyToJob: async (jobId: string, coverNote?: string): Promise<unknown> => {
+    applyToJob: async (
+        jobId: string,
+        opts?: {
+            coverNote?: string;
+            availabilityKind?: 'FULL' | 'PARTIAL';
+            availableDates?: string[];
+        },
+    ): Promise<unknown> => {
+        const body: Record<string, unknown> = {};
+        if (opts?.coverNote !== undefined && opts.coverNote !== '') body.coverNote = opts.coverNote;
+        if (opts?.availabilityKind) body.availabilityKind = opts.availabilityKind;
+        if (opts?.availabilityKind === 'PARTIAL') body.availableDates = opts.availableDates ?? [];
         const res = await trackedFetch(`${NEST_BASE}/api/locum/jobs/${encodeURIComponent(jobId)}/apply`, {
             method: 'POST',
             headers: nestHeaders(true),
-            body: JSON.stringify(coverNote !== undefined ? { coverNote } : {}),
+            body: JSON.stringify(body),
         });
         if (!res.ok) {
             const text = await res.text();
@@ -661,6 +689,11 @@ export type Job = {
     hasAcceptedLocum?: boolean;
     startDate?: string | null;
     endDate?: string | null;
+    /** Individually chosen days (YYYY-MM-DD). Non-empty => specific-dates posting. */
+    dates?: string[] | null;
+    /** Individually chosen days, each with its own optional start/end time (UTC HH:mm). */
+    shifts?: JobShift[] | null;
+    scheduleType?: string | null;
     payPerDay?: string | number | null;
     location?: string;
     keyResponsibilities?: string[];
@@ -707,6 +740,10 @@ export type ApplicationRecord = {
     id: string;
     status: 'APPLIED' | 'SHORTLISTED' | 'CONFIRMED' | 'REJECTED' | 'WITHDRAWN';
     locumResponse: 'ACCEPTED' | 'REJECTED' | null;
+    coverNote?: string | null;
+    /** 'FULL' = available for the whole schedule; 'PARTIAL' = only availableDates. */
+    availabilityKind?: 'FULL' | 'PARTIAL' | null;
+    availableDates?: string[] | null;
     locumProfile: {
         id: string;
         userId: string;
@@ -767,6 +804,12 @@ export interface CreateJobPayload {
     keyResponsibilities?: string[];
     startDate?: string;
     endDate?: string;
+    /** Individually chosen days (YYYY-MM-DD). When set, replaces the start/end range. */
+    dates?: string[];
+    /** Individually chosen days, each with its own optional start/end time (UTC HH:mm). */
+    shifts?: { date: string; startTime?: string; endTime?: string }[];
+    /** 'DATES' (individual days) or 'RANGES' (multiple date ranges). */
+    scheduleType?: 'DATES' | 'RANGES';
     startTime?: string;
     endTime?: string;
     payPerDay?: number;

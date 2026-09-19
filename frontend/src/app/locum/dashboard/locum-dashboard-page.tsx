@@ -19,6 +19,7 @@ import {
     startOfLocalCalendarDay,
 } from '@/lib/localDateTime';
 import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
+import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, getPostingDays } from '@/lib/jobSchedule';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { CountBadge } from '@/components/CountBadge';
 
@@ -382,7 +383,7 @@ export default function LocumDashboard(props: {
             color: '#4A4A4A',
         }}>
             Total Accepted Shifts :{' '}
-            <span style={{ color: '#000' }}>{loading ? '–' : acceptedCount}</span>
+            <span style={{ color: '#000' }}>{loading ? '-' : acceptedCount}</span>
           </p>
         </div>
         <div style={{ flex: 1, flexShrink: 0, padding: '18px 18px' }}>
@@ -395,7 +396,7 @@ export default function LocumDashboard(props: {
             color: '#4A4A4A',
         }}>
             Completed Shifts :{' '}
-            <span style={{ color: '#000' }}>{loading ? '–' : completedCount}</span>
+            <span style={{ color: '#000' }}>{loading ? '-' : completedCount}</span>
           </p>
         </div>
       </div>
@@ -587,7 +588,7 @@ export default function LocumDashboard(props: {
                         gap: 16,
                         flexWrap: 'wrap',
                     }}>
-                {(jp.startDate || jp.endDate) && (<span style={{
+                {getJobScheduleMode(jp) !== 'none' && (<span style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: 5,
@@ -598,9 +599,11 @@ export default function LocumDashboard(props: {
                             color: mutedText,
                         }}>
                     <Image src="/calender.svg" alt="" width={14} height={14} style={{ flexShrink: 0, objectFit: 'contain' }}/>
-                    {fmtDate(jp.startDate)} – {fmtDate(jp.endDate)}
+                    {getJobScheduleMode(jp) === 'list'
+                        ? formatScheduleSummaryText(jp, '')
+                        : `${fmtDate(jp.startDate)} - ${fmtDate(jp.endDate)}`}
                   </span>)}
-                {(jp.startTime || jp.endTime) && (<span style={{
+                {(jp.startTime || jp.endTime) && !(getJobScheduleMode(jp) === 'list' && hasVaryingShiftTimes(jp)) && (<span style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: 5,
@@ -611,8 +614,21 @@ export default function LocumDashboard(props: {
                             color: mutedText,
                         }}>
                     <Image src="/clock.svg" alt="" width={14} height={14} style={{ flexShrink: 0, objectFit: 'contain' }}/>
-                    {fmtTime(jp.startTime)} – {fmtTime(jp.endTime)}
+                    {fmtTime(jp.startTime)} - {fmtTime(jp.endTime)}
                   </span>)}
+                {isPartialAvailability(app) && (() => {
+                    const days = getPostingDays(jp);
+                    const n = applicationCoveredDays(app, days).length;
+                    return (
+                      <span style={{
+                        display: 'flex', alignItems: 'center', gap: 5,
+                        background: '#FFFBEB', border: '1px solid #FDE68A', color: '#B45309',
+                        padding: '4px 10px', borderRadius: 5, fontSize: 12, fontWeight: 700,
+                      }}>
+                        Partial availability {n}/{days.length}
+                      </span>
+                    );
+                })()}
                 <span style={{ fontSize: 12, color: '#8892a4', marginLeft: 'auto' }}>
                   {relativeHoursOrDaysAgo(app.appliedAt)}
                 </span>

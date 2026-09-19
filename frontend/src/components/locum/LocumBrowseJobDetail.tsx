@@ -3,6 +3,8 @@
 import Image from 'next/image';
 import type { CSSProperties, ReactNode } from 'react';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
+import { JobScheduleDates } from '@/components/JobScheduleDates';
+import { getJobScheduleMode, hasVaryingShiftTimes } from '@/lib/jobSchedule';
 import type { BrowseJob } from '@/lib/api';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 import { formatHostDoctorDisplayName } from '@/lib/hostDisplayName';
@@ -99,6 +101,8 @@ export function LocumBrowseJobDetail({
   const hostCpsnsVerified = isCpsnsVerificationApproved(
     job.hostProfile.cpsnsVerificationStatus,
   );
+  const scheduleMode = getJobScheduleMode(job);
+  const perDayTimesVary = hasVaryingShiftTimes(job);
 
   return (
     <div
@@ -276,7 +280,10 @@ export function LocumBrowseJobDetail({
             marginBottom: 14,
           }}
         >
-          {(job.startDate || job.endDate) &&
+          {scheduleMode === 'list' ? (
+            <JobScheduleDates job={job} tone="teal" />
+          ) : (
+            (job.startDate || job.endDate) &&
             (() => {
               const start = formatBrowseJobUtcDateTimeToLocal(
                 job.startDate,
@@ -309,11 +316,13 @@ export function LocumBrowseJobDetail({
                     height={14}
                     style={{ flexShrink: 0, objectFit: 'contain' }}
                   />
-                  {start?.localDate ?? '—'} – {end?.localDate ?? '—'}
+                  {start?.localDate ?? '-'} - {end?.localDate ?? '-'}
                 </span>
               );
-            })()}
+            })()
+          )}
           {(job.startTime || job.endTime) &&
+            !(scheduleMode === 'list' && perDayTimesVary) &&
             (() => {
               const start = formatBrowseJobUtcDateTimeToLocal(
                 job.startDate,
@@ -346,7 +355,7 @@ export function LocumBrowseJobDetail({
                     height={14}
                     style={{ flexShrink: 0, objectFit: 'contain' }}
                   />
-                  {start?.localTime ?? '—'} – {end?.localTime ?? '—'}
+                  {start?.localTime ?? '-'} - {end?.localTime ?? '-'}
                 </span>
               );
             })()}

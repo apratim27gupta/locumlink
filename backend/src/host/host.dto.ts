@@ -6,7 +6,23 @@ import {
   IsIn,
   IsNumber,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+
+// One individually chosen day with its own optional start/end time.
+export class JobShiftDto {
+  @IsString()
+  date!: string;
+
+  @IsString()
+  @IsOptional()
+  startTime?: string;
+
+  @IsString()
+  @IsOptional()
+  endTime?: string;
+}
 
 // PRD Section 2.2: leave types required on every job posting
 export const LEAVE_TYPES = [
@@ -201,6 +217,27 @@ export class CreateJobDto {
   @IsOptional()
   endDate?: string;
 
+  // Individually chosen days the host wants a locum for (YYYY-MM-DD each).
+  // When provided, these take precedence over the startDate/endDate range.
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  dates?: string[];
+
+  // Individually chosen days, each with its own optional start/end time.
+  // Takes precedence over `dates` and the startDate/endDate range.
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => JobShiftDto)
+  @IsOptional()
+  shifts?: JobShiftDto[];
+
+  // How the schedule was entered (for display grouping): DATES or RANGES.
+  @IsOptional()
+  @IsString()
+  @IsIn(['DATES', 'RANGES'])
+  scheduleType?: string;
+
   @IsString()
   @IsOptional()
   startTime?: string;
@@ -279,6 +316,27 @@ export class UpdateJobDto {
   @IsString()
   @IsOptional()
   endDate?: string;
+
+  // Individually chosen days the host wants a locum for (YYYY-MM-DD each).
+  // When provided, these replace the startDate/endDate range.
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  dates?: string[];
+
+  // Individually chosen days, each with its own optional start/end time.
+  // Takes precedence over `dates` and the startDate/endDate range.
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => JobShiftDto)
+  @IsOptional()
+  shifts?: JobShiftDto[];
+
+  // How the schedule was entered (for display grouping): DATES or RANGES.
+  @IsOptional()
+  @IsString()
+  @IsIn(['DATES', 'RANGES'])
+  scheduleType?: string;
 
   @IsString()
   @IsOptional()

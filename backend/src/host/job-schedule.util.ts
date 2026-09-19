@@ -154,6 +154,250 @@ export function assertJobScheduleAcceptable(params: {
   };
 }
 
+/**
+ * Validate a set of individually chosen locum dates (YYYY-MM-DD each).
+ * Returns the de-duplicated dates as @db.Date values (UTC midnight, ascending)
+ * plus the derived start/end span (min/max) so the existing range-based status,
+ * expiry, browse and notification logic keeps working unchanged.
+ */
+export function parseJobDates(
+  dates: string[],
+  opts: { allowPast?: boolean } = {},
+): { dates: Date[]; startDate: Date; endDate: Date } {
+  const byIso = new Map<string, Date>();
+  for (const raw of dates) {
+    const cal = extractCalendarDatePart(raw);
+    if (!cal) {
+      throw new BadRequestException('Invalid date format.');
+    }
+    if (!byIso.has(cal)) {
+      byIso.set(cal, parseCalendarDateForDb(cal));
+    }
+  }
+
+  const parsed = [...byIso.values()].sort(
+    (a, b) => a.getTime() - b.getTime(),
+  );
+  if (parsed.length === 0) {
+    throw new BadRequestException('At least one date is required.');
+  }
+
+  if (!opts.allowPast) {
+    // A chosen day is in the past once it (and its whole day) has elapsed.
+    const earliest = parsed[0];
+    const endOfEarliestDay = Date.UTC(
+      earliest.getUTCFullYear(),
+      earliest.getUTCMonth(),
+      earliest.getUTCDate(),
+      23,
+      59,
+      59,
+      999,
+    );
+    if (endOfEarliestDay < Date.now()) {
+      throw new BadRequestException('Dates cannot be in the past.');
+    }
+  }
+
+  return {
+    dates: parsed,
+    startDate: parsed[0],
+    endDate: parsed[parsed.length - 1],
+  };
+}
+
+/** HH:mm (UTC) -> a Date suitable for a Prisma @db.Time column (1970-01-01 UTC). */
+export function clockTimeToDbTime(
+  time: string | null | undefined,
+): Date | null {
+  const tm = parseClockTimeHm(time);
+  if (!tm) return null;
+  return new Date(Date.UTC(1970, 0, 1, tm.hours, tm.minutes, 0, 0));
+}
+
+/** Prisma @db.Time value (Date at 1970-01-01 UTC) -> "HH:mm" (UTC). */
+export function dbTimeToClockString(
+  value: Date | string | null | undefined,
+): string | null {
+  if (value == null) return null;
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return null;
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+export type JobShiftInput = {
+  date: string;
+  startTime?: string | null;
+  endTime?: string | null;
+};
+
+export type ParsedJobShift = {
+  date: Date;
+  startTime: string | null;
+  endTime: string | null;
+};
+
+/**
+ * Validate a set of individually chosen shifts, each with its own optional
+ * start/end time. De-duplicates by calendar day (last entry wins), sorts
+ * ascending, and derives:
+ *  - startDate / endDate: the min/max day (so range-based status & expiry work)
+ *  - startTime / endTime: the earliest day's start and latest day's end, kept as
+ *    the posting-level fallback for reminders, browse filters and emails that
+ *    still assume one time per posting.
+ */
+export function parseJobShifts(
+  shifts: JobShiftInput[],
+  opts: { allowPast?: boolean } = {},
+): {
+  shifts: ParsedJobShift[];
+  startDate: Date;
+  endDate: Date;
+  startTime: string | null;
+  endTime: string | null;
+} {
+  const byIso = new Map<string, ParsedJobShift>();
+  for (const raw of shifts) {
+    const cal = extractCalendarDatePart(raw?.date);
+    if (!cal) {
+      throw new BadRequestException('Invalid date format.');
+    }
+    const startTime = raw.startTime?.trim() ? raw.startTime.trim() : null;
+    const endTime = raw.endTime?.trim() ? raw.endTime.trim() : null;
+    if (startTime && !parseClockTimeHm(startTime)) {
+      throw new BadRequestException('Invalid start time.');
+    }
+    if (endTime && !parseClockTimeHm(endTime)) {
+      throw new BadRequestException('Invalid end time.');
+    }
+    // Last entry for a given day wins.
+    byIso.set(cal, {
+      date: parseCalendarDateForDb(cal),
+      startTime,
+      endTime,
+    });
+  }
+
+  const parsed = [...byIso.values()].sort(
+    (a, b) => a.date.getTime() - b.date.getTime(),
+  );
+  if (parsed.length === 0) {
+    throw new BadRequestException('At least one date is required.');
+  }
+
+  if (!opts.allowPast) {
+    const earliest = parsed[0].date;
+    const endOfEarliestDay = Date.UTC(
+      earliest.getUTCFullYear(),
+      earliest.getUTCMonth(),
+      earliest.getUTCDate(),
+      23,
+      59,
+      59,
+      999,
+    );
+    if (endOfEarliestDay < Date.now()) {
+      throw new BadRequestException('Dates cannot be in the past.');
+    }
+  }
+
+  return {
+    shifts: parsed,
+    startDate: parsed[0].date,
+    endDate: parsed[parsed.length - 1].date,
+    startTime: parsed[0].startTime,
+    endTime: parsed[parsed.length - 1].endTime,
+  };
+}
+
+/** Inclusive list of YYYY-MM-DD from two @db.Date values (UTC components); capped. */
+export function expandCalendarDateRange(
+  start: Date | null | undefined,
+  end: Date | null | undefined,
+): string[] {
+  if (!start || !end) return [];
+  let cur = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const last = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+  if (Number.isNaN(cur) || Number.isNaN(last) || last < cur) return [];
+  const out: string[] = [];
+  for (let i = 0; cur <= last && i < 400; i++) {
+    out.push(new Date(cur).toISOString().slice(0, 10));
+    cur += 86400000;
+  }
+  return out;
+}
+
+export type PostingDaysSource = {
+  startDate?: Date | null;
+  endDate?: Date | null;
+  shifts?: { date: Date }[] | null;
+};
+
+/**
+ * The set of calendar days a posting needs covered (sorted, unique, YYYY-MM-DD):
+ * shift dates when the posting has shifts (DATES/RANGES), otherwise the days
+ * spanned by the continuous start/end range.
+ */
+export function getPostingRequiredDates(posting: PostingDaysSource): string[] {
+  const shifts = posting.shifts ?? [];
+  const days = shifts.length
+    ? shifts
+        .map((s) => formatCalendarDateForApi(s.date))
+        .filter((d): d is string => d != null)
+    : expandCalendarDateRange(posting.startDate ?? null, posting.endDate ?? null);
+  return [...new Set(days)].sort();
+}
+
+export type CoverageApplication = {
+  availabilityKind?: string | null;
+  availableDates?: string[] | null;
+};
+
+/**
+ * Days covered by the given (accepted) applications. A FULL application covers
+ * every required day; a PARTIAL one covers its availableDates intersected with
+ * the required set. Anything without PARTIAL + dates is treated as FULL.
+ */
+export function computeCoveredDates(
+  apps: CoverageApplication[],
+  requiredDates: string[],
+): Set<string> {
+  const required = new Set(requiredDates);
+  const covered = new Set<string>();
+  for (const app of apps) {
+    const isPartial =
+      app.availabilityKind === 'PARTIAL' &&
+      Array.isArray(app.availableDates) &&
+      app.availableDates.length > 0;
+    if (!isPartial) {
+      // FULL (or unspecified) covers everything.
+      for (const d of required) covered.add(d);
+      return covered;
+    }
+    for (const d of app.availableDates as string[]) {
+      const cal = extractCalendarDatePart(d);
+      if (cal && required.has(cal)) covered.add(cal);
+    }
+  }
+  return covered;
+}
+
+/** True when every required day is covered by the given accepted applications. */
+export function isPostingFullyCovered(
+  posting: PostingDaysSource,
+  acceptedApps: CoverageApplication[],
+): boolean {
+  const required = getPostingRequiredDates(posting);
+  if (required.length === 0) {
+    // No discrete schedule: fall back to legacy "any accepted" behaviour.
+    return acceptedApps.length > 0;
+  }
+  const covered = computeCoveredDates(acceptedApps, required);
+  return required.every((d) => covered.has(d));
+}
+
 /** True after the stored calendar end day (UTC date components) has fully passed. */
 export function isPostingEndDatePassed(
   endDate: Date | null | undefined,

@@ -74,7 +74,11 @@ export class LocumController {
     @Body()
     dto: ApplyJobDto,
   ) {
-    return this.locumService.applyToJob(req.user!.id, jobId, dto.coverNote);
+    return this.locumService.applyToJob(req.user!.id, jobId, {
+      coverNote: dto.coverNote,
+      availabilityKind: dto.availabilityKind,
+      availableDates: dto.availableDates,
+    });
   }
   @Get('applications')
   getMyApplications(

@@ -89,6 +89,11 @@ export function toBrowseJobPreview(
     },
     startDate: asNullableString(job.startDate),
     endDate: asNullableString(job.endDate),
+    dates: asStringArray((job as { dates?: unknown }).dates),
+    shifts: Array.isArray((job as { shifts?: unknown }).shifts)
+      ? ((job as { shifts?: unknown }).shifts as BrowseJob['shifts'])
+      : null,
+    scheduleType: asNullableString((job as { scheduleType?: unknown }).scheduleType),
     startTime: asNullableString(job.startTime),
     endTime: asNullableString(job.endTime),
     payPerDay: job.payPerDay ?? null,
