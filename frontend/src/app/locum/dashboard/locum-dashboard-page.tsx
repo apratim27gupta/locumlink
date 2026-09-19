@@ -19,7 +19,7 @@ import {
     startOfLocalCalendarDay,
 } from '@/lib/localDateTime';
 import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
-import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, getPostingDays } from '@/lib/jobSchedule';
+import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, getPostingDays, formatSpecificDate } from '@/lib/jobSchedule';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { CountBadge } from '@/components/CountBadge';
 
@@ -162,6 +162,7 @@ export default function LocumDashboard(props: {
     const [loading, setLoading] = useState(true);
     const [respondingAppId, setRespondingAppId] = useState<string | null>(null);
     const [rejectConfirmAppId, setRejectConfirmAppId] = useState<string | null>(null);
+    const [acceptConfirmAppId, setAcceptConfirmAppId] = useState<string | null>(null);
     const [respondError, setRespondError] = useState<string | null>(null);
     const respondingRef = useRef(false);
     useEffect(() => {
@@ -321,6 +322,7 @@ export default function LocumDashboard(props: {
             setApplications(apps);
             setShiftStats(stats);
             setRejectConfirmAppId(null);
+            setAcceptConfirmAppId(null);
         }
         catch (e) {
             setRespondError(e instanceof Error ? e.message : 'Could not update application.');
@@ -639,10 +641,13 @@ export default function LocumDashboard(props: {
                         borderTop: '1px solid #F3F4F6',
                     }}>
                   <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10 }}>
-                    The host confirmed this placement. Accept to finalize or reject to decline.
+                    The host confirmed this placement. Review the dates before you accept, or reject to decline.
                   </div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    <button type="button" disabled={responding} onClick={() => void respondToPlacement(app.id, 'accept')} style={{
+                    <button type="button" disabled={responding} onClick={() => {
+                            setRespondError(null);
+                            setAcceptConfirmAppId(app.id);
+                        }} style={{
                             padding: '9px 18px',
                             borderRadius: 8,
                             border: 'none',
@@ -675,6 +680,138 @@ export default function LocumDashboard(props: {
             })}
       </div>
 
+      {acceptConfirmAppId ? (() => {
+        const accepting = respondingAppId === acceptConfirmAppId;
+        const app = applications.find((a) => a.id === acceptConfirmAppId);
+        const preview = app?.acceptPreview;
+        const remaining = preview?.remainingDates ?? [];
+        const taken = preview?.takenDates ?? [];
+        const proposed = preview?.proposedDates ?? [];
+        const noDaysLeft = Boolean(preview && remaining.length === 0);
+        const hasOverlap = taken.length > 0;
+        const formatList = (days: string[]) =>
+          days.map((d) => formatSpecificDate(d)).filter(Boolean).join(', ');
+        return (
+        <div
+          role="presentation"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.45)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+          onMouseDown={(e) => {
+            if (!accepting && e.target === e.currentTarget) setAcceptConfirmAppId(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="locum-accept-confirm-title"
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              padding: '24px 28px',
+              maxWidth: 440,
+              width: '100%',
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
+              fontFamily: 'Inter, sans-serif',
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="locum-accept-confirm-title"
+              style={{
+                margin: '0 0 10px 0',
+                fontSize: 18,
+                fontWeight: 600,
+                color: '#0B0F1F',
+              }}
+            >
+              {noDaysLeft ? 'No days left to accept' : 'Accept this placement?'}
+            </h3>
+            {noDaysLeft ? (
+              <p style={{ margin: '0 0 24px 0', fontSize: 14, color: '#6B7280', lineHeight: 1.5 }}>
+                All of the days from your availability were already filled by another locum who accepted first. You can reject this confirmation or wait for the host to update it.
+              </p>
+            ) : (
+              <div style={{ margin: '0 0 24px 0', fontSize: 14, color: '#6B7280', lineHeight: 1.5 }}>
+                {hasOverlap ? (
+                  <>
+                    <p style={{ margin: '0 0 12px 0' }}>
+                      Some days from your proposed availability are already filled by another locum who accepted first.
+                    </p>
+                    <p style={{ margin: '0 0 8px 0' }}>
+                      <span style={{ fontWeight: 700, color: '#9A3412' }}>Already filled: </span>
+                      {formatList(taken)}
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      <span style={{ fontWeight: 700, color: '#047857' }}>Accept shift for: </span>
+                      {formatList(remaining)}
+                    </p>
+                  </>
+                ) : (
+                  <p style={{ margin: 0 }}>
+                    You will accept this shift for{' '}
+                    <span style={{ fontWeight: 700, color: '#0B0F1F' }}>
+                      {formatList(remaining.length > 0 ? remaining : proposed) || 'the confirmed dates'}
+                    </span>
+                    .
+                  </p>
+                )}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                type="button"
+                disabled={accepting}
+                onClick={() => setAcceptConfirmAppId(null)}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  border: '1px solid #D0D5DD',
+                  borderRadius: 8,
+                  background: '#fff',
+                  color: '#374151',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: accepting ? 'default' : 'pointer',
+                  fontFamily: 'inherit',
+                  opacity: accepting ? 0.6 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              {!noDaysLeft ? (
+                <button
+                  type="button"
+                  disabled={accepting}
+                  onClick={() => void respondToPlacement(acceptConfirmAppId, 'accept')}
+                  style={{
+                    flex: 1,
+                    padding: '10px 16px',
+                    border: 'none',
+                    borderRadius: 8,
+                    background: accepting ? '#94D3AF' : 'linear-gradient(180deg,#22C55E 0%,#16A34A 100%)',
+                    color: '#fff',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    cursor: accepting ? 'default' : 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {accepting ? 'Accepting…' : hasOverlap ? 'Accept for these dates' : 'Accept'}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        );
+      })() : null}
       {rejectConfirmAppId ? (() => {
         const rejecting = respondingAppId === rejectConfirmAppId;
         return (

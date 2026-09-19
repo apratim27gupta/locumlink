@@ -739,11 +739,52 @@ export class LocumService {
       },
     );
 
+    const pendingConfirmIds = page.items
+      .filter(
+        (app) =>
+          app.status === 'CONFIRMED' &&
+          !app.locumAcceptedAt &&
+          app.locumResponse !== 'ACCEPTED',
+      )
+      .map((app) => app.jobPostingId);
+    const acceptedByJob = new Map<
+      string,
+      { availabilityKind: string | null; availableDates: string[] }[]
+    >();
+    if (pendingConfirmIds.length > 0) {
+      const acceptedOthers = await this.prisma.application.findMany({
+        where: {
+          jobPostingId: { in: [...new Set(pendingConfirmIds)] },
+          id: { notIn: page.items.map((a) => a.id) },
+          OR: [
+            { locumResponse: 'ACCEPTED' },
+            { locumAcceptedAt: { not: null } },
+          ],
+        },
+        select: {
+          jobPostingId: true,
+          availabilityKind: true,
+          availableDates: true,
+        },
+      });
+      for (const row of acceptedOthers) {
+        const list = acceptedByJob.get(row.jobPostingId) ?? [];
+        list.push({
+          availabilityKind: row.availabilityKind,
+          availableDates: row.availableDates,
+        });
+        acceptedByJob.set(row.jobPostingId, list);
+      }
+    }
+
     return {
       items: page.items.map((app) => {
         const jp = (
           app as {
             jobPosting?: {
+              id?: string;
+              startDate?: Date | null;
+              endDate?: Date | null;
               shifts?: { date: Date; startTime: Date | null; endTime: Date | null }[];
             };
           }
@@ -761,8 +802,49 @@ export class LocumService {
           }))
           .filter((s): s is { date: string; startTime: string | null; endTime: string | null } => s.date != null)
           .sort((a, b) => a.date.localeCompare(b.date));
+
+        let acceptPreview:
+          | {
+              proposedDates: string[];
+              takenDates: string[];
+              remainingDates: string[];
+            }
+          | undefined;
+        if (
+          app.status === 'CONFIRMED' &&
+          !app.locumAcceptedAt &&
+          app.locumResponse !== 'ACCEPTED' &&
+          jp
+        ) {
+          const requiredDates = getPostingRequiredDates({
+            startDate: jp.startDate,
+            endDate: jp.endDate,
+            shifts: shiftRows,
+          });
+          const others = acceptedByJob.get(app.jobPostingId) ?? [];
+          const proposedDates = applicationClaimedDates(
+            {
+              availabilityKind: app.availabilityKind,
+              availableDates: app.availableDates,
+            },
+            requiredDates,
+          );
+          const remainingDates = finalizeAcceptDates(
+            {
+              availabilityKind: app.availabilityKind,
+              availableDates: app.availableDates,
+            },
+            requiredDates,
+            others,
+          );
+          const remainingSet = new Set(remainingDates);
+          const takenDates = proposedDates.filter((d) => !remainingSet.has(d));
+          acceptPreview = { proposedDates, takenDates, remainingDates };
+        }
+
         return {
           ...app,
+          ...(acceptPreview ? { acceptPreview } : {}),
           ...(jp ? { jobPosting: { ...jp, dates, shifts } } : {}),
         };
       }),

@@ -509,6 +509,11 @@ export type BrowseJob = {
     accommodationProvided: boolean;
     isDeleted?: boolean;
 };
+export type PlacementAcceptPreview = {
+    proposedDates: string[];
+    takenDates: string[];
+    remainingDates: string[];
+};
 export type MyApplication = {
     id: string;
     status: 'APPLIED' | 'SHORTLISTED' | 'CONFIRMED' | 'REJECTED' | 'WITHDRAWN';
@@ -518,6 +523,8 @@ export type MyApplication = {
     availabilityKind?: 'FULL' | 'PARTIAL' | null;
     availableDates?: string[] | null;
     locumAcceptedAt?: string | null;
+    /** Present when host-confirmed and locum has not accepted yet. */
+    acceptPreview?: PlacementAcceptPreview | null;
     jobPosting: {
         id: string;
         title: string;
@@ -665,6 +672,7 @@ export const locumApi = {
     },
     respondToConfirmedPlacement: async (applicationId: string, response: 'accept' | 'decline'): Promise<{
         success: boolean;
+        finalizedDates?: string[];
     }> => {
         const res = await trackedFetch(`${NEST_BASE}/api/locum/applications/${encodeURIComponent(applicationId)}/respond`, {
             method: 'PATCH',
@@ -675,7 +683,7 @@ export const locumApi = {
             const text = await res.text();
             throw nestHttpError(text, res.status, 'Updating application');
         }
-        return res.json() as Promise<{ success: boolean }>;
+        return res.json() as Promise<{ success: boolean; finalizedDates?: string[] }>;
     },
 };
 export type PostingStatus = 'DRAFT' | 'ACTIVE' | 'SCHEDULED' | 'ONGOING' | 'COMPLETED' | 'EXPIRED';
