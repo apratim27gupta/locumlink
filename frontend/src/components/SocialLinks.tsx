@@ -1,9 +1,8 @@
-import FacebookIcon from '@/components/icons/FacebookIcon';
-import LinkedInIcon from '@/components/icons/LinkedInIcon';
 import { FACEBOOK_URL, LINKEDIN_URL } from '@/lib/support';
 
 type SocialLinksProps = {
   className?: string;
+  /** Display size in px for each logo image. */
   iconSize?: number;
 };
 
@@ -17,16 +16,32 @@ export function SocialLinks({ className, iconSize = 36 }: SocialLinksProps) {
         rel="noopener noreferrer"
         aria-label="LocumLink on LinkedIn"
       >
-        <LinkedInIcon size={iconSize} />
+        {/* Official LinkedIn brand mark (square) */}
+        <img
+          src="/icons/linkedin.svg"
+          alt=""
+          width={iconSize}
+          height={iconSize}
+          decoding="async"
+          style={{ width: iconSize, height: iconSize }}
+        />
       </a>
       <a
         href={FACEBOOK_URL}
-        className="site-social-link"
+        className="site-social-link site-social-link--circle"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="LocumLink on Facebook"
       >
-        <FacebookIcon size={iconSize} />
+        {/* Current official Facebook brand mark (circle) */}
+        <img
+          src="/icons/facebook.svg"
+          alt=""
+          width={iconSize}
+          height={iconSize}
+          decoding="async"
+          style={{ width: iconSize, height: iconSize }}
+        />
       </a>
     </div>
   );

@@ -1087,8 +1087,16 @@
   justify-content: center;
   line-height: 0;
   text-decoration: none;
-  border-radius: 10px;
+  border-radius: 6px;
   transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.site-social-link--circle {
+  border-radius: 50%;
+}
+
+.site-social-link img {
+  display: block;
 }
 
 .site-social-link:hover {
