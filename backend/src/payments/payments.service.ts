@@ -42,6 +42,8 @@ import type Stripe from 'stripe';
 import {
   computeApplicationClaimedHours,
   getPostingRequiredDates,
+  platformCalendarDateOf,
+  platformCalendarDateToday,
 } from '../host/job-schedule.util.js';
 import {
   BadRequestException,
@@ -365,6 +367,7 @@ export class PaymentsService {
             id: true,
             title: true,
             hostProfileId: true,
+            createdAt: true,
             startDate: true,
             endDate: true,
             startTime: true,
@@ -391,6 +394,14 @@ export class PaymentsService {
       },
     });
     if (!app?.locumAcceptedAt) return;
+
+    // Grandfather: no match fee for postings created before today (platform TZ).
+    if (
+      platformCalendarDateOf(app.jobPosting.createdAt) <
+      platformCalendarDateToday()
+    ) {
+      return;
+    }
 
     // If this posting is seeking a replacement for a prior paid invoice, close
     // that search only when *this* accept is a real replacement (accepted after
@@ -1024,7 +1035,7 @@ export class PaymentsService {
     };
   }
 
-  async adminMatchFeeSummary() {
+  async adminMatchFeeSummary(params?: { days?: number }) {
     const statuses: MatchFeeInvoiceStatus[] = [
       'PENDING',
       'OVERDUE',
@@ -1048,11 +1059,39 @@ export class PaymentsService {
     const reviewHosts = await this.prisma.hostProfile.count({
       where: { matchFeeReviewRequired: true },
     });
+
+    const days =
+      params?.days != null && Number.isFinite(params.days) && params.days > 0
+        ? Math.floor(params.days)
+        : null;
+    const paidSince =
+      days != null
+        ? new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+        : null;
+    const paidWhere = {
+      status: 'PAID' as const,
+      paidAt: paidSince
+        ? { gte: paidSince }
+        : { not: null as Date | null },
+    };
+    const [receivedCount, receivedSum] = await Promise.all([
+      this.prisma.matchFeeInvoice.count({ where: paidWhere }),
+      this.prisma.matchFeeInvoice.aggregate({
+        where: paidWhere,
+        _sum: { amountCents: true },
+      }),
+    ]);
+
     return {
       byStatus,
       escalated,
       reviewHosts,
       stripeEnabled: this.stripeService.isEnabled(),
+      received: {
+        days,
+        count: receivedCount,
+        amountCents: receivedSum._sum.amountCents ?? 0,
+      },
     };
   }
 

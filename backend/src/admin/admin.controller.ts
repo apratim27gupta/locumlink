@@ -319,8 +319,17 @@ export class AdminController {
   }
 
   @Get('match-fees/summary')
-  async matchFeeSummary() {
-    return this.payments.adminMatchFeeSummary();
+  async matchFeeSummary(@Query('days') days?: string) {
+    const parsed =
+      days != null && days !== '' && days !== 'all'
+        ? Number(days)
+        : undefined;
+    return this.payments.adminMatchFeeSummary({
+      days:
+        parsed != null && Number.isFinite(parsed) && parsed > 0
+          ? Math.min(Math.floor(parsed), 3650)
+          : undefined,
+    });
   }
 
   @Get('match-fees')

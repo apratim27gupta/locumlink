@@ -47,6 +47,26 @@ export function parseCalendarDateForDb(value: string): Date {
   return dt;
 }
 
+/** Today's calendar day (YYYY-MM-DD) in the platform timezone. */
+export function platformCalendarDateToday(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: getPlatformTimezone(),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+/** Calendar day (YYYY-MM-DD) of an instant in the platform timezone. */
+export function platformCalendarDateOf(instant: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: getPlatformTimezone(),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
+}
+
 /** Serialize Prisma DATE for API consumers as YYYY-MM-DD. */
 export function formatCalendarDateForApi(
   value: Date | string | null | undefined,

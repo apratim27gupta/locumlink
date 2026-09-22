@@ -138,6 +138,7 @@ export default function AdminPaymentsPage() {
                 ['PENDING', 'Pending'],
                 ['OVERDUE', 'Overdue'],
                 ['PAID', 'Paid'],
+                ['REFUNDED', 'Refunded'],
                 ['PENDING_REPLACEMENT', 'Replacement'],
               ] as const
             ).map(([key, label]) => (

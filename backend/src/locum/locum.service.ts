@@ -1520,6 +1520,11 @@ export class LocumService {
       },
     });
 
+    // Release SLOTS seats so other locums can claim them again.
+    await this.prisma.applicationShiftClaim.deleteMany({
+      where: { applicationId },
+    });
+
     // Soft-reopen posting when accepted coverage is no longer complete.
     await this.applyCoverageStatus(app.jobPostingId);
 
@@ -1550,6 +1555,20 @@ export class LocumService {
    * so remaining days can still be applied for. Terminal states are left alone.
    */
   private async applyCoverageStatus(jobPostingId: string): Promise<void> {
+    // Drop seat claims from apps that are no longer accepted (heals stuck seats
+    // after withdraw/cancel, and keeps unique shift claims accurate).
+    await this.prisma.applicationShiftClaim.deleteMany({
+      where: {
+        application: {
+          jobPostingId,
+          AND: [
+            { locumAcceptedAt: null },
+            { locumResponse: { not: 'ACCEPTED' } },
+          ],
+        },
+      },
+    });
+
     const posting = await this.prisma.jobPosting.findUnique({
       where: { id: jobPostingId },
       select: {

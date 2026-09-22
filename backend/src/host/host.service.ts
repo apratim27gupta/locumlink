@@ -1660,6 +1660,18 @@ export class HostService {
   }
 
   private async applyCoverageStatusForJob(jobPostingId: string): Promise<void> {
+    await this.prisma.applicationShiftClaim.deleteMany({
+      where: {
+        application: {
+          jobPostingId,
+          AND: [
+            { locumAcceptedAt: null },
+            { locumResponse: { not: 'ACCEPTED' } },
+          ],
+        },
+      },
+    });
+
     const posting = await this.prisma.jobPosting.findUnique({
       where: { id: jobPostingId },
       select: {
@@ -1751,6 +1763,9 @@ export class HostService {
         locumResponse: 'REJECTED',
         locumAcceptedAt: null,
       },
+    });
+    await this.prisma.applicationShiftClaim.deleteMany({
+      where: { applicationId },
     });
     await this.applyCoverageStatusForJob(app.jobPostingId);
     return { success: true };

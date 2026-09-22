@@ -6,15 +6,11 @@ import { useSearchParams } from 'next/navigation';
 import DashLayout from '@/components/DashLayout';
 import {
   MatchFeePolicyModal,
-  hostMatchFeeRefundEligible,
   matchFeeStatusColor,
   matchFeeStatusLabel,
 } from '@/components/payments/MatchFeePolicy';
 import { MatchFeeEventTimeline } from '@/components/payments/MatchFeeEventTimeline';
-import {
-  MatchFeeRefundConfirmModal,
-  matchFeeOutlineButtonStyle,
-} from '@/components/payments/MatchFeeRefundConfirmModal';
+import { matchFeeOutlineButtonStyle } from '@/components/payments/MatchFeeRefundConfirmModal';
 import type { MatchFeePolicyContent } from '@/components/payments/MatchFeePolicy';
 import { HOST_DASH_NAV } from '@/lib/hostNav';
 import { notifyMatchFeesUpdated } from '@/lib/matchFeeUpdatedEvent';
@@ -29,8 +25,6 @@ export default function HostInvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payingId, setPayingId] = useState<string | null>(null);
-  const [refundingId, setRefundingId] = useState<string | null>(null);
-  const [refundConfirmInvoice, setRefundConfirmInvoice] = useState<MatchFeeInvoice | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
 
@@ -82,25 +76,6 @@ export default function HostInvoicesPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Payment failed.');
       setPayingId(null);
-    }
-  }
-
-  async function confirmRefund() {
-    if (!refundConfirmInvoice) return;
-    setRefundingId(refundConfirmInvoice.id);
-    setError(null);
-    try {
-      await hostApi.cancelAcceptedMatch(
-        refundConfirmInvoice.applicationId,
-        'Host requested match fee refund per cancellation policy.',
-      );
-      setRefundConfirmInvoice(null);
-      setBanner('Refund submitted. Your invoice will update shortly.');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Refund request failed.');
-    } finally {
-      setRefundingId(null);
     }
   }
 
@@ -196,8 +171,7 @@ export default function HostInvoicesPage() {
             {invoices.map((invoice) => {
               const colors = matchFeeStatusColor(invoice.status);
               const canPay = invoice.status === 'PENDING' || invoice.status === 'OVERDUE';
-              const canRefund = hostMatchFeeRefundEligible(invoice);
-              const busy = payingId === invoice.id || refundingId === invoice.id;
+              const busy = payingId === invoice.id;
               const postingHref = `/host/applicants/${encodeURIComponent(invoice.jobPostingId)}`;
               return (
                 <div
@@ -312,16 +286,6 @@ export default function HostInvoicesPage() {
                       Download receipt (PDF)
                     </button>
                   ) : null}
-                    {canRefund ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setRefundConfirmInvoice(invoice)}
-                        style={matchFeeOutlineButtonStyle(busy)}
-                      >
-                        Request refund
-                      </button>
-                    ) : null}
                   </div>
                 </div>
               );
@@ -334,15 +298,6 @@ export default function HostInvoicesPage() {
         policy={policy}
         open={policyOpen}
         onClose={() => setPolicyOpen(false)}
-      />
-      <MatchFeeRefundConfirmModal
-        invoice={refundConfirmInvoice}
-        open={refundConfirmInvoice != null}
-        busy={refundingId != null}
-        onClose={() => {
-          if (!refundingId) setRefundConfirmInvoice(null);
-        }}
-        onConfirm={() => void confirmRefund()}
       />
     </DashLayout>
   );

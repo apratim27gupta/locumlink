@@ -6,6 +6,7 @@ import {
   AlertCircle,
   Calendar,
   Clock,
+  DollarSign,
   ShieldCheck,
   TrendingUp,
   UserCheck,
@@ -13,17 +14,11 @@ import {
 } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { useAdminStats } from '@/components/AdminStatsContext';
-import { adminFetchJson } from '@/lib/adminApi';
-
-type Stats = {
-  totalUsers: number;
-  hostUsers: number;
-  verifiedHostUsers: number;
-  locumUsers: number;
-  verifiedLocumUsers: number;
-  pendingVerifications: number;
-  activeJobPostings: number;
-};
+import {
+  adminFetchJson,
+  adminMatchFeeSummary,
+  type AdminMatchFeeSummary,
+} from '@/lib/adminApi';
 
 type Activity = {
   id: string;
@@ -34,18 +29,22 @@ type Activity = {
   detail: string;
 };
 
+type FeeDays = 7 | 30 | 90 | 'all';
+
 function MetricCard({
   label,
   value,
   subtext,
   icon,
   trend,
+  headerRight,
 }: {
   label: string;
   value: string;
   subtext?: string;
   icon: React.ReactNode;
   trend?: string;
+  headerRight?: React.ReactNode;
 }) {
   return (
     <div className="metric-card">
@@ -55,7 +54,17 @@ function MetricCard({
           <p className="metric-value">{value}</p>
           {subtext ? <p className="metric-subtext">{subtext}</p> : null}
         </div>
-        <div className="metric-icon">{icon}</div>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 8,
+          }}
+        >
+          {headerRight}
+          <div className="metric-icon">{icon}</div>
+        </div>
       </div>
       {trend ? (
         <div className="metric-trend">
@@ -84,11 +93,20 @@ function fmtActivityTime(iso: string): string {
   }
 }
 
+function feeWindowLabel(days: FeeDays): string {
+  if (days === 'all') return 'All time';
+  return `Last ${days} days`;
+}
+
 export default function AdminOverviewPage() {
   const { stats, loading: statsLoading, error: statsErr } = useAdminStats();
   const [activity, setActivity] = useState<Activity[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
   const [activityErr, setActivityErr] = useState<string | null>(null);
+  const [feeDays, setFeeDays] = useState<FeeDays>(30);
+  const [feeSummary, setFeeSummary] = useState<AdminMatchFeeSummary | null>(null);
+  const [feeLoading, setFeeLoading] = useState(true);
+  const [feeErr, setFeeErr] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,6 +130,28 @@ export default function AdminOverviewPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    setFeeLoading(true);
+    setFeeErr(null);
+    void adminMatchFeeSummary({ days: feeDays })
+      .then((summary) => {
+        if (!cancelled) setFeeSummary(summary);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setFeeErr(e instanceof Error ? e.message : 'Failed to load match fees');
+          setFeeSummary(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setFeeLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [feeDays]);
+
   const loading = statsLoading || activityLoading;
   const err = statsErr ?? activityErr;
   const pending = stats?.pendingVerifications ?? 0;
@@ -126,6 +166,20 @@ export default function AdminOverviewPage() {
   const metric = (n: number) => (loading ? '—' : String(n));
   const fillPct =
     totalJobs > 0 ? Math.min(100, Math.round((openJobs / totalJobs) * 100)) : 0;
+
+  const received = feeSummary?.received;
+  const feeAmount =
+    received != null
+      ? `$${((received.amountCents ?? 0) / 100).toLocaleString('en-CA', {
+          maximumFractionDigits: 0,
+        })}`
+      : '—';
+  const feeCount = received?.count ?? 0;
+  const feeSubtext = feeLoading
+    ? 'Loading…'
+    : feeErr
+      ? 'Could not load match fees'
+      : `${feeCount} paid invoice${feeCount === 1 ? '' : 's'} · ${feeWindowLabel(feeDays)}`;
 
   return (
     <AdminLayout>
@@ -185,6 +239,36 @@ export default function AdminOverviewPage() {
           value={metric(pending)}
           subtext="Target turnaround: 48h"
           icon={<Clock size={24} color="#4f46e5" />}
+        />
+        <MetricCard
+          label="Match fees received"
+          value={feeLoading ? '—' : feeAmount}
+          subtext={feeSubtext}
+          icon={<DollarSign size={24} color="#4f46e5" />}
+          headerRight={
+            <select
+              aria-label="Match fees time window"
+              value={feeDays === 'all' ? 'all' : String(feeDays)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFeeDays(v === 'all' ? 'all' : (Number(v) as 7 | 30 | 90));
+              }}
+              style={{
+                fontSize: 12,
+                padding: '4px 6px',
+                borderRadius: 6,
+                border: '1px solid #E5E7EB',
+                background: '#fff',
+                color: '#374151',
+                maxWidth: 110,
+              }}
+            >
+              <option value="7">7 days</option>
+              <option value="30">30 days</option>
+              <option value="90">90 days</option>
+              <option value="all">All time</option>
+            </select>
+          }
         />
       </div>
 

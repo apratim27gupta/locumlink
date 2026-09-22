@@ -254,10 +254,24 @@ export type AdminMatchFeeSummary = {
   escalated: number;
   reviewHosts: number;
   stripeEnabled: boolean;
+  received: {
+    days: number | null;
+    count: number;
+    amountCents: number;
+  };
 };
 
-export async function adminMatchFeeSummary(): Promise<AdminMatchFeeSummary> {
-  return adminFetchJson('/api/admin/match-fees/summary');
+export async function adminMatchFeeSummary(params?: {
+  days?: number | 'all';
+}): Promise<AdminMatchFeeSummary> {
+  const qs = new URLSearchParams();
+  if (params?.days != null && params.days !== 'all') {
+    qs.set('days', String(params.days));
+  } else if (params?.days === 'all') {
+    qs.set('days', 'all');
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return adminFetchJson(`/api/admin/match-fees/summary${suffix}`);
 }
 
 export async function adminSendMatchFeeReminder(
