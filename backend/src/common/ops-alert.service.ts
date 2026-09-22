@@ -68,7 +68,7 @@ export class OpsAlertService {
       const admins = this.parseAdminEmails();
       if (admins.length === 0) return;
 
-      const subject = `Server Error [${input.statusCode}] — ${input.method ?? '?'} ${input.route ?? '?'}`;
+      const subject = `Server Error [${input.statusCode}] - ${input.method ?? '?'} ${input.route ?? '?'}`;
       const text = [
         `Error: ${input.message}`,
         `User ID: ${input.userId ?? 'unauthenticated'}`,

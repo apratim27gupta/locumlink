@@ -54,6 +54,21 @@ describe('match-fee-cancellation.util', () => {
     expect(result.replacementStatus).toBe('SEARCHING');
   });
 
+  it('host early cancel boundary is more than 14 days', () => {
+    const late = evaluateCancellationPolicy({
+      cancelledBy: 'HOST',
+      wasPaid: true,
+      daysUntilStart: 14,
+    });
+    expect(late.nonRefundable).toBe(true);
+    const early = evaluateCancellationPolicy({
+      cancelledBy: 'HOST',
+      wasPaid: true,
+      daysUntilStart: 15,
+    });
+    expect(early.refundResolution).toBe('REFUND');
+  });
+
   it('detects escalation threshold thirty days after due date', () => {
     const dueAt = new Date('2026-01-01T00:00:00.000Z');
     expect(isEscalationDue(dueAt, null, new Date('2026-01-30T00:00:00.000Z'))).toBe(

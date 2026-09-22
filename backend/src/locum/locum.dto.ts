@@ -69,6 +69,12 @@ export class ApplyJobDto {
   @IsString({ each: true })
   @IsOptional()
   availableDates?: string[];
+
+  /** SLOTS: specific shift row IDs the locum is available for. */
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  shiftIds?: string[];
 }
 
 export class UpdateAvailabilityDto {
@@ -79,6 +85,11 @@ export class UpdateAvailabilityDto {
   @IsString({ each: true })
   @IsOptional()
   availableDates?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  shiftIds?: string[];
 }
 
 export class RespondToConfirmedPlacementDto {

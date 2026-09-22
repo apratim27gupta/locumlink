@@ -68,6 +68,8 @@ export type LocumBrowseJobDetailProps = {
   job: BrowseJob;
   /** When true, show clinic/host identifying details (signed-in locum or host preview). */
   revealHostDetails: boolean;
+  /** When set, highlight these shift pills in the schedule list (dim the rest). */
+  highlightShiftIds?: string[] | null;
   /** Panel open class for mobile master-detail. */
   open?: boolean;
   contentOpacity?: number;
@@ -85,6 +87,7 @@ export type LocumBrowseJobDetailProps = {
 export function LocumBrowseJobDetail({
   job,
   revealHostDetails,
+  highlightShiftIds,
   open = true,
   contentOpacity = 1,
   banner,
@@ -281,7 +284,11 @@ export function LocumBrowseJobDetail({
           }}
         >
           {scheduleMode === 'list' ? (
-            <JobScheduleDates job={job} tone="teal" />
+            <JobScheduleDates
+              job={job}
+              tone="teal"
+              highlightShiftIds={highlightShiftIds}
+            />
           ) : (
             (job.startDate || job.endDate) &&
             (() => {

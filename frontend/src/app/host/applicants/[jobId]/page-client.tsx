@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import DashLayout, { NavIcon } from '@/components/DashLayout';
+import DashLayout from '@/components/DashLayout';
 import { hostApi, messageApi, normalizeHostJob, type ApplicationRecord, type Job } from '@/lib/api';
 import { getToken } from '@/lib/auth';
 import { useAuth } from '@/providers/AuthProvider';
@@ -13,34 +13,7 @@ import { useHostProfile } from '@/hooks/useHostProfile';
 import { getPostingDays } from '@/lib/jobSchedule';
 import { AvailabilityStrip } from '@/components/AvailabilityStrip';
 import { CoverageCalendar } from '@/components/CoverageCalendar';
-const NAV = [
-    {
-        label: 'My Postings',
-        href: '/host/dashboard',
-        icon: <NavIcon name="postings"/>,
-    },
-    { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile"/> },
-    {
-        label: 'Messages',
-        href: '/host/messages',
-        icon: <NavIcon name="messages"/>,
-    },
-    {
-        label: 'Resources',
-        href: '/host/resources',
-        icon: <NavIcon name="resources"/>,
-    },
-    {
-        label: 'FAQs',
-        href: '/host/faq',
-        icon: <NavIcon name="faq"/>,
-    },
-    {
-        label: 'Settings',
-        href: '/host/settings',
-        icon: <NavIcon name="settings"/>,
-    },
-] as const;
+import { HOST_DASH_NAV } from '@/lib/hostNav';
 const QUICK_MESSAGE_PANEL_STORAGE_KEY = 'l2-host-applicants-quick-message-panel-pos';
 const QUICK_MESSAGE_PANEL_WIDTH = 384;
 const QUICK_MESSAGE_PANEL_MAX_HEIGHT = 280;
@@ -557,6 +530,8 @@ export default function HostApplicantsPage(props: {
                 locumResponse: a.locumResponse,
                 availabilityKind: a.availabilityKind ?? null,
                 availableDates: a.availableDates ?? null,
+                requestedShiftIds: a.requestedShiftIds ?? null,
+                shiftClaims: a.shiftClaims ?? null,
             })),
         [apps],
     );
@@ -812,7 +787,7 @@ export default function HostApplicantsPage(props: {
           </div>
         </div>, document.body)
         : null;
-    return (<DashLayout navItems={[...NAV]} activeHref="/host/dashboard" topbarFirstName={headerProfile?.contactFirstName ?? undefined} topbarLastName={headerProfile?.contactLastName ?? undefined}>
+    return (<DashLayout navItems={HOST_DASH_NAV} activeHref="/host/dashboard" topbarFirstName={headerProfile?.contactFirstName ?? undefined} topbarLastName={headerProfile?.contactLastName ?? undefined}>
       
       <div style={{
             display: 'flex',
@@ -824,7 +799,14 @@ export default function HostApplicantsPage(props: {
         <h1 style={{ fontSize: 18, margin: 0, fontWeight: 700, color: '#0f1523' }}>
           Applicants
         </h1>
-        <button type="button" aria-label="Close" onClick={() => router.back()} style={{
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={() => {
+            beforeClientNavigation('/host/dashboard');
+            router.push('/host/dashboard');
+          }}
+          style={{
             marginLeft: 'auto',
             width: 36,
             height: 36,
@@ -850,7 +832,7 @@ export default function HostApplicantsPage(props: {
 
       {!loading && apps.length > 0 && postingDays.length > 0 && (
         <div style={{ marginBottom: 14 }}>
-          <CoverageCalendar postingDays={postingDays} applicants={coverageApplicants} />
+          <CoverageCalendar postingDays={postingDays} applicants={coverageApplicants} job={job} />
         </div>
       )}
 
@@ -965,7 +947,7 @@ export default function HostApplicantsPage(props: {
 
                   <div style={{ minWidth: 0 }}>
                     {postingDays.length > 0 ? (
-                      <AvailabilityStrip postingDays={postingDays} app={a} cell={11} />
+                      <AvailabilityStrip postingDays={postingDays} app={a} job={job} cell={11} />
                     ) : (
                       <span style={{ fontSize: 12, color: '#9CA3AF' }}>—</span>
                     )}
@@ -1121,7 +1103,7 @@ export default function HostApplicantsPage(props: {
                     <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: 13, color: '#374151' }}>
                       Availability
                     </span>
-                    <AvailabilityStrip postingDays={postingDays} app={selected} />
+                    <AvailabilityStrip postingDays={postingDays} app={selected} job={job} />
                     {selected.coverNote ? (
                       <div style={{ fontSize: 13, color: '#4B5563', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>
                         {selected.coverNote}

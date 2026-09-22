@@ -109,7 +109,7 @@ export default function LocumProfileStatusBanner({
               ? 'Set up your profile to start finding opportunities'
               : cpsnsVerified
                 ? 'Your profile is complete'
-                : 'Profile complete — CPSNS verification required to apply'}
+                : 'Profile complete - CPSNS verification required to apply'}
           </div>
           <div
             style={{

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -84,6 +84,22 @@ export class StripeService {
       data: { stripeCustomerId: customer.id },
     });
     return customer.id;
+  }
+
+  async refundMatchFeePayment(params: {
+    paymentIntentId: string;
+    amountCents: number;
+    invoiceId: string;
+  }): Promise<string> {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not configured.');
+    }
+    const refund = await this.stripe.refunds.create({
+      payment_intent: params.paymentIntentId,
+      amount: params.amountCents,
+      metadata: { matchFeeInvoiceId: params.invoiceId },
+    });
+    return refund.id;
   }
 
   async createMatchFeeCheckoutSession(params: {

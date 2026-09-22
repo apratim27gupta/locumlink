@@ -6,9 +6,15 @@ import { useSearchParams } from 'next/navigation';
 import DashLayout from '@/components/DashLayout';
 import {
   MatchFeePolicyModal,
+  hostMatchFeeRefundEligible,
   matchFeeStatusColor,
   matchFeeStatusLabel,
 } from '@/components/payments/MatchFeePolicy';
+import { MatchFeeEventTimeline } from '@/components/payments/MatchFeeEventTimeline';
+import {
+  MatchFeeRefundConfirmModal,
+  matchFeeOutlineButtonStyle,
+} from '@/components/payments/MatchFeeRefundConfirmModal';
 import type { MatchFeePolicyContent } from '@/components/payments/MatchFeePolicy';
 import { HOST_DASH_NAV } from '@/lib/hostNav';
 import { notifyMatchFeesUpdated } from '@/lib/matchFeeUpdatedEvent';
@@ -23,6 +29,8 @@ export default function HostInvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payingId, setPayingId] = useState<string | null>(null);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [refundConfirmInvoice, setRefundConfirmInvoice] = useState<MatchFeeInvoice | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
 
@@ -77,6 +85,25 @@ export default function HostInvoicesPage() {
     }
   }
 
+  async function confirmRefund() {
+    if (!refundConfirmInvoice) return;
+    setRefundingId(refundConfirmInvoice.id);
+    setError(null);
+    try {
+      await hostApi.cancelAcceptedMatch(
+        refundConfirmInvoice.applicationId,
+        'Host requested match fee refund per cancellation policy.',
+      );
+      setRefundConfirmInvoice(null);
+      setBanner('Refund submitted. Your invoice will update shortly.');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Refund request failed.');
+    } finally {
+      setRefundingId(null);
+    }
+  }
+
   const overdueCount = invoices.filter((i) => i.status === 'OVERDUE').length;
 
   return (
@@ -86,12 +113,12 @@ export default function HostInvoicesPage() {
       topbarFirstName={profile?.contactFirstName}
       topbarLastName={profile?.contactLastName}
     >
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 16px 48px' }}>
+      <div style={{ maxWidth: 640, padding: '24px 16px 48px 0' }}>
         <h1 style={{ fontSize: 26, fontWeight: 700, color: '#111827', margin: '0 0 8px' }}>
           Match Fees
         </h1>
         <p style={{ margin: '0 0 8px', color: '#6B7280', fontSize: 14, lineHeight: 1.5 }}>
-          Free to post. Pay $250 only when a locum accepts your confirmed match.
+          Free to post. Pay $125 or $250 per matched locum when they accept your confirmed match.
         </p>
         <button
           type="button"
@@ -157,7 +184,7 @@ export default function HostInvoicesPage() {
               border: '1px dashed #D1D5DB',
               borderRadius: 12,
               padding: 24,
-              textAlign: 'center',
+              textAlign: 'left',
               color: '#6B7280',
               fontSize: 14,
             }}
@@ -169,7 +196,8 @@ export default function HostInvoicesPage() {
             {invoices.map((invoice) => {
               const colors = matchFeeStatusColor(invoice.status);
               const canPay = invoice.status === 'PENDING' || invoice.status === 'OVERDUE';
-              const busy = payingId === invoice.id;
+              const canRefund = hostMatchFeeRefundEligible(invoice);
+              const busy = payingId === invoice.id || refundingId === invoice.id;
               const postingHref = `/host/applicants/${encodeURIComponent(invoice.jobPostingId)}`;
               return (
                 <div
@@ -182,17 +210,15 @@ export default function HostInvoicesPage() {
                   }}
                 >
                   <div style={{ marginBottom: 10 }}>
-                    <Link
-                      href={postingHref}
+                    <div
                       style={{
                         fontWeight: 700,
                         color: '#0F2A7A',
                         fontSize: 16,
-                        textDecoration: 'none',
                       }}
                     >
                       {invoice.jobTitle}
-                    </Link>
+                    </div>
                     {invoice.postingScheduleLabel ? (
                       <div style={{ fontSize: 13, color: '#374151', marginTop: 6 }}>
                         Shifts: {invoice.postingScheduleLabel}
@@ -203,9 +229,6 @@ export default function HostInvoicesPage() {
                         {invoice.postingLocation}
                       </div>
                     ) : null}
-                    <div style={{ fontSize: 13, color: '#6B7280', marginTop: 6 }}>
-                      Confirmed locum: {invoice.locumName}
-                    </div>
                   </div>
 
                   <div
@@ -239,27 +262,67 @@ export default function HostInvoicesPage() {
                     </span>
                   </div>
 
-                  {canPay ? (
+                  {invoice.events?.length ? (
+                    <MatchFeeEventTimeline events={invoice.events} compact />
+                  ) : null}
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      marginTop: 14,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Link href={postingHref} style={matchFeeOutlineButtonStyle(busy)}>
+                      View job
+                    </Link>
+                    {canPay ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void payInvoice(invoice)}
+                        style={{
+                          padding: '10px 20px',
+                          borderRadius: 8,
+                          border: 'none',
+                          background: busy ? '#94A3B8' : '#0F2A7A',
+                          color: '#fff',
+                          fontWeight: 600,
+                          fontSize: 14,
+                          cursor: busy ? 'default' : 'pointer',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        {busy && payingId === invoice.id
+                          ? stripeEnabled
+                            ? 'Redirecting…'
+                            : 'Processing…'
+                          : 'Pay'}
+                      </button>
+                    ) : null}
+                  {invoice.paidAt ? (
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => void payInvoice(invoice)}
-                      style={{
-                        marginTop: 14,
-                        padding: '10px 20px',
-                        borderRadius: 8,
-                        border: 'none',
-                        background: busy ? '#94A3B8' : '#0F2A7A',
-                        color: '#fff',
-                        fontWeight: 600,
-                        fontSize: 14,
-                        cursor: busy ? 'default' : 'pointer',
-                        fontFamily: 'inherit',
-                      }}
+                      onClick={() => void hostApi.downloadMatchFeeReceipt(invoice.id)}
+                      style={matchFeeOutlineButtonStyle(busy)}
                     >
-                      {busy ? (stripeEnabled ? 'Redirecting…' : 'Processing…') : 'Pay'}
+                      Download receipt (PDF)
                     </button>
                   ) : null}
+                    {canRefund ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setRefundConfirmInvoice(invoice)}
+                        style={matchFeeOutlineButtonStyle(busy)}
+                      >
+                        Request refund
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               );
             })}
@@ -271,6 +334,15 @@ export default function HostInvoicesPage() {
         policy={policy}
         open={policyOpen}
         onClose={() => setPolicyOpen(false)}
+      />
+      <MatchFeeRefundConfirmModal
+        invoice={refundConfirmInvoice}
+        open={refundConfirmInvoice != null}
+        busy={refundingId != null}
+        onClose={() => {
+          if (!refundingId) setRefundConfirmInvoice(null);
+        }}
+        onConfirm={() => void confirmRefund()}
       />
     </DashLayout>
   );

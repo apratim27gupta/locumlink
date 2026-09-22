@@ -8,9 +8,6 @@ export class CancelMatchDto {
 }
 
 export class AdminResolveRefundDto {
-  @IsString()
-  resolution!: 'REFUND' | 'CREDIT';
-
   @IsOptional()
   @IsString()
   @MaxLength(2000)
@@ -42,7 +39,6 @@ export class AdminOverrideDto {
     | 'OVERDUE'
     | 'CANCELLED'
     | 'REFUNDED'
-    | 'CREDITED'
     | 'PENDING_REPLACEMENT';
 
   @IsString()

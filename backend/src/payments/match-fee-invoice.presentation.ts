@@ -18,7 +18,7 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
     status: 'PENDING',
     label: 'Pending payment',
     summary: 'Match confirmed; host has not paid yet and due date has not passed.',
-    hostObligation: 'Pay $250 by the policy due date (see due date on each row).',
+    hostObligation: 'Pay the invoiced match fee ($125 or $250) by the policy due date (see due date on each row).',
   },
   {
     status: 'OVERDUE',
@@ -30,30 +30,26 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
     status: 'PAID',
     label: 'Paid',
     summary: 'Platform match fee collected (mock or Stripe).',
-    hostObligation: 'None unless a eligible cancellation triggers refund review.',
+    hostObligation:
+      'None while the match stands. Refund to your payment method only if you cancel the posting or match more than 14 days before start (see policy).',
   },
   {
     status: 'PENDING_REPLACEMENT',
     label: 'Replacement pending',
     summary: 'Locum cancelled within 14 days of start after fee was paid; LocumLink seeks a replacement.',
-    hostObligation: 'Await replacement locum accept or admin outcome (refund/credit if none).',
+    hostObligation: 'Await replacement locum accept or admin refund if none.',
   },
   {
     status: 'REFUNDED',
     label: 'Refunded',
-    summary: 'Fee returned per cancellation policy or admin action.',
-    hostObligation: 'None.',
-  },
-  {
-    status: 'CREDITED',
-    label: 'Credit issued',
-    summary: 'Fee credited to host per policy or admin discretion.',
+    summary: 'Fee returned to the original payment method per policy or admin action.',
     hostObligation: 'None.',
   },
   {
     status: 'CANCELLED',
     label: 'Cancelled',
-    summary: 'No fee owed (e.g. cancelled before payment or early cancel while unpaid).',
+    summary:
+      'Invoice voided: no payment was collected (e.g. posting removed or match ended while the fee was still unpaid).',
     hostObligation: 'None.',
   },
 ];

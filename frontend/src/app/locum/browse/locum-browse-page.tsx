@@ -531,7 +531,12 @@ export default function LocumBrowsePage(props: {
   }
   async function submitApply(
     jobId: string,
-    opts: { availabilityKind: 'FULL' | 'PARTIAL'; availableDates: string[]; coverNote?: string },
+    opts: {
+      availabilityKind: 'FULL' | 'PARTIAL';
+      availableDates: string[];
+      shiftIds?: string[];
+      coverNote?: string;
+    },
   ) {
     setApplying(jobId);
     setApplyError('');
@@ -540,6 +545,7 @@ export default function LocumBrowsePage(props: {
         await locumApi.updateApplicationAvailability(editAppId, {
           availabilityKind: opts.availabilityKind,
           availableDates: opts.availableDates,
+          shiftIds: opts.shiftIds,
         });
       } else {
         await locumApi.applyToJob(jobId, opts);
@@ -661,6 +667,11 @@ export default function LocumBrowsePage(props: {
             initialDates={
               editAppId
                 ? myAppsByJobId.get(applyModalJob.id)?.availableDates ?? []
+                : []
+            }
+            initialShiftIds={
+              editAppId
+                ? myAppsByJobId.get(applyModalJob.id)?.requestedShiftIds ?? []
                 : []
             }
             onSubmit={(opts) => submitApply(applyModalJob.id, opts)}

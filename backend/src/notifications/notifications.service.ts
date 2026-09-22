@@ -1352,23 +1352,21 @@ export class NotificationsService {
     recipientId: string;
     recipientEmail: string;
     jobTitle: string;
-    resolution: 'REFUND' | 'CREDIT';
     invoiceId: string;
   }): Promise<void> {
-    const label = params.resolution === 'CREDIT' ? 'credit' : 'refund';
     await this.create({
       recipientId: params.recipientId,
       eventType: 'H_018_MATCH_FEE_REFUND',
-      title: `Match fee ${label} issued`,
-      body: `A ${label} was applied to your match fee for ${params.jobTitle}.`,
+      title: 'Match fee refund issued',
+      body: `Your match fee for ${params.jobTitle} was refunded to your original payment method.`,
       href: '/host/invoices',
       priority: 'MEDIUM',
       actionLabel: 'View Invoice',
       referenceId: params.invoiceId,
       referenceType: 'MatchFeeInvoice',
       emailTo: params.recipientEmail,
-      emailSubject: `Match fee ${label}: ${params.jobTitle}`,
-      emailBody: `LocumLink applied a ${label} to your match fee for ${params.jobTitle}.`,
+      emailSubject: `Match fee refund: ${params.jobTitle}`,
+      emailBody: `LocumLink refunded your match fee for ${params.jobTitle} to your original payment method.`,
     });
   }
 

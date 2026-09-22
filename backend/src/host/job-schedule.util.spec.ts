@@ -4,12 +4,17 @@ import {
   browseShiftStartActiveSql,
   parseJobDates,
   parseJobShifts,
+  parseJobShiftsSlots,
+  addClockHours,
+  computeMatchFeeAmountCents,
+  computeApplicationClaimedHours,
   clockTimeToDbTime,
   dbTimeToClockString,
   expandCalendarDateRange,
   getPostingRequiredDates,
   isPostingFullyCovered,
   finalizeAcceptDates,
+  finalizeAcceptShiftIds,
   availabilityAfterFinalize,
 } from './job-schedule.util';
 
@@ -109,11 +114,9 @@ describe('job-schedule.util', () => {
         '2999-06-18',
         '2999-06-20',
       ]);
-      // Last entry for 2999-06-20 wins.
       expect(result.shifts[1].startTime).toBe('11:00');
       expect(iso(result.startDate)).toBe('2999-06-18');
       expect(iso(result.endDate)).toBe('2999-06-20');
-      // Posting-level fallback = earliest day's start, latest day's end.
       expect(result.startTime).toBe('09:00');
       expect(result.endTime).toBe('15:00');
     });
@@ -140,6 +143,136 @@ describe('job-schedule.util', () => {
 
     it('rejects past dates unless allowPast is set', () => {
       expect(() => parseJobShifts([{ date: '2000-01-01' }])).toThrow();
+    });
+  });
+
+  describe('parseJobShiftsSlots', () => {
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+    it('computes end time from start + slot kind', () => {
+      expect(addClockHours('08:00', 3.5)).toBe('11:30');
+      expect(addClockHours('08:00', 7)).toBe('15:00');
+      const result = parseJobShiftsSlots(
+        [{ date: '2999-06-18', startTime: '08:00', slotKind: 'HALF' }],
+        { allowPast: true },
+      );
+      expect(result.shifts[0].endTime).toBe('11:30');
+      expect(result.shifts[0].slotKind).toBe('HALF');
+      expect(iso(result.startDate)).toBe('2999-06-18');
+    });
+
+    it('allows two half slots on one day and rejects full+half mix', () => {
+      const twoHalves = parseJobShiftsSlots(
+        [
+          { date: '2999-06-18', startTime: '08:00', slotKind: 'HALF' },
+          { date: '2999-06-18', startTime: '12:00', slotKind: 'HALF' },
+        ],
+        { allowPast: true },
+      );
+      expect(twoHalves.shifts).toHaveLength(2);
+      expect(() =>
+        parseJobShiftsSlots(
+          [
+            { date: '2999-06-18', startTime: '08:00', slotKind: 'FULL' },
+            { date: '2999-06-18', startTime: '12:00', slotKind: 'HALF' },
+          ],
+          { allowPast: true },
+        ),
+      ).toThrow(/not both/i);
+    });
+
+    it('rejects overlapping halves', () => {
+      expect(() =>
+        parseJobShiftsSlots(
+          [
+            { date: '2999-06-18', startTime: '08:00', slotKind: 'HALF' },
+            { date: '2999-06-18', startTime: '10:00', slotKind: 'HALF' },
+          ],
+          { allowPast: true },
+        ),
+      ).toThrow(/overlap/i);
+    });
+  });
+
+  describe('match fee hours', () => {
+    it('tiers at 3.5 hours', () => {
+      expect(computeMatchFeeAmountCents(0)).toBe(12500);
+      expect(computeMatchFeeAmountCents(3.5)).toBe(12500);
+      expect(computeMatchFeeAmountCents(3.51)).toBe(25000);
+      expect(computeMatchFeeAmountCents(7)).toBe(25000);
+    });
+
+    it('sums claimed hours for SLOTS and LEGACY', () => {
+      const slotsPosting = {
+        scheduleModel: 'SLOTS',
+        shifts: [
+          {
+            id: 's1',
+            date: utcDate('2999-06-01'),
+            shiftType: 'HALF_DAY',
+            startTime: '08:00',
+            endTime: '11:30',
+          },
+          {
+            id: 's2',
+            date: utcDate('2999-06-01'),
+            shiftType: 'HALF_DAY',
+            startTime: '12:00',
+            endTime: '15:30',
+          },
+        ],
+      };
+      expect(
+        computeApplicationClaimedHours(slotsPosting, {
+          shiftClaims: [{ shiftId: 's1' }],
+        }),
+      ).toBe(3.5);
+      expect(
+        computeApplicationClaimedHours(slotsPosting, {
+          shiftClaims: [{ shiftId: 's1' }, { shiftId: 's2' }],
+        }),
+      ).toBe(7);
+
+      const legacy = {
+        scheduleModel: 'LEGACY',
+        startTime: '08:00',
+        endTime: '11:30',
+        shifts: [{ date: utcDate('2999-06-01') }],
+      };
+      expect(
+        computeApplicationClaimedHours(legacy, {
+          availabilityKind: 'FULL',
+          availableDates: [],
+        }),
+      ).toBe(3.5);
+    });
+
+    it('covers SLOTS by shift ids', () => {
+      const posting = {
+        scheduleModel: 'SLOTS',
+        shifts: [
+          { id: 'a', date: utcDate('2999-06-01') },
+          { id: 'b', date: utcDate('2999-06-01') },
+        ],
+      };
+      expect(
+        isPostingFullyCovered(posting, [
+          { shiftClaims: [{ shiftId: 'a' }] },
+        ]),
+      ).toBe(false);
+      expect(
+        isPostingFullyCovered(posting, [
+          { shiftClaims: [{ shiftId: 'a' }] },
+          { shiftClaims: [{ shiftId: 'b' }] },
+        ]),
+      ).toBe(true);
+      expect(
+        finalizeAcceptShiftIds(
+          { requestedShiftIds: ['a', 'b'] },
+          posting,
+          [{ shiftClaims: [{ shiftId: 'a' }] }],
+        ),
+      ).toEqual(['b']);
     });
   });
 

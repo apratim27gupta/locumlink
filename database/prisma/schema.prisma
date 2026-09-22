@@ -48,10 +48,17 @@ enum Specialty {
 
 enum ShiftType {
   FULL_DAY
+  HALF_DAY
   HALF_DAY_AM
   HALF_DAY_PM
   OVERNIGHT
   WEEKEND
+}
+
+/** LEGACY = free-form start/end times; SLOTS = half (3.5h) / full (7h) with computed end. */
+enum ScheduleModel {
+  LEGACY
+  SLOTS
 }
 
 enum PostingStatus {
@@ -148,6 +155,29 @@ enum MatchFeeReplacementStatus {
 enum MatchFeePaymentProvider {
   MOCK
   STRIPE
+}
+
+enum MatchFeeInvoiceEventType {
+  INVOICED
+  PAID
+  OVERDUE
+  PAYMENT_REMINDER
+  CANCELLED
+  REPLACEMENT_SEARCHING
+  REPLACEMENT_FOUND
+  REPLACEMENT_NOT_FOUND
+  REFUNDED
+  ESCALATED
+  ADMIN_NOTE
+  POSTING_REMOVED
+  FEE_NON_REFUNDABLE
+}
+
+enum MatchFeeInvoiceEventActor {
+  SYSTEM
+  HOST
+  LOCUM
+  ADMIN
 }
 
 model User {
@@ -323,6 +353,9 @@ model JobPosting {
   // RANGES (multiple date ranges). Null/absent = a single continuous range.
   scheduleType        String?       @map("schedule_type")
 
+  // LEGACY keeps free-form times on existing postings; new posts use SLOTS.
+  scheduleModel       ScheduleModel @default(LEGACY) @map("schedule_model")
+
   dailyRateGP         Decimal       @default(1200.00) @db.Decimal(10, 2)
   dailyRateSpecialist Decimal       @default(1600.00) @db.Decimal(10, 2)
 
@@ -380,7 +413,25 @@ model Shift {
 
   createdAt    DateTime   @default(now())
 
+  claims       ApplicationShiftClaim[]
+
   @@map("shifts")
+}
+
+/** Locum claim of a specific shift row (SLOTS postings; first-accept wins per shift). */
+model ApplicationShiftClaim {
+  id            String      @id @default(cuid())
+  applicationId String      @map("application_id")
+  shiftId       String      @map("shift_id")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  shift       Shift       @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, shiftId])
+  @@unique([shiftId])
+  @@index([applicationId])
+  @@map("application_shift_claims")
 }
 
 model Application {
@@ -399,6 +450,8 @@ model Application {
   // as covering every posting day by the coverage logic.
   availabilityKind String?          @map("availability_kind")
   availableDates   String[]         @default([]) @map("available_dates")
+  /** SLOTS: shift IDs the locum requested before accept (finalized into shiftClaims). */
+  requestedShiftIds String[]        @default([]) @map("requested_shift_ids")
 
   appliedAt       DateTime          @default(now())
   statusChangedAt DateTime          @updatedAt
@@ -408,6 +461,7 @@ model Application {
   placedAt        DateTime?         @map("placed_at")
 
   matchFeeInvoice MatchFeeInvoice?
+  shiftClaims     ApplicationShiftClaim[]
 
   @@unique([jobPostingId, locumProfileId])
   @@index([jobPostingId, id], map: "applications_job_posting_id_id_idx")
@@ -692,6 +746,10 @@ model MatchFeeInvoice {
   hostProfileId      String                    @map("host_profile_id")
   jobPostingId       String                    @map("job_posting_id")
   amountCents        Int                       @default(25000) @map("amount_cents")
+  /** Snapshot of claimed hours used to pick the tier at invoice time. */
+  claimedHours       Decimal?                  @map("claimed_hours") @db.Decimal(6, 2)
+  /** HALF = $125 tier (<=3.5h); FULL = $250 tier (>3.5h). */
+  matchFeeTier       String?                   @map("match_fee_tier")
   currency           String                    @default("CAD")
   status             MatchFeeInvoiceStatus     @default(PENDING)
   dueAt              DateTime                  @map("due_at")
@@ -707,6 +765,7 @@ model MatchFeeInvoice {
   paymentProvider    MatchFeePaymentProvider   @default(MOCK) @map("payment_provider")
   stripeCheckoutSessionId String?              @map("stripe_checkout_session_id")
   stripePaymentIntentId   String?              @map("stripe_payment_intent_id")
+  stripeRefundId          String?              @map("stripe_refund_id")
   lastReminderAt     DateTime?                 @map("last_reminder_at")
   createdAt          DateTime                  @default(now()) @map("created_at")
   updatedAt          DateTime                  @updatedAt @map("updated_at")
@@ -714,9 +773,24 @@ model MatchFeeInvoice {
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   hostProfile HostProfile @relation(fields: [hostProfileId], references: [id], onDelete: Cascade)
   jobPosting  JobPosting  @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  events      MatchFeeInvoiceEvent[]
 
   @@index([hostProfileId, status])
   @@index([status, dueAt])
   @@index([escalatedAt])
   @@map("match_fee_invoices")
+}
+
+model MatchFeeInvoiceEvent {
+  id         String                    @id @default(cuid())
+  invoiceId  String                    @map("invoice_id")
+  eventType  MatchFeeInvoiceEventType  @map("event_type")
+  actor      MatchFeeInvoiceEventActor @default(SYSTEM)
+  detail     String?                   @db.Text
+  occurredAt DateTime                  @default(now()) @map("occurred_at")
+
+  invoice MatchFeeInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, occurredAt])
+  @@map("match_fee_invoice_events")
 }

@@ -8,10 +8,15 @@ export type MatchFeePolicyContent = {
   locumFee: string;
   hostPostingFee: string;
   matchFeeAmountCad: number;
+  matchFeeHalfCad?: number;
+  matchFeeFullCad?: number;
+  /** Preferred: short bullets under Match fee. */
+  matchFeePoints?: string[];
   matchFeeDescription: string;
+  perPostFeeRule?: string;
+  perLocumFeeRule?: string;
   dueRule: string;
   clinicalPayNote: string;
-  futurePaymentMethods: string;
   cancellationRules: Array<{ id: string; summary: string }>;
   paymentMethods?: { enabled: boolean; mockEnabled: boolean };
 };
@@ -21,50 +26,67 @@ type MatchFeePolicyBodyProps = {
   listStyle?: CSSProperties;
 };
 
+const bulletListStyle = (extra?: CSSProperties): CSSProperties => ({
+  margin: '0 0 16px',
+  paddingLeft: 22,
+  fontSize: 14,
+  color: '#4B5563',
+  lineHeight: 1.55,
+  listStyleType: 'disc',
+  listStylePosition: 'outside',
+  ...extra,
+});
+
 export function MatchFeePolicyBody({ policy, listStyle }: MatchFeePolicyBodyProps) {
+  const matchFeeItems =
+    policy.matchFeePoints && policy.matchFeePoints.length > 0
+      ? policy.matchFeePoints
+      : [policy.matchFeeDescription];
+
   return (
     <>
-      <p style={{ margin: '0 0 12px', fontSize: 14, color: '#374151', lineHeight: 1.5 }}>
+      <p style={{ margin: '0 0 14px', fontSize: 14, color: '#374151', lineHeight: 1.5 }}>
         {policy.emphasis}
       </p>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 8 }}>
+
+      <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 8 }}>
         Match fee
       </div>
-      <ul
-        style={{
-          margin: '0 0 16px',
-          paddingLeft: 20,
-          fontSize: 14,
-          color: '#4B5563',
-          lineHeight: 1.55,
-          ...listStyle,
-        }}
-      >
-        <li>{policy.matchFeeDescription}</li>
-        <li>{policy.dueRule}</li>
-        <li>{policy.clinicalPayNote}</li>
-        {policy.role === 'HOST' ? <li>{policy.futurePaymentMethods}</li> : null}
+      <ul style={bulletListStyle(listStyle)}>
+        {matchFeeItems.map((item) => (
+          <li key={item} style={{ marginBottom: 6 }}>
+            {item}
+          </li>
+        ))}
+        {policy.role === 'HOST' && (policy.perLocumFeeRule || policy.perPostFeeRule) ? (
+          <li style={{ marginBottom: 6 }}>
+            {policy.perLocumFeeRule ?? policy.perPostFeeRule}
+          </li>
+        ) : null}
+        <li style={{ marginBottom: 6 }}>{policy.dueRule}</li>
+        <li style={{ marginBottom: 6 }}>{policy.clinicalPayNote}</li>
         {policy.role === 'LOCUM' ? (
-          <li>LocumLink is free for locums. You are never charged the platform match fee.</li>
+          <li style={{ marginBottom: 6 }}>
+            LocumLink is free for locums. You are never charged the platform match fee.
+          </li>
         ) : null}
       </ul>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 8 }}>
+
+      <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 8 }}>
         Cancellation
       </div>
-      <ul
+      <ol
         style={{
-          margin: 0,
-          paddingLeft: 20,
-          fontSize: 14,
-          color: '#4B5563',
-          lineHeight: 1.55,
-          ...listStyle,
+          ...bulletListStyle({ margin: 0, ...listStyle }),
+          listStyleType: 'decimal',
         }}
       >
         {policy.cancellationRules.map((rule) => (
-          <li key={rule.id}>{rule.summary}</li>
+          <li key={rule.id} style={{ marginBottom: 8 }}>
+            {rule.summary}
+          </li>
         ))}
-      </ul>
+      </ol>
     </>
   );
 }
@@ -170,6 +192,94 @@ export default function MatchFeePolicy({
   );
 }
 
+const HOST_REFUND_MIN_DAYS_BEFORE_START = 15; // policy: more than 14 days before start
+
+/** Host may cancel match and receive a fee refund (paid invoice, outside late window). */
+export function hostMatchFeeRefundEligible(invoice: {
+  paidAt: string | null;
+  status: string;
+  daysUntilStart: number | null;
+}): boolean {
+  if (!invoice.paidAt) return false;
+  if (invoice.status !== 'PAID') return false;
+  if (invoice.daysUntilStart == null) return false;
+  return invoice.daysUntilStart >= HOST_REFUND_MIN_DAYS_BEFORE_START;
+}
+
+/**
+ * Admin "Refund to payment method" is only for early-cancel leftovers after:
+ * - locum withdraws, or
+ * - host deletes the posting
+ * and only when more than 14 days before start.
+ * Late locum cancel → use "No replacement". Host late cancel → non-refundable.
+ */
+export function adminMatchFeeRefundEligibility(invoice: {
+  status: string;
+  daysUntilStart: number | null;
+  cancelledBy?: string | null;
+  cancellationReason?: string | null;
+  events?: Array<{ eventType: string }> | null;
+}): { allowed: boolean; reason: string } {
+  if (invoice.status === 'PENDING_REPLACEMENT') {
+    return {
+      allowed: false,
+      reason:
+        'Locum cancelled within 14 days of start. Per policy, try to find a replacement first. Use "No replacement" to refund the host if none is found.',
+    };
+  }
+  if (invoice.status !== 'PAID') {
+    return {
+      allowed: false,
+      reason: 'Refund applies only to a paid invoice after an eligible cancellation.',
+    };
+  }
+
+  const postingRemoved = (invoice.events ?? []).some(
+    (e) => e.eventType === 'POSTING_REMOVED',
+  );
+  const reason = (invoice.cancellationReason ?? '').toLowerCase();
+  const hostDeletedPost =
+    postingRemoved ||
+    (invoice.cancelledBy === 'HOST' &&
+      (reason.includes('job posting removed') ||
+        reason.includes('posting removed') ||
+        reason.includes('removed the job')));
+  const locumWithdrew = invoice.cancelledBy === 'LOCUM';
+
+  if (!locumWithdrew && !hostDeletedPost) {
+    return {
+      allowed: false,
+      reason:
+        'Refund is only available after a locum withdraws or the host deletes the posting (and more than 14 days before start).',
+    };
+  }
+
+  if (
+    invoice.daysUntilStart == null ||
+    invoice.daysUntilStart < HOST_REFUND_MIN_DAYS_BEFORE_START
+  ) {
+    if (locumWithdrew) {
+      return {
+        allowed: false,
+        reason:
+          'Locum cancelled within 14 days of start. Use the replacement search flow; refund only if no replacement is found.',
+      };
+    }
+    return {
+      allowed: false,
+      reason:
+        'Host cancelled within 14 days of start - the match fee is non-refundable if already paid.',
+    };
+  }
+
+  return {
+    allowed: true,
+    reason: locumWithdrew
+      ? 'Locum withdrew more than 14 days before start - a paid match fee may be refunded.'
+      : 'Host deleted the posting more than 14 days before start - a paid match fee may be refunded.',
+  };
+}
+
 export function matchFeeStatusLabel(status: string): string {
   switch (status) {
     case 'PENDING':
@@ -183,7 +293,7 @@ export function matchFeeStatusLabel(status: string): string {
     case 'REFUNDED':
       return 'Refunded';
     case 'CREDITED':
-      return 'Credit issued';
+      return 'Legacy credit';
     case 'PENDING_REPLACEMENT':
       return 'Replacement pending';
     default:

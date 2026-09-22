@@ -10,7 +10,8 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-// One individually chosen day with its own optional start/end time.
+// One individually chosen day with its own optional start/end time (LEGACY),
+// or startTime + slotKind for SLOTS (endTime computed server-side).
 export class JobShiftDto {
   @IsString()
   date!: string;
@@ -22,6 +23,11 @@ export class JobShiftDto {
   @IsString()
   @IsOptional()
   endTime?: string;
+
+  /** SLOTS only: HALF (3.5h) or FULL (7h). End time is computed. */
+  @IsOptional()
+  @IsIn(['HALF', 'FULL'])
+  slotKind?: 'HALF' | 'FULL';
 }
 
 // PRD Section 2.2: leave types required on every job posting

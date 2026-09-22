@@ -45,24 +45,90 @@ import {
   isPostingFullyCovered,
   parseJobDates,
   parseJobShifts,
+  parseJobShiftsSlots,
   postingStatusAfterLocumAccept,
+  slotHoursFromShiftType,
   type ParsedJobShift,
+  type SlotKind,
 } from './job-schedule.util.js';
 import { getReviewPlaygroundEmails, isReviewPlaygroundEmail } from '../config/review-playground.util.js';
 import { PaymentsService } from '../payments/payments.service.js';
 
 export type ApiJobShift = {
+  id?: string;
   date: string;
   startTime: string | null;
   endTime: string | null;
+  shiftType?: string | null;
+  slotKind?: SlotKind | null;
+  hours?: number | null;
 };
+
+function slotKindFromShiftType(
+  shiftType: string | null | undefined,
+): SlotKind | null {
+  if (shiftType === 'HALF_DAY' || shiftType === 'HALF_DAY_AM' || shiftType === 'HALF_DAY_PM') {
+    return 'HALF';
+  }
+  if (shiftType === 'FULL_DAY') return 'FULL';
+  return null;
+}
+
+function shiftsUseSlotKind(
+  shifts: { slotKind?: string | null }[] | undefined,
+): boolean {
+  return (
+    Array.isArray(shifts) &&
+    shifts.length > 0 &&
+    shifts.every((s) => s.slotKind === 'HALF' || s.slotKind === 'FULL')
+  );
+}
+
+/** Infer HALF/FULL from duration when editing SLOTS without explicit slotKind. */
+function coerceShiftsWithSlotKind(
+  shifts: {
+    date: string;
+    startTime?: string | null;
+    endTime?: string | null;
+    slotKind?: 'HALF' | 'FULL' | null;
+  }[],
+): { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] {
+  return shifts.map((s) => {
+    if (s.slotKind === 'HALF' || s.slotKind === 'FULL') {
+      return {
+        date: s.date,
+        startTime: s.startTime?.trim() || '08:00',
+        slotKind: s.slotKind,
+      };
+    }
+    const start = s.startTime?.trim() || '08:00';
+    const end = s.endTime?.trim();
+    let kind: 'HALF' | 'FULL' = 'FULL';
+    if (end) {
+      const a = start.split(':').map(Number);
+      const b = end.split(':').map(Number);
+      if (a.length >= 2 && b.length >= 2) {
+        const mins = b[0] * 60 + b[1] - (a[0] * 60 + a[1]);
+        if (mins > 0 && mins <= 4 * 60) kind = 'HALF';
+      }
+    }
+    return { date: s.date, startTime: start, slotKind: kind };
+  });
+}
 
 function mapJobPostingForApi<T extends {
   startDate?: Date | null;
   endDate?: Date | null;
   servicesRequired?: string[];
   clinicDesc?: string | null;
-  shifts?: { date: Date; startTime?: Date | null; endTime?: Date | null }[];
+  scheduleModel?: string | null;
+  shifts?: {
+    id?: string;
+    date: Date;
+    shiftType?: string | null;
+    startTime?: Date | null;
+    endTime?: Date | null;
+  }[];
 }>(
   job: T,
 ): Omit<T, 'shifts'> & {
@@ -73,19 +139,31 @@ function mapJobPostingForApi<T extends {
   shifts: ApiJobShift[];
 } {
   const apiShifts: ApiJobShift[] = (job.shifts ?? [])
-    .map((s) => ({
-      date: formatCalendarDateForApi(s.date),
-      startTime: dbTimeToClockString(s.startTime ?? null),
-      endTime: dbTimeToClockString(s.endTime ?? null),
-    }))
-    .filter((s): s is ApiJobShift => s.date != null)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .map((s) => {
+      const date = formatCalendarDateForApi(s.date);
+      const slotKind = slotKindFromShiftType(s.shiftType);
+      return {
+        id: s.id,
+        date,
+        startTime: dbTimeToClockString(s.startTime ?? null),
+        endTime: dbTimeToClockString(s.endTime ?? null),
+        shiftType: s.shiftType ?? null,
+        slotKind,
+        hours: s.shiftType ? slotHoursFromShiftType(s.shiftType) : null,
+      };
+    })
+    .filter((s): s is ApiJobShift & { date: string } => s.date != null)
+    .sort((a, b) => {
+      const d = a.date.localeCompare(b.date);
+      if (d !== 0) return d;
+      return (a.startTime ?? '').localeCompare(b.startTime ?? '');
+    });
   return {
     ...job,
     startDate: formatCalendarDateForApi(job.startDate ?? null),
     endDate: formatCalendarDateForApi(job.endDate ?? null),
     amenities: job.servicesRequired ?? [],
-    dates: apiShifts.map((s) => s.date),
+    dates: [...new Set(apiShifts.map((s) => s.date))],
     shifts: apiShifts,
   };
 }
@@ -97,9 +175,17 @@ function shiftTypeFromFullHalfDay(value: string | null | undefined): ShiftType {
       return ShiftType.HALF_DAY_AM;
     case 'HALF_DAY_PM':
       return ShiftType.HALF_DAY_PM;
+    case 'HALF_DAY':
+      return ShiftType.HALF_DAY;
     default:
       return ShiftType.FULL_DAY;
   }
+}
+
+function shiftTypeFromParsed(s: ParsedJobShift, fullHalfDay?: string | null): ShiftType {
+  if (s.shiftType === 'HALF_DAY') return ShiftType.HALF_DAY;
+  if (s.shiftType === 'FULL_DAY') return ShiftType.FULL_DAY;
+  return shiftTypeFromFullHalfDay(fullHalfDay);
 }
 
 export type HostProfileApi = {
@@ -585,20 +671,39 @@ export class HostService {
           : PostingStatus.DRAFT;
 
     // Schedule can arrive three ways (most specific wins): per-day `shifts`
-    // (each with its own time), plain `dates` (shared job-level time), or the
+    // (each with its own time / slotKind), plain `dates` (shared job-level time), or the
     // classic start/end `range`. Individual days drive the derived span; the
     // posting-level startTime/endTime stays populated as the fallback that
     // reminders, browse filters and emails still read.
+    // New posts default to SLOTS when shifts include slotKind; otherwise LEGACY.
     let parsedShifts: ParsedJobShift[] | null = null;
     let schedule: { startDate?: Date; endDate?: Date };
     let scheduleStartTime: string | null = dto.startTime ?? null;
     let scheduleEndTime: string | null = dto.endTime ?? null;
+    let scheduleModel: 'LEGACY' | 'SLOTS' = 'SLOTS';
     if (Array.isArray(dto.shifts) && dto.shifts.length > 0) {
-      const parsed = parseJobShifts(dto.shifts, { allowPast: saveAsDraft });
-      parsedShifts = parsed.shifts;
-      schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
-      scheduleStartTime = parsed.startTime ?? dto.startTime ?? null;
-      scheduleEndTime = parsed.endTime ?? dto.endTime ?? null;
+      if (shiftsUseSlotKind(dto.shifts)) {
+        const parsed = parseJobShiftsSlots(
+          dto.shifts.map((s) => ({
+            date: s.date,
+            startTime: s.startTime ?? '',
+            slotKind: s.slotKind as 'HALF' | 'FULL',
+          })),
+          { allowPast: saveAsDraft },
+        );
+        parsedShifts = parsed.shifts;
+        schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
+        scheduleStartTime = parsed.startTime ?? dto.startTime ?? null;
+        scheduleEndTime = parsed.endTime ?? dto.endTime ?? null;
+        scheduleModel = 'SLOTS';
+      } else {
+        const parsed = parseJobShifts(dto.shifts, { allowPast: saveAsDraft });
+        parsedShifts = parsed.shifts;
+        schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
+        scheduleStartTime = parsed.startTime ?? dto.startTime ?? null;
+        scheduleEndTime = parsed.endTime ?? dto.endTime ?? null;
+        scheduleModel = 'LEGACY';
+      }
     } else if (Array.isArray(dto.dates) && dto.dates.length > 0) {
       const parsed = parseJobDates(dto.dates, { allowPast: saveAsDraft });
       parsedShifts = parsed.dates.map((date) => ({
@@ -607,6 +712,7 @@ export class HostService {
         endTime: null,
       }));
       schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
+      scheduleModel = 'LEGACY';
     } else {
       schedule = assertJobScheduleAcceptable({
         startDate: dto.startDate,
@@ -615,6 +721,7 @@ export class HostService {
         endTime: dto.endTime,
         allowPast: saveAsDraft,
       });
+      scheduleModel = 'LEGACY';
     }
 
     const amenitiesFromDto =
@@ -678,12 +785,13 @@ export class HostService {
         leaveType: dto.leaveType ?? null,
         fullHalfDay: dto.fullHalfDay ?? null,
         scheduleType: parsedShifts ? (dto.scheduleType ?? 'DATES') : null,
+        scheduleModel,
         ...(parsedShifts
           ? {
               shifts: {
                 create: parsedShifts.map((s) => ({
                   date: s.date,
-                  shiftType: shiftTypeFromFullHalfDay(dto.fullHalfDay),
+                  shiftType: shiftTypeFromParsed(s, dto.fullHalfDay),
                   startTime: clockTimeToDbTime(s.startTime),
                   endTime: clockTimeToDbTime(s.endTime),
                 })),
@@ -724,7 +832,8 @@ export class HostService {
         status: true,
         startDate: true,
         endDate: true,
-        shifts: { select: { date: true } },
+        scheduleModel: true,
+        shifts: { select: { id: true, date: true } },
         applications: {
           where: {
             OR: [
@@ -732,7 +841,12 @@ export class HostService {
               { locumAcceptedAt: { not: null } },
             ],
           },
-          select: { availabilityKind: true, availableDates: true },
+          select: {
+            availabilityKind: true,
+            availableDates: true,
+            requestedShiftIds: true,
+            shiftClaims: { select: { shiftId: true } },
+          },
         },
       },
     });
@@ -743,7 +857,7 @@ export class HostService {
     const toReopen: string[] = [];
 
     for (const j of jobs) {
-      // A posting is filled only when accepted locums cover every day.
+      // A posting is filled only when accepted locums cover every day/shift.
       const fullyCovered = isPostingFullyCovered(j, j.applications);
       if (fullyCovered) {
         const next = postingStatusAfterLocumAccept(j.startDate, j.endDate);
@@ -933,17 +1047,49 @@ export class HostService {
     const allowPastEdit =
       !publishingActive && job.status === PostingStatus.DRAFT;
     // Same precedence as createJob: per-day `shifts` > plain `dates` > range.
+    // LEGACY postings keep free-form times; SLOTS postings require slotKind.
+    const existingModel =
+      (job as { scheduleModel?: string }).scheduleModel === 'SLOTS'
+        ? 'SLOTS'
+        : 'LEGACY';
     let parsedShifts: ParsedJobShift[] | null = null;
     let schedule: { startDate?: Date; endDate?: Date };
     let scheduleStartTime: string | null | undefined = dto.startTime;
     let scheduleEndTime: string | null | undefined = dto.endTime;
+    let scheduleModelUpdate: 'LEGACY' | 'SLOTS' | undefined;
     if (Array.isArray(dto.shifts) && dto.shifts.length > 0) {
-      const parsed = parseJobShifts(dto.shifts, { allowPast: allowPastEdit });
-      parsedShifts = parsed.shifts;
-      schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
-      scheduleStartTime = parsed.startTime ?? dto.startTime ?? null;
-      scheduleEndTime = parsed.endTime ?? dto.endTime ?? null;
+      const useSlots =
+        existingModel === 'SLOTS' || shiftsUseSlotKind(dto.shifts);
+      if (useSlots) {
+        const slotShifts = shiftsUseSlotKind(dto.shifts)
+          ? dto.shifts.map((s) => ({
+              date: s.date,
+              startTime: s.startTime ?? '',
+              slotKind: s.slotKind as 'HALF' | 'FULL',
+            }))
+          : coerceShiftsWithSlotKind(dto.shifts);
+        const parsed = parseJobShiftsSlots(slotShifts, {
+          allowPast: allowPastEdit,
+        });
+        parsedShifts = parsed.shifts;
+        schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
+        scheduleStartTime = parsed.startTime ?? dto.startTime ?? null;
+        scheduleEndTime = parsed.endTime ?? dto.endTime ?? null;
+        scheduleModelUpdate = 'SLOTS';
+      } else {
+        const parsed = parseJobShifts(dto.shifts, { allowPast: allowPastEdit });
+        parsedShifts = parsed.shifts;
+        schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
+        scheduleStartTime = parsed.startTime ?? dto.startTime ?? null;
+        scheduleEndTime = parsed.endTime ?? dto.endTime ?? null;
+        scheduleModelUpdate = 'LEGACY';
+      }
     } else if (Array.isArray(dto.dates) && dto.dates.length > 0) {
+      if (existingModel === 'SLOTS') {
+        throw new BadRequestException(
+          'SLOTS postings must be updated with shifts that include slotKind.',
+        );
+      }
       const parsed = parseJobDates(dto.dates, { allowPast: allowPastEdit });
       parsedShifts = parsed.dates.map((date) => ({
         date,
@@ -952,6 +1098,11 @@ export class HostService {
       }));
       schedule = { startDate: parsed.startDate, endDate: parsed.endDate };
     } else if (dto.startDate != null || dto.endDate != null) {
+      if (existingModel === 'SLOTS') {
+        throw new BadRequestException(
+          'SLOTS postings must be updated with shifts that include slotKind.',
+        );
+      }
       schedule = assertJobScheduleAcceptable({
         startDate: dto.startDate,
         endDate: dto.endDate,
@@ -1017,6 +1168,7 @@ export class HostService {
         // PRD Section 2.2: allow updating leave type + full/half day
         ...(dto.leaveType != null && { leaveType: dto.leaveType }),
         ...(dto.fullHalfDay != null && { fullHalfDay: dto.fullHalfDay }),
+        ...(scheduleModelUpdate != null && { scheduleModel: scheduleModelUpdate }),
         // Replace the chosen days wholesale when a new set is supplied; when the
         // host switches back to a single continuous range, clear any old shifts.
         ...(parsedShifts
@@ -1026,7 +1178,8 @@ export class HostService {
                 deleteMany: {},
                 create: parsedShifts.map((s) => ({
                   date: s.date,
-                  shiftType: shiftTypeFromFullHalfDay(
+                  shiftType: shiftTypeFromParsed(
+                    s,
                     dto.fullHalfDay ?? job.fullHalfDay,
                   ),
                   startTime: clockTimeToDbTime(s.startTime),
@@ -1239,6 +1392,8 @@ export class HostService {
           coverNote: true,
           availabilityKind: true,
           availableDates: true,
+          requestedShiftIds: true,
+          shiftClaims: { select: { shiftId: true } },
           locumProfile: {
             select: {
               id: true,
@@ -1512,7 +1667,8 @@ export class HostService {
         status: true,
         startDate: true,
         endDate: true,
-        shifts: { select: { date: true } },
+        scheduleModel: true,
+        shifts: { select: { id: true, date: true } },
         applications: {
           where: {
             OR: [
@@ -1520,7 +1676,12 @@ export class HostService {
               { locumAcceptedAt: { not: null } },
             ],
           },
-          select: { availabilityKind: true, availableDates: true },
+          select: {
+            availabilityKind: true,
+            availableDates: true,
+            requestedShiftIds: true,
+            shiftClaims: { select: { shiftId: true } },
+          },
         },
       },
     });
@@ -1579,6 +1740,7 @@ export class HostService {
         applicationId,
         cancelledBy: 'HOST',
         reason,
+        context: 'MATCH_CANCEL',
       });
     } catch {}
 

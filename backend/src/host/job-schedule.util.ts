@@ -1,5 +1,20 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import {
+  HALF_SLOT_HOURS,
+  FULL_SLOT_HOURS,
+  MAX_HOURS_PER_DAY,
+  computeMatchFeeAmountCents,
+  matchFeeTierFromHours,
+} from '../payments/match-fee.constants.js';
+
+export {
+  HALF_SLOT_HOURS,
+  FULL_SLOT_HOURS,
+  MAX_HOURS_PER_DAY,
+  computeMatchFeeAmountCents,
+  matchFeeTierFromHours,
+};
 
 const DEFAULT_PLATFORM_TIMEZONE = 'America/Halifax';
 
@@ -233,11 +248,71 @@ export type JobShiftInput = {
   endTime?: string | null;
 };
 
+export type SlotKind = 'HALF' | 'FULL';
+
+export type JobSlotShiftInput = {
+  date: string;
+  startTime: string;
+  slotKind: SlotKind;
+};
+
 export type ParsedJobShift = {
   date: Date;
   startTime: string | null;
   endTime: string | null;
+  /** Present for SLOTS postings. */
+  shiftType?: 'HALF_DAY' | 'FULL_DAY';
+  slotKind?: SlotKind;
+  hours?: number;
 };
+
+/** Add fractional hours to HH:mm; clamps to same calendar day (max 23:59). */
+export function addClockHours(startHm: string, hours: number): string {
+  const tm = parseClockTimeHm(startHm);
+  if (!tm) {
+    throw new BadRequestException('Invalid start time.');
+  }
+  const totalMinutes = Math.round(tm.hours * 60 + tm.minutes + hours * 60);
+  if (totalMinutes < 0) {
+    throw new BadRequestException('Computed end time is invalid.');
+  }
+  if (totalMinutes > 23 * 60 + 59) {
+    throw new BadRequestException(
+      'Slot end time must fall on the same calendar day. Choose an earlier start time.',
+    );
+  }
+  const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+  const mm = String(totalMinutes % 60).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+/** Hours for a ShiftType used on SLOTS rows (and legacy AM/PM half aliases). */
+export function slotHoursFromShiftType(
+  shiftType: string | null | undefined,
+): number {
+  switch (shiftType) {
+    case 'HALF_DAY':
+    case 'HALF_DAY_AM':
+    case 'HALF_DAY_PM':
+      return HALF_SLOT_HOURS;
+    case 'FULL_DAY':
+    default:
+      return FULL_SLOT_HOURS;
+  }
+}
+
+export function hoursBetweenClockTimes(
+  startHm: string | null | undefined,
+  endHm: string | null | undefined,
+): number | null {
+  const a = parseClockTimeHm(startHm);
+  const b = parseClockTimeHm(endHm);
+  if (!a || !b) return null;
+  const startM = a.hours * 60 + a.minutes;
+  const endM = b.hours * 60 + b.minutes;
+  if (endM <= startM) return null;
+  return (endM - startM) / 60;
+}
 
 /**
  * Validate a set of individually chosen shifts, each with its own optional
@@ -312,6 +387,154 @@ export function parseJobShifts(
   };
 }
 
+/**
+ * Validate SLOTS schedule: per day either 1 full (7h) or 1–2 halves (3.5h each),
+ * total <= 7h. End time is computed from start + slot kind.
+ */
+export function parseJobShiftsSlots(
+  shifts: JobSlotShiftInput[],
+  opts: { allowPast?: boolean } = {},
+): {
+  shifts: ParsedJobShift[];
+  startDate: Date;
+  endDate: Date;
+  startTime: string | null;
+  endTime: string | null;
+} {
+  if (!Array.isArray(shifts) || shifts.length === 0) {
+    throw new BadRequestException('At least one date is required.');
+  }
+
+  type DaySlot = {
+    cal: string;
+    date: Date;
+    startTime: string;
+    slotKind: SlotKind;
+    hours: number;
+    endTime: string;
+    shiftType: 'HALF_DAY' | 'FULL_DAY';
+  };
+
+  const byDay = new Map<string, DaySlot[]>();
+
+  for (const raw of shifts) {
+    const cal = extractCalendarDatePart(raw?.date);
+    if (!cal) {
+      throw new BadRequestException('Invalid date format.');
+    }
+    const startTime = raw.startTime?.trim() ?? '';
+    if (!parseClockTimeHm(startTime)) {
+      throw new BadRequestException('Start time is required for each slot.');
+    }
+    const kind = (raw.slotKind ?? '').toString().toUpperCase();
+    if (kind !== 'HALF' && kind !== 'FULL') {
+      throw new BadRequestException('Each slot must be HALF or FULL.');
+    }
+    const slotKind = kind as SlotKind;
+    const hours = slotKind === 'HALF' ? HALF_SLOT_HOURS : FULL_SLOT_HOURS;
+    const endTime = addClockHours(startTime, hours);
+    const entry: DaySlot = {
+      cal,
+      date: parseCalendarDateForDb(cal),
+      startTime,
+      slotKind,
+      hours,
+      endTime,
+      shiftType: slotKind === 'HALF' ? 'HALF_DAY' : 'FULL_DAY',
+    };
+    const list = byDay.get(cal) ?? [];
+    list.push(entry);
+    byDay.set(cal, list);
+  }
+
+  for (const [cal, daySlots] of byDay) {
+    const halfCount = daySlots.filter((s) => s.slotKind === 'HALF').length;
+    const fullCount = daySlots.filter((s) => s.slotKind === 'FULL').length;
+    if (fullCount > 0 && halfCount > 0) {
+      throw new BadRequestException(
+        `Day ${cal}: use either one full-day slot or half-day slots, not both.`,
+      );
+    }
+    if (fullCount > 1) {
+      throw new BadRequestException(
+        `Day ${cal}: only one full-day slot is allowed.`,
+      );
+    }
+    if (halfCount > 2) {
+      throw new BadRequestException(
+        `Day ${cal}: at most two half-day slots are allowed.`,
+      );
+    }
+    if (fullCount === 0 && halfCount === 0) {
+      throw new BadRequestException(`Day ${cal}: at least one slot is required.`);
+    }
+    const totalHours = daySlots.reduce((sum, s) => sum + s.hours, 0);
+    if (totalHours > MAX_HOURS_PER_DAY + 1e-9) {
+      throw new BadRequestException(
+        `Day ${cal}: total hours cannot exceed ${MAX_HOURS_PER_DAY}.`,
+      );
+    }
+    // Overlap check within the day.
+    const intervals = daySlots
+      .map((s) => {
+        const a = parseClockTimeHm(s.startTime)!;
+        const b = parseClockTimeHm(s.endTime)!;
+        return {
+          start: a.hours * 60 + a.minutes,
+          end: b.hours * 60 + b.minutes,
+        };
+      })
+      .sort((x, y) => x.start - y.start);
+    for (let i = 1; i < intervals.length; i++) {
+      if (intervals[i].start < intervals[i - 1].end) {
+        throw new BadRequestException(
+          `Day ${cal}: half-day slots must not overlap.`,
+        );
+      }
+    }
+  }
+
+  const parsed: ParsedJobShift[] = [...byDay.values()]
+    .flat()
+    .sort((a, b) => {
+      const d = a.date.getTime() - b.date.getTime();
+      if (d !== 0) return d;
+      return a.startTime.localeCompare(b.startTime);
+    })
+    .map((s) => ({
+      date: s.date,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      shiftType: s.shiftType,
+      slotKind: s.slotKind,
+      hours: s.hours,
+    }));
+
+  if (!opts.allowPast) {
+    const earliest = parsed[0].date;
+    const endOfEarliestDay = Date.UTC(
+      earliest.getUTCFullYear(),
+      earliest.getUTCMonth(),
+      earliest.getUTCDate(),
+      23,
+      59,
+      59,
+      999,
+    );
+    if (endOfEarliestDay < Date.now()) {
+      throw new BadRequestException('Dates cannot be in the past.');
+    }
+  }
+
+  return {
+    shifts: parsed,
+    startDate: parsed[0].date,
+    endDate: parsed[parsed.length - 1].date,
+    startTime: parsed[0].startTime,
+    endTime: parsed[parsed.length - 1].endTime,
+  };
+}
+
 /** Inclusive list of YYYY-MM-DD from two @db.Date values (UTC components); capped. */
 export function expandCalendarDateRange(
   start: Date | null | undefined,
@@ -332,7 +555,28 @@ export function expandCalendarDateRange(
 export type PostingDaysSource = {
   startDate?: Date | null;
   endDate?: Date | null;
-  shifts?: { date: Date }[] | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  scheduleModel?: string | null;
+  shifts?:
+    | {
+        id?: string;
+        date: Date;
+        shiftType?: string | null;
+        startTime?: Date | string | null;
+        endTime?: Date | string | null;
+      }[]
+    | null;
+};
+
+export type ShiftClaimSource = {
+  shiftId: string;
+};
+
+export type CoverageApplicationWithClaims = CoverageApplication & {
+  shiftClaims?: ShiftClaimSource[] | null;
+  /** Requested shift IDs before finalize (apply payload). */
+  requestedShiftIds?: string[] | null;
 };
 
 /**
@@ -426,11 +670,181 @@ export function availabilityAfterFinalize(
   return { availabilityKind: 'PARTIAL', availableDates: sortedFinal };
 }
 
+function postingShiftIds(posting: PostingDaysSource): string[] {
+  return (posting.shifts ?? [])
+    .map((s) => s.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
+/** Shift IDs an application claims (explicit claims, requested IDs, or all for FULL). */
+export function applicationClaimedShiftIds(
+  app: CoverageApplicationWithClaims,
+  posting: PostingDaysSource,
+): string[] {
+  const allIds = postingShiftIds(posting);
+  const allSet = new Set(allIds);
+  const fromClaims = (app.shiftClaims ?? [])
+    .map((c) => c.shiftId)
+    .filter((id) => allSet.has(id));
+  if (fromClaims.length > 0) return [...new Set(fromClaims)].sort();
+
+  const requested = (app.requestedShiftIds ?? []).filter((id) => allSet.has(id));
+  if (requested.length > 0) return [...new Set(requested)].sort();
+
+  // Day-based partial without shift IDs: map days → all shifts on those days.
+  const requiredDates = getPostingRequiredDates(posting);
+  const claimedDays = new Set(applicationClaimedDates(app, requiredDates));
+  if (
+    app.availabilityKind === 'PARTIAL' &&
+    Array.isArray(app.availableDates) &&
+    app.availableDates.length > 0
+  ) {
+    const out: string[] = [];
+    for (const s of posting.shifts ?? []) {
+      if (!s.id) continue;
+      const cal = formatCalendarDateForApi(s.date);
+      if (cal && claimedDays.has(cal)) out.push(s.id);
+    }
+    return [...new Set(out)].sort();
+  }
+
+  // FULL (or no partial dates): every shift.
+  return [...allIds].sort();
+}
+
+export function computeCoveredShiftIds(
+  apps: CoverageApplicationWithClaims[],
+  posting: PostingDaysSource,
+): Set<string> {
+  const covered = new Set<string>();
+  for (const app of apps) {
+    for (const id of applicationClaimedShiftIds(app, posting)) {
+      covered.add(id);
+    }
+  }
+  return covered;
+}
+
+/** First-accept-wins per shift ID. */
+export function finalizeAcceptShiftIds(
+  app: CoverageApplicationWithClaims,
+  posting: PostingDaysSource,
+  alreadyAcceptedApps: CoverageApplicationWithClaims[],
+): string[] {
+  const taken = computeCoveredShiftIds(alreadyAcceptedApps, posting);
+  return applicationClaimedShiftIds(app, posting).filter((id) => !taken.has(id));
+}
+
+function clockFromShiftTime(
+  value: Date | string | null | undefined,
+): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    const hm = parseClockTimeHm(value);
+    if (hm) {
+      return `${String(hm.hours).padStart(2, '0')}:${String(hm.minutes).padStart(2, '0')}`;
+    }
+    return dbTimeToClockString(value);
+  }
+  return dbTimeToClockString(value);
+}
+
+/** Hours for one shift row (SLOTS type or legacy clock span). */
+export function hoursForShiftRow(shift: {
+  shiftType?: string | null;
+  startTime?: Date | string | null;
+  endTime?: Date | string | null;
+}): number {
+  const start = clockFromShiftTime(shift.startTime);
+  const end = clockFromShiftTime(shift.endTime);
+  const fromClock = hoursBetweenClockTimes(start, end);
+  if (fromClock != null && fromClock > 0) return fromClock;
+  return slotHoursFromShiftType(shift.shiftType);
+}
+
+/**
+ * Total hours claimed by an application for match-fee tiering.
+ * SLOTS: sum claimed shift hours. LEGACY: sum per claimed day from shift/posting times.
+ */
+export function computeApplicationClaimedHours(
+  posting: PostingDaysSource,
+  app: CoverageApplicationWithClaims,
+): number {
+  const shifts = posting.shifts ?? [];
+  const isSlots = posting.scheduleModel === 'SLOTS';
+
+  if (isSlots && shifts.some((s) => s.id)) {
+    const claimedIds = new Set(applicationClaimedShiftIds(app, posting));
+    let total = 0;
+    for (const s of shifts) {
+      if (s.id && claimedIds.has(s.id)) {
+        total += hoursForShiftRow(s);
+      }
+    }
+    return Math.round(total * 100) / 100;
+  }
+
+  // LEGACY (or SLOTS without shift ids): sum hours for claimed calendar days.
+  const requiredDates = getPostingRequiredDates(posting);
+  const claimedDays = applicationClaimedDates(app, requiredDates);
+  if (claimedDays.length === 0) return 0;
+
+  const byDay = new Map<string, typeof shifts>();
+  for (const s of shifts) {
+    const cal = formatCalendarDateForApi(s.date);
+    if (!cal) continue;
+    const list = byDay.get(cal) ?? [];
+    list.push(s);
+    byDay.set(cal, list);
+  }
+
+  let total = 0;
+  for (const day of claimedDays) {
+    const dayShifts = byDay.get(day);
+    if (dayShifts && dayShifts.length > 0) {
+      for (const s of dayShifts) {
+        const start = clockFromShiftTime(s.startTime);
+        const end = clockFromShiftTime(s.endTime);
+        const fromClock = hoursBetweenClockTimes(start, end);
+        if (fromClock != null && fromClock > 0) {
+          total += fromClock;
+        } else if (s.shiftType) {
+          total += slotHoursFromShiftType(s.shiftType);
+        } else {
+          const fromPosting = hoursBetweenClockTimes(
+            posting.startTime ?? null,
+            posting.endTime ?? null,
+          );
+          total +=
+            fromPosting != null && fromPosting > 0
+              ? fromPosting
+              : FULL_SLOT_HOURS;
+        }
+      }
+    } else {
+      const fromPosting = hoursBetweenClockTimes(
+        posting.startTime ?? null,
+        posting.endTime ?? null,
+      );
+      total += fromPosting != null && fromPosting > 0 ? fromPosting : FULL_SLOT_HOURS;
+    }
+  }
+  return Math.round(total * 100) / 100;
+}
+
 /** True when every required day is covered by the given accepted applications. */
 export function isPostingFullyCovered(
   posting: PostingDaysSource,
-  acceptedApps: CoverageApplication[],
+  acceptedApps: CoverageApplicationWithClaims[],
 ): boolean {
+  if (posting.scheduleModel === 'SLOTS') {
+    const requiredShiftIds = postingShiftIds(posting);
+    if (requiredShiftIds.length > 0) {
+      const covered = computeCoveredShiftIds(acceptedApps, posting);
+      return requiredShiftIds.every((id) => covered.has(id));
+    }
+  }
+
   const required = getPostingRequiredDates(posting);
   if (required.length === 0) {
     // No discrete schedule: fall back to legacy "any accepted" behaviour.

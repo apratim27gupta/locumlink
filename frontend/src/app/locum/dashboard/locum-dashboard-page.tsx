@@ -21,7 +21,7 @@ import {
     startOfLocalCalendarDay,
 } from '@/lib/localDateTime';
 import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
-import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, getPostingDays, formatSpecificDate } from '@/lib/jobSchedule';
+import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, applicationCoveredShiftIds, applicationPartialAvailabilityBadge, formatApplicationSlotLabels, formatSpecificDate, getJobScheduleModel, getPostingDays } from '@/lib/jobSchedule';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { CountBadge } from '@/components/CountBadge';
 import { canMutateApplicationBeforeOngoing } from '@/lib/locumApplicationActions';
@@ -59,6 +59,7 @@ function applicationToBrowseJob(app: MyApplication): BrowseJob {
         dates: jp.dates ?? null,
         shifts: jp.shifts ?? null,
         scheduleType: jp.scheduleType ?? null,
+        scheduleModel: jp.scheduleModel ?? null,
         startTime: jp.startTime,
         endTime: jp.endTime,
         payPerDay: jp.payPerDay ?? null,
@@ -71,37 +72,117 @@ function applicationToBrowseJob(app: MyApplication): BrowseJob {
     };
 }
 
-/** Dates the locum should focus on for this application stage. */
-function myShiftDatesForApp(app: MyApplication): { label: string; dates: string[] } {
-    const postingDays = getPostingDays(app.jobPosting);
+function SlotLabelChips({
+  items,
+  tone = 'teal',
+}: {
+  items: string[];
+  tone?: 'teal' | 'amber' | 'neutral';
+}) {
+  if (items.length === 0) return null;
+  const styles =
+    tone === 'amber'
+      ? { color: '#9A3412', bg: '#FFF7ED', border: '#FDBA74' }
+      : tone === 'neutral'
+        ? { color: '#374151', bg: '#F9FAFB', border: '#E5E7EB' }
+        : { color: '#0F766E', bg: 'rgba(15, 118, 110, 0.08)', border: '#99F6E4' };
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {items.map((label) => (
+        <span
+          key={label}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            background: styles.bg,
+            border: `1px solid ${styles.border}`,
+            color: styles.color,
+            padding: '4px 9px',
+            borderRadius: 5,
+            fontSize: 12,
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Dates/slots the locum should focus on for this application stage. */
+function myShiftFocusForApp(app: MyApplication): { label: string; items: string[] } {
+    const jp = app.jobPosting;
+    const postingDays = getPostingDays(jp);
+    const isSlots = getJobScheduleModel(jp) === 'SLOTS';
     const accepted = app.locumResponse === 'ACCEPTED' || !!app.locumAcceptedAt;
+
+    if (isSlots) {
+        const preview = app.acceptPreview;
+        if (accepted) {
+            return {
+                label: 'Your confirmed slots',
+                items: formatApplicationSlotLabels(app, jp),
+            };
+        }
+        if (preview) {
+            const remainingIds = preview.remainingShiftIds;
+            const proposedIds = preview.proposedShiftIds;
+            if ((preview.takenShiftIds?.length ?? 0) > 0 && remainingIds) {
+                return {
+                    label: 'Slots you can still accept',
+                    items: formatApplicationSlotLabels(app, jp, remainingIds),
+                };
+            }
+            return {
+                label: 'Your proposed availability',
+                items: formatApplicationSlotLabels(
+                    app,
+                    jp,
+                    proposedIds ?? applicationCoveredShiftIds(app, jp),
+                ),
+            };
+        }
+        if (isPartialAvailability(app)) {
+            return {
+                label: 'Your proposed availability',
+                items: formatApplicationSlotLabels(app, jp),
+            };
+        }
+        return {
+            label: 'Posting schedule',
+            items: formatApplicationSlotLabels(app, jp, applicationCoveredShiftIds(app, jp)),
+        };
+    }
+
     if (accepted) {
         return {
             label: 'Your confirmed shift dates',
-            dates: applicationCoveredDays(app, postingDays),
+            items: applicationCoveredDays(app, postingDays).map(formatSpecificDate),
         };
     }
     if (app.acceptPreview) {
         if (app.acceptPreview.takenDates.length > 0) {
             return {
                 label: 'Dates you can still accept',
-                dates: app.acceptPreview.remainingDates,
+                items: app.acceptPreview.remainingDates.map(formatSpecificDate),
             };
         }
         return {
             label: 'Your proposed availability',
-            dates: app.acceptPreview.proposedDates,
+            items: app.acceptPreview.proposedDates.map(formatSpecificDate),
         };
     }
     if (isPartialAvailability(app)) {
         return {
             label: 'Your proposed availability',
-            dates: applicationCoveredDays(app, postingDays),
+            items: applicationCoveredDays(app, postingDays).map(formatSpecificDate),
         };
     }
     return {
         label: 'Posting schedule',
-        dates: postingDays,
+        items: postingDays.map(formatSpecificDate),
     };
 }
 
@@ -432,7 +513,11 @@ export default function LocumDashboard(props: {
 
     async function saveAvailability(
         appId: string,
-        opts: { availabilityKind: 'FULL' | 'PARTIAL'; availableDates: string[] },
+        opts: {
+            availabilityKind: 'FULL' | 'PARTIAL';
+            availableDates: string[];
+            shiftIds?: string[];
+        },
     ) {
         setAvailabilityBusy(true);
         setAvailabilityError(null);
@@ -482,6 +567,7 @@ export default function LocumDashboard(props: {
           error={availabilityError ?? undefined}
           initialKind={editApp.availabilityKind === 'PARTIAL' ? 'PARTIAL' : 'FULL'}
           initialDates={editApp.availableDates ?? []}
+          initialShiftIds={editApp.requestedShiftIds ?? []}
           onSubmit={(opts) => void saveAvailability(editApp.id, opts)}
           onClose={() => {
             setEditAvailabilityAppId(null);
@@ -774,13 +860,9 @@ export default function LocumDashboard(props: {
                     <Image src="/clock.svg" alt="" width={14} height={14} style={{ flexShrink: 0, objectFit: 'contain' }}/>
                     {fmtTime(jp.startTime)} - {fmtTime(jp.endTime)}
                   </span>)}
-                {isPartialAvailability(app) && (() => {
-                    const days = getPostingDays(jp);
-                    const n = applicationCoveredDays(app, days).length;
-                    const label =
-                      n === days.length && days.length > 0
-                        ? `Selected days ${n}/${days.length}`
-                        : `Partial availability ${n}/${days.length}`;
+                {(() => {
+                    const label = applicationPartialAvailabilityBadge(app, jp);
+                    if (!label) return null;
                     return (
                       <span style={{
                         display: 'flex', alignItems: 'center', gap: 5,
@@ -905,10 +987,14 @@ export default function LocumDashboard(props: {
         const app = applications.find((a) => a.id === detailAppId);
         if (!app) return null;
         const st = applicationStatusPresentation(app);
-        const myDates = myShiftDatesForApp(app);
+        const myFocus = myShiftFocusForApp(app);
         const preview = app.acceptPreview;
-        const formatList = (days: string[]) =>
-          days.map((d) => formatSpecificDate(d)).filter(Boolean).join(', ');
+        const highlightIds = applicationCoveredShiftIds(app, app.jobPosting);
+        const takenSlotLabels =
+          getJobScheduleModel(app.jobPosting) === 'SLOTS' &&
+          (preview?.takenShiftIds?.length ?? 0) > 0
+            ? formatApplicationSlotLabels(app, app.jobPosting, preview!.takenShiftIds)
+            : (preview?.takenDates ?? []).map(formatSpecificDate).filter(Boolean);
         return (
           <div
             role="presentation"
@@ -972,6 +1058,9 @@ export default function LocumDashboard(props: {
               <LocumBrowseJobDetail
                 job={applicationToBrowseJob(app)}
                 revealHostDetails
+                highlightShiftIds={
+                  getJobScheduleModel(app.jobPosting) === 'SLOTS' ? highlightIds : null
+                }
                 open
                 style={{ flex: 1, minHeight: 0 }}
                 banner={(
@@ -1003,22 +1092,23 @@ export default function LocumDashboard(props: {
                         </span>
                       ) : null}
                     </div>
-                    {myDates.dates.length > 0 ? (
+                    {myFocus.items.length > 0 ? (
                       <div style={{
                         background: '#F0FDFA',
                         border: '1px solid #99F6E4',
                         borderRadius: 10,
                         padding: '12px 14px',
                       }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: '#0F766E', marginBottom: 6 }}>
-                          {myDates.label}
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#0F766E', marginBottom: 8 }}>
+                          {myFocus.label}
                         </div>
-                        <div style={{ fontSize: 14, color: '#134E4A', lineHeight: 1.45, fontWeight: 600 }}>
-                          {formatList(myDates.dates)}
-                        </div>
-                        {preview && preview.takenDates.length > 0 ? (
-                          <div style={{ fontSize: 12, color: '#9A3412', marginTop: 8, lineHeight: 1.4 }}>
-                            Already filled by another locum: {formatList(preview.takenDates)}
+                        <SlotLabelChips items={myFocus.items} tone="teal" />
+                        {takenSlotLabels.length > 0 ? (
+                          <div style={{ marginTop: 10 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#9A3412', marginBottom: 6 }}>
+                              Already filled by another locum
+                            </div>
+                            <SlotLabelChips items={takenSlotLabels} tone="amber" />
                           </div>
                         ) : null}
                       </div>
@@ -1035,13 +1125,33 @@ export default function LocumDashboard(props: {
         const accepting = respondingAppId === acceptConfirmAppId;
         const app = applications.find((a) => a.id === acceptConfirmAppId);
         const preview = app?.acceptPreview;
-        const remaining = preview?.remainingDates ?? [];
-        const taken = preview?.takenDates ?? [];
-        const proposed = preview?.proposedDates ?? [];
-        const noDaysLeft = Boolean(preview && remaining.length === 0);
+        const jp = app?.jobPosting;
+        const isSlots = jp != null && getJobScheduleModel(jp) === 'SLOTS';
+        const taken = isSlots
+          ? preview?.takenShiftIds
+            ? formatApplicationSlotLabels(app!, jp, preview.takenShiftIds)
+            : []
+          : (preview?.takenDates ?? []).map(formatSpecificDate).filter(Boolean);
+        const remaining = isSlots
+          ? preview?.remainingShiftIds
+            ? formatApplicationSlotLabels(app!, jp, preview.remainingShiftIds)
+            : formatApplicationSlotLabels(app!, jp)
+          : (preview?.remainingDates ?? []).map(formatSpecificDate).filter(Boolean);
+        const proposed = isSlots
+          ? formatApplicationSlotLabels(
+              app!,
+              jp,
+              preview?.proposedShiftIds ?? (app ? applicationCoveredShiftIds(app, jp) : []),
+            )
+          : (preview?.proposedDates ?? []).map(formatSpecificDate).filter(Boolean);
+        const noDaysLeft = Boolean(
+          preview &&
+            (isSlots
+              ? (preview.remainingShiftIds?.length ?? remaining.length) === 0
+              : (preview.remainingDates?.length ?? 0) === 0),
+        );
         const hasOverlap = taken.length > 0;
-        const formatList = (days: string[]) =>
-          days.map((d) => formatSpecificDate(d)).filter(Boolean).join(', ');
+        const acceptItems = remaining.length > 0 ? remaining : proposed;
         return (
         <div
           role="presentation"
@@ -1067,7 +1177,7 @@ export default function LocumDashboard(props: {
               background: '#fff',
               borderRadius: 12,
               padding: '24px 28px',
-              maxWidth: 440,
+              maxWidth: 480,
               width: '100%',
               boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
               fontFamily: 'Inter, sans-serif',
@@ -1083,36 +1193,53 @@ export default function LocumDashboard(props: {
                 color: '#0B0F1F',
               }}
             >
-              {noDaysLeft ? 'No days left to accept' : 'Accept this placement?'}
+              {noDaysLeft
+                ? isSlots
+                  ? 'No slots left to accept'
+                  : 'No days left to accept'
+                : 'Accept this placement?'}
             </h3>
             {noDaysLeft ? (
               <p style={{ margin: '0 0 24px 0', fontSize: 14, color: '#6B7280', lineHeight: 1.5 }}>
-                All of the days from your availability were already filled by another locum who accepted first. You can reject this confirmation or wait for the host to update it.
+                {isSlots
+                  ? 'All of the slots from your availability were already filled by another locum who accepted first. You can reject this confirmation or wait for the host to update it.'
+                  : 'All of the days from your availability were already filled by another locum who accepted first. You can reject this confirmation or wait for the host to update it.'}
               </p>
             ) : (
               <div style={{ margin: '0 0 24px 0', fontSize: 14, color: '#6B7280', lineHeight: 1.5 }}>
                 {hasOverlap ? (
                   <>
                     <p style={{ margin: '0 0 12px 0' }}>
-                      Some days from your proposed availability are already filled by another locum who accepted first.
+                      {isSlots
+                        ? 'Some slots from your proposed availability are already filled by another locum who accepted first.'
+                        : 'Some days from your proposed availability are already filled by another locum who accepted first.'}
                     </p>
-                    <p style={{ margin: '0 0 8px 0' }}>
-                      <span style={{ fontWeight: 700, color: '#9A3412' }}>Already filled: </span>
-                      {formatList(taken)}
-                    </p>
-                    <p style={{ margin: 0 }}>
-                      <span style={{ fontWeight: 700, color: '#047857' }}>Accept shift for: </span>
-                      {formatList(remaining)}
-                    </p>
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#9A3412', marginBottom: 6 }}>
+                        Already filled
+                      </div>
+                      <SlotLabelChips items={taken} tone="amber" />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#047857', marginBottom: 6 }}>
+                        Accept for
+                      </div>
+                      <SlotLabelChips items={remaining} tone="teal" />
+                    </div>
                   </>
                 ) : (
-                  <p style={{ margin: 0 }}>
-                    You will accept this shift for{' '}
-                    <span style={{ fontWeight: 700, color: '#0B0F1F' }}>
-                      {formatList(remaining.length > 0 ? remaining : proposed) || 'the confirmed dates'}
-                    </span>
-                    .
-                  </p>
+                  <>
+                    <p style={{ margin: '0 0 10px 0' }}>
+                      You will accept this shift for:
+                    </p>
+                    {acceptItems.length > 0 ? (
+                      <SlotLabelChips items={acceptItems} tone="teal" />
+                    ) : (
+                      <p style={{ margin: 0, fontWeight: 700, color: '#0B0F1F' }}>
+                        {isSlots ? 'the confirmed slots' : 'the confirmed dates'}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -1155,7 +1282,13 @@ export default function LocumDashboard(props: {
                     fontFamily: 'inherit',
                   }}
                 >
-                  {accepting ? 'Accepting…' : hasOverlap ? 'Accept for these dates' : 'Accept'}
+                  {accepting
+                    ? 'Accepting…'
+                    : hasOverlap
+                      ? isSlots
+                        ? 'Accept for these slots'
+                        : 'Accept for these dates'
+                      : 'Accept'}
                 </button>
               ) : null}
             </div>

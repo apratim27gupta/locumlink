@@ -171,7 +171,7 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   H_015_MATCH_FEE_DUE_SOON: 'Match fee due soon',
   H_016_MATCH_FEE_OVERDUE: 'Match fee overdue',
   H_017_MATCH_FEE_PAID: 'Match fee received',
-  H_018_MATCH_FEE_REFUND: 'Match fee refund or credit',
+  H_018_MATCH_FEE_REFUND: 'Match fee refund',
   H_019_MATCH_FEE_CANCELLED: 'Match fee updated after cancellation',
   L_001_NEW_OPPORTUNITY: 'New Locum Opportunity Available',
   L_002_HOST_CONFIRMED: 'Shift Confirmed',

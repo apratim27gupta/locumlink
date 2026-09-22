@@ -13,9 +13,14 @@ import { formatLocalCalendarDateForDisplay } from '@/lib/localDateTime';
  */
 
 export type JobShiftLike = {
+  id?: string;
   date: string;
   startTime?: string | null;
   endTime?: string | null;
+  shiftType?: string | null;
+  slotKind?: 'HALF' | 'FULL' | null;
+  hours?: number | null;
+  isTaken?: boolean;
 };
 
 export type JobScheduleLike = {
@@ -26,7 +31,51 @@ export type JobScheduleLike = {
   dates?: unknown;
   shifts?: unknown;
   scheduleType?: unknown;
+  scheduleModel?: unknown;
 };
+
+export const HALF_SLOT_HOURS = 3.5;
+export const FULL_SLOT_HOURS = 7;
+
+/** Preview end time from start HH:mm + hours (mirrors backend addClockHours). */
+export function addClockHours(startHm: string, hours: number): string | null {
+  const m = startHm.trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  const total = Math.round(h * 60 + min + hours * 60);
+  if (total < 0 || total > 23 * 60 + 59) return null;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** Local HH:mm → minutes from midnight, or null if invalid. */
+export function clockToMinutes(hm: string): number | null {
+  const m = hm.trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return h * 60 + min;
+}
+
+/** True when two half-day windows (start + 3.5h) overlap on the same day. */
+export function halfSlotsOverlap(startA: string, startB: string): boolean {
+  const a0 = clockToMinutes(startA);
+  const b0 = clockToMinutes(startB);
+  if (a0 == null || b0 == null) return false;
+  const dur = Math.round(HALF_SLOT_HOURS * 60);
+  const a1 = a0 + dur;
+  const b1 = b0 + dur;
+  return a0 < b1 && b0 < a1;
+}
+
+export function getJobScheduleModel(
+  job: JobScheduleLike | null | undefined,
+): 'LEGACY' | 'SLOTS' {
+  const v = (job as { scheduleModel?: unknown } | null | undefined)?.scheduleModel;
+  return v === 'SLOTS' ? 'SLOTS' : 'LEGACY';
+}
 
 export type JobScheduleMode = 'none' | 'range' | 'list';
 
@@ -61,13 +110,37 @@ export function getJobShifts(job: JobScheduleLike | null | undefined): JobShiftL
       if (!/^\d{4}-\d{2}-\d{2}$/.test(cal)) continue;
       const st = (r as { startTime?: unknown }).startTime;
       const en = (r as { endTime?: unknown }).endTime;
+      const id = (r as { id?: unknown }).id;
+      const slotKindRaw = (r as { slotKind?: unknown }).slotKind;
+      const shiftType = (r as { shiftType?: unknown }).shiftType;
+      const hours = (r as { hours?: unknown }).hours;
+      const isTaken = (r as { isTaken?: unknown }).isTaken === true;
+      const slotKind =
+        slotKindRaw === 'HALF' || slotKindRaw === 'FULL'
+          ? slotKindRaw
+          : shiftType === 'HALF_DAY' ||
+              shiftType === 'HALF_DAY_AM' ||
+              shiftType === 'HALF_DAY_PM'
+            ? ('HALF' as const)
+            : shiftType === 'FULL_DAY'
+              ? ('FULL' as const)
+              : null;
       rows.push({
+        id: typeof id === 'string' ? id : undefined,
         date: cal,
         startTime: typeof st === 'string' && st ? st : fallbackStart,
         endTime: typeof en === 'string' && en ? en : fallbackEnd,
+        shiftType: typeof shiftType === 'string' ? shiftType : null,
+        slotKind,
+        hours: typeof hours === 'number' ? hours : null,
+        isTaken,
       });
     }
-    return rows.sort((a, b) => a.date.localeCompare(b.date));
+    return rows.sort((a, b) => {
+      const d = a.date.localeCompare(b.date);
+      if (d !== 0) return d;
+      return (a.startTime ?? '').localeCompare(b.startTime ?? '');
+    });
   }
   // Older payloads only send `dates`; apply the posting-level time to each.
   return getJobSpecificDates(job).map((date) => ({
@@ -167,6 +240,8 @@ export function getPostingDays(job: JobScheduleLike | null | undefined): string[
 export type ApplicationAvailability = {
   availabilityKind?: string | null;
   availableDates?: string[] | null;
+  requestedShiftIds?: string[] | null;
+  shiftClaims?: { shiftId: string }[] | null;
 };
 
 /** Normalized set of days an application covers, given the posting's days. */
@@ -185,13 +260,163 @@ export function applicationCoveredDays(
   return postingDays.filter((d) => wanted.has(d));
 }
 
-/** True when an application only covers part of the posting's days. */
+/** True when an application only covers part of the posting's days/slots. */
 export function isPartialAvailability(app: ApplicationAvailability): boolean {
-  return (
-    app.availabilityKind === 'PARTIAL' &&
-    Array.isArray(app.availableDates) &&
-    app.availableDates.length > 0
-  );
+  if (app.availabilityKind !== 'PARTIAL') return false;
+  if ((app.requestedShiftIds?.length ?? 0) > 0) return true;
+  return Array.isArray(app.availableDates) && app.availableDates.length > 0;
+}
+
+/** Ordered SLOTS shifts with ids (empty for LEGACY / missing ids). */
+export function getPostingSlots(job: JobScheduleLike | null | undefined): JobShiftLike[] {
+  if (getJobScheduleModel(job) !== 'SLOTS') return [];
+  return getJobShifts(job)
+    .filter((s) => Boolean(s.id))
+    .sort((a, b) => {
+      const d = a.date.localeCompare(b.date);
+      if (d !== 0) return d;
+      return (a.startTime ?? '').localeCompare(b.startTime ?? '');
+    });
+}
+
+/** Shift ids this application covers (claims preferred, else requested; FULL = all). */
+export function applicationCoveredShiftIds(
+  app: ApplicationAvailability,
+  job: JobScheduleLike | null | undefined,
+): string[] {
+  const slots = getPostingSlots(job);
+  const allIds = slots.map((s) => s.id!).filter(Boolean);
+  if (allIds.length === 0) return [];
+
+  const fromClaims = (app.shiftClaims ?? [])
+    .map((c) => c.shiftId)
+    .filter((id) => allIds.includes(id));
+  if (fromClaims.length > 0) return [...new Set(fromClaims)];
+
+  const requested = (app.requestedShiftIds ?? []).filter((id) => allIds.includes(id));
+  if (requested.length > 0) return [...new Set(requested)];
+  if (app.availabilityKind === 'FULL' || !app.availabilityKind) {
+    return allIds;
+  }
+  if (app.availabilityKind === 'PARTIAL') {
+    if ((app.availableDates?.length ?? 0) > 0) {
+      const days = new Set((app.availableDates ?? []).map((d) => d.slice(0, 10)));
+      return slots.filter((s) => days.has(s.date) && s.id).map((s) => s.id!);
+    }
+    return [];
+  }
+  return allIds;
+}
+
+export type DaySlotSegments = {
+  date: string;
+  /** One segment for FULL / single HALF; two for dual halves (earlier first). */
+  segments: { shiftId: string; slotKind: 'HALF' | 'FULL'; covered: boolean; label: string }[];
+};
+
+/** Per-day segments for slotwise strip/coverage painting. */
+export function getDaySlotSegments(
+  job: JobScheduleLike | null | undefined,
+  coveredShiftIds: Set<string> | string[],
+): DaySlotSegments[] {
+  const covered = coveredShiftIds instanceof Set ? coveredShiftIds : new Set(coveredShiftIds);
+  const slots = getPostingSlots(job);
+  if (slots.length === 0) return [];
+
+  const byDay = new Map<string, JobShiftLike[]>();
+  for (const s of slots) {
+    const list = byDay.get(s.date) ?? [];
+    list.push(s);
+    byDay.set(s.date, list);
+  }
+
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, daySlots]) => {
+      const ordered = [...daySlots].sort((a, b) =>
+        (a.startTime ?? '').localeCompare(b.startTime ?? ''),
+      );
+      return {
+        date,
+        segments: ordered.map((s) => {
+          const kind: 'HALF' | 'FULL' =
+            s.slotKind === 'HALF' || s.slotKind === 'FULL'
+              ? s.slotKind
+              : 'FULL';
+          const range = formatShiftTimeRange(s);
+          const label =
+            kind === 'HALF'
+              ? `Half day${range ? ` · ${range}` : ''}`
+              : `Full day${range ? ` · ${range}` : ''}`;
+          return {
+            shiftId: s.id!,
+            slotKind: kind,
+            covered: covered.has(s.id!),
+            label,
+          };
+        }),
+      };
+    });
+}
+
+/** Badge counts for SLOTS: claimed / total slots. */
+export function applicationSlotCoverageCounts(
+  app: ApplicationAvailability,
+  job: JobScheduleLike | null | undefined,
+): { covered: number; total: number } | null {
+  const slots = getPostingSlots(job);
+  if (slots.length === 0) return null;
+  const covered = applicationCoveredShiftIds(app, job);
+  return { covered: covered.length, total: slots.length };
+}
+
+/** "Sep 24, 2026 · 09:00 AM - 12:30 PM" (omits time when missing). */
+export function formatShiftSlotLabel(shift: JobShiftLike): string {
+  const date = formatSpecificDate(shift.date);
+  const range = formatShiftTimeRange(shift);
+  return range ? `${date} · ${range}` : date;
+}
+
+/** Covered slot labels for an application (SLOTS only; empty otherwise). */
+export function formatApplicationSlotLabels(
+  app: ApplicationAvailability,
+  job: JobScheduleLike | null | undefined,
+  shiftIds?: string[] | null,
+): string[] {
+  const slots = getPostingSlots(job);
+  if (slots.length === 0) return [];
+  const ids =
+    shiftIds != null
+      ? shiftIds.filter(Boolean)
+      : applicationCoveredShiftIds(app, job);
+  const wanted = new Set(ids);
+  return slots
+    .filter((s) => s.id && wanted.has(s.id))
+    .map(formatShiftSlotLabel);
+}
+
+/**
+ * Partial/full badge copy: slot counts for SLOTS, day counts for LEGACY.
+ * Returns null when the app is full coverage (no partial badge needed).
+ */
+export function applicationPartialAvailabilityBadge(
+  app: ApplicationAvailability,
+  job: JobScheduleLike | null | undefined,
+): string | null {
+  if (!isPartialAvailability(app)) return null;
+  const slotCounts = applicationSlotCoverageCounts(app, job);
+  if (slotCounts && slotCounts.total > 0) {
+    const { covered, total } = slotCounts;
+    return covered === total
+      ? `Selected ${covered}/${total} slots`
+      : `Partial availability ${covered}/${total} slots`;
+  }
+  const days = getPostingDays(job);
+  if (days.length === 0) return null;
+  const n = applicationCoveredDays(app, days).length;
+  return n === days.length
+    ? `Selected days ${n}/${days.length}`
+    : `Partial availability ${n}/${days.length}`;
 }
 
 /** "Jun 1, 2026" for a single day, or "Jun 1, 2026 - Jun 5, 2026" for a span. */
@@ -244,6 +469,18 @@ export function formatScheduleSummaryText(
 ): string {
   const mode = getJobScheduleMode(job);
   if (mode === 'list') {
+    const shifts = getJobShifts(job);
+    if (getJobScheduleModel(job) === 'SLOTS' && shifts.length > 0) {
+      if (shifts.length === 1) {
+        const t = formatShiftTimeRange(shifts[0]);
+        return t
+          ? `${formatSpecificDate(shifts[0].date)} · ${t}`
+          : formatSpecificDate(shifts[0].date);
+      }
+      const first = formatSpecificDate(shifts[0].date);
+      const last = formatSpecificDate(shifts[shifts.length - 1].date);
+      return `${shifts.length} total slots (${first} - ${last})`;
+    }
     if (getJobScheduleType(job) === 'RANGES') {
       const ranges = getJobDateRanges(job);
       if (ranges.length === 1) return formatDateRange(ranges[0]);

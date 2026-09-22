@@ -19,6 +19,14 @@ export type AdminJobListItem = {
   applicationCount: number;
   selectedCount: number;
   acceptedCount: number;
+  scheduleModel?: 'LEGACY' | 'SLOTS' | null;
+  shifts?: {
+    id: string;
+    date: string;
+    startTime: string | null;
+    endTime: string | null;
+    slotKind: 'HALF' | 'FULL' | null;
+  }[] | null;
   host: {
     userId: string;
     email: string;
@@ -37,6 +45,10 @@ export type AdminApplicationItem = {
   placedAt: string | null;
   locumAcceptedAt: string | null;
   statusChangedAt: string;
+  availabilityKind?: 'FULL' | 'PARTIAL' | null;
+  availableDates?: string[] | null;
+  requestedShiftIds?: string[] | null;
+  shiftClaims?: { shiftId: string }[] | null;
   locum: {
     userId: string;
     email: string;
@@ -230,6 +242,7 @@ export async function getAdminJobDetail(
       leaveType: true,
       payPerDay: true,
       createdAt: true,
+      scheduleModel: true,
       servicesRequired: true,
       requiredSpecialty: true,
       minYearsExperience: true,
@@ -240,6 +253,15 @@ export async function getAdminJobDetail(
           contactFirstName: true,
           contactLastName: true,
           user: { select: { id: true, email: true } },
+        },
+      },
+      shifts: {
+        select: {
+          id: true,
+          date: true,
+          startTime: true,
+          endTime: true,
+          shiftType: true,
         },
       },
       applications: {
@@ -253,6 +275,10 @@ export async function getAdminJobDetail(
           placedAt: true,
           locumAcceptedAt: true,
           statusChangedAt: true,
+          availabilityKind: true,
+          availableDates: true,
+          requestedShiftIds: true,
+          shiftClaims: { select: { shiftId: true } },
           locumProfile: {
             select: {
               firstName: true,
@@ -284,6 +310,28 @@ export async function getAdminJobDetail(
     city: row.hostProfile.city,
   };
 
+  const clockUtc = (t: Date | null) => {
+    if (!t) return null;
+    return `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`;
+  };
+  const shifts = (row.shifts ?? []).map((s) => {
+    const slotKind =
+      s.shiftType === 'HALF_DAY' ||
+      s.shiftType === 'HALF_DAY_AM' ||
+      s.shiftType === 'HALF_DAY_PM'
+        ? ('HALF' as const)
+        : s.shiftType === 'FULL_DAY'
+          ? ('FULL' as const)
+          : null;
+    return {
+      id: s.id,
+      date: s.date.toISOString().slice(0, 10),
+      startTime: clockUtc(s.startTime),
+      endTime: clockUtc(s.endTime),
+      slotKind,
+    };
+  });
+
   const jobBase: AdminJobListItem = {
     id: row.id,
     title: row.title,
@@ -302,6 +350,8 @@ export async function getAdminJobDetail(
     applicationCount: row.applications.length,
     selectedCount,
     acceptedCount,
+    scheduleModel: row.scheduleModel === 'SLOTS' ? 'SLOTS' : 'LEGACY',
+    shifts,
     host,
   };
 
@@ -314,6 +364,13 @@ export async function getAdminJobDetail(
     placedAt: a.placedAt?.toISOString() ?? null,
     locumAcceptedAt: a.locumAcceptedAt?.toISOString() ?? null,
     statusChangedAt: a.statusChangedAt.toISOString(),
+    availabilityKind:
+      a.availabilityKind === 'PARTIAL' || a.availabilityKind === 'FULL'
+        ? a.availabilityKind
+        : null,
+    availableDates: a.availableDates ?? [],
+    requestedShiftIds: a.requestedShiftIds ?? [],
+    shiftClaims: a.shiftClaims ?? [],
     locum: {
       userId: a.locumProfile.user.id,
       email: a.locumProfile.user.email,

@@ -29,9 +29,13 @@ import {
   isPostingFullyCovered,
   postingStatusAfterLocumAccept,
   finalizeAcceptDates,
+  finalizeAcceptShiftIds,
   availabilityAfterFinalize,
   applicationClaimedDates,
+  applicationClaimedShiftIds,
   computeCoveredDates,
+  computeCoveredShiftIds,
+  slotHoursFromShiftType,
 } from '../host/job-schedule.util.js';
 import {
   paginateJobPostings,
@@ -476,7 +480,16 @@ export class LocumService {
             highlights: true,
           },
         },
-        shifts: { select: { date: true, startTime: true, endTime: true } },
+        shifts: {
+          select: {
+            id: true,
+            date: true,
+            shiftType: true,
+            startTime: true,
+            endTime: true,
+            claims: { select: { id: true } },
+          },
+        },
         _count: { select: { applications: true } },
       },
     );
@@ -540,12 +553,37 @@ export class LocumService {
             .sort(),
           shifts: (j.shifts ?? [])
             .map((s) => ({
+              id: s.id,
               date: formatCalendarDateForApi(s.date),
+              shiftType: s.shiftType,
+              slotKind:
+                s.shiftType === 'HALF_DAY' ||
+                s.shiftType === 'HALF_DAY_AM' ||
+                s.shiftType === 'HALF_DAY_PM'
+                  ? ('HALF' as const)
+                  : s.shiftType === 'FULL_DAY'
+                    ? ('FULL' as const)
+                    : null,
               startTime: dbTimeToClockString(s.startTime),
               endTime: dbTimeToClockString(s.endTime),
+              isTaken: (s.claims?.length ?? 0) > 0,
             }))
-            .filter((s): s is { date: string; startTime: string | null; endTime: string | null } => s.date != null)
-            .sort((a, b) => a.date.localeCompare(b.date)),
+            .filter(
+              (s): s is {
+                id: string;
+                date: string;
+                shiftType: (typeof j.shifts)[number]['shiftType'];
+                slotKind: 'HALF' | 'FULL' | null;
+                startTime: string | null;
+                endTime: string | null;
+                isTaken: boolean;
+              } => s.date != null,
+            )
+            .sort((a, b) => {
+              const d = a.date.localeCompare(b.date);
+              if (d !== 0) return d;
+              return (a.startTime ?? '').localeCompare(b.startTime ?? '');
+            }),
         };
       }),
       nextCursor: page.nextCursor,
@@ -559,6 +597,7 @@ export class LocumService {
       coverNote?: string;
       availabilityKind?: 'FULL' | 'PARTIAL';
       availableDates?: string[];
+      shiftIds?: string[];
     } = {},
   ) {
     const { coverNote } = opts;
@@ -583,7 +622,7 @@ export class LocumService {
     const job = await this.prisma.jobPosting.findUnique({
       where: { id: jobId },
       include: {
-        shifts: { select: { date: true } },
+        shifts: { select: { id: true, date: true } },
         hostProfile: {
           select: { user: { select: { email: true } } },
         },
@@ -624,6 +663,55 @@ export class LocumService {
       opts,
       requiredDates,
     );
+    const requestedShiftIds = this.parseRequestedShiftIds(
+      opts.shiftIds,
+      job,
+      availabilityKind,
+      availableDates,
+    );
+    const openShiftIds = await this.filterOpenShiftIds(requestedShiftIds);
+    if (
+      job.scheduleModel === 'SLOTS' &&
+      job.shifts.length > 0 &&
+      openShiftIds.length === 0
+    ) {
+      throw new BadRequestException(
+        'No open slots remain on this posting. Another locum already accepted them.',
+      );
+    }
+    if (
+      availabilityKind === 'PARTIAL' &&
+      requestedShiftIds.length > 0 &&
+      openShiftIds.length < requestedShiftIds.length
+    ) {
+      throw new BadRequestException(
+        'Some selected slots are already filled by another locum.',
+      );
+    }
+
+    // FULL with some slots already claimed → store as PARTIAL for the remaining open slots.
+    let finalKind = availabilityKind;
+    let finalDates = availableDates;
+    let finalShiftIds = openShiftIds;
+    if (
+      availabilityKind === 'FULL' &&
+      job.scheduleModel === 'SLOTS' &&
+      job.shifts.length > 0 &&
+      openShiftIds.length > 0 &&
+      openShiftIds.length < job.shifts.length
+    ) {
+      finalKind = 'PARTIAL';
+      const openSet = new Set(openShiftIds);
+      finalDates = [
+        ...new Set(
+          job.shifts
+            .filter((s) => openSet.has(s.id))
+            .map((s) => formatCalendarDateForApi(s.date))
+            .filter((d): d is string => d != null),
+        ),
+      ].sort();
+      finalShiftIds = openShiftIds;
+    }
 
     const application = existing
       ? await this.prisma.application.update({
@@ -634,8 +722,9 @@ export class LocumService {
             locumAcceptedAt: null,
             placedAt: null,
             coverNote: coverNote ?? null,
-            availabilityKind,
-            availableDates,
+            availabilityKind: finalKind,
+            availableDates: finalDates,
+            requestedShiftIds: finalShiftIds,
             appliedAt: new Date(),
           },
         })
@@ -645,8 +734,9 @@ export class LocumService {
             locumProfileId: locumProfile.id,
             status: 'APPLIED',
             coverNote: coverNote ?? null,
-            availabilityKind,
-            availableDates,
+            availabilityKind: finalKind,
+            availableDates: finalDates,
+            requestedShiftIds: finalShiftIds,
           },
         });
     // H-001: Notify host of new application
@@ -712,6 +802,7 @@ export class LocumService {
       pagination,
       {
         include: {
+          shiftClaims: { select: { shiftId: true } },
           jobPosting: {
             select: {
               id: true,
@@ -726,6 +817,7 @@ export class LocumService {
               startTime: true,
               endTime: true,
               scheduleType: true,
+              scheduleModel: true,
               payPerDay: true,
               requiredCredentials: true,
               keyResponsibilities: true,
@@ -738,7 +830,16 @@ export class LocumService {
               numPhysicians: true,
               patientVol: true,
               servicesRequired: true,
-              shifts: { select: { date: true, startTime: true, endTime: true } },
+              shifts: {
+                select: {
+                  id: true,
+                  date: true,
+                  startTime: true,
+                  endTime: true,
+                  shiftType: true,
+                  claims: { select: { applicationId: true } },
+                },
+              },
               hostProfile: {
                 select: {
                   userId: true,
@@ -773,7 +874,12 @@ export class LocumService {
       .map((app) => app.jobPostingId);
     const acceptedByJob = new Map<
       string,
-      { availabilityKind: string | null; availableDates: string[] }[]
+      {
+        availabilityKind: string | null;
+        availableDates: string[];
+        requestedShiftIds: string[];
+        shiftClaims: { shiftId: string }[];
+      }[]
     >();
     if (pendingConfirmIds.length > 0) {
       const acceptedOthers = await this.prisma.application.findMany({
@@ -789,6 +895,8 @@ export class LocumService {
           jobPostingId: true,
           availabilityKind: true,
           availableDates: true,
+          requestedShiftIds: true,
+          shiftClaims: { select: { shiftId: true } },
         },
       });
       for (const row of acceptedOthers) {
@@ -796,6 +904,8 @@ export class LocumService {
         list.push({
           availabilityKind: row.availabilityKind,
           availableDates: row.availableDates,
+          requestedShiftIds: row.requestedShiftIds ?? [],
+          shiftClaims: row.shiftClaims ?? [],
         });
         acceptedByJob.set(row.jobPostingId, list);
       }
@@ -809,6 +919,7 @@ export class LocumService {
               id?: string;
               startDate?: Date | null;
               endDate?: Date | null;
+              scheduleModel?: string | null;
               practiceType?: string | null;
               emr?: string | null;
               clinicDesc?: string | null;
@@ -822,7 +933,14 @@ export class LocumService {
                 servicesOffered?: string[];
                 highlights?: string | null;
               };
-              shifts?: { date: Date; startTime: Date | null; endTime: Date | null }[];
+              shifts?: {
+                id: string;
+                date: Date;
+                startTime: Date | null;
+                endTime: Date | null;
+                shiftType: string | null;
+                claims?: { applicationId: string }[];
+              }[];
             };
           }
         ).jobPosting;
@@ -832,19 +950,44 @@ export class LocumService {
           .filter((d): d is string => d != null)
           .sort();
         const shifts = shiftRows
-          .map((s) => ({
-            date: formatCalendarDateForApi(s.date),
-            startTime: dbTimeToClockString(s.startTime),
-            endTime: dbTimeToClockString(s.endTime),
-          }))
-          .filter((s): s is { date: string; startTime: string | null; endTime: string | null } => s.date != null)
-          .sort((a, b) => a.date.localeCompare(b.date));
+          .map((s) => {
+            const date = formatCalendarDateForApi(s.date);
+            if (!date) return null;
+            const slotKind =
+              s.shiftType === 'HALF_DAY' ||
+              s.shiftType === 'HALF_DAY_AM' ||
+              s.shiftType === 'HALF_DAY_PM'
+                ? ('HALF' as const)
+                : s.shiftType === 'FULL_DAY'
+                  ? ('FULL' as const)
+                  : null;
+            const claimAppId = s.claims?.[0]?.applicationId;
+            return {
+              id: s.id,
+              date,
+              startTime: dbTimeToClockString(s.startTime),
+              endTime: dbTimeToClockString(s.endTime),
+              shiftType: s.shiftType,
+              slotKind,
+              hours: slotHoursFromShiftType(s.shiftType),
+              isTaken: Boolean(claimAppId && claimAppId !== app.id),
+            };
+          })
+          .filter((s): s is NonNullable<typeof s> => s != null)
+          .sort((a, b) =>
+            a.date === b.date
+              ? (a.startTime ?? '').localeCompare(b.startTime ?? '')
+              : a.date.localeCompare(b.date),
+          );
 
         let acceptPreview:
           | {
               proposedDates: string[];
               takenDates: string[];
               remainingDates: string[];
+              proposedShiftIds?: string[];
+              takenShiftIds?: string[];
+              remainingShiftIds?: string[];
             }
           | undefined;
         if (
@@ -859,24 +1002,48 @@ export class LocumService {
             shifts: shiftRows,
           });
           const others = acceptedByJob.get(app.jobPostingId) ?? [];
-          const proposedDates = applicationClaimedDates(
-            {
-              availabilityKind: app.availabilityKind,
-              availableDates: app.availableDates,
-            },
-            requiredDates,
-          );
+          const appAvail = {
+            availabilityKind: app.availabilityKind,
+            availableDates: app.availableDates,
+            requestedShiftIds: app.requestedShiftIds ?? [],
+            shiftClaims: app.shiftClaims ?? [],
+          };
+          const proposedDates = applicationClaimedDates(appAvail, requiredDates);
           const remainingDates = finalizeAcceptDates(
-            {
-              availabilityKind: app.availabilityKind,
-              availableDates: app.availableDates,
-            },
+            appAvail,
             requiredDates,
             others,
           );
           const remainingSet = new Set(remainingDates);
           const takenDates = proposedDates.filter((d) => !remainingSet.has(d));
           acceptPreview = { proposedDates, takenDates, remainingDates };
+
+          const isSlots =
+            jp.scheduleModel === 'SLOTS' && shiftRows.some((s) => Boolean(s.id));
+          if (isSlots) {
+            const posting = {
+              startDate: jp.startDate,
+              endDate: jp.endDate,
+              scheduleModel: 'SLOTS' as const,
+              shifts: shiftRows,
+            };
+            const proposedShiftIds = applicationClaimedShiftIds(appAvail, posting);
+            const remainingShiftIds = finalizeAcceptShiftIds(
+              appAvail,
+              posting,
+              others,
+            );
+            const remainingShiftSet = new Set(remainingShiftIds);
+            const takenShiftIds = proposedShiftIds.filter(
+              (id) => !remainingShiftSet.has(id),
+            );
+            acceptPreview = {
+              ...acceptPreview,
+              proposedShiftIds,
+              takenShiftIds,
+              remainingShiftIds,
+            };
+          }
         }
 
         const hp = jp?.hostProfile;
@@ -988,6 +1155,84 @@ export class LocumService {
     return { availabilityKind: 'PARTIAL', availableDates: picked };
   }
 
+  /**
+   * Resolve requested shift IDs for SLOTS postings. LEGACY (no shift ids) returns [].
+   * FULL with no shiftIds → all posting shifts. PARTIAL with shiftIds → those shifts.
+   * PARTIAL with only dates → all shifts on those dates.
+   */
+  private parseRequestedShiftIds(
+    shiftIds: string[] | undefined,
+    job: {
+      scheduleModel?: string | null;
+      shifts: { id: string; date: Date }[];
+    },
+    availabilityKind: 'FULL' | 'PARTIAL',
+    availableDates: string[],
+  ): string[] {
+    const allIds = job.shifts.map((s) => s.id);
+    if (allIds.length === 0) return [];
+
+    const isSlots = job.scheduleModel === 'SLOTS';
+    const explicit = [
+      ...new Set((shiftIds ?? []).filter((id) => typeof id === 'string' && id.length > 0)),
+    ];
+
+    if (explicit.length > 0) {
+      const allowed = new Set(allIds);
+      if (explicit.some((id) => !allowed.has(id))) {
+        throw new BadRequestException(
+          'Selected shifts must belong to this posting.',
+        );
+      }
+      if (availabilityKind === 'PARTIAL' && availableDates.length > 0) {
+        const daySet = new Set(availableDates);
+        for (const s of job.shifts) {
+          if (!explicit.includes(s.id)) continue;
+          const cal = formatCalendarDateForApi(s.date);
+          if (cal && !daySet.has(cal)) {
+            throw new BadRequestException(
+              'Selected shifts must fall on your available days.',
+            );
+          }
+        }
+      }
+      return explicit.sort();
+    }
+
+    if (!isSlots) return [];
+
+    if (availabilityKind === 'FULL') return [...allIds].sort();
+
+    const daySet = new Set(availableDates);
+    return job.shifts
+      .filter((s) => {
+        const cal = formatCalendarDateForApi(s.date);
+        return cal != null && daySet.has(cal);
+      })
+      .map((s) => s.id)
+      .sort();
+  }
+
+  /** Drop shift IDs that already have a claim (optionally keep this application's own claims). */
+  private async filterOpenShiftIds(
+    shiftIds: string[],
+    opts?: { excludeApplicationId?: string },
+  ): Promise<string[]> {
+    if (shiftIds.length === 0) return [];
+    const taken = await this.prisma.applicationShiftClaim.findMany({
+      where: {
+        shiftId: { in: shiftIds },
+        ...(opts?.excludeApplicationId
+          ? { applicationId: { not: opts.excludeApplicationId } }
+          : {}),
+      },
+      select: { shiftId: true },
+    });
+    if (taken.length === 0) return [...shiftIds].sort();
+    const takenSet = new Set(taken.map((t) => t.shiftId));
+    return shiftIds.filter((id) => !takenSet.has(id)).sort();
+  }
+
   /** Withdraw / edit availability allowed until the posting is ongoing or finished. */
   private assertApplicationMutableBeforeOngoing(posting: {
     status: string;
@@ -1072,6 +1317,7 @@ export class LocumService {
     opts: {
       availabilityKind: 'FULL' | 'PARTIAL';
       availableDates?: string[];
+      shiftIds?: string[];
     },
   ) {
     await this.assertLocumCanWrite(userId);
@@ -1092,7 +1338,8 @@ export class LocumService {
             isDeleted: true,
             startDate: true,
             endDate: true,
-            shifts: { select: { date: true } },
+            scheduleModel: true,
+            shifts: { select: { id: true, date: true } },
             hostProfile: {
               select: {
                 userId: true,
@@ -1116,6 +1363,33 @@ export class LocumService {
       opts,
       requiredDates,
     );
+    const requestedShiftIds = this.parseRequestedShiftIds(
+      opts.shiftIds,
+      app.jobPosting,
+      availabilityKind,
+      availableDates,
+    );
+    const openShiftIds = await this.filterOpenShiftIds(requestedShiftIds, {
+      excludeApplicationId: applicationId,
+    });
+    if (
+      app.jobPosting.scheduleModel === 'SLOTS' &&
+      app.jobPosting.shifts.length > 0 &&
+      openShiftIds.length === 0
+    ) {
+      throw new BadRequestException(
+        'No open slots remain on this posting. Another locum already accepted them.',
+      );
+    }
+    if (
+      availabilityKind === 'PARTIAL' &&
+      requestedShiftIds.length > 0 &&
+      openShiftIds.length < requestedShiftIds.length
+    ) {
+      throw new BadRequestException(
+        'Some selected slots are already filled by another locum.',
+      );
+    }
 
     // If already accepted, shrinking days must not leave zero days claimed.
     const wasAccepted =
@@ -1129,13 +1403,52 @@ export class LocumService {
       }
     }
 
+    let finalKind = availabilityKind;
+    let finalDates = availableDates;
+    let finalShiftIds = openShiftIds;
+    if (
+      availabilityKind === 'FULL' &&
+      app.jobPosting.scheduleModel === 'SLOTS' &&
+      app.jobPosting.shifts.length > 0 &&
+      openShiftIds.length > 0 &&
+      openShiftIds.length < app.jobPosting.shifts.length
+    ) {
+      finalKind = 'PARTIAL';
+      const openSet = new Set(openShiftIds);
+      finalDates = [
+        ...new Set(
+          app.jobPosting.shifts
+            .filter((s) => openSet.has(s.id))
+            .map((s) => formatCalendarDateForApi(s.date))
+            .filter((d): d is string => d != null),
+        ),
+      ].sort();
+    }
+
     const updated = await this.prisma.application.update({
       where: { id: applicationId },
-      data: { availabilityKind, availableDates },
+      data: {
+        availabilityKind: finalKind,
+        availableDates: finalDates,
+        requestedShiftIds: finalShiftIds,
+      },
     });
 
     // Recalculate coverage if this locum was already counting toward fill.
     if (wasAccepted) {
+      // Sync shift claims to the newly requested set (first-accept already held).
+      if (app.jobPosting.scheduleModel === 'SLOTS' && finalShiftIds.length > 0) {
+        await this.prisma.applicationShiftClaim.deleteMany({
+          where: { applicationId },
+        });
+        await this.prisma.applicationShiftClaim.createMany({
+          data: finalShiftIds.map((shiftId) => ({
+            applicationId,
+            shiftId,
+          })),
+          skipDuplicates: true,
+        });
+      }
       await this.applyCoverageStatus(app.jobPostingId);
     }
 
@@ -1215,6 +1528,7 @@ export class LocumService {
         await this.paymentsService.handleCancellation({
           applicationId,
           cancelledBy: 'LOCUM',
+          context: 'LOCUM_WITHDRAW',
         });
       } catch {}
     }
@@ -1243,7 +1557,8 @@ export class LocumService {
         status: true,
         startDate: true,
         endDate: true,
-        shifts: { select: { date: true } },
+        scheduleModel: true,
+        shifts: { select: { id: true, date: true } },
         applications: {
           where: {
             OR: [
@@ -1251,7 +1566,12 @@ export class LocumService {
               { locumAcceptedAt: { not: null } },
             ],
           },
-          select: { availabilityKind: true, availableDates: true },
+          select: {
+            availabilityKind: true,
+            availableDates: true,
+            requestedShiftIds: true,
+            shiftClaims: { select: { shiftId: true } },
+          },
         },
       },
     });
@@ -1324,7 +1644,7 @@ export class LocumService {
           'You have already accepted this placement.',
         );
 
-      // First to accept wins overlapping days: finalize against already-accepted coverage.
+      // First to accept wins overlapping days/shifts: finalize against already-accepted coverage.
       const postingForCoverage = await this.prisma.jobPosting.findUnique({
         where: { id: app.jobPostingId },
         select: {
@@ -1332,7 +1652,8 @@ export class LocumService {
           title: true,
           startDate: true,
           endDate: true,
-          shifts: { select: { date: true } },
+          scheduleModel: true,
+          shifts: { select: { id: true, date: true } },
           applications: {
             where: {
               id: { not: applicationId },
@@ -1345,50 +1666,105 @@ export class LocumService {
               id: true,
               availabilityKind: true,
               availableDates: true,
+              requestedShiftIds: true,
+              shiftClaims: { select: { shiftId: true } },
             },
           },
         },
       });
       if (!postingForCoverage) throw new NotFoundException('Job not found');
       const requiredDates = getPostingRequiredDates(postingForCoverage);
-      const finalizedDates = finalizeAcceptDates(
-        {
-          availabilityKind: app.availabilityKind,
-          availableDates: app.availableDates,
-        },
-        requiredDates,
-        postingForCoverage.applications,
-      );
-      if (requiredDates.length > 0 && finalizedDates.length === 0) {
-        throw new BadRequestException(
-          'No remaining days are available on this posting. Another locum already accepted the overlapping dates.',
-        );
-      }
-      const availability =
-        requiredDates.length === 0
-          ? {
-              availabilityKind: (app.availabilityKind === 'PARTIAL'
-                ? 'PARTIAL'
-                : 'FULL') as 'FULL' | 'PARTIAL',
-              availableDates: app.availableDates ?? [],
-            }
-          : availabilityAfterFinalize(
-              requiredDates,
-              finalizedDates,
-              app.availabilityKind,
-            );
+      const isSlots = postingForCoverage.scheduleModel === 'SLOTS';
 
-      await this.prisma.application.update({
-        where: { id: applicationId },
-        data: {
-          locumAcceptedAt: new Date(),
-          locumResponse: 'ACCEPTED',
-          availabilityKind: availability.availabilityKind,
-          availableDates: availability.availableDates,
-        },
+      let finalizedDates: string[] = [];
+      let finalizedShiftIds: string[] = [];
+      let availability: {
+        availabilityKind: 'FULL' | 'PARTIAL';
+        availableDates: string[];
+      };
+
+      if (isSlots && postingForCoverage.shifts.some((s) => s.id)) {
+        finalizedShiftIds = finalizeAcceptShiftIds(
+          {
+            availabilityKind: app.availabilityKind,
+            availableDates: app.availableDates,
+            requestedShiftIds: app.requestedShiftIds,
+          },
+          postingForCoverage,
+          postingForCoverage.applications,
+        );
+        if (finalizedShiftIds.length === 0) {
+          throw new BadRequestException(
+            'No remaining shifts are available on this posting. Another locum already accepted the overlapping slots.',
+          );
+        }
+        finalizedDates = [
+          ...new Set(
+            postingForCoverage.shifts
+              .filter((s) => finalizedShiftIds.includes(s.id))
+              .map((s) => formatCalendarDateForApi(s.date))
+              .filter((d): d is string => d != null),
+          ),
+        ].sort();
+        availability = availabilityAfterFinalize(
+          requiredDates,
+          finalizedDates,
+          app.availabilityKind,
+        );
+      } else {
+        finalizedDates = finalizeAcceptDates(
+          {
+            availabilityKind: app.availabilityKind,
+            availableDates: app.availableDates,
+          },
+          requiredDates,
+          postingForCoverage.applications,
+        );
+        if (requiredDates.length > 0 && finalizedDates.length === 0) {
+          throw new BadRequestException(
+            'No remaining days are available on this posting. Another locum already accepted the overlapping dates.',
+          );
+        }
+        availability =
+          requiredDates.length === 0
+            ? {
+                availabilityKind: (app.availabilityKind === 'PARTIAL'
+                  ? 'PARTIAL'
+                  : 'FULL') as 'FULL' | 'PARTIAL',
+                availableDates: app.availableDates ?? [],
+              }
+            : availabilityAfterFinalize(
+                requiredDates,
+                finalizedDates,
+                app.availabilityKind,
+              );
+      }
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.application.update({
+          where: { id: applicationId },
+          data: {
+            locumAcceptedAt: new Date(),
+            locumResponse: 'ACCEPTED',
+            availabilityKind: availability.availabilityKind,
+            availableDates: availability.availableDates,
+            ...(isSlots ? { requestedShiftIds: finalizedShiftIds } : {}),
+          },
+        });
+        if (isSlots && finalizedShiftIds.length > 0) {
+          await tx.applicationShiftClaim.deleteMany({
+            where: { applicationId },
+          });
+          await tx.applicationShiftClaim.createMany({
+            data: finalizedShiftIds.map((shiftId) => ({
+              applicationId,
+              shiftId,
+            })),
+          });
+        }
       });
 
-      // Trim other host-confirmed (not yet accepted) locums off days just taken.
+      // Trim other host-confirmed (not yet accepted) locums off days/shifts just taken.
       const taken = computeCoveredDates(
         [
           ...postingForCoverage.applications,
@@ -1399,6 +1775,19 @@ export class LocumService {
         ],
         requiredDates,
       );
+      const takenShifts = isSlots
+        ? computeCoveredShiftIds(
+            [
+              ...postingForCoverage.applications,
+              {
+                availabilityKind: availability.availabilityKind,
+                availableDates: availability.availableDates,
+                shiftClaims: finalizedShiftIds.map((shiftId) => ({ shiftId })),
+              },
+            ],
+            postingForCoverage,
+          )
+        : new Set<string>();
       const pendingConfirmed = await this.prisma.application.findMany({
         where: {
           jobPostingId: app.jobPostingId,
@@ -1410,6 +1799,7 @@ export class LocumService {
           id: true,
           availabilityKind: true,
           availableDates: true,
+          requestedShiftIds: true,
           locumProfile: {
             select: {
               userId: true,
@@ -1421,6 +1811,79 @@ export class LocumService {
         },
       });
       for (const other of pendingConfirmed) {
+        if (isSlots) {
+          const claimed = applicationClaimedShiftIds(
+            {
+              availabilityKind: other.availabilityKind,
+              availableDates: other.availableDates,
+              requestedShiftIds: other.requestedShiftIds,
+            },
+            postingForCoverage,
+          );
+          const remaining = claimed.filter((id) => !takenShifts.has(id));
+          if (remaining.length === claimed.length) continue;
+          if (remaining.length === 0) {
+            await this.prisma.application.update({
+              where: { id: other.id },
+              data: {
+                status: 'WITHDRAWN',
+                locumResponse: 'REJECTED',
+                availableDates: [],
+                requestedShiftIds: [],
+              },
+            });
+            try {
+              const email = other.locumProfile.user.email;
+              if (email) {
+                await this.notifService.notifyLocumPlacementDates({
+                  recipientId: other.locumProfile.userId,
+                  recipientEmail: email,
+                  jobTitle: postingForCoverage.title,
+                  dates: [],
+                  kind: 'cleared',
+                  applicationId: other.id,
+                });
+              }
+            } catch {}
+          } else {
+            const remainingDays = [
+              ...new Set(
+                postingForCoverage.shifts
+                  .filter((s) => remaining.includes(s.id))
+                  .map((s) => formatCalendarDateForApi(s.date))
+                  .filter((d): d is string => d != null),
+              ),
+            ].sort();
+            const trimmed = availabilityAfterFinalize(
+              requiredDates,
+              remainingDays,
+              other.availabilityKind,
+            );
+            await this.prisma.application.update({
+              where: { id: other.id },
+              data: {
+                availabilityKind: trimmed.availabilityKind,
+                availableDates: trimmed.availableDates,
+                requestedShiftIds: remaining,
+              },
+            });
+            try {
+              const email = other.locumProfile.user.email;
+              if (email) {
+                await this.notifService.notifyLocumPlacementDates({
+                  recipientId: other.locumProfile.userId,
+                  recipientEmail: email,
+                  jobTitle: postingForCoverage.title,
+                  dates: remainingDays,
+                  kind: 'updated',
+                  applicationId: other.id,
+                });
+              }
+            } catch {}
+          }
+          continue;
+        }
+
         const claimed = applicationClaimedDates(other, requiredDates);
         const remaining = claimed.filter((d) => !taken.has(d));
         if (remaining.length === claimed.length) continue;
@@ -1475,7 +1938,7 @@ export class LocumService {
         }
       }
 
-      // Only fill/close the posting once accepted locums cover every day.
+      // Only fill/close the posting once accepted locums cover every day/shift.
       await this.applyCoverageStatus(app.jobPostingId);
 
       try {

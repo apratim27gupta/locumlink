@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import {
   MatchFeeCancelledBy,
+  MatchFeeInvoiceEventActor,
+  MatchFeeInvoiceEventType,
   MatchFeeInvoiceStatus,
   MatchFeeRefundResolution,
   MatchFeeReplacementStatus,
@@ -11,9 +13,11 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
 import {
-  MATCH_FEE_AMOUNT_CENTS,
   MATCH_FEE_CURRENCY,
   MATCH_FEE_POLICY,
+  MATCH_FEE_CANCELLATION_WINDOW_DAYS,
+  computeMatchFeeAmountCents,
+  matchFeeTierFromHours,
 } from './match-fee.constants.js';
 import {
   computeDueAt,
@@ -27,9 +31,18 @@ import {
   buildMatchFeeInvoiceTimeline,
   MATCH_FEE_STATUS_ADMIN_GUIDE,
 } from './match-fee-invoice.presentation.js';
+import {
+  cancellationActorToEventActor,
+  mergeMatchFeeEvents,
+  type MatchFeeInvoiceEventDto,
+} from './match-fee-invoice.events.js';
+import { buildMatchFeeReceiptPdf } from './match-fee-receipt.pdf.js';
 import { StripeService } from './stripe.service.js';
 import type Stripe from 'stripe';
-import { getPostingRequiredDates } from '../host/job-schedule.util.js';
+import {
+  computeApplicationClaimedHours,
+  getPostingRequiredDates,
+} from '../host/job-schedule.util.js';
 import {
   BadRequestException,
   NotFoundException,
@@ -43,6 +56,7 @@ const invoiceInclude = {
       locumAcceptedAt: true,
       availabilityKind: true,
       availableDates: true,
+      requestedShiftIds: true,
       locumProfile: {
         select: {
           firstName: true,
@@ -50,6 +64,7 @@ const invoiceInclude = {
           userId: true,
         },
       },
+      shiftClaims: { select: { shiftId: true } },
     },
   },
   jobPosting: {
@@ -59,9 +74,25 @@ const invoiceInclude = {
       location: true,
       startDate: true,
       endDate: true,
-      shifts: { select: { date: true } },
+      startTime: true,
+      endTime: true,
+      scheduleModel: true,
+      shifts: {
+        select: {
+          id: true,
+          date: true,
+          shiftType: true,
+          startTime: true,
+          endTime: true,
+        },
+      },
     },
   },
+} satisfies Prisma.MatchFeeInvoiceInclude;
+
+const invoiceIncludeWithEvents = {
+  ...invoiceInclude,
+  events: { orderBy: { occurredAt: 'asc' as const } },
 } satisfies Prisma.MatchFeeInvoiceInclude;
 
 function formatPostingScheduleLabel(
@@ -85,6 +116,8 @@ export type MatchFeeInvoiceDto = {
   applicationId: string;
   jobPostingId: string;
   amountCents: number;
+  claimedHours: number | null;
+  matchFeeTier: string | null;
   currency: string;
   status: MatchFeeInvoiceStatus;
   dueAt: string;
@@ -102,6 +135,7 @@ export type MatchFeeInvoiceDto = {
   postingScheduleLabel: string | null;
   locumName: string;
   daysUntilStart: number | null;
+  events: MatchFeeInvoiceEventDto[];
 };
 
 function formatLocumName(
@@ -111,15 +145,20 @@ function formatLocumName(
   return [firstName, lastName].filter(Boolean).join(' ').trim() || 'Locum';
 }
 
-function mapInvoice(row: Prisma.MatchFeeInvoiceGetPayload<{
-  include: typeof invoiceInclude;
-}>): MatchFeeInvoiceDto {
+function mapInvoice(
+  row: Prisma.MatchFeeInvoiceGetPayload<{
+    include: typeof invoiceIncludeWithEvents;
+  }>,
+): MatchFeeInvoiceDto {
   const earliest = computeEarliestShiftDate(row.jobPosting, row.application);
   return {
     id: row.id,
     applicationId: row.applicationId,
     jobPostingId: row.jobPostingId,
     amountCents: row.amountCents,
+    claimedHours:
+      row.claimedHours != null ? Number(row.claimedHours) : null,
+    matchFeeTier: row.matchFeeTier ?? null,
     currency: row.currency,
     status: row.status,
     dueAt: row.dueAt.toISOString(),
@@ -140,6 +179,7 @@ function mapInvoice(row: Prisma.MatchFeeInvoiceGetPayload<{
       row.application.locumProfile.lastName,
     ),
     daysUntilStart: daysUntilCalendarDate(earliest),
+    events: mergeMatchFeeEvents(row.events ?? [], row),
   };
 }
 
@@ -183,6 +223,7 @@ function mapAdminInvoice(
     lastReminderAt: row.lastReminderAt?.toISOString() ?? null,
     statusGuide: statusGuide ?? null,
     timeline,
+    events: base.events,
   };
 }
 
@@ -205,9 +246,107 @@ export class PaymentsService {
       paymentMethods,
       emphasis:
         role === 'LOCUM'
-          ? 'LocumLink is free for locums. The host pays the $250 match fee after you accept a confirmed placement.'
-          : 'Free to post. Free to review applicants. Pay $250 only when a locum accepts your confirmed match.',
+          ? 'LocumLink is free for locums. The host pays a match fee ($125 or $250 CAD) after you accept a confirmed placement, based on total hours claimed.'
+          : 'Free to post. Free to review applicants. Pay $125 or $250 per matched locum when they accept your confirmed match (based on total hours claimed).',
     };
+  }
+
+  private async recordMatchFeeEvent(
+    invoiceId: string,
+    eventType: MatchFeeInvoiceEventType,
+    params?: {
+      detail?: string | null;
+      actor?: MatchFeeInvoiceEventActor;
+      occurredAt?: Date;
+    },
+  ): Promise<void> {
+    await this.prisma.matchFeeInvoiceEvent.create({
+      data: {
+        invoiceId,
+        eventType,
+        detail: params?.detail ?? undefined,
+        actor: params?.actor ?? 'SYSTEM',
+        occurredAt: params?.occurredAt,
+      },
+    });
+  }
+
+  private async processRefund(params: {
+    invoiceId: string;
+    reason?: string | null;
+    cancelledBy?: MatchFeeCancelledBy;
+    adminNotes?: string | null;
+    notifyHost?: boolean;
+  }): Promise<void> {
+    const invoice = await this.prisma.matchFeeInvoice.findUnique({
+      where: { id: params.invoiceId },
+      include: {
+        jobPosting: { select: { title: true, hostProfileId: true } },
+        hostProfile: {
+          select: { userId: true, user: { select: { email: true } } },
+        },
+      },
+    });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.status === 'REFUNDED') return;
+
+    const wasCollected =
+      invoice.paidAt != null ||
+      invoice.status === 'PAID' ||
+      invoice.status === 'PENDING_REPLACEMENT';
+
+    let stripeRefundId = invoice.stripeRefundId;
+    if (
+      wasCollected &&
+      invoice.paymentProvider === 'STRIPE' &&
+      invoice.stripePaymentIntentId &&
+      !stripeRefundId
+    ) {
+      stripeRefundId = await this.stripeService.refundMatchFeePayment({
+        paymentIntentId: invoice.stripePaymentIntentId,
+        amountCents: invoice.amountCents,
+        invoiceId: invoice.id,
+      });
+    }
+
+    await this.prisma.matchFeeInvoice.update({
+      where: { id: invoice.id },
+      data: {
+        status: 'REFUNDED',
+        refundResolution: 'REFUND',
+        stripeRefundId,
+        cancelledAt: new Date(),
+        cancelledBy: params.cancelledBy ?? 'ADMIN',
+        cancellationReason: params.reason ?? invoice.cancellationReason,
+        adminNotes: params.adminNotes ?? invoice.adminNotes,
+      },
+    });
+
+    await this.recordMatchFeeEvent(invoice.id, 'REFUNDED', {
+      detail: stripeRefundId
+        ? `Refunded to original payment method (Stripe ${stripeRefundId}).`
+        : wasCollected
+          ? 'Refunded (no Stripe charge on file).'
+          : 'Refund recorded.',
+      actor: cancellationActorToEventActor(params.cancelledBy ?? 'ADMIN'),
+    });
+
+    const host = invoice.hostProfile;
+    if (
+      params.notifyHost !== false &&
+      wasCollected &&
+      host?.userId &&
+      host.user?.email
+    ) {
+      await this.notifications.notifyHostMatchFeeRefund({
+        recipientId: host.userId,
+        recipientEmail: host.user.email,
+        jobTitle: invoice.jobPosting.title,
+        invoiceId: invoice.id,
+      });
+    }
+
+    await this.syncHostReviewFlag(invoice.jobPosting.hostProfileId);
   }
 
   async createMatchFeeInvoice(applicationId: string): Promise<void> {
@@ -220,6 +359,7 @@ export class PaymentsService {
     const app = await this.prisma.application.findUnique({
       where: { id: applicationId },
       include: {
+        shiftClaims: { select: { shiftId: true } },
         jobPosting: {
           select: {
             id: true,
@@ -227,7 +367,18 @@ export class PaymentsService {
             hostProfileId: true,
             startDate: true,
             endDate: true,
-            shifts: { select: { date: true } },
+            startTime: true,
+            endTime: true,
+            scheduleModel: true,
+            shifts: {
+              select: {
+                id: true,
+                date: true,
+                shiftType: true,
+                startTime: true,
+                endTime: true,
+              },
+            },
             hostProfile: {
               select: {
                 userId: true,
@@ -241,19 +392,42 @@ export class PaymentsService {
     });
     if (!app?.locumAcceptedAt) return;
 
-    const existingForPosting = await this.prisma.matchFeeInvoice.findFirst({
+    // If this posting is seeking a replacement for a prior paid invoice, close
+    // that search only when *this* accept is a real replacement (accepted after
+    // the cancel) — not a prior co-locum who already had a paid invoice.
+    const seekingReplacement = await this.prisma.matchFeeInvoice.findFirst({
       where: {
         jobPostingId: app.jobPostingId,
-        status: { in: ['PENDING', 'OVERDUE', 'PAID', 'PENDING_REPLACEMENT'] },
+        OR: [
+          { status: 'PENDING_REPLACEMENT' },
+          { status: 'PAID', replacementStatus: 'SEARCHING' },
+        ],
       },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        applicationId: true,
+        cancelledAt: true,
+      },
+      orderBy: { cancelledAt: 'desc' },
     });
-    if (existingForPosting) {
-      if (existingForPosting.status === 'PENDING_REPLACEMENT') {
-        await this.completeReplacementAcceptance(applicationId);
-      }
-      return;
+    if (
+      seekingReplacement &&
+      this.isEligibleReplacementForInvoice(
+        { id: applicationId, locumAcceptedAt: app.locumAcceptedAt },
+        seekingReplacement,
+      )
+    ) {
+      await this.markReplacementFound(seekingReplacement.id);
     }
+
+    const claimedHours = computeApplicationClaimedHours(app.jobPosting, {
+      availabilityKind: app.availabilityKind,
+      availableDates: app.availableDates,
+      requestedShiftIds: app.requestedShiftIds,
+      shiftClaims: app.shiftClaims,
+    });
+    const amountCents = computeMatchFeeAmountCents(claimedHours);
+    const matchFeeTier = matchFeeTierFromHours(claimedHours);
 
     const createdAt = new Date();
     const earliestShiftDate = computeEarliestShiftDate(app.jobPosting, app);
@@ -264,7 +438,9 @@ export class PaymentsService {
         applicationId,
         hostProfileId: app.jobPosting.hostProfileId,
         jobPostingId: app.jobPostingId,
-        amountCents: MATCH_FEE_AMOUNT_CENTS,
+        amountCents,
+        claimedHours,
+        matchFeeTier,
         currency: MATCH_FEE_CURRENCY,
         dueAt,
       },
@@ -282,14 +458,47 @@ export class PaymentsService {
         applicationId,
       });
     }
+
+    await this.recordMatchFeeEvent(invoice.id, 'INVOICED', {
+      detail: `${app.jobPosting.title} - ${claimedHours}h (${matchFeeTier} tier, $${(amountCents / 100).toFixed(0)} CAD)`,
+    });
   }
 
   /**
-   * Per-post match fee: when a replacement locum accepts (any partial/full availability),
-   * the existing invoice stays paid and replacement is marked found.
+   * Per-locum match fee: when a replacement locum accepts, mark the prior
+   * invoice's replacement search as FOUND. A new invoice is created separately
+   * via createMatchFeeInvoice for the replacement application.
    */
   async registerReplacementLocumAccepted(applicationId: string): Promise<void> {
     await this.completeReplacementAcceptance(applicationId);
+  }
+
+  private async markReplacementFound(invoiceId: string): Promise<void> {
+    await this.prisma.matchFeeInvoice.update({
+      where: { id: invoiceId },
+      data: {
+        status: 'PAID',
+        replacementStatus: 'FOUND',
+        refundResolution: 'NONE',
+      },
+    });
+    await this.recordMatchFeeEvent(invoiceId, 'REPLACEMENT_FOUND', {
+      detail:
+        'Replacement locum accepted; original match fee remains paid. A new invoice is created for the replacement locum.',
+    });
+  }
+
+  /**
+   * A replacement must accept *after* the cancel that started the search.
+   * Otherwise a prior co-locum (A) on the same posting is wrongly treated as
+   * the replacement for a later withdrawn locum (B).
+   */
+  private isEligibleReplacementForInvoice(
+    app: { id: string; locumAcceptedAt: Date | null },
+    invoice: { applicationId: string; cancelledAt: Date | null },
+  ): boolean {
+    if (!app.locumAcceptedAt || !invoice.cancelledAt) return false;
+    return app.locumAcceptedAt.getTime() > invoice.cancelledAt.getTime();
   }
 
   private async completeReplacementAcceptance(
@@ -316,53 +525,19 @@ export class PaymentsService {
           },
         ],
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { cancelledAt: 'desc' },
+      select: {
+        id: true,
+        applicationId: true,
+        cancelledAt: true,
+      },
     });
     if (!replacementInvoice) return;
+    if (!this.isEligibleReplacementForInvoice(app, replacementInvoice)) return;
 
-    await this.prisma.$transaction(async (tx) => {
-      const duplicateForApp = await tx.matchFeeInvoice.findUnique({
-        where: { applicationId: app.id },
-        select: { id: true, status: true },
-      });
-      if (
-        duplicateForApp &&
-        duplicateForApp.id !== replacementInvoice.id &&
-        ['PENDING', 'OVERDUE'].includes(duplicateForApp.status)
-      ) {
-        await tx.matchFeeInvoice.update({
-          where: { id: duplicateForApp.id },
-          data: {
-            status: 'CANCELLED',
-            cancellationReason:
-              'Superseded by per-post match fee when replacement locum accepted.',
-          },
-        });
-      }
-
-      await tx.matchFeeInvoice.updateMany({
-        where: {
-          jobPostingId: app.jobPostingId,
-          id: { not: replacementInvoice.id },
-          status: { in: ['PENDING', 'OVERDUE'] },
-        },
-        data: {
-          status: 'CANCELLED',
-          cancellationReason:
-            'Superseded by per-post match fee when replacement locum accepted.',
-        },
-      });
-
-      await tx.matchFeeInvoice.update({
-        where: { id: replacementInvoice.id },
-        data: {
-          status: 'PAID',
-          replacementStatus: 'FOUND',
-          refundResolution: 'NONE',
-          applicationId: app.id,
-        },
-      });
-    });
+    await this.markReplacementFound(replacementInvoice.id);
+    // New per-locum invoice for the replacement application (idempotent).
+    await this.createMatchFeeInvoice(applicationId);
   }
 
   /** Fix invoices left in PENDING_REPLACEMENT after a locum already re-confirmed on the posting. */
@@ -370,23 +545,30 @@ export class PaymentsService {
     const stuck = await this.prisma.matchFeeInvoice.findMany({
       where: { hostProfileId, status: 'PENDING_REPLACEMENT' },
       select: {
+        id: true,
         jobPostingId: true,
+        applicationId: true,
+        cancelledAt: true,
         application: { select: { id: true, status: true, locumAcceptedAt: true } },
       },
     });
     for (const inv of stuck) {
       if (
         inv.application.status === 'CONFIRMED' &&
-        inv.application.locumAcceptedAt
+        this.isEligibleReplacementForInvoice(inv.application, inv)
       ) {
         await this.completeReplacementAcceptance(inv.application.id);
         continue;
       }
+      // Only a locum who accepted *after* this invoice's cancel counts.
+      // Exclude prior co-locums who were already confirmed before the withdraw.
+      if (!inv.cancelledAt) continue;
       const replacementApp = await this.prisma.application.findFirst({
         where: {
           jobPostingId: inv.jobPostingId,
           status: 'CONFIRMED',
-          locumAcceptedAt: { not: null },
+          locumAcceptedAt: { gt: inv.cancelledAt },
+          id: { not: inv.applicationId },
         },
         orderBy: { locumAcceptedAt: 'desc' },
         select: { id: true },
@@ -428,7 +610,7 @@ export class PaymentsService {
 
     const rows = await this.prisma.matchFeeInvoice.findMany({
       where,
-      include: invoiceInclude,
+      include: invoiceIncludeWithEvents,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
@@ -474,7 +656,7 @@ export class PaymentsService {
 
     const row = await this.prisma.matchFeeInvoice.findFirst({
       where: { id: invoiceId, hostProfileId: hostProfile.id },
-      include: invoiceInclude,
+      include: invoiceIncludeWithEvents,
     });
     if (!row) throw new NotFoundException('Invoice not found');
     return mapInvoice(row);
@@ -513,6 +695,7 @@ export class PaymentsService {
     applicationId: string;
     cancelledBy: CancellationActor;
     reason?: string;
+    context?: 'JOB_REMOVED' | 'MATCH_CANCEL' | 'LOCUM_WITHDRAW';
   }) {
     const app = await this.prisma.application.findUnique({
       where: { id: params.applicationId },
@@ -528,6 +711,7 @@ export class PaymentsService {
             hostProfile: {
               select: {
                 userId: true,
+                practiceName: true,
                 user: { select: { email: true } },
               },
             },
@@ -575,6 +759,34 @@ export class PaymentsService {
       nextStatus = 'PAID';
     }
 
+    const host = app.jobPosting.hostProfile;
+    const jobRemoved = params.context === 'JOB_REMOVED';
+    const actor = cancellationActorToEventActor(
+      params.cancelledBy as MatchFeeCancelledBy,
+    );
+
+    if (nextStatus === 'REFUNDED' && wasPaid) {
+      await this.processRefund({
+        invoiceId: invoice.id,
+        reason: policy.reason,
+        cancelledBy: params.cancelledBy as MatchFeeCancelledBy,
+      });
+      if (jobRemoved) {
+        await this.recordMatchFeeEvent(invoice.id, 'POSTING_REMOVED', {
+          detail: params.reason ?? 'Host removed the job posting.',
+          actor: 'HOST',
+        });
+      }
+      await this.adminNotifications.notifyMatchFeeOutcome({
+        invoiceId: invoice.id,
+        hostPracticeName: host?.practiceName ?? 'Host',
+        jobTitle: app.jobPosting.title,
+        outcome: 'REFUND_ISSUED',
+        detail: policy.reason,
+      });
+      return;
+    }
+
     await this.prisma.matchFeeInvoice.update({
       where: { id: invoice.id },
       data: {
@@ -587,7 +799,51 @@ export class PaymentsService {
       },
     });
 
-    const host = app.jobPosting.hostProfile;
+    if (jobRemoved) {
+      await this.recordMatchFeeEvent(invoice.id, 'POSTING_REMOVED', {
+        detail: params.reason ?? 'Job posting removed.',
+        actor: 'HOST',
+      });
+    }
+
+    if (nextStatus === 'PENDING_REPLACEMENT') {
+      await this.recordMatchFeeEvent(invoice.id, 'REPLACEMENT_SEARCHING', {
+        detail: policy.reason,
+        actor,
+      });
+      await this.adminNotifications.notifyMatchFeeOutcome({
+        invoiceId: invoice.id,
+        hostPracticeName: host?.practiceName ?? 'Host',
+        jobTitle: app.jobPosting.title,
+        outcome: 'REPLACEMENT_SEARCHING',
+        detail: policy.reason,
+      });
+    } else if (nextStatus === 'CANCELLED') {
+      await this.recordMatchFeeEvent(invoice.id, 'CANCELLED', {
+        detail: policy.reason,
+        actor,
+      });
+      await this.adminNotifications.notifyMatchFeeOutcome({
+        invoiceId: invoice.id,
+        hostPracticeName: host?.practiceName ?? 'Host',
+        jobTitle: app.jobPosting.title,
+        outcome: 'INVOICE_VOIDED',
+        detail: policy.reason,
+      });
+    } else if (nextStatus === 'PAID' && policy.nonRefundable && wasPaid) {
+      await this.recordMatchFeeEvent(invoice.id, 'FEE_NON_REFUNDABLE', {
+        detail: policy.reason,
+        actor,
+      });
+      await this.adminNotifications.notifyMatchFeeOutcome({
+        invoiceId: invoice.id,
+        hostPracticeName: host?.practiceName ?? 'Host',
+        jobTitle: app.jobPosting.title,
+        outcome: 'FEE_NON_REFUNDABLE',
+        detail: policy.reason,
+      });
+    }
+
     if (host?.userId && host.user?.email) {
       await this.notifications.notifyHostMatchFeeCancelled({
         recipientId: host.userId,
@@ -598,11 +854,7 @@ export class PaymentsService {
       });
     }
 
-    if (
-      nextStatus === 'REFUNDED' ||
-      nextStatus === 'CREDITED' ||
-      nextStatus === 'CANCELLED'
-    ) {
+    if (nextStatus === 'REFUNDED' || nextStatus === 'CANCELLED') {
       await this.syncHostReviewFlag(app.jobPosting.hostProfileId);
     }
   }
@@ -620,6 +872,7 @@ export class PaymentsService {
         applicationId: inv.applicationId,
         cancelledBy,
         reason: 'Job posting removed.',
+        context: 'JOB_REMOVED',
       });
     }
   }
@@ -663,6 +916,9 @@ export class PaymentsService {
         where: { id: invoice.id },
         data: { status: 'OVERDUE' },
       });
+      await this.recordMatchFeeEvent(invoice.id, 'OVERDUE', {
+        detail: `Due date was ${invoice.dueAt.toLocaleDateString('en-CA', { timeZone: 'UTC' })}.`,
+      });
       const host = invoice.hostProfile;
       if (host?.userId && host.user?.email) {
         await this.notifications.notifyHostMatchFeeOverdue({
@@ -700,6 +956,9 @@ export class PaymentsService {
       await this.prisma.matchFeeInvoice.update({
         where: { id: invoice.id },
         data: { escalatedAt: now },
+      });
+      await this.recordMatchFeeEvent(invoice.id, 'ESCALATED', {
+        detail: 'Unpaid match fee overdue beyond policy threshold.',
       });
       await this.prisma.hostProfile.update({
         where: { id: invoice.hostProfileId },
@@ -740,7 +999,7 @@ export class PaymentsService {
     const rows = await this.prisma.matchFeeInvoice.findMany({
       where,
       include: {
-        ...invoiceInclude,
+        ...invoiceIncludeWithEvents,
         hostProfile: {
           select: {
             id: true,
@@ -846,6 +1105,16 @@ export class PaymentsService {
       data: { lastReminderAt: new Date() },
     });
 
+    await this.recordMatchFeeEvent(invoiceId, 'PAYMENT_REMINDER', {
+      detail: [
+        options.sendEmail ? 'email' : null,
+        options.sendNotification ? 'in-app' : null,
+      ]
+        .filter(Boolean)
+        .join(' + '),
+      actor: 'ADMIN',
+    });
+
     return { success: true };
   }
 
@@ -949,10 +1218,18 @@ export class PaymentsService {
         stripeCheckoutSessionId: params.stripeCheckoutSessionId ?? undefined,
         stripePaymentIntentId: params.stripePaymentIntentId ?? undefined,
       },
-      include: invoiceInclude,
+      include: invoiceIncludeWithEvents,
     });
 
     await this.syncHostReviewFlag(invoice.hostProfileId);
+
+    await this.recordMatchFeeEvent(params.invoiceId, 'PAID', {
+      detail:
+        params.paymentProvider === 'STRIPE'
+          ? 'Paid via Stripe.'
+          : `Mock payment ${params.mockPaymentRef ?? ''}`.trim(),
+      occurredAt: paidAt,
+    });
 
     const host = invoice.hostProfile;
     if (host?.userId && host.user?.email) {
@@ -967,43 +1244,83 @@ export class PaymentsService {
     return updated;
   }
 
-  async resolveRefund(
-    invoiceId: string,
-    resolution: 'REFUND' | 'CREDIT',
-    adminNotes?: string,
-  ) {
+  async resolveRefund(invoiceId: string, adminNotes?: string) {
     const invoice = await this.prisma.matchFeeInvoice.findUnique({
       where: { id: invoiceId },
       include: {
-        jobPosting: { select: { title: true, hostProfileId: true } },
-        hostProfile: {
-          select: { userId: true, user: { select: { email: true } } },
+        jobPosting: {
+          select: {
+            startDate: true,
+            endDate: true,
+            shifts: { select: { date: true } },
+          },
+        },
+        application: {
+          select: { availabilityKind: true, availableDates: true },
         },
       },
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
-
-    const status = resolution === 'CREDIT' ? 'CREDITED' : 'REFUNDED';
-    await this.prisma.matchFeeInvoice.update({
-      where: { id: invoiceId },
-      data: {
-        status,
-        refundResolution: resolution,
-        adminNotes: adminNotes ?? invoice.adminNotes,
-      },
-    });
-
-    const host = invoice.hostProfile;
-    if (host?.userId && host.user?.email) {
-      await this.notifications.notifyHostMatchFeeRefund({
-        recipientId: host.userId,
-        recipientEmail: host.user.email,
-        jobTitle: invoice.jobPosting.title,
-        resolution,
-        invoiceId,
-      });
+    if (invoice.status === 'PENDING_REPLACEMENT') {
+      throw new BadRequestException(
+        'Locum cancelled within 14 days of start. Per policy, use "No replacement" after searching - that issues the host refund if none is found.',
+      );
     }
-    await this.syncHostReviewFlag(invoice.jobPosting.hostProfileId);
+    if (invoice.status !== 'PAID') {
+      throw new BadRequestException(
+        'Only a paid invoice after an eligible cancellation can be refunded from this action.',
+      );
+    }
+
+    const events = await this.prisma.matchFeeInvoiceEvent.findMany({
+      where: { invoiceId },
+      select: { eventType: true },
+    });
+    const postingRemoved = events.some((e) => e.eventType === 'POSTING_REMOVED');
+    const reasonText = (invoice.cancellationReason ?? '').toLowerCase();
+    const hostDeletedPost =
+      postingRemoved ||
+      (invoice.cancelledBy === 'HOST' &&
+        (reasonText.includes('job posting removed') ||
+          reasonText.includes('posting removed') ||
+          reasonText.includes('removed the job')));
+    const locumWithdrew = invoice.cancelledBy === 'LOCUM';
+    if (!locumWithdrew && !hostDeletedPost) {
+      throw new BadRequestException(
+        'Refund is only available after a locum withdraws or the host deletes the posting (and more than 14 days before start).',
+      );
+    }
+
+    // Early cancel only: more than 14 days before start → refund allowed.
+    const earliest = computeEarliestShiftDate(
+      invoice.jobPosting,
+      invoice.application,
+    );
+    const daysUntilStart = daysUntilCalendarDate(earliest);
+    if (
+      daysUntilStart == null ||
+      daysUntilStart <= MATCH_FEE_CANCELLATION_WINDOW_DAYS
+    ) {
+      if (locumWithdrew) {
+        throw new BadRequestException(
+          'Locum cancelled within 14 days of start. Use the replacement flow; refund only if no replacement is found.',
+        );
+      }
+      throw new BadRequestException(
+        'Host cancelled within 14 days of start - the match fee is non-refundable if already paid.',
+      );
+    }
+
+    await this.processRefund({
+      invoiceId,
+      adminNotes,
+      cancelledBy: 'ADMIN',
+      reason:
+        adminNotes ??
+        (locumWithdrew
+          ? 'Admin refund after locum withdraw - more than 14 days before start.'
+          : 'Admin refund after host deleted posting - more than 14 days before start.'),
+    });
     return { success: true };
   }
 
@@ -1026,37 +1343,40 @@ export class PaymentsService {
       throw new BadRequestException('Invoice is not awaiting replacement resolution.');
     }
 
-    let nextStatus: MatchFeeInvoiceStatus = 'PENDING_REPLACEMENT';
-    let refundResolution: MatchFeeRefundResolution = 'PENDING';
     if (replacementStatus === 'FOUND') {
-      nextStatus = 'PAID';
-      refundResolution = 'NONE';
+      await this.prisma.matchFeeInvoice.update({
+        where: { id: invoiceId },
+        data: {
+          replacementStatus: 'FOUND',
+          status: 'PAID',
+          refundResolution: 'NONE',
+          adminNotes: adminNotes ?? invoice.adminNotes,
+        },
+      });
+      await this.recordMatchFeeEvent(invoiceId, 'REPLACEMENT_FOUND', {
+        detail: adminNotes,
+        actor: 'ADMIN',
+      });
     } else if (replacementStatus === 'NOT_FOUND') {
-      nextStatus = 'REFUNDED';
-      refundResolution = 'REFUND';
-    }
-
-    await this.prisma.matchFeeInvoice.update({
-      where: { id: invoiceId },
-      data: {
-        replacementStatus,
-        status: nextStatus,
-        refundResolution,
-        adminNotes: adminNotes ?? invoice.adminNotes,
-      },
-    });
-
-    if (replacementStatus === 'NOT_FOUND') {
-      const host = invoice.hostProfile;
-      if (host?.userId && host.user?.email) {
-        await this.notifications.notifyHostMatchFeeRefund({
-          recipientId: host.userId,
-          recipientEmail: host.user.email,
-          jobTitle: invoice.jobPosting.title,
-          resolution: 'REFUND',
-          invoiceId,
-        });
-      }
+      await this.prisma.matchFeeInvoice.update({
+        where: { id: invoiceId },
+        data: {
+          replacementStatus: 'NOT_FOUND',
+          adminNotes: adminNotes ?? invoice.adminNotes,
+        },
+      });
+      await this.recordMatchFeeEvent(invoiceId, 'REPLACEMENT_NOT_FOUND', {
+        detail: adminNotes,
+        actor: 'ADMIN',
+      });
+      await this.processRefund({
+        invoiceId,
+        reason:
+          adminNotes ??
+          'No replacement locum found; refund to original payment method.',
+        cancelledBy: 'ADMIN',
+        adminNotes,
+      });
     }
 
     await this.syncHostReviewFlag(invoice.jobPosting.hostProfileId);
@@ -1082,6 +1402,10 @@ export class PaymentsService {
         cancellationReason: 'Admin write-off for long-overdue invoice.',
         adminNotes,
       },
+    });
+    await this.recordMatchFeeEvent(invoiceId, 'CANCELLED', {
+      detail: 'Admin write-off for long-overdue invoice.',
+      actor: 'ADMIN',
     });
     await this.syncHostReviewFlag(invoice.hostProfileId);
     return { success: true };
@@ -1133,8 +1457,55 @@ export class PaymentsService {
     if (applicationIds.length === 0) return new Map<string, MatchFeeInvoiceDto>();
     const rows = await this.prisma.matchFeeInvoice.findMany({
       where: { applicationId: { in: applicationIds } },
-      include: invoiceInclude,
+      include: invoiceIncludeWithEvents,
     });
     return new Map(rows.map((row) => [row.applicationId, mapInvoice(row)]));
+  }
+
+  async buildHostReceiptPdf(userId: string, invoiceId: string): Promise<Buffer> {
+    const hostProfile = await this.prisma.hostProfile.findUnique({
+      where: { userId },
+      select: {
+        id: true,
+        practiceName: true,
+        user: { select: { email: true } },
+      },
+    });
+    if (!hostProfile?.user?.email) {
+      throw new NotFoundException('Host profile not found');
+    }
+
+    const row = await this.prisma.matchFeeInvoice.findFirst({
+      where: { id: invoiceId, hostProfileId: hostProfile.id },
+      include: invoiceIncludeWithEvents,
+    });
+    if (!row) throw new NotFoundException('Invoice not found');
+
+    const mapped = mapInvoice(row);
+    const receiptNumber = row.id.slice(-8).toUpperCase();
+    const paymentReference =
+      row.paymentProvider === 'STRIPE'
+        ? (row.stripePaymentIntentId ?? row.stripeCheckoutSessionId)
+        : row.mockPaymentRef;
+
+    return buildMatchFeeReceiptPdf({
+      invoiceId: row.id,
+      invoiceNumber: receiptNumber,
+      issuedAt: row.createdAt,
+      paidAt: row.paidAt,
+      dueAt: row.dueAt,
+      amountCents: row.amountCents,
+      currency: row.currency,
+      status: row.status,
+      jobTitle: mapped.jobTitle,
+      postingScheduleLabel: mapped.postingScheduleLabel,
+      postingLocation: mapped.postingLocation,
+      locumName: mapped.locumName,
+      practiceName: hostProfile.practiceName,
+      hostEmail: hostProfile.user.email,
+      paymentProvider:
+        row.paymentProvider === 'STRIPE' ? 'Stripe (card)' : 'Test payment',
+      paymentReference,
+    });
   }
 }

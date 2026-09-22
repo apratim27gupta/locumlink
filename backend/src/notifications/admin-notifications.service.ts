@@ -15,7 +15,8 @@ export type AdminNotifEventType =
   | 'A_003_CREDENTIAL_UPLOADED'
   | 'A_004_ACCOUNT_FLAGGED'
   | 'A_005_CPSNS_UPDATED'
-  | 'A_006_MATCH_FEE_OVERDUE';
+  | 'A_006_MATCH_FEE_OVERDUE'
+  | 'A_007_MATCH_FEE_OUTCOME';
 
 export type AdminNotificationPriority =
   | 'CRITICAL'
@@ -238,6 +239,37 @@ export class AdminNotificationsService {
       referenceType: 'MatchFeeInvoice',
       emailSubject: `Overdue match fee: ${params.hostPracticeName}`,
       emailBody: `${params.hostPracticeName} has an overdue $${amount} LocumLink match fee for ${params.jobTitle}. Review in the admin payments dashboard.`,
+    });
+  }
+
+  async notifyMatchFeeOutcome(params: {
+    invoiceId: string;
+    hostPracticeName: string;
+    jobTitle: string;
+    outcome:
+      | 'INVOICE_VOIDED'
+      | 'REFUND_ISSUED'
+      | 'FEE_NON_REFUNDABLE'
+      | 'REPLACEMENT_SEARCHING';
+    detail: string;
+  }): Promise<void> {
+    const titles: Record<typeof params.outcome, string> = {
+      INVOICE_VOIDED: 'Match fee invoice voided',
+      REFUND_ISSUED: 'Match fee refunded',
+      FEE_NON_REFUNDABLE: 'Match fee held (no refund)',
+      REPLACEMENT_SEARCHING: 'Match fee: replacement search',
+    };
+    await this.notifyAllAdmins({
+      eventType: 'A_007_MATCH_FEE_OUTCOME',
+      title: titles[params.outcome],
+      body: `${params.hostPracticeName} · ${params.jobTitle}. ${params.detail}`,
+      href: '/admin/payments',
+      priority: params.outcome === 'FEE_NON_REFUNDABLE' ? 'HIGH' : 'MEDIUM',
+      actionLabel: 'View match fees',
+      referenceId: params.invoiceId,
+      referenceType: 'MatchFeeInvoice',
+      emailSubject: `${titles[params.outcome]}: ${params.hostPracticeName}`,
+      emailBody: `${params.hostPracticeName} - ${params.jobTitle}. ${params.detail} Review in admin Match Fees.`,
     });
   }
 

@@ -123,7 +123,7 @@ export function evaluateCancellationPolicy(params: {
       replacementStatus: 'NONE',
       nonRefundable: false,
       reason:
-        'Host cancelled more than 14 days before start. Refund or credit applies if the fee was paid.',
+        'Host cancelled more than 14 days before start. Refund to original payment method if the fee was paid.',
     };
   }
 
@@ -137,7 +137,7 @@ export function evaluateCancellationPolicy(params: {
         replacementStatus: wasPaid ? 'SEARCHING' : 'NONE',
         nonRefundable: wasPaid,
         reason:
-          'Locum cancelled within 14 days of start. LocumLink will seek a replacement before issuing a refund or credit.',
+          'Locum cancelled within 14 days of start. LocumLink will seek a replacement before issuing a refund.',
       };
     }
     return {
@@ -148,7 +148,7 @@ export function evaluateCancellationPolicy(params: {
       replacementStatus: 'NONE',
       nonRefundable: false,
       reason:
-        'Locum cancelled more than 14 days before start. Refund or credit applies if the fee was paid.',
+        'Locum cancelled more than 14 days before start. Refund to original payment method if the fee was paid.',
     };
   }
 

@@ -475,11 +475,17 @@ export type BrowseJobHostProfile = {
     servicesOffered: string[];
     highlights: string | null;
 };
-/** One individually chosen day with its own start/end time (UTC HH:mm strings). */
+/** One individually chosen day/slot with start/end time (UTC HH:mm strings). */
 export type JobShift = {
+    id?: string;
     date: string;
     startTime: string | null;
     endTime: string | null;
+    shiftType?: string | null;
+    slotKind?: 'HALF' | 'FULL' | null;
+    hours?: number | null;
+    /** True when another locum already accepted this slot. */
+    isTaken?: boolean;
 };
 export type BrowseJob = {
     id: string;
@@ -499,6 +505,8 @@ export type BrowseJob = {
     shifts?: JobShift[] | null;
     /** 'DATES' or 'RANGES' when the posting used individual days / multiple ranges. */
     scheduleType?: string | null;
+    /** LEGACY = free times; SLOTS = half/full day with computed end. */
+    scheduleModel?: 'LEGACY' | 'SLOTS' | null;
     startTime: string | null;
     endTime: string | null;
     payPerDay: string | number | null;
@@ -513,6 +521,10 @@ export type PlacementAcceptPreview = {
     proposedDates: string[];
     takenDates: string[];
     remainingDates: string[];
+    /** Present for SLOTS postings (prefer these over date lists in UI). */
+    proposedShiftIds?: string[];
+    takenShiftIds?: string[];
+    remainingShiftIds?: string[];
 };
 export type MyApplication = {
     id: string;
@@ -522,6 +534,8 @@ export type MyApplication = {
     coverNote?: string | null;
     availabilityKind?: 'FULL' | 'PARTIAL' | null;
     availableDates?: string[] | null;
+    requestedShiftIds?: string[] | null;
+    shiftClaims?: { shiftId: string }[] | null;
     locumAcceptedAt?: string | null;
     /** Present when host-confirmed and locum has not accepted yet. */
     acceptPreview?: PlacementAcceptPreview | null;
@@ -538,6 +552,7 @@ export type MyApplication = {
         dates?: string[] | null;
         shifts?: JobShift[] | null;
         scheduleType?: string | null;
+        scheduleModel?: 'LEGACY' | 'SLOTS' | null;
         startTime: string | null;
         endTime: string | null;
         payPerDay?: string | number | null;
@@ -647,12 +662,14 @@ export const locumApi = {
             coverNote?: string;
             availabilityKind?: 'FULL' | 'PARTIAL';
             availableDates?: string[];
+            shiftIds?: string[];
         },
     ): Promise<unknown> => {
         const body: Record<string, unknown> = {};
         if (opts?.coverNote !== undefined && opts.coverNote !== '') body.coverNote = opts.coverNote;
         if (opts?.availabilityKind) body.availabilityKind = opts.availabilityKind;
         if (opts?.availabilityKind === 'PARTIAL') body.availableDates = opts.availableDates ?? [];
+        if (opts?.shiftIds && opts.shiftIds.length > 0) body.shiftIds = opts.shiftIds;
         const res = await trackedFetch(`${NEST_BASE}/api/locum/jobs/${encodeURIComponent(jobId)}/apply`, {
             method: 'POST',
             headers: nestHeaders(true),
@@ -712,6 +729,7 @@ export const locumApi = {
         opts: {
             availabilityKind: 'FULL' | 'PARTIAL';
             availableDates?: string[];
+            shiftIds?: string[];
         },
     ): Promise<{ success: boolean }> => {
         const body: Record<string, unknown> = {
@@ -720,6 +738,7 @@ export const locumApi = {
         if (opts.availabilityKind === 'PARTIAL') {
             body.availableDates = opts.availableDates ?? [];
         }
+        if (opts.shiftIds && opts.shiftIds.length > 0) body.shiftIds = opts.shiftIds;
         const res = await trackedFetch(
             `${NEST_BASE}/api/locum/applications/${encodeURIComponent(applicationId)}/availability`,
             {
@@ -828,6 +847,8 @@ export type ApplicationRecord = {
     /** 'FULL' = available for the whole schedule; 'PARTIAL' = only availableDates. */
     availabilityKind?: 'FULL' | 'PARTIAL' | null;
     availableDates?: string[] | null;
+    requestedShiftIds?: string[] | null;
+    shiftClaims?: { shiftId: string }[] | null;
     locumProfile: {
         id: string;
         userId: string;
@@ -890,8 +911,13 @@ export interface CreateJobPayload {
     endDate?: string;
     /** Individually chosen days (YYYY-MM-DD). When set, replaces the start/end range. */
     dates?: string[];
-    /** Individually chosen days, each with its own optional start/end time (UTC HH:mm). */
-    shifts?: { date: string; startTime?: string; endTime?: string }[];
+    /** Individually chosen days, each with start time + optional end (LEGACY) or slotKind (SLOTS). */
+    shifts?: {
+        date: string;
+        startTime?: string;
+        endTime?: string;
+        slotKind?: 'HALF' | 'FULL';
+    }[];
     /** 'DATES' (individual days) or 'RANGES' (multiple date ranges). */
     scheduleType?: 'DATES' | 'RANGES';
     startTime?: string;
@@ -1201,6 +1227,25 @@ export const hostApi = {
         }
         return res.json() as Promise<{ success: boolean; url: string }>;
     },
+    downloadMatchFeeReceipt: async (invoiceId: string): Promise<void> => {
+        const res = await trackedFetch(
+            `${NEST_BASE}/api/host/match-fees/${encodeURIComponent(invoiceId)}/receipt.pdf`,
+            { headers: nestHeaders(false) },
+        );
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Downloading receipt');
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `locumlink-match-fee-${invoiceId.slice(-8)}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    },
     cancelAcceptedMatch: async (applicationId: string, reason?: string): Promise<{ success: boolean }> => {
         const res = await trackedFetch(`${NEST_BASE}/api/host/applications/${encodeURIComponent(applicationId)}/cancel-match`, {
             method: 'POST',
@@ -1244,6 +1289,15 @@ export type MatchFeeInvoice = {
     postingScheduleLabel: string | null;
     locumName: string;
     daysUntilStart: number | null;
+    events: MatchFeeInvoiceEvent[];
+};
+export type MatchFeeInvoiceEvent = {
+    id: string;
+    eventType: string;
+    label: string;
+    detail: string | null;
+    actor: string;
+    occurredAt: string;
 };
 export type MatchFeePolicyResponse = {
     role: 'HOST' | 'LOCUM';
@@ -1251,10 +1305,14 @@ export type MatchFeePolicyResponse = {
     locumFee: string;
     hostPostingFee: string;
     matchFeeAmountCad: number;
+    matchFeeHalfCad?: number;
+    matchFeeFullCad?: number;
     matchFeeDescription: string;
+    matchFeePoints?: string[];
+    perPostFeeRule?: string;
+    perLocumFeeRule?: string;
     dueRule: string;
     clinicalPayNote: string;
-    futurePaymentMethods: string;
     cancellationRules: Array<{ id: string; summary: string }>;
     paymentMethods?: { enabled: boolean; mockEnabled: boolean };
 };

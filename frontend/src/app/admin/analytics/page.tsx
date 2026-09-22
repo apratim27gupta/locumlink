@@ -11,6 +11,8 @@ import {
   Users,
 } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
+import { AvailabilityStrip } from '@/components/AvailabilityStrip';
+import { getPostingDays } from '@/lib/jobSchedule';
 import { adminDownloadAnalyticsReport, adminFetchJson } from '@/lib/adminApi';
 import type { AnalyticsSummary } from '@/lib/adminAnalyticsSummary';
 import type {
@@ -492,6 +494,7 @@ export default function AdminAnalyticsPage() {
                 <thead>
                   <tr>
                     <th>Candidate</th>
+                    <th>Availability</th>
                     <th>Status</th>
                     <th>Locum response</th>
                     <th>Applied</th>
@@ -502,6 +505,19 @@ export default function AdminAnalyticsPage() {
                     <tr key={a.id}>
                       <td>
                         <ProfileLink userId={a.locum.userId}>{a.locum.name}</ProfileLink>
+                      </td>
+                      <td>
+                        <AvailabilityStrip
+                          postingDays={getPostingDays(jobDetail.job)}
+                          app={{
+                            availabilityKind: a.availabilityKind,
+                            availableDates: a.availableDates,
+                            requestedShiftIds: a.requestedShiftIds,
+                            shiftClaims: a.shiftClaims,
+                          }}
+                          job={jobDetail.job}
+                          cell={10}
+                        />
                       </td>
                       <td>{a.status}</td>
                       <td>{a.locumResponse ?? '—'}</td>
@@ -643,6 +659,7 @@ export default function AdminAnalyticsPage() {
                                   <thead>
                                     <tr>
                                       <th>Candidate</th>
+                                      <th>Availability</th>
                                       <th>Specialty</th>
                                       <th>Status</th>
                                       <th>Locum response</th>
@@ -661,6 +678,19 @@ export default function AdminAnalyticsPage() {
                                           <div className="text-sm text-muted">
                                             {a.locum.email}
                                           </div>
+                                        </td>
+                                        <td>
+                                          <AvailabilityStrip
+                                            postingDays={getPostingDays(jobDetail.job)}
+                                            app={{
+                                              availabilityKind: a.availabilityKind,
+                                              availableDates: a.availableDates,
+                                              requestedShiftIds: a.requestedShiftIds,
+                                              shiftClaims: a.shiftClaims,
+                                            }}
+                                            job={jobDetail.job}
+                                            cell={10}
+                                          />
                                         </td>
                                         <td className="text-sm">
                                           {a.locum.specialty ?? '—'}

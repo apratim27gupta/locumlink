@@ -78,6 +78,7 @@ export class LocumController {
       coverNote: dto.coverNote,
       availabilityKind: dto.availabilityKind,
       availableDates: dto.availableDates,
+      shiftIds: dto.shiftIds,
     });
   }
   @Get('applications')
@@ -112,6 +113,7 @@ export class LocumController {
       {
         availabilityKind: dto.availabilityKind,
         availableDates: dto.availableDates,
+        shiftIds: dto.shiftIds,
       },
     );
   }

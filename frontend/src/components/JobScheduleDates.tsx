@@ -2,8 +2,6 @@ import type { CSSProperties } from 'react';
 import {
   getJobShifts,
   getJobScheduleType,
-  getJobDateRanges,
-  formatDateRange,
   formatShiftTimeRange,
   formatSpecificDate,
   type JobScheduleLike,
@@ -52,58 +50,30 @@ export function JobScheduleDates({
   tone = 'neutral',
   fontSize = 'var(--font-small)',
   style,
+  highlightShiftIds,
 }: {
   job: JobScheduleLike;
   tone?: JobScheduleTone;
   fontSize?: number | string;
   style?: CSSProperties;
+  /** When set, highlighted shifts use the tone; others render muted. */
+  highlightShiftIds?: string[] | null;
 }) {
   const shifts = getJobShifts(job);
   if (shifts.length === 0) return null;
   const t = TONES[tone];
+  const muted = TONES.neutral;
+  const highlight =
+    highlightShiftIds != null && highlightShiftIds.length > 0
+      ? new Set(highlightShiftIds)
+      : null;
 
-  // Multiple periods posting: show grouped ranges, each with its time.
-  if (getJobScheduleType(job) === 'RANGES') {
-    const ranges = getJobDateRanges(job);
-    const rangeTimes = ranges.map((r) =>
-      formatShiftTimeRange({ date: r.startDate, startTime: r.startTime, endTime: r.endTime }),
-    );
-    const showTime = rangeTimes.some(Boolean) && new Set(rangeTimes.map((r) => r ?? '')).size > 1;
-    return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, ...style }}>
-        <span
-          title="This posting is for multiple date ranges, not one continuous range."
-          style={{
-            background: t.bg, border: `1px solid ${t.border}`, padding: '5px 10px',
-            borderRadius: 5, fontSize, fontWeight: 600, color: t.color,
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-          }}
-        >
-          <MiniCalendarIcon color={t.color} />
-          {ranges.length} date range{ranges.length === 1 ? '' : 's'}
-        </span>
-        {ranges.map((r, i) => (
-          <span
-            key={`${r.startDate}-${r.endDate}`}
-            style={{
-              background: t.pillBg, border: `1px solid ${t.border}`, padding: '4px 9px',
-              borderRadius: 5, fontSize, fontWeight: 500, color: t.color, whiteSpace: 'nowrap',
-            }}
-          >
-            {formatDateRange(r)}
-            {showTime && rangeTimes[i] ? ` · ${rangeTimes[i]}` : ''}
-          </span>
-        ))}
-      </div>
-    );
-  }
-
-  // Only surface per-day times when they actually differ between days; if every
-  // day shares one time, the separate time chip already covers it.
+  // Prefer one pill per shift (unique keys for same-day halves / full slots).
   const timeRanges = shifts.map((s) => formatShiftTimeRange(s));
   const anyTimes = timeRanges.some(Boolean);
   const uniqueTimes = new Set(timeRanges.map((r) => r ?? ''));
-  const showPerDayTime = anyTimes && uniqueTimes.size > 1;
+  const showPerDayTime = anyTimes && (uniqueTimes.size > 1 || getJobScheduleType(job) === 'RANGES');
+  const slotCount = shifts.length;
 
   return (
     <div
@@ -116,7 +86,7 @@ export function JobScheduleDates({
       }}
     >
       <span
-        title="This posting is for a set of specific dates, not a continuous range."
+        title="Total slots in this posting."
         style={{
           background: t.bg,
           border: `1px solid ${t.border}`,
@@ -131,26 +101,30 @@ export function JobScheduleDates({
         }}
       >
         <MiniCalendarIcon color={t.color} />
-        {shifts.length} specific date{shifts.length === 1 ? '' : 's'}
+        {slotCount} total slot{slotCount === 1 ? '' : 's'}
       </span>
-      {shifts.map((s, i) => (
-        <span
-          key={s.date}
-          style={{
-            background: t.pillBg,
-            border: `1px solid ${t.border}`,
-            padding: '4px 9px',
-            borderRadius: 5,
-            fontSize,
-            fontWeight: 500,
-            color: t.color,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {formatSpecificDate(s.date)}
-          {showPerDayTime && timeRanges[i] ? ` · ${timeRanges[i]}` : ''}
-        </span>
-      ))}
+      {shifts.map((s, i) => {
+        const on = !highlight || (s.id != null && highlight.has(s.id));
+        const pill = on ? t : muted;
+        return (
+          <span
+            key={s.id ?? `${s.date}-${s.startTime ?? ''}-${s.endTime ?? ''}-${i}`}
+            style={{
+              background: on ? pill.pillBg : '#fff',
+              border: `1px solid ${pill.border}`,
+              padding: '4px 9px',
+              borderRadius: 5,
+              fontSize,
+              fontWeight: on ? 600 : 500,
+              color: pill.color,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {formatSpecificDate(s.date)}
+            {showPerDayTime && timeRanges[i] ? ` · ${timeRanges[i]}` : ''}
+          </span>
+        );
+      })}
     </div>
   );
 }

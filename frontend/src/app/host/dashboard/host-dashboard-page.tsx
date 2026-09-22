@@ -29,7 +29,7 @@ import {
   type JobPracticeFields,
 } from '@/components/host/HostJobPracticeSections';
 import { AvailabilityStrip } from '@/components/AvailabilityStrip';
-import { getPostingDays } from '@/lib/jobSchedule';
+import { getPostingDays, addClockHours, HALF_SLOT_HOURS, FULL_SLOT_HOURS, halfSlotsOverlap } from '@/lib/jobSchedule';
 import {
     maxIsoDate,
     isPostingEndDatePassed,
@@ -142,6 +142,216 @@ const lbl: React.CSSProperties = {
     color: '#374151',
     marginBottom: 6,
 };
+
+const halfSlotCardStyle: React.CSSProperties = {
+    padding: 10,
+    borderRadius: 8,
+    border: '1px solid rgba(48, 155, 183, 0.35)',
+    background: '#fff',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+};
+
+const halfSlotAddBtnStyle: React.CSSProperties = {
+    alignSelf: 'flex-start',
+    padding: '8px 14px',
+    borderRadius: 8,
+    border: '1px dashed #309BB7',
+    background: '#fff',
+    color: '#1B6F86',
+    fontWeight: 600,
+    fontSize: 13,
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+};
+
+const halfSlotRemoveBtnStyle: React.CSSProperties = {
+    flexShrink: 0,
+    border: 'none',
+    background: 'transparent',
+    color: '#1B6F86',
+    cursor: 'pointer',
+    fontSize: 17,
+    lineHeight: 1,
+    padding: '0 2px',
+};
+
+type SlotKindOrEmpty = 'HALF' | 'FULL' | '';
+
+/**
+ * One day of work: Full (7h) or Half (1–2 × 3.5h). Reused for continuous,
+ * each range, and specific-date (shared or per-day) configs.
+ */
+function DayConfigEditor({
+    slotKind,
+    startTime,
+    secondHalfStart,
+    onSlotKindChange,
+    onStartChange,
+    onSecondChange,
+    onAddSecond,
+    onRemoveSecond,
+    heading = 'What does each work day look like?',
+}: {
+    slotKind: SlotKindOrEmpty;
+    startTime: string;
+    secondHalfStart: string | null;
+    onSlotKindChange: (kind: SlotKindOrEmpty) => void;
+    onStartChange: (value: string) => void;
+    onSecondChange: (value: string) => void;
+    onAddSecond: () => void;
+    onRemoveSecond: () => void;
+    heading?: string;
+}) {
+    const fullEnd =
+        slotKind === 'FULL' && startTime.trim()
+            ? addClockHours(startTime, FULL_SLOT_HOURS)
+            : null;
+    const firstEnd =
+        slotKind === 'HALF' && startTime.trim()
+            ? addClockHours(startTime, HALF_SLOT_HOURS)
+            : null;
+    const secondEnd =
+        slotKind === 'HALF' &&
+        secondHalfStart != null &&
+        secondHalfStart.trim()
+            ? addClockHours(secondHalfStart, HALF_SLOT_HOURS)
+            : null;
+    const overlaps =
+        slotKind === 'HALF' &&
+        secondHalfStart != null &&
+        Boolean(startTime.trim()) &&
+        Boolean(secondHalfStart.trim()) &&
+        halfSlotsOverlap(startTime, secondHalfStart);
+    const canAddSecond =
+        slotKind === 'HALF' &&
+        secondHalfStart == null &&
+        Boolean(startTime.trim());
+
+    const segBtn = (active: boolean): React.CSSProperties => ({
+        flex: 1,
+        padding: '10px 12px',
+        borderRadius: 8,
+        border: active ? '1.5px solid #309BB7' : '1px solid #D0D5DD',
+        background: active ? 'rgba(48, 155, 183, 0.1)' : '#fff',
+        color: active ? '#1B6F86' : '#374151',
+        fontWeight: active ? 700 : 500,
+        fontSize: 13,
+        fontFamily: 'inherit',
+        cursor: 'pointer',
+        textAlign: 'left' as const,
+    });
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{heading}</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                    type="button"
+                    style={segBtn(slotKind === 'FULL')}
+                    onClick={() => onSlotKindChange('FULL')}
+                >
+                    <div>Full day</div>
+                    <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.8, marginTop: 2 }}>
+                        7 hours · one start time
+                    </div>
+                </button>
+                <button
+                    type="button"
+                    style={segBtn(slotKind === 'HALF')}
+                    onClick={() => onSlotKindChange('HALF')}
+                >
+                    <div>Half day</div>
+                    <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.8, marginTop: 2 }}>
+                        3.5 hours · up to two slots
+                    </div>
+                </button>
+            </div>
+
+            {slotKind === 'FULL' ? (
+                <div>
+                    <label style={lbl}>Start time *</label>
+                    <input
+                        type="time"
+                        style={fieldInp}
+                        value={startTime}
+                        onChange={(e) => onStartChange(e.target.value)}
+                    />
+                    <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
+                        Ends {fullEnd ?? '-'}
+                    </div>
+                </div>
+            ) : null}
+
+            {slotKind === 'HALF' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={halfSlotCardStyle}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: '#1B6F86' }}>
+                                Half-day 1 (3.5 hrs)
+                            </span>
+                        </div>
+                        <div>
+                            <label style={lbl}>Start time *</label>
+                            <input
+                                type="time"
+                                style={fieldInp}
+                                value={startTime}
+                                onChange={(e) => onStartChange(e.target.value)}
+                            />
+                            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
+                                Ends {firstEnd ?? '-'}
+                            </div>
+                        </div>
+                    </div>
+
+                    {secondHalfStart != null ? (
+                        <div style={halfSlotCardStyle}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: '#1B6F86' }}>
+                                    Half-day 2 (3.5 hrs)
+                                </span>
+                                <button
+                                    type="button"
+                                    aria-label="Remove half-day 2"
+                                    onClick={onRemoveSecond}
+                                    style={halfSlotRemoveBtnStyle}
+                                >
+                                    ×
+                                </button>
+                            </div>
+                            <div>
+                                <label style={lbl}>Start time *</label>
+                                <input
+                                    type="time"
+                                    style={fieldInp}
+                                    value={secondHalfStart}
+                                    onChange={(e) => onSecondChange(e.target.value)}
+                                />
+                                <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
+                                        Ends {secondEnd ?? '-'}
+                                </div>
+                                {overlaps ? (
+                                    <div style={{ fontSize: 12, color: '#B42318', marginTop: 4, fontWeight: 600 }}>
+                                        Half-day slots must not overlap.
+                                    </div>
+                                ) : null}
+                            </div>
+                        </div>
+                    ) : null}
+
+                    {canAddSecond ? (
+                        <button type="button" onClick={onAddSecond} style={halfSlotAddBtnStyle}>
+                            + Add second half-day (3.5 hrs)
+                        </button>
+                    ) : null}
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
 function fmtDate(iso: string | null | undefined): string {
     return fmtJobCalendarDate(iso);
 }
@@ -699,7 +909,7 @@ function InlineApplicantsTable({ job, applications, loading, onViewAll, }: {
               </span>
               {postingDays.length > 0 && (
                 <div style={{ minWidth: 0 }}>
-                  <AvailabilityStrip postingDays={postingDays} app={app} cell={10} />
+                  <AvailabilityStrip postingDays={postingDays} app={app} job={job} cell={10} />
                 </div>
               )}
               <span style={{ fontSize: 'var(--font-body)', color: '#6B7280', textAlign: 'center' }}>
@@ -1149,15 +1359,48 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     const [scheduleKind, setScheduleKind] = useState<'range' | 'list' | 'ranges'>('range');
     const [startDateInput, setStartDateInput] = useState('');
     const [endDateInput, setEndDateInput] = useState('');
-    // Multiple date ranges: each has its own date span + time range.
+    // Multiple date ranges: each has its own date span + start + slot kind (SLOTS).
+    // secondHalfStart is set only when slotKind is HALF and a second 3.5h slot is added.
+    type DaySlotConfig = {
+        startTime: string;
+        slotKind: SlotKindOrEmpty;
+        secondHalfStart: string | null;
+    };
+    const emptyDaySlot = (): DaySlotConfig => ({
+        startTime: '',
+        slotKind: '',
+        secondHalfStart: null,
+    });
     const [dateRanges, setDateRanges] = useState<
-        { startDate: string; endDate: string; startTime: string; endTime: string }[]
-    >([{ startDate: '', endDate: '', startTime: '05:00', endTime: '14:00' }]);
+        ({ startDate: string; endDate: string } & DaySlotConfig)[]
+    >([{ startDate: '', endDate: '', ...emptyDaySlot() }]);
     function addDateRange() {
-        setDateRanges((prev) => [...prev, { startDate: '', endDate: '', startTime: '05:00', endTime: '14:00' }]);
+        if (!canAddAnotherRange()) return;
+        setDateRanges((prev) => [
+            ...prev,
+            { startDate: '', endDate: '', ...emptyDaySlot() },
+        ]);
     }
-    function updateDateRange(i: number, field: 'startDate' | 'endDate' | 'startTime' | 'endTime', value: string) {
-        setDateRanges((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)));
+    function updateDateRange(
+        i: number,
+        field: 'startDate' | 'endDate' | 'startTime' | 'slotKind' | 'secondHalfStart',
+        value: string | null,
+    ) {
+        setDateRanges((prev) =>
+            prev.map((r, idx) => {
+                if (idx !== i) return r;
+                if (field === 'slotKind') {
+                    const kind: SlotKindOrEmpty =
+                        value === 'HALF' || value === 'FULL' ? value : '';
+                    return {
+                        ...r,
+                        slotKind: kind,
+                        secondHalfStart: kind === 'HALF' ? r.secondHalfStart : null,
+                    };
+                }
+                return { ...r, [field]: value };
+            }),
+        );
     }
     function removeDateRange(i: number) {
         setDateRanges((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
@@ -1165,14 +1408,106 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     // Specific-dates mode: individually chosen local calendar days (YYYY-MM-DD), ascending.
     const [specificDates, setSpecificDates] = useState<string[]>([]);
     const [newDateInput, setNewDateInput] = useState('');
-    // When true, every specific date uses the shared start/end time below.
+    // When true, every specific date uses the shared start/slot below.
     const [sameTimeForAll, setSameTimeForAll] = useState(true);
-    // Per-date times (local HH:mm), used only when sameTimeForAll is false.
+    // Per-date slots (local HH:mm + HALF/FULL), used only when sameTimeForAll is false.
     const [perDateTimes, setPerDateTimes] = useState<
-        Record<string, { start: string; end: string }>
+        Record<string, { start: string; slotKind: SlotKindOrEmpty; secondHalfStart: string | null }>
     >({});
-    const [startTime, setStartTime] = useState('05:00');
-    const [endTime, setEndTime] = useState('14:00');
+    const [startTime, setStartTime] = useState('');
+    const [slotKind, setSlotKind] = useState<SlotKindOrEmpty>('');
+    const [secondHalfStart, setSecondHalfStart] = useState<string | null>(null);
+    const endTime =
+        startTime.trim() && (slotKind === 'HALF' || slotKind === 'FULL')
+            ? addClockHours(
+                  startTime,
+                  slotKind === 'HALF' ? HALF_SLOT_HOURS : FULL_SLOT_HOURS,
+              )
+            : null;
+    const secondHalfEnd =
+        secondHalfStart != null && secondHalfStart.trim()
+            ? addClockHours(secondHalfStart, HALF_SLOT_HOURS)
+            : null;
+
+    function isSlotConfigReady(start: string, kind: SlotKindOrEmpty): boolean {
+        return Boolean(start.trim()) && (kind === 'HALF' || kind === 'FULL');
+    }
+
+    function isRangeRowComplete(r: {
+        startDate: string;
+        endDate: string;
+        startTime: string;
+        slotKind: SlotKindOrEmpty;
+        secondHalfStart: string | null;
+    }): boolean {
+        if (
+            !(
+                Boolean(r.startDate.trim()) &&
+                Boolean(r.endDate.trim()) &&
+                isSlotConfigReady(r.startTime, r.slotKind) &&
+                (r.secondHalfStart == null || Boolean(r.secondHalfStart.trim()))
+            )
+        ) {
+            return false;
+        }
+        if (
+            r.slotKind === 'HALF' &&
+            r.secondHalfStart != null &&
+            halfSlotsOverlap(r.startTime, r.secondHalfStart)
+        ) {
+            return false;
+        }
+        return true;
+    }
+
+    function canAddAnotherRange(): boolean {
+        return dateRanges.every(isRangeRowComplete);
+    }
+
+    function canAddSpecificDate(): boolean {
+        if (
+            !(
+                Boolean(newDateInput) &&
+                isSlotConfigReady(startTime, slotKind) &&
+                (secondHalfStart == null || Boolean(secondHalfStart.trim()))
+            )
+        ) {
+            return false;
+        }
+        if (
+            slotKind === 'HALF' &&
+            secondHalfStart != null &&
+            halfSlotsOverlap(startTime, secondHalfStart)
+        ) {
+            return false;
+        }
+        return true;
+    }
+
+    function setSharedSlotKind(next: SlotKindOrEmpty) {
+        setSlotKind(next);
+        if (next !== 'HALF') setSecondHalfStart(null);
+    }
+
+    /** Expand one calendar day into 1–2 SLOTS payload rows. */
+    function slotsForDay(
+        day: string,
+        cfg: { start: string; slotKind: 'HALF' | 'FULL'; secondHalfStart?: string | null },
+    ): { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] {
+        const startUtc = localDateTimeToUtcParts(day, cfg.start || '00:00').utcTime;
+        const rows: { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] = [
+            { date: day, startTime: startUtc, slotKind: cfg.slotKind },
+        ];
+        if (cfg.slotKind === 'HALF' && cfg.secondHalfStart?.trim()) {
+            rows.push({
+                date: day,
+                startTime: localDateTimeToUtcParts(day, cfg.secondHalfStart.trim()).utcTime,
+                slotKind: 'HALF',
+            });
+        }
+        return rows;
+    }
+
     const [ratePerDay, setRatePerDay] = useState('');
     const [yearsExp, setYearsExp] = useState('');
     const [credentials, setCredentials] = useState<string[]>([
@@ -1197,7 +1532,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     const scheduleValidationError = useMemo(() => {
         const startIso = parseMmDdYyyyToIso(startDateInput);
         const endIso = parseMmDdYyyyToIso(endDateInput);
-        if (!startIso || !endIso || !startTime.trim() || !endTime.trim())
+        if (!startIso || !endIso || !startTime.trim() || !endTime?.trim())
             return null;
         return getJobScheduleValidationError({
             startDateIso: startIso,
@@ -1240,13 +1575,32 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         const cal = calendarDatePartFromInput(iso);
         if (!cal)
             return;
+        if (!isSlotConfigReady(startTime, slotKind))
+            return;
+        if (secondHalfStart != null && !secondHalfStart.trim())
+            return;
+        if (
+            slotKind === 'HALF' &&
+            secondHalfStart != null &&
+            halfSlotsOverlap(startTime, secondHalfStart)
+        )
+            return;
         setSpecificDates((prev) =>
             prev.includes(cal) ? prev : [...prev, cal].sort(),
         );
         // Seed a per-date time when the host is setting times individually.
         if (!sameTimeForAll) {
             setPerDateTimes((prev) =>
-                cal in prev ? prev : { ...prev, [cal]: { start: startTime, end: endTime } },
+                cal in prev
+                    ? prev
+                    : {
+                          ...prev,
+                          [cal]: {
+                              start: startTime,
+                              slotKind,
+                              secondHalfStart,
+                          },
+                      },
             );
         }
         setNewDateInput('');
@@ -1260,20 +1614,45 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             return next;
         });
     }
-    function setPerDateTime(iso: string, field: 'start' | 'end', value: string) {
+    function setPerDateTime(
+        iso: string,
+        field: 'start' | 'slotKind' | 'secondHalfStart',
+        value: string | null,
+    ) {
         setPerDateTimes((prev) => {
-            const current = prev[iso] ?? { start: startTime, end: endTime };
+            const current = prev[iso] ?? {
+                start: startTime,
+                slotKind,
+                secondHalfStart,
+            };
+            if (field === 'slotKind') {
+                const kind: SlotKindOrEmpty =
+                    value === 'HALF' || value === 'FULL' ? value : '';
+                return {
+                    ...prev,
+                    [iso]: {
+                        ...current,
+                        slotKind: kind,
+                        secondHalfStart: kind === 'HALF' ? current.secondHalfStart : null,
+                    },
+                };
+            }
             return { ...prev, [iso]: { ...current, [field]: value } };
         });
     }
     function handleSameTimeForAll(next: boolean) {
         setSameTimeForAll(next);
         if (!next) {
-            // Switching to per-date times: seed each date from the shared time.
             setPerDateTimes((prev) => {
                 const seeded = { ...prev };
                 for (const d of specificDates) {
-                    if (!(d in seeded)) seeded[d] = { start: startTime, end: endTime };
+                    if (!(d in seeded)) {
+                        seeded[d] = {
+                            start: startTime,
+                            slotKind,
+                            secondHalfStart,
+                        };
+                    }
                 }
                 return seeded;
             });
@@ -1344,36 +1723,69 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         }
         return false;
     }
-    // Multiple date ranges: expand each range into per-day shifts (UTC times),
-    // de-duplicating days (later ranges win). Dates are ISO (YYYY-MM-DD).
-    function buildRangeShiftsPayload(): { date: string; startTime: string; endTime: string }[] {
-        const byDate = new Map<string, { date: string; startTime: string; endTime: string }>();
+    // Multiple date ranges: expand each range into per-day SLOTS (UTC start + slotKind).
+    function buildRangeShiftsPayload(): {
+        date: string;
+        startTime: string;
+        slotKind: 'HALF' | 'FULL';
+    }[] {
+        const byDate = new Map<
+            string,
+            { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[]
+        >();
         for (const r of dateRanges) {
             const start = r.startDate.trim();
             const end = r.endDate.trim();
             if (!start || !end) continue;
+            if (r.slotKind !== 'HALF' && r.slotKind !== 'FULL') continue;
             for (const day of expandIsoDateRange(start, end)) {
-                byDate.set(day, {
-                    date: day,
-                    startTime: localDateTimeToUtcParts(day, r.startTime || '00:00').utcTime,
-                    endTime: localDateTimeToUtcParts(day, r.endTime || '23:59').utcTime,
-                });
+                byDate.set(
+                    day,
+                    slotsForDay(day, {
+                        start: r.startTime,
+                        slotKind: r.slotKind,
+                        secondHalfStart: r.secondHalfStart,
+                    }),
+                );
             }
         }
-        return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+        return [...byDate.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .flatMap(([, rows]) => rows);
     }
-    // Specific-dates payload: each chosen day + its time (shared or per-date), UTC.
-    function buildShiftsPayload(): { date: string; startTime: string; endTime: string }[] {
-        return [...specificDates].sort().map((d) => {
-            const o = sameTimeForAll
-                ? { start: startTime, end: endTime }
-                : perDateTimes[d] ?? { start: startTime, end: endTime };
-            return {
-                date: d,
-                startTime: localDateTimeToUtcParts(d, o.start || '00:00').utcTime,
-                endTime: localDateTimeToUtcParts(d, o.end || '23:59').utcTime,
-            };
-        });
+    // Specific-dates payload: each chosen day + start + slotKind (SLOTS).
+    function buildShiftsPayload(): {
+        date: string;
+        startTime: string;
+        slotKind: 'HALF' | 'FULL';
+    }[] {
+        return [...specificDates]
+            .sort()
+            .flatMap((d) => {
+                const o = sameTimeForAll
+                    ? { start: startTime, slotKind, secondHalfStart }
+                    : perDateTimes[d] ?? {
+                          start: startTime,
+                          slotKind,
+                          secondHalfStart,
+                      };
+                if (o.slotKind !== 'HALF' && o.slotKind !== 'FULL') return [];
+                return slotsForDay(d, {
+                    start: o.start,
+                    slotKind: o.slotKind,
+                    secondHalfStart: o.secondHalfStart,
+                });
+            });
+    }
+    /** Continuous range → one or two slots per day (new posts always use SLOTS). */
+    function buildContinuousRangeShiftsPayload(
+        startIso: string,
+        endIso: string,
+    ): { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] {
+        if (slotKind !== 'HALF' && slotKind !== 'FULL') return [];
+        return expandIsoDateRange(startIso, endIso).flatMap((day) =>
+            slotsForDay(day, { start: startTime, slotKind, secondHalfStart }),
+        );
     }
     function buildDraftPayload(): CreateJobPayload {
         const startIso = parseMmDdYyyyToIso(startDateInput);
@@ -1383,37 +1795,19 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         const keyResponsibilities = buildKeyResponsibilitiesPayload();
         const listMode = scheduleKind === 'list';
         const rangesMode = scheduleKind === 'ranges';
-        const shiftsMode = listMode || rangesMode;
         const shiftsForDraft = rangesMode
             ? buildRangeShiftsPayload()
             : listMode
                 ? buildShiftsPayload()
-                : [];
-        const scheduleFields =
-            !shiftsMode && startIso && endIso && startTime && endTime
-                ? buildJobScheduleApiFields({
-                    startDateIso: startIso,
-                    endDateIso: endIso,
-                    startTime,
-                    endTime,
-                })
-                : null;
-        const partialStart = startIso
-            ? localDateTimeToUtcParts(startIso, startTime || '00:00')
-            : null;
-        const partialEnd = endIso
-            ? localDateTimeToUtcParts(endIso, endTime || '23:59')
-            : null;
+                : startIso && endIso
+                    ? buildContinuousRangeShiftsPayload(startIso, endIso)
+                    : [];
         return {
             title: jobTitle.trim() || 'Draft locum shift',
             description: jobDescription.trim() || undefined,
             keyResponsibilities: keyResponsibilities.length ? keyResponsibilities : undefined,
-            shifts: shiftsMode && shiftsForDraft.length ? shiftsForDraft : undefined,
-            scheduleType: rangesMode ? 'RANGES' : listMode ? 'DATES' : undefined,
-            startDate: shiftsMode ? undefined : scheduleFields?.startDate ?? partialStart?.utcDate,
-            endDate: shiftsMode ? undefined : scheduleFields?.endDate ?? partialEnd?.utcDate,
-            startTime: shiftsMode ? undefined : scheduleFields?.startTime ?? partialStart?.utcTime ?? (startTime || undefined),
-            endTime: shiftsMode ? undefined : scheduleFields?.endTime ?? partialEnd?.utcTime ?? (endTime || undefined),
+            shifts: shiftsForDraft.length ? shiftsForDraft : undefined,
+            scheduleType: rangesMode ? 'RANGES' : listMode || shiftsForDraft.length ? 'DATES' : undefined,
             payPerDay: Number.isFinite(rateNum) && rateNum > 0 ? rateNum : undefined,
             minYearsExperience: yearsExp.trim() && Number.isFinite(yearsNum) ? yearsNum : undefined,
             requiredCredentials: credentials,
@@ -1468,11 +1862,13 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         }
         const listMode = scheduleKind === 'list';
         const rangesMode = scheduleKind === 'ranges';
-        const shiftsMode = listMode || rangesMode;
         const sortedDates = [...specificDates].sort();
         const todayIso = todayIsoDateLocal();
-        let scheduleFields: { startDate: string; endDate: string; startTime: string; endTime: string } | null = null;
-        let outShifts: { date: string; startTime: string; endTime: string }[] = [];
+        let outShifts: {
+            date: string;
+            startTime: string;
+            slotKind: 'HALF' | 'FULL';
+        }[] = [];
         if (rangesMode) {
             const filled = dateRanges.filter((r) => r.startDate.trim() || r.endDate.trim());
             if (filled.length === 0) {
@@ -1492,8 +1888,20 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                     setSubmitError('Dates cannot be in the past.');
                     return;
                 }
-                if (!r.startTime.trim() || !r.endTime.trim()) {
-                    setSubmitError('Set a start and end time for each range.');
+                if (!r.startTime.trim() || !r.slotKind) {
+                    setSubmitError('Set a start time and half/full day for each range.');
+                    return;
+                }
+                if (r.secondHalfStart != null && !r.secondHalfStart.trim()) {
+                    setSubmitError('Set the second half start time, or remove the second half-day.');
+                    return;
+                }
+                if (
+                    r.slotKind === 'HALF' &&
+                    r.secondHalfStart != null &&
+                    halfSlotsOverlap(r.startTime, r.secondHalfStart)
+                ) {
+                    setSubmitError('Half-day slots must not overlap.');
                     return;
                 }
             }
@@ -1513,15 +1921,43 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 return;
             }
             if (sameTimeForAll) {
-                if (!startTime.trim() || !endTime.trim()) {
-                    setSubmitError('Set the start and end time.');
+                if (!startTime.trim() || !slotKind) {
+                    setSubmitError('Set the start time and half/full day.');
+                    return;
+                }
+                if (secondHalfStart != null && !secondHalfStart.trim()) {
+                    setSubmitError('Set the second half start time, or remove the second half-day.');
+                    return;
+                }
+                if (
+                    slotKind === 'HALF' &&
+                    secondHalfStart != null &&
+                    halfSlotsOverlap(startTime, secondHalfStart)
+                ) {
+                    setSubmitError('Half-day slots must not overlap.');
                     return;
                 }
             } else {
                 for (const d of sortedDates) {
-                    const o = perDateTimes[d] ?? { start: startTime, end: endTime };
-                    if (!o.start.trim() || !o.end.trim()) {
-                        setSubmitError(`Set a start and end time for ${fmtJobCalendarDate(d)}.`);
+                    const o = perDateTimes[d] ?? { start: startTime, slotKind, secondHalfStart };
+                    if (!o.start.trim() || !o.slotKind) {
+                        setSubmitError(`Set a start time and half/full day for ${fmtJobCalendarDate(d)}.`);
+                        return;
+                    }
+                    if (o.secondHalfStart != null && !o.secondHalfStart.trim()) {
+                        setSubmitError(
+                            `Set the second half start time for ${fmtJobCalendarDate(d)}, or remove it.`,
+                        );
+                        return;
+                    }
+                    if (
+                        o.slotKind === 'HALF' &&
+                        o.secondHalfStart != null &&
+                        halfSlotsOverlap(o.start, o.secondHalfStart)
+                    ) {
+                        setSubmitError(
+                            `Half-day slots must not overlap on ${fmtJobCalendarDate(d)}.`,
+                        );
                         return;
                     }
                 }
@@ -1547,26 +1983,33 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 setSubmitError('End date must be a valid date in MM-DD-YYYY format.');
                 return;
             }
+            if (!startTime.trim() || !slotKind) {
+                setSubmitError('Set the start time and half/full day.');
+                return;
+            }
+            if (secondHalfStart != null && !secondHalfStart.trim()) {
+                setSubmitError('Set the second half start time, or remove the second half-day.');
+                return;
+            }
+            if (
+                slotKind === 'HALF' &&
+                secondHalfStart != null &&
+                halfSlotsOverlap(startTime, secondHalfStart)
+            ) {
+                setSubmitError('Half-day slots must not overlap.');
+                return;
+            }
             const scheduleCheck = validateJobPostingSchedule({
                 startDateIso: startIso,
                 endDateIso: endIso,
                 startTime,
-                endTime,
+                endTime: endTime ?? '',
             });
             if (!scheduleCheck.valid) {
                 setSubmitError(scheduleCheck.message);
                 return;
             }
-            scheduleFields = buildJobScheduleApiFields({
-                startDateIso: startIso,
-                endDateIso: endIso,
-                startTime,
-                endTime,
-            });
-            if (!scheduleFields) {
-                setSubmitError('Schedule could not be encoded. Check dates and times.');
-                return;
-            }
+            outShifts = buildContinuousRangeShiftsPayload(startIso, endIso);
         }
         const rateNum = ratePerDay.trim() ? Number(ratePerDay) : NaN;
         if (!Number.isFinite(rateNum) || rateNum <= 0) {
@@ -1585,12 +2028,8 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 title: jobTitle.trim(),
                 description: jobDescription.trim() || undefined,
                 keyResponsibilities: buildKeyResponsibilitiesPayload(),
-                shifts: shiftsMode ? outShifts : undefined,
-                scheduleType: rangesMode ? 'RANGES' : listMode ? 'DATES' : undefined,
-                startDate: shiftsMode ? undefined : scheduleFields!.startDate,
-                endDate: shiftsMode ? undefined : scheduleFields!.endDate,
-                startTime: shiftsMode ? undefined : scheduleFields!.startTime,
-                endTime: shiftsMode ? undefined : scheduleFields!.endTime,
+                shifts: outShifts,
+                scheduleType: rangesMode ? 'RANGES' : 'DATES',
                 payPerDay: rateNum,
                 minYearsExperience: yearsExp.trim() && Number.isFinite(yearsNum) ? yearsNum : undefined,
                 requiredCredentials: credentials,
@@ -1895,20 +2334,16 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                     <MmDdYyyyDateField value={endDateInput} onChange={setEndDateInput} inputStyle={fieldInp} minIso={jobEndMinIso}/>
                   </div>
                 </div>
-                <div className="host-job-schedule-grid" style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: 12,
-            }}>
-                  <div>
-                    <label style={lbl}>Start Time *</label>
-                    <input type="time" style={fieldInp} value={startTime} onChange={(e) => setStartTime(e.target.value)}/>
-                  </div>
-                  <div>
-                    <label style={lbl}>End Time *</label>
-                    <input type="time" style={fieldInp} value={endTime} onChange={(e) => setEndTime(e.target.value)}/>
-                  </div>
-                </div>
+                <DayConfigEditor
+                  slotKind={slotKind}
+                  startTime={startTime}
+                  secondHalfStart={secondHalfStart}
+                  onSlotKindChange={setSharedSlotKind}
+                  onStartChange={setStartTime}
+                  onSecondChange={(v) => setSecondHalfStart(v)}
+                  onAddSecond={() => setSecondHalfStart('')}
+                  onRemoveSecond={() => setSecondHalfStart(null)}
+                />
                 </>
                 ) : scheduleKind === 'ranges' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1930,19 +2365,39 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                           <input type="date" style={fieldInp} min={r.startDate || jobDateMinIso} value={r.endDate} onChange={(e) => updateDateRange(i, 'endDate', e.target.value)} />
                         </div>
                       </div>
-                      <div className="host-job-schedule-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                        <div>
-                          <label style={lbl}>Start Time *</label>
-                          <input type="time" style={fieldInp} value={r.startTime} onChange={(e) => updateDateRange(i, 'startTime', e.target.value)} />
-                        </div>
-                        <div>
-                          <label style={lbl}>End Time *</label>
-                          <input type="time" style={fieldInp} value={r.endTime} onChange={(e) => updateDateRange(i, 'endTime', e.target.value)} />
-                        </div>
-                      </div>
+                      <DayConfigEditor
+                        slotKind={r.slotKind}
+                        startTime={r.startTime}
+                        secondHalfStart={r.secondHalfStart}
+                        onSlotKindChange={(kind) => updateDateRange(i, 'slotKind', kind)}
+                        onStartChange={(v) => updateDateRange(i, 'startTime', v)}
+                        onSecondChange={(v) => updateDateRange(i, 'secondHalfStart', v)}
+                        onAddSecond={() => updateDateRange(i, 'secondHalfStart', '')}
+                        onRemoveSecond={() => updateDateRange(i, 'secondHalfStart', null)}
+                        heading="Work day for this period"
+                      />
                     </div>
                   ))}
-                  <button type="button" onClick={addDateRange} style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: '1px solid #309BB7', background: '#fff', color: '#1B6F86', fontWeight: 600, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>+ Add range</button>
+                  <button
+                    type="button"
+                    onClick={addDateRange}
+                    disabled={!canAddAnotherRange()}
+                    style={{
+                      alignSelf: 'flex-start',
+                      padding: '8px 14px',
+                      borderRadius: 8,
+                      border: '1px solid #309BB7',
+                      background: '#fff',
+                      color: canAddAnotherRange() ? '#1B6F86' : '#9CA3AF',
+                      fontWeight: 600,
+                      fontSize: 13,
+                      fontFamily: 'inherit',
+                      cursor: canAddAnotherRange() ? 'pointer' : 'not-allowed',
+                      opacity: canAddAnotherRange() ? 1 : 0.6,
+                    }}
+                  >
+                    + Add range
+                  </button>
                 </div>
                 ) : (
                 <>
@@ -1959,17 +2414,17 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                     <button
                       type="button"
                       onClick={() => addSpecificDate(newDateInput)}
-                      disabled={!newDateInput}
+                      disabled={!canAddSpecificDate()}
                       style={{
                         padding: '9px 16px',
                         borderRadius: 8,
                         border: '1px solid #309BB7',
-                        background: newDateInput ? '#309BB7' : '#E5E7EB',
-                        color: newDateInput ? '#fff' : '#9CA3AF',
+                        background: canAddSpecificDate() ? '#309BB7' : '#E5E7EB',
+                        color: canAddSpecificDate() ? '#fff' : '#9CA3AF',
                         fontWeight: 600,
                         fontSize: 13,
                         fontFamily: 'inherit',
-                        cursor: newDateInput ? 'pointer' : 'not-allowed',
+                        cursor: canAddSpecificDate() ? 'pointer' : 'not-allowed',
                         whiteSpace: 'nowrap',
                       }}
                     >
@@ -1986,75 +2441,89 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                   />
                   Use the same time for every date
                 </label>
-                <div className="host-job-schedule-grid" style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 12,
-                }}>
-                  <div>
-                    <label style={lbl}>
-                      {sameTimeForAll ? 'Start Time *' : 'Start time for next date *'}
-                    </label>
-                    <input type="time" style={fieldInp} value={startTime} onChange={(e) => setStartTime(e.target.value)}/>
-                  </div>
-                  <div>
-                    <label style={lbl}>
-                      {sameTimeForAll ? 'End Time *' : 'End time for next date *'}
-                    </label>
-                    <input type="time" style={fieldInp} value={endTime} onChange={(e) => setEndTime(e.target.value)}/>
-                  </div>
-                </div>
+                <DayConfigEditor
+                  slotKind={slotKind}
+                  startTime={startTime}
+                  secondHalfStart={secondHalfStart}
+                  onSlotKindChange={setSharedSlotKind}
+                  onStartChange={setStartTime}
+                  onSecondChange={(v) => setSecondHalfStart(v)}
+                  onAddSecond={() => setSecondHalfStart('')}
+                  onRemoveSecond={() => setSecondHalfStart(null)}
+                  heading={
+                    sameTimeForAll
+                      ? 'What does each work day look like?'
+                      : 'Defaults for the next date you add'
+                  }
+                />
                 {specificDates.length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {specificDates.map((d) => {
-                        const t = perDateTimes[d] ?? { start: startTime, end: endTime };
+                        const t = perDateTimes[d] ?? {
+                          start: startTime,
+                          slotKind,
+                          secondHalfStart,
+                        };
+                        const dayEnd =
+                          t.start.trim() &&
+                          (t.slotKind === 'HALF' || t.slotKind === 'FULL')
+                            ? addClockHours(
+                                  t.start,
+                                  t.slotKind === 'HALF' ? HALF_SLOT_HOURS : FULL_SLOT_HOURS,
+                              )
+                            : null;
                         return (
                         <div
                           key={d}
                           style={{
                             display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            flexWrap: 'nowrap',
+                            flexDirection: 'column',
+                            gap: 10,
                             background: 'rgba(48, 155, 183, 0.06)',
                             border: '1px solid rgba(48, 155, 183, 0.24)',
                             borderRadius: 8,
-                            padding: '8px 10px',
+                            padding: '10px 12px',
                           }}
                         >
-                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1B6F86', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                            {fmtJobCalendarDate(d)}
-                          </span>
-                          {!sameTimeForAll && (
-                            <>
-                              <input
-                                type="time"
-                                aria-label={`Start time for ${d}`}
-                                style={{ ...fieldInp, flex: '1 1 0', minWidth: 0, width: 'auto', padding: '9px 6px' }}
-                                value={t.start}
-                                onChange={(e) => setPerDateTime(d, 'start', e.target.value)}
-                              />
-                              <span style={{ color: '#9CA3AF', fontSize: 12, flexShrink: 0 }}>-</span>
-                              <input
-                                type="time"
-                                aria-label={`End time for ${d}`}
-                                style={{ ...fieldInp, flex: '1 1 0', minWidth: 0, width: 'auto', padding: '9px 6px' }}
-                                value={t.end}
-                                onChange={(e) => setPerDateTime(d, 'end', e.target.value)}
-                              />
-                            </>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#1B6F86' }}>
+                              {fmtJobCalendarDate(d)}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`Remove ${d}`}
+                              onClick={() => removeSpecificDate(d)}
+                              style={{
+                                flexShrink: 0, border: 'none', background: 'transparent',
+                                color: '#1B6F86', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: '0 2px',
+                              }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                          {!sameTimeForAll ? (
+                            <DayConfigEditor
+                              slotKind={t.slotKind}
+                              startTime={t.start}
+                              secondHalfStart={t.secondHalfStart}
+                              onSlotKindChange={(kind) => setPerDateTime(d, 'slotKind', kind)}
+                              onStartChange={(v) => setPerDateTime(d, 'start', v)}
+                              onSecondChange={(v) => setPerDateTime(d, 'secondHalfStart', v)}
+                              onAddSecond={() => setPerDateTime(d, 'secondHalfStart', '')}
+                              onRemoveSecond={() => setPerDateTime(d, 'secondHalfStart', null)}
+                              heading="Work day"
+                            />
+                          ) : (
+                            <div style={{ fontSize: 12, color: '#6B7280' }}>
+                              {startTime.trim() && slotKind
+                                ? `${slotKind === 'HALF' ? 'First half' : 'Full day'} starts ${startTime}${dayEnd ? ` → ${dayEnd}` : ''}${
+                                    secondHalfStart
+                                      ? ` · Second half ${secondHalfStart} → ${secondHalfEnd ?? '-'}`
+                                      : ''
+                                  }`
+                                : 'Uses the shared schedule above'}
+                            </div>
                           )}
-                          <button
-                            type="button"
-                            aria-label={`Remove ${d}`}
-                            onClick={() => removeSpecificDate(d)}
-                            style={{
-                              marginLeft: 'auto', flexShrink: 0, border: 'none', background: 'transparent',
-                              color: '#1B6F86', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: '0 2px',
-                            }}
-                          >
-                            ×
-                          </button>
                         </div>
                         );
                       })}

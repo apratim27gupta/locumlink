@@ -5,10 +5,12 @@ import {
   Param,
   Query,
   Req,
+  Res,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -44,6 +46,20 @@ export class HostPaymentsController {
       limit: query.limit ? Number(query.limit) : undefined,
       status: query.status,
     });
+  }
+
+  @Get(':id/receipt.pdf')
+  async downloadReceipt(
+    @Req() req: JwtRequest,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.payments.buildHostReceiptPdf(req.user.id, id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="locumlink-match-fee-${id.slice(-8)}.pdf"`,
+    });
+    res.send(pdf);
   }
 
   @Get(':id')

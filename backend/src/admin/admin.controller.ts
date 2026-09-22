@@ -356,7 +356,7 @@ export class AdminController {
     @Param('id') id: string,
     @Body() dto: AdminResolveRefundDto,
   ) {
-    return this.payments.resolveRefund(id, dto.resolution, dto.adminNotes);
+    return this.payments.resolveRefund(id, dto.adminNotes);
   }
 
   @Post('match-fees/:id/replacement-status')

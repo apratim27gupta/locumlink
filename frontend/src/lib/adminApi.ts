@@ -231,8 +231,22 @@ export type AdminMatchFeeInvoice = {
   hostPracticeName: string;
   matchFeeReviewRequired: boolean;
   adminNotes: string | null;
+  cancelledBy?: string | null;
+  cancellationReason?: string | null;
+  replacementStatus?: string | null;
+  daysUntilStart: number | null;
   statusGuide: AdminMatchFeeStatusGuide | null;
   timeline: AdminMatchFeeTimeline;
+  events: MatchFeeInvoiceEventItem[];
+};
+
+export type MatchFeeInvoiceEventItem = {
+  id: string;
+  eventType: string;
+  label: string;
+  detail: string | null;
+  actor: string;
+  occurredAt: string;
 };
 
 export type AdminMatchFeeSummary = {
@@ -278,12 +292,11 @@ export async function adminListMatchFees(params?: {
 
 export async function adminResolveMatchFeeRefund(
   invoiceId: string,
-  resolution: 'REFUND' | 'CREDIT',
   adminNotes?: string,
 ): Promise<{ success: boolean }> {
   return adminFetchJson(`/api/admin/match-fees/${encodeURIComponent(invoiceId)}/resolve-refund`, {
     method: 'POST',
-    body: JSON.stringify({ resolution, adminNotes }),
+    body: JSON.stringify({ adminNotes }),
   });
 }
 
