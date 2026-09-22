@@ -5,6 +5,7 @@ import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import LocumProfileStatusBanner from '@/components/LocumProfileStatusBanner';
 import { LocumBrowseJobDetail } from '@/components/locum/LocumBrowseJobDetail';
+import { LocumApplyModal } from '@/components/locum/LocumApplyModal';
 import { fetchAllPaginated, locumApi, type BrowseJob, type MyApplication } from '@/lib/api';
 import { getToken } from '@/lib/auth';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
@@ -23,6 +24,7 @@ import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
 import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, getPostingDays, formatSpecificDate } from '@/lib/jobSchedule';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { CountBadge } from '@/components/CountBadge';
+import { canMutateApplicationBeforeOngoing } from '@/lib/locumApplicationActions';
 
 function applicationToBrowseJob(app: MyApplication): BrowseJob {
     const jp = app.jobPosting;
@@ -243,6 +245,11 @@ export default function LocumDashboard(props: {
     const [respondingAppId, setRespondingAppId] = useState<string | null>(null);
     const [rejectConfirmAppId, setRejectConfirmAppId] = useState<string | null>(null);
     const [acceptConfirmAppId, setAcceptConfirmAppId] = useState<string | null>(null);
+    const [editAvailabilityAppId, setEditAvailabilityAppId] = useState<string | null>(null);
+    const [availabilityBusy, setAvailabilityBusy] = useState(false);
+    const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+    const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+    const [withdrawConfirmAppId, setWithdrawConfirmAppId] = useState<string | null>(null);
     const [detailAppId, setDetailAppId] = useState<string | null>(null);
     const [respondError, setRespondError] = useState<string | null>(null);
     const respondingRef = useRef(false);
@@ -413,7 +420,75 @@ export default function LocumDashboard(props: {
             setRespondingAppId(null);
         }
     }
+
+    async function refreshApplications() {
+        const [apps, stats] = await Promise.all([
+            fetchAllPaginated((cursor) => locumApi.getMyApplications({ cursor, limit: 100 })),
+            locumApi.getDashboardStats(),
+        ]);
+        setApplications(apps);
+        setShiftStats(stats);
+    }
+
+    async function saveAvailability(
+        appId: string,
+        opts: { availabilityKind: 'FULL' | 'PARTIAL'; availableDates: string[] },
+    ) {
+        setAvailabilityBusy(true);
+        setAvailabilityError(null);
+        try {
+            await locumApi.updateApplicationAvailability(appId, opts);
+            setEditAvailabilityAppId(null);
+            await refreshApplications();
+        } catch (e) {
+            setAvailabilityError(
+                e instanceof Error ? e.message : 'Could not update availability.',
+            );
+        } finally {
+            setAvailabilityBusy(false);
+        }
+    }
+
+    async function withdrawApplication(app: MyApplication) {
+        if (!canMutateApplicationBeforeOngoing(app)) return;
+        setWithdrawConfirmAppId(app.id);
+    }
+
+    async function confirmWithdrawApplication(app: MyApplication) {
+        setWithdrawConfirmAppId(null);
+        setWithdrawingId(app.id);
+        setRespondError(null);
+        try {
+            await locumApi.withdrawApplication(app.id);
+            await refreshApplications();
+        } catch (e) {
+            setRespondError(
+                e instanceof Error ? e.message : 'Could not withdraw.',
+            );
+        } finally {
+            setWithdrawingId(null);
+        }
+    }
+
+    const editApp = editAvailabilityAppId
+        ? applications.find((a) => a.id === editAvailabilityAppId)
+        : null;
     return (<DashLayout navItems={NAV} activeHref="/locum/dashboard" topbarFirstName={profile?.firstName} topbarLastName={profile?.lastName}>
+      {editApp ? (
+        <LocumApplyModal
+          job={applicationToBrowseJob(editApp)}
+          mode="edit"
+          applying={availabilityBusy}
+          error={availabilityError ?? undefined}
+          initialKind={editApp.availabilityKind === 'PARTIAL' ? 'PARTIAL' : 'FULL'}
+          initialDates={editApp.availableDates ?? []}
+          onSubmit={(opts) => void saveAvailability(editApp.id, opts)}
+          onClose={() => {
+            setEditAvailabilityAppId(null);
+            setAvailabilityError(null);
+          }}
+        />
+      ) : null}
       
       <h1 style={{
             display: 'flex',
@@ -702,13 +777,17 @@ export default function LocumDashboard(props: {
                 {isPartialAvailability(app) && (() => {
                     const days = getPostingDays(jp);
                     const n = applicationCoveredDays(app, days).length;
+                    const label =
+                      n === days.length && days.length > 0
+                        ? `Selected days ${n}/${days.length}`
+                        : `Partial availability ${n}/${days.length}`;
                     return (
                       <span style={{
                         display: 'flex', alignItems: 'center', gap: 5,
                         background: '#FFFBEB', border: '1px solid #FDE68A', color: '#B45309',
                         padding: '4px 10px', borderRadius: 5, fontSize: 12, fontWeight: 700,
                       }}>
-                        Partial availability {n}/{days.length}
+                        {label}
                       </span>
                     );
                 })()}
@@ -716,7 +795,7 @@ export default function LocumDashboard(props: {
                   {relativeHoursOrDaysAgo(app.appliedAt)}
                 </span>
               </div>
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={() => setDetailAppId(app.id)}
@@ -734,6 +813,48 @@ export default function LocumDashboard(props: {
                 >
                   View shift details
                 </button>
+                {canMutateApplicationBeforeOngoing(app) ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAvailabilityError(null);
+                        setEditAvailabilityAppId(app.id);
+                      }}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: 8,
+                        border: '1px solid #309BB7',
+                        background: '#fff',
+                        color: '#1B6F86',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        fontFamily: 'inherit',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Change availability
+                    </button>
+                    <button
+                      type="button"
+                      disabled={withdrawingId === app.id}
+                      onClick={() => void withdrawApplication(app)}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: 8,
+                        border: '1px solid #FCA5A5',
+                        background: '#fff',
+                        color: '#B91C1C',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        fontFamily: 'inherit',
+                        cursor: withdrawingId === app.id ? 'default' : 'pointer',
+                      }}
+                    >
+                      {withdrawingId === app.id ? 'Withdrawing…' : 'Withdraw'}
+                    </button>
+                  </>
+                ) : null}
               </div>
               {needsLocumResponse ? (<div style={{
                         marginTop: 14,
@@ -1141,6 +1262,86 @@ export default function LocumDashboard(props: {
             </div>
           </div>
         </div>
+        );
+      })() : null}
+      {withdrawConfirmAppId ? (() => {
+        const app = applications.find((a) => a.id === withdrawConfirmAppId);
+        if (!app) return null;
+        const wasAccepted = app.locumResponse === 'ACCEPTED' || !!app.locumAcceptedAt;
+        return (
+          <div
+            role="presentation"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.45)',
+              zIndex: 10000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 24,
+            }}
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setWithdrawConfirmAppId(null);
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              style={{
+                background: '#fff',
+                borderRadius: 12,
+                padding: '24px 28px',
+                maxWidth: 480,
+                width: '100%',
+                boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 600, color: '#0B0F1F' }}>
+                Withdraw from this placement?
+              </h3>
+              <p style={{ margin: '0 0 12px', fontSize: 14, color: '#6B7280', lineHeight: 1.5 }}>
+                The host will be notified. {wasAccepted
+                  ? 'Because you already accepted, cancellation policy applies to the host match fee.'
+                  : 'Your application will be withdrawn.'}
+              </p>
+              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => setWithdrawConfirmAppId(null)}
+                  style={{
+                    flex: 1,
+                    padding: '10px 16px',
+                    border: '1px solid #D0D5DD',
+                    borderRadius: 8,
+                    background: '#fff',
+                    color: '#374151',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirmWithdrawApplication(app)}
+                  style={{
+                    flex: 1,
+                    padding: '10px 16px',
+                    border: 'none',
+                    borderRadius: 8,
+                    background: '#DC2626',
+                    color: '#fff',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Withdraw
+                </button>
+              </div>
+            </div>
+          </div>
         );
       })() : null}
     </DashLayout>);

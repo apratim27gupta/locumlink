@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { EmailDigestService } from '../notifications/email-digest.service.js';
+import { PaymentsService } from '../payments/payments.service.js';
 import { browseShiftStartActiveSql, postingStatusAfterLocumAccept } from '../host/job-schedule.util.js';
 
 const locumReminderInclude = {
@@ -32,6 +33,7 @@ export class SchedulerService {
     private readonly prisma: PrismaService,
     private readonly notifService: NotificationsService,
     private readonly emailDigest: EmailDigestService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   private async shiftReminderAlreadySent(
@@ -324,6 +326,17 @@ export class SchedulerService {
       }
     } catch (err) {
       this.logger.error('Sync filled job posting statuses cron failed', err);
+    }
+  }
+
+  /** Mark pending match-fee invoices overdue and escalate long-overdue accounts. */
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async handleMatchFeeInvoiceLifecycle(): Promise<void> {
+    try {
+      await this.paymentsService.markOverdueInvoices();
+      await this.paymentsService.escalateLongOverdueInvoices();
+    } catch (err) {
+      this.logger.error('Match fee invoice lifecycle cron failed', err);
     }
   }
 }

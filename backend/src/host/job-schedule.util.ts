@@ -408,17 +408,22 @@ export function finalizeAcceptDates(
   return applicationClaimedDates(app, requiredDates).filter((d) => !taken.has(d));
 }
 
-/** Persist shape after accept: FULL only when every required day is kept. */
+/** Persist shape after accept: FULL only when every required day is kept and locum chose FULL. */
 export function availabilityAfterFinalize(
   requiredDates: string[],
   finalizedDates: string[],
+  priorKind?: string | null,
 ): { availabilityKind: 'FULL' | 'PARTIAL'; availableDates: string[] } {
+  const sortedFinal = [...finalizedDates].sort();
+  if (priorKind === 'PARTIAL') {
+    return { availabilityKind: 'PARTIAL', availableDates: sortedFinal };
+  }
   const all =
     requiredDates.length > 0 &&
-    requiredDates.length === finalizedDates.length &&
-    requiredDates.every((d) => finalizedDates.includes(d));
+    requiredDates.length === sortedFinal.length &&
+    requiredDates.every((d) => sortedFinal.includes(d));
   if (all) return { availabilityKind: 'FULL', availableDates: [] };
-  return { availabilityKind: 'PARTIAL', availableDates: [...finalizedDates].sort() };
+  return { availabilityKind: 'PARTIAL', availableDates: sortedFinal };
 }
 
 /** True when every required day is covered by the given accepted applications. */

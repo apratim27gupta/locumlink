@@ -16,7 +16,7 @@ import { Role } from '@prisma/client';
 import { Public } from '../auth/decorators/public.decorator.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { LocumService } from './locum.service.js';
-import { ApplyJobDto, RespondToConfirmedPlacementDto } from './locum.dto.js';
+import { ApplyJobDto, RespondToConfirmedPlacementDto, UpdateAvailabilityDto } from './locum.dto.js';
 interface JwtRequest {
   user?: {
     id: string;
@@ -95,6 +95,38 @@ export class LocumController {
     req: JwtRequest,
   ) {
     return this.locumService.getDashboardStats(req.user!.id);
+  }
+  @Patch('applications/:applicationId/availability')
+  @HttpCode(HttpStatus.OK)
+  updateAvailability(
+    @Req()
+    req: JwtRequest,
+    @Param('applicationId')
+    applicationId: string,
+    @Body()
+    dto: UpdateAvailabilityDto,
+  ) {
+    return this.locumService.updateApplicationAvailability(
+      req.user!.id,
+      applicationId,
+      {
+        availabilityKind: dto.availabilityKind,
+        availableDates: dto.availableDates,
+      },
+    );
+  }
+  @Patch('applications/:applicationId/withdraw')
+  @HttpCode(HttpStatus.OK)
+  withdrawApplication(
+    @Req()
+    req: JwtRequest,
+    @Param('applicationId')
+    applicationId: string,
+  ) {
+    return this.locumService.withdrawApplication(
+      req.user!.id,
+      applicationId,
+    );
   }
   @Patch('applications/:applicationId/respond')
   @HttpCode(HttpStatus.OK)

@@ -53,6 +53,7 @@ import {
   H006_HOST_VERIFICATION_REJECTED,
   H007_HOST_ACCOUNT_SUSPENDED,
   H011_HOST_PROFILE_REMINDER,
+  buildH013AvailabilityUpdated,
   hostMessagesHref,
 } from './host-notification-copy.js';
 
@@ -70,6 +71,13 @@ export type NotifEventType =
   | 'H_010_ACCOUNT_WARNING'
   | 'H_011_PROFILE_REMINDER'
   | 'H_012_JOB_POSTED'
+  | 'H_013_AVAILABILITY_UPDATED'
+  | 'H_014_MATCH_FEE_INVOICED'
+  | 'H_015_MATCH_FEE_DUE_SOON'
+  | 'H_016_MATCH_FEE_OVERDUE'
+  | 'H_017_MATCH_FEE_PAID'
+  | 'H_018_MATCH_FEE_REFUND'
+  | 'H_019_MATCH_FEE_CANCELLED'
   // Locum
   | 'L_001_NEW_OPPORTUNITY'
   | 'L_002_HOST_CONFIRMED'
@@ -85,6 +93,7 @@ export type NotifEventType =
   | 'L_012_SHIFT_CANCELLED'
   | 'L_013_ACCOUNT_WARNING'
   | 'L_014_PROFILE_REMINDER'
+  | 'L_015_MATCH_FEE_INFO'
   // Shared / system
   | 'U_001_ADMIN_MESSAGE'
   // Admin
@@ -139,7 +148,8 @@ function eventTypeToCategory(eventType: string): NotificationItem['type'] {
     return 'application';
   if (eventType.includes('REMINDER') || eventType.includes('EXPIRING'))
     return 'reminder';
-  if (eventType.includes('CANCELLED')) return 'cancellation';
+  if (eventType.includes('CANCELLED') || eventType.includes('MATCH_FEE'))
+    return 'cancellation';
   if (eventType.includes('REGISTRATION')) return 'registration';
   if (eventType.includes('CREDENTIAL')) return 'credential';
   if (eventType.includes('FLAGGED')) return 'flagged';
@@ -830,6 +840,44 @@ export class NotificationsService {
     });
   }
 
+  /** H-013: locum updated availability on an open application */
+  async notifyHostAvailabilityUpdated(params: {
+    recipientId: string;
+    recipientEmail: string;
+    locumFirstName?: string | null;
+    locumLastName?: string | null;
+    jobId: string;
+    jobTitle: string;
+    applicationId: string;
+    availabilityKind: 'FULL' | 'PARTIAL';
+    dayCount: number;
+  }): Promise<void> {
+    const locumName = formatLocumDoctorName(
+      params.locumFirstName,
+      params.locumLastName,
+    );
+    const copy = buildH013AvailabilityUpdated({
+      locumName,
+      jobTitle: params.jobTitle,
+      kind: params.availabilityKind,
+      dayCount: params.dayCount,
+    });
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'H_013_AVAILABILITY_UPDATED',
+      title: copy.inAppTitle,
+      body: copy.inAppBody,
+      href: `/host/applicants/${params.jobId}`,
+      priority: copy.priority,
+      actionLabel: copy.actionLabel,
+      referenceId: params.applicationId,
+      referenceType: 'Application',
+      emailTo: params.recipientEmail,
+      emailSubject: copy.emailSubject,
+      emailBody: copy.emailBody,
+    });
+  }
+
   /** H-009: last-minute cancellation (<24h) — host alert on locum decline. */
   async notifyHostShiftCancelled(params: {
     recipientId: string;
@@ -1179,6 +1227,193 @@ export class NotificationsService {
     await this.prisma.notificationEvent.updateMany({
       where: { id: notifId, recipientId: userId },
       data: { deliveryStatus: 'READ' },
+    });
+  }
+
+  async notifyHostMatchFeeInvoiced(params: {
+    recipientId: string;
+    recipientEmail: string;
+    jobTitle: string;
+    dueAt: Date;
+    invoiceId: string;
+    applicationId: string;
+  }): Promise<void> {
+    const dueStr = params.dueAt.toLocaleDateString('en-CA');
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'H_014_MATCH_FEE_INVOICED',
+      title: 'Match fee invoice due',
+      body: `A $250 LocumLink match fee is due for ${params.jobTitle} by ${dueStr}. Pay from Match Fees when ready.`,
+      href: '/host/invoices',
+      priority: 'HIGH',
+      actionLabel: 'View Invoice',
+      referenceId: params.invoiceId,
+      referenceType: 'MatchFeeInvoice',
+      emailTo: params.recipientEmail,
+      emailSubject: `Match fee invoice: ${params.jobTitle}`,
+      emailBody: `Your locum confirmed the match for ${params.jobTitle}. The $250 LocumLink match fee is due by ${dueStr}. Sign in to pay from Match Fees.`,
+    });
+  }
+
+  async notifyHostMatchFeeOverdue(params: {
+    recipientId: string;
+    recipientEmail: string;
+    jobTitle: string;
+    invoiceId: string;
+  }): Promise<void> {
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'H_016_MATCH_FEE_OVERDUE',
+      title: 'Match fee overdue',
+      body: `Your $250 match fee for ${params.jobTitle} is overdue. Please pay from Match Fees.`,
+      href: '/host/invoices',
+      priority: 'CRITICAL',
+      actionLabel: 'Pay Match Fee',
+      referenceId: params.invoiceId,
+      referenceType: 'MatchFeeInvoice',
+      emailTo: params.recipientEmail,
+      emailSubject: `Overdue match fee: ${params.jobTitle}`,
+      emailBody: `Your $250 LocumLink match fee for ${params.jobTitle} is overdue. Please sign in and pay from Match Fees.`,
+    });
+  }
+
+  async notifyHostMatchFeePaid(params: {
+    recipientId: string;
+    recipientEmail: string;
+    jobTitle: string;
+    invoiceId: string;
+  }): Promise<void> {
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'H_017_MATCH_FEE_PAID',
+      title: 'Match fee received',
+      body: `We received your $250 match fee for ${params.jobTitle}. Thank you.`,
+      href: '/host/invoices',
+      priority: 'NORMAL',
+      actionLabel: 'View Receipt',
+      referenceId: params.invoiceId,
+      referenceType: 'MatchFeeInvoice',
+      emailTo: params.recipientEmail,
+      emailSubject: `Match fee paid: ${params.jobTitle}`,
+      emailBody: `Thank you. Your $250 LocumLink match fee for ${params.jobTitle} has been recorded.`,
+    });
+  }
+
+  async notifyHostMatchFeePaymentReminder(params: {
+    recipientId: string;
+    recipientEmail: string;
+    jobTitle: string;
+    dueAt: Date;
+    invoiceId: string;
+    status: 'PENDING' | 'OVERDUE';
+    sendEmail: boolean;
+    sendNotification: boolean;
+  }): Promise<void> {
+    const dueStr = params.dueAt.toLocaleDateString('en-CA');
+    const overdue = params.status === 'OVERDUE';
+    const title = overdue ? 'Match fee overdue reminder' : 'Match fee payment reminder';
+    const body = overdue
+      ? `Your $250 match fee for ${params.jobTitle} was due by ${dueStr}. Please pay from Match Fees.`
+      : `Reminder: your $250 match fee for ${params.jobTitle} is due by ${dueStr}.`;
+    const eventType = overdue ? 'H_016_MATCH_FEE_OVERDUE' : 'H_015_MATCH_FEE_DUE_SOON';
+    const emailSubject = `${title}: ${params.jobTitle}`;
+    const emailBody = `${body}\n\nSign in to LocumLink and open Match Fees to pay.`;
+
+    if (params.sendNotification) {
+      await this.create({
+        recipientId: params.recipientId,
+        eventType,
+        title,
+        body,
+        href: '/host/invoices',
+        priority: overdue ? 'CRITICAL' : 'HIGH',
+        actionLabel: 'Pay Match Fee',
+        referenceId: params.invoiceId,
+        referenceType: 'MatchFeeInvoice',
+      });
+    }
+
+    if (params.sendEmail) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: params.recipientId },
+        select: { emailPrefs: true },
+      });
+      if (allowsEmailForEvent(user?.emailPrefs, eventType)) {
+        await this.email.send({
+          to: params.recipientEmail,
+          subject: emailSubject,
+          text: emailBody,
+        });
+      }
+    }
+  }
+
+  async notifyHostMatchFeeRefund(params: {
+    recipientId: string;
+    recipientEmail: string;
+    jobTitle: string;
+    resolution: 'REFUND' | 'CREDIT';
+    invoiceId: string;
+  }): Promise<void> {
+    const label = params.resolution === 'CREDIT' ? 'credit' : 'refund';
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'H_018_MATCH_FEE_REFUND',
+      title: `Match fee ${label} issued`,
+      body: `A ${label} was applied to your match fee for ${params.jobTitle}.`,
+      href: '/host/invoices',
+      priority: 'MEDIUM',
+      actionLabel: 'View Invoice',
+      referenceId: params.invoiceId,
+      referenceType: 'MatchFeeInvoice',
+      emailTo: params.recipientEmail,
+      emailSubject: `Match fee ${label}: ${params.jobTitle}`,
+      emailBody: `LocumLink applied a ${label} to your match fee for ${params.jobTitle}.`,
+    });
+  }
+
+  async notifyHostMatchFeeCancelled(params: {
+    recipientId: string;
+    recipientEmail: string;
+    jobTitle: string;
+    reason: string;
+    invoiceId: string;
+  }): Promise<void> {
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'H_019_MATCH_FEE_CANCELLED',
+      title: 'Match fee updated after cancellation',
+      body: `${params.reason} (${params.jobTitle})`,
+      href: '/host/invoices',
+      priority: 'MEDIUM',
+      actionLabel: 'View Invoice',
+      referenceId: params.invoiceId,
+      referenceType: 'MatchFeeInvoice',
+      emailTo: params.recipientEmail,
+      emailSubject: `Match fee update: ${params.jobTitle}`,
+      emailBody: `${params.reason}`,
+    });
+  }
+
+  async notifyLocumMatchFeeInfo(params: {
+    recipientId: string;
+    recipientEmail: string;
+    jobTitle: string;
+    applicationId: string;
+  }): Promise<void> {
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'L_015_MATCH_FEE_INFO',
+      title: 'Placement confirmed',
+      body: `You accepted ${params.jobTitle}. LocumLink is free for locums; the host pays the $250 match fee.`,
+      href: '/locum/dashboard',
+      priority: 'LOW',
+      actionLabel: 'View Dashboard',
+      referenceId: params.applicationId,
+      referenceType: 'Application',
+      emailTo: params.recipientEmail,
+      emailSubject: `Placement confirmed: ${params.jobTitle}`,
+      emailBody: `You accepted ${params.jobTitle}. LocumLink is free for locums. The host pays the $250 platform match fee.`,
     });
   }
 }

@@ -3,11 +3,12 @@ import { GcsModule } from '../gcs/gcs.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
 import { FeedbackModule } from '../feedback/feedback.module.js';
+import { PaymentsModule } from '../payments/payments.module.js';
 import { AdminController } from './admin.controller.js';
 import { AdminService } from './admin.service.js';
 
 @Module({
-  imports: [PrismaModule, GcsModule, NotificationsModule, FeedbackModule],
+  imports: [PrismaModule, GcsModule, NotificationsModule, FeedbackModule, PaymentsModule],
   controllers: [AdminController],
   providers: [AdminService],
 })

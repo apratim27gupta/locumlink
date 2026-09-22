@@ -68,6 +68,12 @@ const nextConfig: NextConfig = {
       { source: '/api/admin/verifications', destination: `${apiBase}/api/admin/verifications` },
       { source: '/api/admin/verifications/:path*', destination: `${apiBase}/api/admin/verifications/:path*` },
       { source: '/api/admin/audit-logs', destination: `${apiBase}/api/admin/audit-logs` },
+      { source: '/api/admin/match-fees', destination: `${apiBase}/api/admin/match-fees` },
+      { source: '/api/admin/match-fees/:path*', destination: `${apiBase}/api/admin/match-fees/:path*` },
+      {
+        source: '/api/admin/hosts/:hostProfileId/clear-match-fee-review',
+        destination: `${apiBase}/api/admin/hosts/:hostProfileId/clear-match-fee-review`,
+      },
       { source: '/api/admin/users/:id/profile', destination: `${apiBase}/api/admin/users/:id/profile` },
       { source: '/api/admin/users/:id/remind', destination: `${apiBase}/api/admin/users/:id/remind` },
       { source: '/api/admin/users/broadcast', destination: `${apiBase}/api/admin/users/broadcast` },

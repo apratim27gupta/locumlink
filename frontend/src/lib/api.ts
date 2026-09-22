@@ -707,6 +707,60 @@ export const locumApi = {
         }
         return res.json() as Promise<{ success: boolean; finalizedDates?: string[] }>;
     },
+    updateApplicationAvailability: async (
+        applicationId: string,
+        opts: {
+            availabilityKind: 'FULL' | 'PARTIAL';
+            availableDates?: string[];
+        },
+    ): Promise<{ success: boolean }> => {
+        const body: Record<string, unknown> = {
+            availabilityKind: opts.availabilityKind,
+        };
+        if (opts.availabilityKind === 'PARTIAL') {
+            body.availableDates = opts.availableDates ?? [];
+        }
+        const res = await trackedFetch(
+            `${NEST_BASE}/api/locum/applications/${encodeURIComponent(applicationId)}/availability`,
+            {
+                method: 'PATCH',
+                headers: nestHeaders(true),
+                body: JSON.stringify(body),
+            },
+        );
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Updating availability');
+        }
+        return res.json() as Promise<{ success: boolean }>;
+    },
+    withdrawApplication: async (
+        applicationId: string,
+    ): Promise<{ success: boolean; reopened?: boolean }> => {
+        const res = await trackedFetch(
+            `${NEST_BASE}/api/locum/applications/${encodeURIComponent(applicationId)}/withdraw`,
+            {
+                method: 'PATCH',
+                headers: nestHeaders(true),
+            },
+        );
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Withdrawing application');
+        }
+        return res.json() as Promise<{ success: boolean; reopened?: boolean }>;
+    },
+    getMatchFeePolicy: async (): Promise<MatchFeePolicyResponse> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/locum/match-fees/policy`, {
+            cache: 'no-store',
+            headers: nestHeaders(false),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Loading match fee policy');
+        }
+        return res.json() as Promise<MatchFeePolicyResponse>;
+    },
 };
 export type PostingStatus = 'DRAFT' | 'ACTIVE' | 'SCHEDULED' | 'ONGOING' | 'COMPLETED' | 'EXPIRED';
 export type Job = {
@@ -1091,6 +1145,118 @@ export const hostApi = {
         }
         return res.json();
     },
+    getMatchFeePolicy: async (): Promise<MatchFeePolicyResponse> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/host/match-fees/policy`, {
+            cache: 'no-store',
+            headers: nestHeaders(false),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Loading match fee policy');
+        }
+        return res.json() as Promise<MatchFeePolicyResponse>;
+    },
+    getMatchFeeDueCount: async (): Promise<{ dueCount: number; overdueCount: number }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/host/match-fees/due-count`, {
+            cache: 'no-store',
+            headers: nestHeaders(false),
+            skipTopLoader: true,
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Loading match fee count');
+        }
+        return res.json() as Promise<{ dueCount: number; overdueCount: number }>;
+    },
+    listMatchFees: async (params?: PaginationQuery): Promise<PaginatedResult<MatchFeeInvoice>> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/host/match-fees${buildPaginationQs(params)}`, {
+            cache: 'no-store',
+            headers: nestHeaders(false),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Loading match fees');
+        }
+        return res.json() as Promise<PaginatedResult<MatchFeeInvoice>>;
+    },
+    payMatchFeeMock: async (invoiceId: string): Promise<{ success: boolean; invoice: MatchFeeInvoice }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/host/match-fees/${encodeURIComponent(invoiceId)}/pay-mock`, {
+            method: 'POST',
+            headers: nestHeaders(true),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Paying match fee');
+        }
+        return res.json() as Promise<{ success: boolean; invoice: MatchFeeInvoice }>;
+    },
+    payMatchFeeStripe: async (invoiceId: string): Promise<{ success: boolean; url: string }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/host/match-fees/${encodeURIComponent(invoiceId)}/pay-stripe`, {
+            method: 'POST',
+            headers: nestHeaders(true),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Starting Stripe checkout');
+        }
+        return res.json() as Promise<{ success: boolean; url: string }>;
+    },
+    cancelAcceptedMatch: async (applicationId: string, reason?: string): Promise<{ success: boolean }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/host/applications/${encodeURIComponent(applicationId)}/cancel-match`, {
+            method: 'POST',
+            headers: nestHeaders(true),
+            body: JSON.stringify({ reason }),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Cancelling match');
+        }
+        return res.json() as Promise<{ success: boolean }>;
+    },
+};
+export type MatchFeeInvoiceStatus =
+    | 'PENDING'
+    | 'PAID'
+    | 'OVERDUE'
+    | 'CANCELLED'
+    | 'REFUNDED'
+    | 'CREDITED'
+    | 'PENDING_REPLACEMENT';
+export type MatchFeeInvoice = {
+    id: string;
+    applicationId: string;
+    jobPostingId: string;
+    amountCents: number;
+    currency: string;
+    status: MatchFeeInvoiceStatus;
+    dueAt: string;
+    paidAt: string | null;
+    mockPaymentRef: string | null;
+    cancelledAt: string | null;
+    cancelledBy: string | null;
+    cancellationReason: string | null;
+    refundResolution: string;
+    replacementStatus: string;
+    escalatedAt: string | null;
+    createdAt: string;
+    jobTitle: string;
+    postingLocation: string | null;
+    postingScheduleLabel: string | null;
+    locumName: string;
+    daysUntilStart: number | null;
+};
+export type MatchFeePolicyResponse = {
+    role: 'HOST' | 'LOCUM';
+    emphasis: string;
+    locumFee: string;
+    hostPostingFee: string;
+    matchFeeAmountCad: number;
+    matchFeeDescription: string;
+    dueRule: string;
+    clinicalPayNote: string;
+    futurePaymentMethods: string;
+    cancellationRules: Array<{ id: string; summary: string }>;
+    paymentMethods?: { enabled: boolean; mockEnabled: boolean };
 };
 export type ConversationPartner = {
     id: string;

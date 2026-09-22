@@ -1,27 +1,40 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { BrowseJob } from '@/lib/api';
 import { getPostingDays, formatSpecificDate, formatShiftTimeRange, getJobShifts } from '@/lib/jobSchedule';
 
 const TEAL = '#309BB7';
 const TEAL_DARK = '#1B6F86';
 
+export type LocumAvailabilitySubmit = {
+  availabilityKind: 'FULL' | 'PARTIAL';
+  availableDates: string[];
+  coverNote?: string;
+};
+
 /**
- * Apply flow: the locum declares availability for the whole schedule or only some
- * days, plus an optional note. Submits { availabilityKind, availableDates, coverNote }.
+ * Apply or update availability: FULL vs PARTIAL days + optional cover note (apply only).
  */
 export function LocumApplyModal({
   job,
   applying,
   error,
+  mode = 'apply',
+  initialKind = 'FULL',
+  initialDates = [],
+  initialNote = '',
   onSubmit,
   onClose,
 }: {
   job: BrowseJob;
   applying: boolean;
   error?: string;
-  onSubmit: (opts: { availabilityKind: 'FULL' | 'PARTIAL'; availableDates: string[]; coverNote?: string }) => void;
+  mode?: 'apply' | 'edit';
+  initialKind?: 'FULL' | 'PARTIAL';
+  initialDates?: string[];
+  initialNote?: string;
+  onSubmit: (opts: LocumAvailabilitySubmit) => void;
   onClose: () => void;
 }) {
   const postingDays = useMemo(() => getPostingDays(job), [job]);
@@ -33,9 +46,15 @@ export function LocumApplyModal({
     }
     return m;
   }, [job]);
-  const [kind, setKind] = useState<'FULL' | 'PARTIAL'>('FULL');
-  const [days, setDays] = useState<Set<string>>(new Set());
-  const [note, setNote] = useState('');
+  const [kind, setKind] = useState<'FULL' | 'PARTIAL'>(initialKind);
+  const [days, setDays] = useState<Set<string>>(() => new Set(initialDates));
+  const [note, setNote] = useState(initialNote);
+
+  useEffect(() => {
+    setKind(initialKind);
+    setDays(new Set(initialDates));
+    setNote(initialNote);
+  }, [initialKind, initialDates, initialNote, job.id]);
 
   function toggleDay(d: string) {
     setDays((prev) => {
@@ -47,13 +66,14 @@ export function LocumApplyModal({
   }
 
   const canSubmit = kind === 'FULL' || days.size > 0;
+  const isEdit = mode === 'edit';
 
   function handleSubmit() {
     if (!canSubmit || applying) return;
     onSubmit({
       availabilityKind: kind,
       availableDates: kind === 'PARTIAL' ? [...days].sort() : [],
-      coverNote: note.trim() || undefined,
+      coverNote: isEdit ? undefined : note.trim() || undefined,
     });
   }
 
@@ -89,7 +109,9 @@ export function LocumApplyModal({
         }}
       >
         <div style={{ padding: '16px 18px', borderBottom: '1px solid #EEF0F3' }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#0B0F1F' }}>Apply to this shift</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#0B0F1F' }}>
+            {isEdit ? 'Update availability' : 'Apply to this shift'}
+          </div>
           <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>{job.title}</div>
         </div>
 
@@ -150,21 +172,23 @@ export function LocumApplyModal({
             </div>
           )}
 
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-              Note to host (optional)
-            </label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={3}
-              placeholder="Anything the host should know about your availability."
-              style={{
-                width: '100%', padding: '9px 12px', border: '1px solid #D0D5DD', borderRadius: 8,
-                fontSize: 13, fontFamily: 'inherit', color: '#0B0F1F', resize: 'vertical', boxSizing: 'border-box',
-              }}
-            />
-          </div>
+          {!isEdit && (
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+                Note to host (optional)
+              </label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={3}
+                placeholder="Anything the host should know about your availability."
+                style={{
+                  width: '100%', padding: '9px 12px', border: '1px solid #D0D5DD', borderRadius: 8,
+                  fontSize: 13, fontFamily: 'inherit', color: '#0B0F1F', resize: 'vertical', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          )}
 
           {error && <p style={{ fontSize: 13, color: '#DC2626', margin: 0 }}>{error}</p>}
         </div>
@@ -191,7 +215,13 @@ export function LocumApplyModal({
               cursor: !canSubmit || applying ? 'default' : 'pointer',
             }}
           >
-            {applying ? 'Applying...' : 'Submit application'}
+            {applying
+              ? isEdit
+                ? 'Saving…'
+                : 'Applying…'
+              : isEdit
+                ? 'Save availability'
+                : 'Submit application'}
           </button>
         </div>
       </div>

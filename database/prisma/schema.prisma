@@ -114,6 +114,42 @@ enum UserReportReason {
   OTHER
 }
 
+enum MatchFeeInvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+  CREDITED
+  PENDING_REPLACEMENT
+}
+
+enum MatchFeeCancelledBy {
+  HOST
+  LOCUM
+  ADMIN
+  SYSTEM
+}
+
+enum MatchFeeRefundResolution {
+  NONE
+  REFUND
+  CREDIT
+  PENDING
+}
+
+enum MatchFeeReplacementStatus {
+  NONE
+  SEARCHING
+  FOUND
+  NOT_FOUND
+}
+
+enum MatchFeePaymentProvider {
+  MOCK
+  STRIPE
+}
+
 model User {
   id                 String     @id @default(cuid())
   email              String
@@ -248,6 +284,8 @@ model HostProfile {
   photoIdFile             String?            @map("photo_id_file")
   photoIdOriginalName     String?            @map("photo_id_original_name")
 
+  stripeCustomerId        String?            @map("stripe_customer_id")
+
   address1                String?
   address2                String?
   accommodationProvided   Boolean            @default(false)
@@ -256,10 +294,13 @@ model HostProfile {
   emr                     String?
   patientVol              String?
 
+  matchFeeReviewRequired  Boolean            @default(false) @map("match_fee_review_required")
+
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
 
   postings                JobPosting[]
+  matchFeeInvoices        MatchFeeInvoice[]
 
   @@map("host_profiles")
 }
@@ -320,6 +361,7 @@ model JobPosting {
   shifts                Shift[]
   applications          Application[]
   messages              Message[]
+  matchFeeInvoices      MatchFeeInvoice[]
 
   @@index([status, id], map: "job_postings_status_id_idx")
   @@map("job_postings")
@@ -364,6 +406,8 @@ model Application {
 
   // Placement timestamp for fill rate + avg time-to-placement (L2-E7.1)
   placedAt        DateTime?         @map("placed_at")
+
+  matchFeeInvoice MatchFeeInvoice?
 
   @@unique([jobPostingId, locumProfileId])
   @@index([jobPostingId, id], map: "applications_job_posting_id_id_idx")
@@ -640,4 +684,39 @@ model ErrorLog {
   @@index([createdAt])
   @@index([statusCode])
   @@map("error_logs")
+}
+
+model MatchFeeInvoice {
+  id                 String                    @id @default(cuid())
+  applicationId      String                    @unique @map("application_id")
+  hostProfileId      String                    @map("host_profile_id")
+  jobPostingId       String                    @map("job_posting_id")
+  amountCents        Int                       @default(25000) @map("amount_cents")
+  currency           String                    @default("CAD")
+  status             MatchFeeInvoiceStatus     @default(PENDING)
+  dueAt              DateTime                  @map("due_at")
+  paidAt             DateTime?                 @map("paid_at")
+  mockPaymentRef     String?                   @map("mock_payment_ref")
+  cancelledAt        DateTime?                 @map("cancelled_at")
+  cancelledBy        MatchFeeCancelledBy?      @map("cancelled_by")
+  cancellationReason String?                   @map("cancellation_reason") @db.Text
+  refundResolution   MatchFeeRefundResolution  @default(NONE) @map("refund_resolution")
+  replacementStatus  MatchFeeReplacementStatus @default(NONE) @map("replacement_status")
+  adminNotes         String?                   @map("admin_notes") @db.Text
+  escalatedAt        DateTime?                 @map("escalated_at")
+  paymentProvider    MatchFeePaymentProvider   @default(MOCK) @map("payment_provider")
+  stripeCheckoutSessionId String?              @map("stripe_checkout_session_id")
+  stripePaymentIntentId   String?              @map("stripe_payment_intent_id")
+  lastReminderAt     DateTime?                 @map("last_reminder_at")
+  createdAt          DateTime                  @default(now()) @map("created_at")
+  updatedAt          DateTime                  @updatedAt @map("updated_at")
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  hostProfile HostProfile @relation(fields: [hostProfileId], references: [id], onDelete: Cascade)
+  jobPosting  JobPosting  @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+
+  @@index([hostProfileId, status])
+  @@index([status, dueAt])
+  @@index([escalatedAt])
+  @@map("match_fee_invoices")
 }

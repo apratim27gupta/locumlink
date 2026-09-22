@@ -15,6 +15,7 @@ import { getSupabase } from '@/lib/supabaseClient';
 import { useTrackLastPath } from '../hooks/useTrackLastPath';
 import { subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { subscribeMessagesUpdated } from '@/lib/messagesUpdatedEvent';
+import { subscribeMatchFeesUpdated } from '@/lib/matchFeeUpdatedEvent';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { isExternalNotificationHref, resolveNotificationAction, resolveNotificationTitle } from '@/lib/notificationActions';
 import { CountBadge } from '@/components/CountBadge';
@@ -57,6 +58,7 @@ const ICON: Record<string, string> = {
     resources: 'M12 6.25278V19.2528M12 6.25278C10.8321 5.47686 9.24649 5 7.5 5C5.75351 5 4.16789 5.47686 3 6.25278V19.2528C4.16789 18.4769 5.75351 18 7.5 18C9.24649 18 10.8321 18.4769 12 19.2528M12 6.25278C13.1679 5.47686 14.7535 5 16.5 5C18.2465 5 19.8321 5.47686 21 6.25278V19.2528C19.8321 18.4769 18.2465 18 16.5 18C14.7535 18 13.1679 18.4769 12 19.2528',
     faq: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01',
     settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
+    matchFees: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM14 3.5L18.5 8H14V3.5zM8 13h8M8 17h8',
 };
 function NavIcon({ name }: {
     name: string;
@@ -275,6 +277,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [notifTotal, setNotifTotal] = useState(0);
     const [messageUnreadTotal, setMessageUnreadTotal] = useState(0);
+    const [matchFeeDueCount, setMatchFeeDueCount] = useState(0);
     const bellRef = useRef<HTMLDivElement>(null);
     /** IDs dismissed locally after open; kept until server reports read (avoids poll flash-back). */
     const dismissedNotifIdsRef = useRef<Set<string>>(new Set());
@@ -392,10 +395,25 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         catch {
         }
     }, []);
+    const fetchMatchFeeDueCount = useCallback(async () => {
+        if (!getToken())
+            return;
+        const role = getRole();
+        if (role !== 'clinic' && !pathname?.startsWith('/host'))
+            return;
+        try {
+            const { dueCount } = await hostApi.getMatchFeeDueCount();
+            setMatchFeeDueCount(dueCount);
+        }
+        catch {
+            setMatchFeeDueCount(0);
+        }
+    }, [pathname]);
     useEffect(() => {
         void fetchNotifications();
         void fetchMessageUnread();
-    }, [fetchNotifications, fetchMessageUnread, userId]);
+        void fetchMatchFeeDueCount();
+    }, [fetchNotifications, fetchMessageUnread, fetchMatchFeeDueCount, userId]);
     const prevNotifTotal = useRef(0);
     useEffect(() => {
         if (notifTotal > prevNotifTotal.current && prevNotifTotal.current !== 0) {
@@ -440,23 +458,34 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     useVisibilityPolling(() => {
         void fetchNotifications();
         void fetchMessageUnread();
+        void fetchMatchFeeDueCount();
     }, 12_000, Boolean(getToken()));
     useEffect(() => {
         if (!getToken()) return;
         return onPwaRefresh(() => {
             void fetchNotifications();
             void fetchMessageUnread();
+            void fetchMatchFeeDueCount();
         });
-    }, [fetchNotifications, fetchMessageUnread]);
+    }, [fetchNotifications, fetchMessageUnread, fetchMatchFeeDueCount]);
     useEffect(() => {
         return subscribeMessagesUpdated(() => {
             void fetchMessageUnread();
         });
     }, [fetchMessageUnread]);
     useEffect(() => {
+        return subscribeMatchFeesUpdated(() => {
+            void fetchMatchFeeDueCount();
+        });
+    }, [fetchMatchFeeDueCount]);
+    useEffect(() => {
         if (pathname?.includes('/messages'))
             void fetchMessageUnread();
     }, [pathname, fetchMessageUnread]);
+    useEffect(() => {
+        if (pathname?.includes('/host/invoices'))
+            void fetchMatchFeeDueCount();
+    }, [pathname, fetchMatchFeeDueCount]);
     useEffect(() => {
         if (!getToken())
             return;
@@ -565,9 +594,16 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         const isMessagesNav = item.href === '/locum/messages'
             || item.href === '/host/messages'
             || item.label === 'Messages';
-        return isMessagesNav
-            ? { ...item, badgeCount: messageUnreadTotal }
-            : item;
+        if (isMessagesNav) {
+            return { ...item, badgeCount: messageUnreadTotal };
+        }
+        const isMatchFeesNav = item.href === '/host/invoices' || item.label === 'Match Fees';
+        const isHostNav =
+            getRole() === 'clinic' || pathname?.startsWith('/host') === true;
+        if (isMatchFeesNav && isHostNav) {
+            return { ...item, badgeCount: matchFeeDueCount };
+        }
+        return item;
     });
     return (<div style={{
             display: 'flex',

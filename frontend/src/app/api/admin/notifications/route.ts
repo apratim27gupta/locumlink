@@ -28,8 +28,9 @@ export async function GET(req: Request) {
       eventType?: string;
     };
     const eventType = payload.eventType ?? e.eventType;
-    let type: 'registration' | 'credential' | 'flagged' = 'registration';
-    if (eventType.includes('CREDENTIAL') || eventType.includes('CPSNS'))
+    let type: 'registration' | 'credential' | 'flagged' | 'payment' = 'registration';
+    if (eventType.includes('MATCH_FEE')) type = 'payment';
+    else if (eventType.includes('CREDENTIAL') || eventType.includes('CPSNS'))
       type = 'credential';
     else if (eventType.includes('FLAGGED')) type = 'flagged';
 

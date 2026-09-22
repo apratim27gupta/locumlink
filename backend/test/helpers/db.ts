@@ -26,6 +26,7 @@ export async function cleanupTables(): Promise<void> {
       message_attachments,
       messages,
       notification_events,
+      match_fee_invoices,
       applications,
       shifts,
       job_postings,

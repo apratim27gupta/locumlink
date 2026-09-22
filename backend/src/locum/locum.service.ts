@@ -1,6 +1,7 @@
 import { PushService } from '../notifications/push.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
+import { PaymentsService } from '../payments/payments.service.js';
 import { formatAdminDoctorName } from '../notifications/admin-notification-copy.js';
 import { formatLocumDoctorName } from '../notifications/notification-copy.js';
 import { isShiftWithin24Hours } from '../notifications/host-notification-copy.js';
@@ -9,6 +10,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import {
   DocumentType,
@@ -150,11 +152,14 @@ function parseSaveBody(body: Record<string, unknown>): SaveLocumProfileDto {
 }
 @Injectable()
 export class LocumService {
+  private readonly logger = new Logger(LocumService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly pushService: PushService,
     private readonly notifService: NotificationsService,
     private readonly adminNotif: AdminNotificationsService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   private async assertLocumCanWrite(userId: string): Promise<void> {
@@ -610,46 +615,40 @@ export class LocumService {
     const existing = await this.prisma.application.findFirst({
       where: { jobPostingId: jobId, locumProfileId: locumProfile.id },
     });
-    if (existing)
+    if (existing && existing.status !== 'WITHDRAWN')
       throw new BadRequestException('You have already applied to this job.');
 
     // Validate declared availability against the posting's required days.
     const requiredDates = getPostingRequiredDates(job);
-    const isPartial = opts.availabilityKind === 'PARTIAL';
-    let availableDates: string[] = [];
-    if (isPartial) {
-      const requiredSet = new Set(requiredDates);
-      const picked = [
-        ...new Set(
-          (opts.availableDates ?? [])
-            .map((d) => d.slice(0, 10))
-            .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
-        ),
-      ].sort();
-      if (picked.length === 0) {
-        throw new BadRequestException(
-          'Select at least one day you are available for.',
-        );
-      }
-      if (requiredDates.length > 0 && picked.some((d) => !requiredSet.has(d))) {
-        throw new BadRequestException(
-          'Selected days must be within the posting schedule.',
-        );
-      }
-      availableDates = picked;
-    }
-    const availabilityKind = isPartial ? 'PARTIAL' : 'FULL';
+    const { availabilityKind, availableDates } = this.parseAvailabilityInput(
+      opts,
+      requiredDates,
+    );
 
-    const application = await this.prisma.application.create({
-      data: {
-        jobPostingId: jobId,
-        locumProfileId: locumProfile.id,
-        status: 'APPLIED',
-        coverNote: coverNote ?? null,
-        availabilityKind,
-        availableDates,
-      },
-    });
+    const application = existing
+      ? await this.prisma.application.update({
+          where: { id: existing.id },
+          data: {
+            status: 'APPLIED',
+            locumResponse: null,
+            locumAcceptedAt: null,
+            placedAt: null,
+            coverNote: coverNote ?? null,
+            availabilityKind,
+            availableDates,
+            appliedAt: new Date(),
+          },
+        })
+      : await this.prisma.application.create({
+          data: {
+            jobPostingId: jobId,
+            locumProfileId: locumProfile.id,
+            status: 'APPLIED',
+            coverNote: coverNote ?? null,
+            availabilityKind,
+            availableDates,
+          },
+        });
     // H-001: Notify host of new application
     try {
       const jobWithHost = await this.prisma.jobPosting.findUnique({
@@ -672,13 +671,13 @@ export class LocumService {
           select: { firstName: true, lastName: true },
         });
         await this.notifService.notifyHostLocumApplied({
-          recipientId: jobWithHost.hostProfile.userId,
+          recipientId: jobWithHost!.hostProfile.userId,
           recipientEmail: hostUser.email,
           locumFirstName: locum?.firstName,
           locumLastName: locum?.lastName,
           jobId,
-          jobTitle: jobWithHost.title,
-          startDate: jobWithHost.startDate,
+          jobTitle: jobWithHost!.title,
+          startDate: jobWithHost!.startDate,
           applicationId: application.id,
         });
       }
@@ -957,6 +956,279 @@ export class LocumService {
     return { totalAcceptedShifts, completedShifts };
   }
 
+  private parseAvailabilityInput(
+    opts: {
+      availabilityKind?: 'FULL' | 'PARTIAL';
+      availableDates?: string[];
+    },
+    requiredDates: string[],
+  ): { availabilityKind: 'FULL' | 'PARTIAL'; availableDates: string[] } {
+    const isPartial = opts.availabilityKind === 'PARTIAL';
+    if (!isPartial) {
+      return { availabilityKind: 'FULL', availableDates: [] };
+    }
+    const requiredSet = new Set(requiredDates);
+    const picked = [
+      ...new Set(
+        (opts.availableDates ?? [])
+          .map((d) => d.slice(0, 10))
+          .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
+      ),
+    ].sort();
+    if (picked.length === 0) {
+      throw new BadRequestException(
+        'Select at least one day you are available for.',
+      );
+    }
+    if (requiredDates.length > 0 && picked.some((d) => !requiredSet.has(d))) {
+      throw new BadRequestException(
+        'Selected days must be within the posting schedule.',
+      );
+    }
+    return { availabilityKind: 'PARTIAL', availableDates: picked };
+  }
+
+  /** Withdraw / edit availability allowed until the posting is ongoing or finished. */
+  private assertApplicationMutableBeforeOngoing(posting: {
+    status: string;
+    isDeleted: boolean;
+  }) {
+    if (posting.isDeleted) {
+      throw new BadRequestException('This posting has been removed by the host.');
+    }
+    if (posting.status === 'ONGOING' || posting.status === 'COMPLETED') {
+      throw new BadRequestException(
+        'This shift has already started or finished. Contact the host if you need help.',
+      );
+    }
+    if (posting.status === 'EXPIRED') {
+      throw new BadRequestException('This posting has expired.');
+    }
+  }
+
+  private async notifyHostOfWithdrawal(params: {
+    userId: string;
+    applicationId: string;
+    jobPostingId: string;
+    wasAccepted: boolean;
+  }) {
+    try {
+      const jobWithHost = await this.prisma.jobPosting.findUnique({
+        where: { id: params.jobPostingId },
+        select: {
+          id: true,
+          startDate: true,
+          hostProfile: {
+            select: {
+              userId: true,
+              practiceName: true,
+              user: { select: { email: true } },
+            },
+          },
+        },
+      });
+      const locumProfile = await this.prisma.locumProfile.findUnique({
+        where: { userId: params.userId },
+        select: { firstName: true, lastName: true },
+      });
+      const host = jobWithHost?.hostProfile;
+      const hostEmail = host?.user?.email;
+      if (!host?.userId || !hostEmail || !jobWithHost) return;
+
+      const reason = params.wasAccepted
+        ? 'Locum withdrew after accepting the placement'
+        : 'Locum withdrew their application';
+
+      if (isShiftWithin24Hours(jobWithHost.startDate)) {
+        await this.notifService.notifyHostShiftCancelled({
+          recipientId: host.userId,
+          recipientEmail: hostEmail,
+          startDate: jobWithHost.startDate,
+          clinicName: host.practiceName ?? 'the clinic',
+          cancelledBy: formatLocumDoctorName(
+            locumProfile?.firstName,
+            locumProfile?.lastName,
+          ),
+          reason,
+          jobId: jobWithHost.id,
+        });
+      } else {
+        await this.notifService.notifyHostLocumDeclined({
+          recipientId: host.userId,
+          recipientEmail: hostEmail,
+          locumFirstName: locumProfile?.firstName,
+          locumLastName: locumProfile?.lastName,
+          startDate: jobWithHost.startDate,
+          applicationId: params.applicationId,
+          jobId: jobWithHost.id,
+        });
+      }
+    } catch {}
+  }
+
+  async updateApplicationAvailability(
+    userId: string,
+    applicationId: string,
+    opts: {
+      availabilityKind: 'FULL' | 'PARTIAL';
+      availableDates?: string[];
+    },
+  ) {
+    await this.assertLocumCanWrite(userId);
+    const locumProfile = await this.prisma.locumProfile.findUnique({
+      where: { userId },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    if (!locumProfile) throw new ForbiddenException();
+
+    const app = await this.prisma.application.findFirst({
+      where: { id: applicationId, locumProfileId: locumProfile.id },
+      include: {
+        jobPosting: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            isDeleted: true,
+            startDate: true,
+            endDate: true,
+            shifts: { select: { date: true } },
+            hostProfile: {
+              select: {
+                userId: true,
+                user: { select: { email: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!app) throw new NotFoundException('Application not found');
+    if (app.status === 'WITHDRAWN' || app.status === 'REJECTED') {
+      throw new BadRequestException(
+        'This application is closed and cannot be updated.',
+      );
+    }
+    this.assertApplicationMutableBeforeOngoing(app.jobPosting);
+
+    const requiredDates = getPostingRequiredDates(app.jobPosting);
+    const { availabilityKind, availableDates } = this.parseAvailabilityInput(
+      opts,
+      requiredDates,
+    );
+
+    // If already accepted, shrinking days must not leave zero days claimed.
+    const wasAccepted =
+      app.locumResponse === 'ACCEPTED' || app.locumAcceptedAt != null;
+    if (wasAccepted && availabilityKind === 'PARTIAL') {
+      // Dropping all days is a withdraw — force that path instead.
+      if (availableDates.length === 0) {
+        throw new BadRequestException(
+          'Select at least one day, or withdraw from this placement.',
+        );
+      }
+    }
+
+    const updated = await this.prisma.application.update({
+      where: { id: applicationId },
+      data: { availabilityKind, availableDates },
+    });
+
+    // Recalculate coverage if this locum was already counting toward fill.
+    if (wasAccepted) {
+      await this.applyCoverageStatus(app.jobPostingId);
+    }
+
+    try {
+      const host = app.jobPosting.hostProfile;
+      const hostEmail = host?.user?.email;
+      if (host?.userId && hostEmail) {
+        await this.notifService.notifyHostAvailabilityUpdated({
+          recipientId: host.userId,
+          recipientEmail: hostEmail,
+          locumFirstName: locumProfile.firstName,
+          locumLastName: locumProfile.lastName,
+          jobId: app.jobPosting.id,
+          jobTitle: app.jobPosting.title,
+          applicationId,
+          availabilityKind,
+          dayCount:
+            availabilityKind === 'FULL'
+              ? requiredDates.length || 0
+              : availableDates.length,
+        });
+      }
+    } catch {}
+
+    return { success: true, application: updated };
+  }
+
+  async withdrawApplication(userId: string, applicationId: string) {
+    await this.assertLocumCanWrite(userId);
+    const locumProfile = await this.prisma.locumProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!locumProfile) throw new ForbiddenException();
+
+    const app = await this.prisma.application.findFirst({
+      where: { id: applicationId, locumProfileId: locumProfile.id },
+      include: {
+        jobPosting: {
+          select: {
+            id: true,
+            status: true,
+            isDeleted: true,
+            startDate: true,
+          },
+        },
+      },
+    });
+    if (!app) throw new NotFoundException('Application not found');
+    if (app.status === 'WITHDRAWN') {
+      return { success: true, alreadyWithdrawn: true };
+    }
+    if (app.status === 'REJECTED') {
+      throw new BadRequestException('This application was already closed.');
+    }
+    this.assertApplicationMutableBeforeOngoing(app.jobPosting);
+
+    const wasAccepted =
+      app.locumResponse === 'ACCEPTED' || app.locumAcceptedAt != null;
+
+    await this.prisma.application.update({
+      where: { id: applicationId },
+      data: {
+        status: 'WITHDRAWN',
+        locumResponse: wasAccepted || app.status === 'CONFIRMED'
+          ? 'REJECTED'
+          : app.locumResponse,
+        locumAcceptedAt: null,
+      },
+    });
+
+    // Soft-reopen posting when accepted coverage is no longer complete.
+    await this.applyCoverageStatus(app.jobPostingId);
+
+    if (wasAccepted) {
+      try {
+        await this.paymentsService.handleCancellation({
+          applicationId,
+          cancelledBy: 'LOCUM',
+        });
+      } catch {}
+    }
+
+    await this.notifyHostOfWithdrawal({
+      userId,
+      applicationId,
+      jobPostingId: app.jobPostingId,
+      wasAccepted,
+    });
+
+    return { success: true, reopened: wasAccepted };
+  }
+
   /**
    * Recompute a posting's status from the coverage of its accepted applications.
    * Fully covered -> promote an ACTIVE posting to SCHEDULED/ONGOING/COMPLETED (so
@@ -1100,7 +1372,11 @@ export class LocumService {
                 : 'FULL') as 'FULL' | 'PARTIAL',
               availableDates: app.availableDates ?? [],
             }
-          : availabilityAfterFinalize(requiredDates, finalizedDates);
+          : availabilityAfterFinalize(
+              requiredDates,
+              finalizedDates,
+              app.availabilityKind,
+            );
 
       await this.prisma.application.update({
         where: { id: applicationId },
@@ -1171,7 +1447,11 @@ export class LocumService {
             }
           } catch {}
         } else {
-          const trimmed = availabilityAfterFinalize(requiredDates, remaining);
+          const trimmed = availabilityAfterFinalize(
+            requiredDates,
+            remaining,
+            other.availabilityKind,
+          );
           await this.prisma.application.update({
             where: { id: other.id },
             data: {
@@ -1197,6 +1477,31 @@ export class LocumService {
 
       // Only fill/close the posting once accepted locums cover every day.
       await this.applyCoverageStatus(app.jobPostingId);
+
+      try {
+        await this.paymentsService.createMatchFeeInvoice(applicationId);
+      } catch (err) {
+        this.logger.warn(
+          `Match fee invoice after accept failed for ${applicationId}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+
+      try {
+        const email = (
+          await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true },
+          })
+        )?.email;
+        if (email) {
+          await this.notifService.notifyLocumMatchFeeInfo({
+            recipientId: userId,
+            recipientEmail: email,
+            jobTitle: postingForCoverage.title,
+            applicationId,
+          });
+        }
+      } catch {}
 
       try {
         const email = (

@@ -46,14 +46,7 @@ import {
     compareLocalCalendarDates,
 } from '@/lib/hostJobPostingForm';
 import { getJobScheduleMode, formatScheduleSummaryText } from '@/lib/jobSchedule';
-const HOST_DASH_NAV = [
-    { label: 'My Postings', href: '/host/dashboard', icon: <NavIcon name="postings"/> },
-    { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile"/> },
-    { label: 'Messages', href: '/host/messages', icon: <NavIcon name="messages"/> },
-    { label: 'Resources', href: '/host/resources', icon: <NavIcon name="resources"/> },
-    { label: 'FAQs', href: '/host/faq', icon: <NavIcon name="faq"/> },
-    { label: 'Settings', href: '/host/settings', icon: <NavIcon name="settings"/> },
-];
+import { HOST_DASH_NAV } from '@/lib/hostNav';
 const TABS = [
     { id: 'active', label: 'Active Posts' },
     { id: 'ongoing', label: 'Confirmed Locum Shifts' },
@@ -1984,33 +1977,33 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                     </button>
                   </div>
                 </div>
-                {(sameTimeForAll || specificDates.length === 0) && (
-                  <div className="host-job-schedule-grid" style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 12,
-                  }}>
-                    <div>
-                      <label style={lbl}>Start Time *</label>
-                      <input type="time" style={fieldInp} value={startTime} onChange={(e) => setStartTime(e.target.value)}/>
-                    </div>
-                    <div>
-                      <label style={lbl}>End Time *</label>
-                      <input type="time" style={fieldInp} value={endTime} onChange={(e) => setEndTime(e.target.value)}/>
-                    </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={sameTimeForAll}
+                    onChange={(e) => handleSameTimeForAll(e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: '#309BB7', flexShrink: 0 }}
+                  />
+                  Use the same time for every date
+                </label>
+                <div className="host-job-schedule-grid" style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 12,
+                }}>
+                  <div>
+                    <label style={lbl}>
+                      {sameTimeForAll ? 'Start Time *' : 'Start time for next date *'}
+                    </label>
+                    <input type="time" style={fieldInp} value={startTime} onChange={(e) => setStartTime(e.target.value)}/>
                   </div>
-                )}
-                {specificDates.length >= 1 && (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={sameTimeForAll}
-                      onChange={(e) => handleSameTimeForAll(e.target.checked)}
-                      style={{ width: 16, height: 16, accentColor: '#309BB7', flexShrink: 0 }}
-                    />
-                    Use the same time for every date
-                  </label>
-                )}
+                  <div>
+                    <label style={lbl}>
+                      {sameTimeForAll ? 'End Time *' : 'End time for next date *'}
+                    </label>
+                    <input type="time" style={fieldInp} value={endTime} onChange={(e) => setEndTime(e.target.value)}/>
+                  </div>
+                </div>
                 {specificDates.length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {specificDates.map((d) => {

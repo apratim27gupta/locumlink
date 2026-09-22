@@ -19,7 +19,7 @@ import {
   formatBrowseJobUtcDateTimeToLocal,
 } from '@/components/locum/LocumBrowseJobDetail';
 import { LocumApplyModal } from '@/components/locum/LocumApplyModal';
-import { fetchAllPaginated, locumApi, type BrowseJob } from '@/lib/api';
+import { fetchAllPaginated, locumApi, type BrowseJob, type MyApplication } from '@/lib/api';
 import { getToken, syncCookies } from '@/lib/auth';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { useAuth } from '@/providers/AuthProvider';
@@ -28,6 +28,10 @@ import type { LocumProfile } from '@/types';
 import LocumAccountNotice from '@/components/LocumAccountNotice';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
+import {
+  applicationJobId,
+  canMutateApplicationBeforeOngoing,
+} from '@/lib/locumApplicationActions';
 import {
   getLocumApplyBlockedMessage,
   getLocumAccountNotice,
@@ -347,10 +351,15 @@ export default function LocumBrowsePage(props: {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authResolved, setAuthResolved] = useState(false);
   const [applied, setApplied] = useState<Set<string>>(new Set());
+  const [myAppsByJobId, setMyAppsByJobId] = useState<Map<string, MyApplication>>(
+    () => new Map(),
+  );
   const [applying, setApplying] = useState<string | null>(null);
   const [applyError, setApplyError] = useState('');
-  // Apply modal (collects availability + optional cover note before submitting).
+  // Apply / edit-availability modal.
   const [applyModalJobId, setApplyModalJobId] = useState<string | null>(null);
+  const [editAppId, setEditAppId] = useState<string | null>(null);
+  const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
   const [profile, setProfile] = useState<LocumProfile | null>(null);
   const [listPanelWidth, setListPanelWidth] = useState(readStoredBrowseListWidth);
   const loadJobs = useCallback(async () => {
@@ -388,14 +397,38 @@ export default function LocumBrowsePage(props: {
     if (!getToken()) return;
     fetchAllPaginated((cursor) => locumApi.getMyApplications({ cursor, limit: 100 }))
       .then((applications) => {
-        const ids = new Set(
-          applications
-            .map((a) => a.jobPosting?.id)
-            .filter((id): id is string => typeof id === 'string' && id.length > 0),
-        );
+        const map = new Map<string, MyApplication>();
+        const ids = new Set<string>();
+        for (const a of applications) {
+          if (a.status === 'WITHDRAWN' || a.status === 'REJECTED') continue;
+          const jid = applicationJobId(a);
+          if (!jid) continue;
+          map.set(jid, a);
+          ids.add(jid);
+        }
+        setMyAppsByJobId(map);
         setApplied(ids);
       })
       .catch(() => {});
+  }, []);
+  const reloadMyApplications = useCallback(async () => {
+    if (!getToken()) return;
+    try {
+      const applications = await fetchAllPaginated((cursor) =>
+        locumApi.getMyApplications({ cursor, limit: 100 }),
+      );
+      const map = new Map<string, MyApplication>();
+      const ids = new Set<string>();
+      for (const a of applications) {
+        if (a.status === 'WITHDRAWN' || a.status === 'REJECTED') continue;
+        const jid = applicationJobId(a);
+        if (!jid) continue;
+        map.set(jid, a);
+        ids.add(jid);
+      }
+      setMyAppsByJobId(map);
+      setApplied(ids);
+    } catch {}
   }, []);
   const filteredJobs = useMemo(() => {
     const nowMs = Date.now();
@@ -469,7 +502,10 @@ export default function LocumBrowsePage(props: {
   const canApply = locumCanApplyToJobs(profile);
   const cpsnsVerified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
   async function handleApply(jobId: string) {
-    if (applied.has(jobId)) return;
+    if (applied.has(jobId)) {
+      openEditAvailability(jobId);
+      return;
+    }
     syncCookies();
     if (!getToken()) {
       beforeClientNavigation('/auth');
@@ -489,7 +525,7 @@ export default function LocumBrowsePage(props: {
       setApplyError(getLocumApplyBlockedMessage(profile));
       return;
     }
-    // Open the availability modal; the actual apply happens in submitApply.
+    setEditAppId(null);
     setApplyError('');
     setApplyModalJobId(jobId);
   }
@@ -500,16 +536,24 @@ export default function LocumBrowsePage(props: {
     setApplying(jobId);
     setApplyError('');
     try {
-      await locumApi.applyToJob(jobId, opts);
+      if (editAppId) {
+        await locumApi.updateApplicationAvailability(editAppId, {
+          availabilityKind: opts.availabilityKind,
+          availableDates: opts.availableDates,
+        });
+      } else {
+        await locumApi.applyToJob(jobId, opts);
+      }
       syncCookies();
-      setApplied((prev) => new Set([...prev, jobId]));
       setApplyModalJobId(null);
+      setEditAppId(null);
+      await reloadMyApplications();
     } catch (e: unknown) {
       const msg =
         e instanceof Error ? e.message : 'Failed to apply. Please try again.';
-      if (msg.toLowerCase().includes('already')) {
-        setApplied((prev) => new Set([...prev, jobId]));
+      if (msg.toLowerCase().includes('already') && !editAppId) {
         setApplyModalJobId(null);
+        await reloadMyApplications();
       } else {
         setApplyError(msg);
       }
@@ -517,8 +561,41 @@ export default function LocumBrowsePage(props: {
       setApplying(null);
     }
   }
+
+  async function handleWithdraw(app: MyApplication) {
+    if (!canMutateApplicationBeforeOngoing(app)) return;
+    if (
+      !window.confirm(
+        'Withdraw this application? The host will be notified. You can apply again later if the posting is still open.',
+      )
+    ) {
+      return;
+    }
+    setWithdrawingId(app.id);
+    setApplyError('');
+    try {
+      await locumApi.withdrawApplication(app.id);
+      await reloadMyApplications();
+    } catch (e) {
+      setApplyError(e instanceof Error ? e.message : 'Could not withdraw');
+    } finally {
+      setWithdrawingId(null);
+    }
+  }
+
+  function openEditAvailability(jobId: string) {
+    const app = myAppsByJobId.get(jobId);
+    if (!app || !canMutateApplicationBeforeOngoing(app)) return;
+    setEditAppId(app.id);
+    setApplyError('');
+    setApplyModalJobId(jobId);
+  }
+
   const isApplied = (id: string) => applied.has(id);
   const isApplying = (id: string) => applying === id;
+  const existingAppForSelected = job?.id ? myAppsByJobId.get(job.id) : undefined;
+  const canMutateSelected =
+    !!existingAppForSelected && canMutateApplicationBeforeOngoing(existingAppForSelected);
   const applyAllowed =
     !selectedJobUnavailable && !isApplied(job?.id ?? '') && !isApplying(job?.id ?? '');
   const applyReady = loggedIn ? canApply && applyAllowed : applyAllowed;
@@ -573,11 +650,23 @@ export default function LocumBrowsePage(props: {
         {applyModalJob && (
           <LocumApplyModal
             job={applyModalJob}
+            mode={editAppId ? 'edit' : 'apply'}
             applying={applying === applyModalJob.id}
             error={applyError}
+            initialKind={
+              myAppsByJobId.get(applyModalJob.id)?.availabilityKind === 'PARTIAL'
+                ? 'PARTIAL'
+                : 'FULL'
+            }
+            initialDates={
+              editAppId
+                ? myAppsByJobId.get(applyModalJob.id)?.availableDates ?? []
+                : []
+            }
             onSubmit={(opts) => submitApply(applyModalJob.id, opts)}
             onClose={() => {
               setApplyModalJobId(null);
+              setEditAppId(null);
               setApplyError('');
             }}
           />
@@ -1144,6 +1233,50 @@ export default function LocumBrowsePage(props: {
                       {applyError}
                     </p>
                   )}
+                  {isApplied(job.id) && canMutateSelected && existingAppForSelected ? (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => openEditAvailability(job.id)}
+                        disabled={isApplying(job.id) || withdrawingId === existingAppForSelected.id}
+                        style={{
+                          height: 34,
+                          padding: '0 14px',
+                          border: '1px solid #309BB7',
+                          borderRadius: 6,
+                          fontSize: 'var(--font-body)',
+                          fontWeight: 'var(--font-weight-bold)',
+                          fontFamily: 'inherit',
+                          cursor: 'pointer',
+                          background: '#fff',
+                          color: '#1B6F86',
+                        }}
+                      >
+                        Change availability
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleWithdraw(existingAppForSelected)}
+                        disabled={withdrawingId === existingAppForSelected.id}
+                        style={{
+                          height: 34,
+                          padding: '0 14px',
+                          border: '1px solid #FCA5A5',
+                          borderRadius: 6,
+                          fontSize: 'var(--font-body)',
+                          fontWeight: 600,
+                          fontFamily: 'inherit',
+                          cursor: 'pointer',
+                          background: '#fff',
+                          color: '#B91C1C',
+                        }}
+                      >
+                        {withdrawingId === existingAppForSelected.id
+                          ? 'Withdrawing…'
+                          : 'Withdraw'}
+                      </button>
+                    </div>
+                  ) : (
                   <span
                     title={
                       isApplied(job.id)
@@ -1204,6 +1337,7 @@ export default function LocumBrowsePage(props: {
                               : 'Apply'}
                     </button>
                   </span>
+                  )}
                 </>
               }
             />

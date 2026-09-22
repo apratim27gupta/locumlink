@@ -32,6 +32,14 @@ import { AdminRemindUserDto } from './dto/admin-remind-user.dto.js';
 import { AdminBroadcastUsersDto } from './dto/admin-broadcast-users.dto.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
+import { PaymentsService } from '../payments/payments.service.js';
+import {
+  AdminOverrideDto,
+  AdminReplacementStatusDto,
+  AdminResolveRefundDto,
+  AdminSendReminderDto,
+  AdminWriteOffDto,
+} from '../payments/payments.dto.js';
 
 @Public()
 @UseGuards(AdminJwtAuthGuard)
@@ -41,6 +49,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly adminNotifications: AdminNotificationsService,
     private readonly feedback: FeedbackService,
+    private readonly payments: PaymentsService,
   ) {}
 
   @Get('stats')
@@ -307,6 +316,87 @@ export class AdminController {
   ) {
     await this.adminNotifications.markRead(admin.sub, id);
     return { ok: true };
+  }
+
+  @Get('match-fees/summary')
+  async matchFeeSummary() {
+    return this.payments.adminMatchFeeSummary();
+  }
+
+  @Get('match-fees')
+  async listMatchFees(
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('escalatedOnly') escalatedOnly?: string,
+  ) {
+    return this.payments.listAdminInvoices({
+      cursor,
+      limit: limit ? Number(limit) : undefined,
+      status,
+      escalatedOnly: escalatedOnly === 'true',
+    });
+  }
+
+  @Post('match-fees/:id/send-reminder')
+  @HttpCode(HttpStatus.OK)
+  async sendMatchFeeReminder(
+    @Param('id') id: string,
+    @Body() dto: AdminSendReminderDto,
+  ) {
+    return this.payments.sendAdminPaymentReminder(id, {
+      sendEmail: dto.sendEmail,
+      sendNotification: dto.sendNotification,
+    });
+  }
+
+  @Post('match-fees/:id/resolve-refund')
+  @HttpCode(HttpStatus.OK)
+  async resolveMatchFeeRefund(
+    @Param('id') id: string,
+    @Body() dto: AdminResolveRefundDto,
+  ) {
+    return this.payments.resolveRefund(id, dto.resolution, dto.adminNotes);
+  }
+
+  @Post('match-fees/:id/replacement-status')
+  @HttpCode(HttpStatus.OK)
+  async setMatchFeeReplacementStatus(
+    @Param('id') id: string,
+    @Body() dto: AdminReplacementStatusDto,
+  ) {
+    return this.payments.setReplacementStatus(
+      id,
+      dto.replacementStatus,
+      dto.adminNotes,
+    );
+  }
+
+  @Post('match-fees/:id/write-off')
+  @HttpCode(HttpStatus.OK)
+  async writeOffMatchFee(
+    @Param('id') id: string,
+    @Body() dto: AdminWriteOffDto,
+  ) {
+    return this.payments.writeOffInvoice(id, dto.adminNotes);
+  }
+
+  @Post('match-fees/:id/override')
+  @HttpCode(HttpStatus.OK)
+  async overrideMatchFee(
+    @Param('id') id: string,
+    @Body() dto: AdminOverrideDto,
+  ) {
+    return this.payments.adminOverride(id, dto.status, dto.adminNotes);
+  }
+
+  @Post('hosts/:hostProfileId/clear-match-fee-review')
+  @HttpCode(HttpStatus.OK)
+  async clearMatchFeeReview(
+    @Param('hostProfileId') hostProfileId: string,
+    @Body() dto: AdminWriteOffDto,
+  ) {
+    return this.payments.clearHostReviewFlag(hostProfileId, dto.adminNotes);
   }
 
 }

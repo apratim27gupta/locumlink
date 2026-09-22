@@ -207,6 +207,10 @@ describe('job-schedule.util', () => {
         availabilityKind: 'FULL',
         availableDates: [],
       });
+      expect(availabilityAfterFinalize(required, required, 'PARTIAL')).toEqual({
+        availabilityKind: 'PARTIAL',
+        availableDates: required,
+      });
     });
   });
 

@@ -70,6 +70,17 @@ export class ApplyJobDto {
   @IsOptional()
   availableDates?: string[];
 }
+
+export class UpdateAvailabilityDto {
+  @IsIn(['FULL', 'PARTIAL'])
+  availabilityKind!: 'FULL' | 'PARTIAL';
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  availableDates?: string[];
+}
+
 export class RespondToConfirmedPlacementDto {
   @IsIn(['accept', 'decline'])
   response!: 'accept' | 'decline';

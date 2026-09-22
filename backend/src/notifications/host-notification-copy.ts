@@ -195,6 +195,28 @@ export function buildH012JobPosted(params: {
   };
 }
 
+/** H-013 — Locum changed availability on an existing application */
+export function buildH013AvailabilityUpdated(params: {
+  locumName: string;
+  jobTitle: string;
+  kind: 'FULL' | 'PARTIAL';
+  dayCount: number;
+}) {
+  const title = params.jobTitle?.trim() || 'your posting';
+  const detail =
+    params.kind === 'FULL'
+      ? 'full schedule availability'
+      : `partial availability (${params.dayCount} day${params.dayCount === 1 ? '' : 's'})`;
+  return {
+    inAppTitle: 'Availability updated',
+    inAppBody: `${params.locumName} updated their availability on "${title}" to ${detail}.`,
+    emailSubject: `Availability update: ${title}`,
+    emailBody: `${params.locumName} changed their availability on "${title}" to ${detail}. Review applicants if this affects your coverage plans.`,
+    priority: 'MEDIUM' as HostCopyPriority,
+    actionLabel: 'Review Applicants',
+  };
+}
+
 /** H-009 — Last-minute shift cancellation (<24h) */
 export function buildH009ShiftCancelled(params: {
   dateStr: string;

@@ -8,6 +8,7 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  CreditCard,
   FileCheck,
   MessageSquare,
   Shield,
@@ -105,6 +106,12 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
       label: 'Feedbacks',
       href: '/admin/feedback',
       icon: <MessageSquare size={20} />,
+    },
+    {
+      id: 'payments',
+      label: 'Match Fees',
+      href: '/admin/payments',
+      icon: <CreditCard size={20} />,
     },
     {
       id: 'audit',

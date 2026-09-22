@@ -23,6 +23,7 @@ import {
   UpdateApplicationDto,
   ReopenJobDto,
 } from './host.dto.js';
+import { CancelMatchDto } from '../payments/payments.dto.js';
 interface JwtRequest {
   user: {
     id: string;
@@ -145,6 +146,20 @@ export class HostController {
       jobId,
       appId,
       dto.status,
+    );
+  }
+
+  @Post('applications/:applicationId/cancel-match')
+  @HttpCode(HttpStatus.OK)
+  cancelAcceptedMatch(
+    @Req() req: JwtRequest,
+    @Param('applicationId') applicationId: string,
+    @Body() dto: CancelMatchDto,
+  ) {
+    return this.hostService.cancelAcceptedMatch(
+      req.user.id,
+      applicationId,
+      dto.reason,
     );
   }
 }

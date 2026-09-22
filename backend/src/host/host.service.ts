@@ -49,6 +49,7 @@ import {
   type ParsedJobShift,
 } from './job-schedule.util.js';
 import { getReviewPlaygroundEmails, isReviewPlaygroundEmail } from '../config/review-playground.util.js';
+import { PaymentsService } from '../payments/payments.service.js';
 
 export type ApiJobShift = {
   date: string;
@@ -139,6 +140,7 @@ export class HostService {
     private readonly pushService: PushService,
     private readonly notifService: NotificationsService,
     private readonly adminNotif: AdminNotificationsService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   private async assertHostCanWrite(userId: string): Promise<void> {
@@ -1059,6 +1061,9 @@ export class HostService {
       where: { id: jobId },
       data: { isDeleted: true },
     });
+    try {
+      await this.paymentsService.cancelInvoicesForJob(jobId, 'HOST');
+    } catch {}
     // L-012: notify confirmed locums of cancellation
     try {
       const confirmed = await this.prisma.application.findMany({
@@ -1497,5 +1502,95 @@ export class HostService {
       if (url) avatars.push(url);
     }
     return { avatars };
+  }
+
+  private async applyCoverageStatusForJob(jobPostingId: string): Promise<void> {
+    const posting = await this.prisma.jobPosting.findUnique({
+      where: { id: jobPostingId },
+      select: {
+        id: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        shifts: { select: { date: true } },
+        applications: {
+          where: {
+            OR: [
+              { locumResponse: 'ACCEPTED' },
+              { locumAcceptedAt: { not: null } },
+            ],
+          },
+          select: { availabilityKind: true, availableDates: true },
+        },
+      },
+    });
+    if (!posting) return;
+    const covered = isPostingFullyCovered(posting, posting.applications);
+    if (covered) {
+      if (posting.status === 'ACTIVE') {
+        await this.prisma.jobPosting.update({
+          where: { id: jobPostingId },
+          data: {
+            status: postingStatusAfterLocumAccept(
+              posting.startDate,
+              posting.endDate,
+            ),
+          },
+        });
+      }
+    } else if (
+      posting.status === 'SCHEDULED' ||
+      posting.status === 'ONGOING'
+    ) {
+      await this.prisma.jobPosting.update({
+        where: { id: jobPostingId },
+        data: { status: 'ACTIVE' },
+      });
+    }
+  }
+
+  async cancelAcceptedMatch(
+    userId: string,
+    applicationId: string,
+    reason?: string,
+  ) {
+    await this.assertHostCanWrite(userId);
+    const hostProfileId = await this.getHostProfileId(userId);
+    const app = await this.prisma.application.findFirst({
+      where: {
+        id: applicationId,
+        jobPosting: { hostProfileId },
+      },
+      select: {
+        id: true,
+        jobPostingId: true,
+        locumAcceptedAt: true,
+      },
+    });
+    if (!app) throw new NotFoundException('Application not found');
+    if (!app.locumAcceptedAt) {
+      throw new BadRequestException(
+        'Only accepted matches can be cancelled through this flow.',
+      );
+    }
+
+    try {
+      await this.paymentsService.handleCancellation({
+        applicationId,
+        cancelledBy: 'HOST',
+        reason,
+      });
+    } catch {}
+
+    await this.prisma.application.update({
+      where: { id: applicationId },
+      data: {
+        status: 'WITHDRAWN',
+        locumResponse: 'REJECTED',
+        locumAcceptedAt: null,
+      },
+    });
+    await this.applyCoverageStatusForJob(app.jobPostingId);
+    return { success: true };
   }
 }

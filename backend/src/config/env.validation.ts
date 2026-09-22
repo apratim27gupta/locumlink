@@ -116,6 +116,19 @@ class EnvironmentVariables {
   @IsUrl({ require_tld: false })
   @IsOptional()
   ADMIN_FRONTEND_REDIRECT_URL: string = 'http://localhost:3001/admin';
+
+  @IsString()
+  @IsOptional()
+  STRIPE_SECRET_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  STRIPE_WEBHOOK_SECRET?: string;
+
+  /** Host-facing frontend URL for Stripe Checkout return links */
+  @IsUrl({ require_tld: false })
+  @IsOptional()
+  HOST_FRONTEND_URL?: string;
 }
 export function validate(config: Record<string, unknown>) {
   const validatedConfig = plainToInstance(EnvironmentVariables, config, {

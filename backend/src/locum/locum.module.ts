@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
+import { PaymentsModule } from '../payments/payments.module.js';
 import { LocumController } from './locum.controller.js';
 import { LocumService } from './locum.service.js';
 @Module({
-  imports: [AuthModule, NotificationsModule],
+  imports: [AuthModule, NotificationsModule, PaymentsModule],
   controllers: [LocumController],
   providers: [LocumService],
 })

@@ -32,8 +32,16 @@ export function AvailabilityStrip({
   if (postingDays.length === 0) return null;
   const covered = new Set(applicationCoveredDays(app, postingDays));
   const partial = isPartialAvailability(app);
+  const fullCoverage = covered.size === postingDays.length && postingDays.length > 0;
   const badge = partial
-    ? { label: `Partial ${covered.size}/${postingDays.length}`, color: AMBER, bg: AMBER_BG, border: AMBER_BORDER }
+    ? {
+        label: fullCoverage
+          ? `Selected ${covered.size}/${postingDays.length}`
+          : `Partial ${covered.size}/${postingDays.length}`,
+        color: AMBER,
+        bg: AMBER_BG,
+        border: AMBER_BORDER,
+      }
     : { label: `Full ${postingDays.length}/${postingDays.length}`, color: TEAL_DARK, bg: 'rgba(48,155,183,0.14)', border: 'rgba(48,155,183,0.28)' };
 
   return (

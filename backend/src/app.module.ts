@@ -19,6 +19,7 @@ import { validate } from './config/env.validation.js';
 import { AdminAuthModule } from './admin-auth/admin-auth.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { SchedulerModule } from './scheduler/scheduler.module.js';
+import { PaymentsModule } from './payments/payments.module.js';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ErrorLogInterceptor } from './common/error-log.interceptor.js';
@@ -55,6 +56,7 @@ import { TurnstileModule } from './common/turnstile/turnstile.module.js';
     AdminAuthModule,
     AdminModule,
     SchedulerModule,
+    PaymentsModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
   ],
   providers: [

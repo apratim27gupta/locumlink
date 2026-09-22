@@ -14,7 +14,8 @@ export type AdminNotifEventType =
   | 'A_002_NEW_LOCUM_REGISTRATION'
   | 'A_003_CREDENTIAL_UPLOADED'
   | 'A_004_ACCOUNT_FLAGGED'
-  | 'A_005_CPSNS_UPDATED';
+  | 'A_005_CPSNS_UPDATED'
+  | 'A_006_MATCH_FEE_OVERDUE';
 
 export type AdminNotificationPriority =
   | 'CRITICAL'
@@ -24,7 +25,7 @@ export type AdminNotificationPriority =
 
 export type AdminNotificationItem = {
   id: string;
-  type: 'registration' | 'credential' | 'flagged';
+  type: 'registration' | 'credential' | 'flagged' | 'payment';
   title: string;
   body: string;
   href: string;
@@ -36,6 +37,7 @@ export type AdminNotificationItem = {
 };
 
 function eventTypeToCategory(eventType: string): AdminNotificationItem['type'] {
+  if (eventType.includes('MATCH_FEE')) return 'payment';
   if (eventType.includes('CREDENTIAL') || eventType.includes('CPSNS'))
     return 'credential';
   if (eventType.includes('FLAGGED')) return 'flagged';
@@ -215,6 +217,27 @@ export class AdminNotificationsService {
       actionLabel: copy.actionLabel,
       referenceId: params.profileId,
       referenceType: params.profileType,
+    });
+  }
+
+  async notifyMatchFeeOverdueEscalation(params: {
+    invoiceId: string;
+    hostPracticeName: string;
+    jobTitle: string;
+    amountCents: number;
+  }): Promise<void> {
+    const amount = (params.amountCents / 100).toFixed(0);
+    await this.notifyAllAdmins({
+      eventType: 'A_006_MATCH_FEE_OVERDUE',
+      title: 'Overdue match fee needs review',
+      body: `${params.hostPracticeName} has a $${amount} match fee overdue 30+ days for ${params.jobTitle}.`,
+      href: '/admin/payments',
+      priority: 'HIGH',
+      actionLabel: 'Review Invoice',
+      referenceId: params.invoiceId,
+      referenceType: 'MatchFeeInvoice',
+      emailSubject: `Overdue match fee: ${params.hostPracticeName}`,
+      emailBody: `${params.hostPracticeName} has an overdue $${amount} LocumLink match fee for ${params.jobTitle}. Review in the admin payments dashboard.`,
     });
   }
 

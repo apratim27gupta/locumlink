@@ -1260,32 +1260,32 @@ export default function HostEditJobPage(props: {
                       </button>
                     </div>
                   </div>
-                  {(sameTimeForAll || specificDates.length === 0) && (
-                    <div
-                      className="host-job-schedule-grid"
-                      style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
-                    >
-                      <div>
-                        <label style={lbl}>Start Time *</label>
-                        <input type="time" style={inp} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-                      </div>
-                      <div>
-                        <label style={lbl}>End Time *</label>
-                        <input type="time" style={inp} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-                      </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={sameTimeForAll}
+                      onChange={(e) => handleSameTimeForAll(e.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: '#309BB7', flexShrink: 0 }}
+                    />
+                    Use the same time for every date
+                  </label>
+                  <div
+                    className="host-job-schedule-grid"
+                    style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
+                  >
+                    <div>
+                      <label style={lbl}>
+                        {sameTimeForAll ? 'Start Time *' : 'Start time for next date *'}
+                      </label>
+                      <input type="time" style={inp} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
                     </div>
-                  )}
-                  {specificDates.length >= 1 && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={sameTimeForAll}
-                        onChange={(e) => handleSameTimeForAll(e.target.checked)}
-                        style={{ width: 16, height: 16, accentColor: '#309BB7', flexShrink: 0 }}
-                      />
-                      Use the same time for every date
-                    </label>
-                  )}
+                    <div>
+                      <label style={lbl}>
+                        {sameTimeForAll ? 'End Time *' : 'End time for next date *'}
+                      </label>
+                      <input type="time" style={inp} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                    </div>
+                  </div>
                   {specificDates.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {specificDates.map((d) => {

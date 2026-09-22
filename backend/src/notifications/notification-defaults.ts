@@ -58,6 +58,34 @@ export const NOTIFICATION_EVENT_DEFAULTS: Record<
     href: '/host/dashboard',
     actionLabel: 'View Posting',
   },
+  H_013_AVAILABILITY_UPDATED: {
+    href: '/host/dashboard',
+    actionLabel: 'Review Applicants',
+  },
+  H_014_MATCH_FEE_INVOICED: {
+    href: '/host/invoices',
+    actionLabel: 'View Invoice',
+  },
+  H_015_MATCH_FEE_DUE_SOON: {
+    href: '/host/invoices',
+    actionLabel: 'Pay Match Fee',
+  },
+  H_016_MATCH_FEE_OVERDUE: {
+    href: '/host/invoices',
+    actionLabel: 'Pay Match Fee',
+  },
+  H_017_MATCH_FEE_PAID: {
+    href: '/host/invoices',
+    actionLabel: 'View Receipt',
+  },
+  H_018_MATCH_FEE_REFUND: {
+    href: '/host/invoices',
+    actionLabel: 'View Invoice',
+  },
+  H_019_MATCH_FEE_CANCELLED: {
+    href: '/host/invoices',
+    actionLabel: 'View Invoice',
+  },
   L_001_NEW_OPPORTUNITY: {
     href: '/locum/browse',
     actionLabel: 'Browse Opportunities',
@@ -114,6 +142,10 @@ export const NOTIFICATION_EVENT_DEFAULTS: Record<
     href: '/locum/profile',
     actionLabel: 'Complete Profile',
   },
+  L_015_MATCH_FEE_INFO: {
+    href: '/locum/dashboard',
+    actionLabel: 'View Dashboard',
+  },
   U_001_ADMIN_MESSAGE: {
     href: '/locum/dashboard',
     actionLabel: 'Open dashboard',
@@ -134,6 +166,13 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   H_010_ACCOUNT_WARNING: 'Account warning',
   H_011_PROFILE_REMINDER: 'Complete your Locum Link profile',
   H_012_JOB_POSTED: 'Job posted',
+  H_013_AVAILABILITY_UPDATED: 'Availability updated',
+  H_014_MATCH_FEE_INVOICED: 'Match fee invoice due',
+  H_015_MATCH_FEE_DUE_SOON: 'Match fee due soon',
+  H_016_MATCH_FEE_OVERDUE: 'Match fee overdue',
+  H_017_MATCH_FEE_PAID: 'Match fee received',
+  H_018_MATCH_FEE_REFUND: 'Match fee refund or credit',
+  H_019_MATCH_FEE_CANCELLED: 'Match fee updated after cancellation',
   L_001_NEW_OPPORTUNITY: 'New Locum Opportunity Available',
   L_002_HOST_CONFIRMED: 'Shift Confirmed',
   L_003_APPLICATION_ACCEPTED: 'Application Shortlisted',
@@ -148,6 +187,7 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   L_012_SHIFT_CANCELLED: 'Shift Cancelled',
   L_013_ACCOUNT_WARNING: 'Account warning',
   L_014_PROFILE_REMINDER: 'Complete your Locum Link profile',
+  L_015_MATCH_FEE_INFO: 'Placement confirmed',
   U_001_ADMIN_MESSAGE: 'Message from Locum Link',
 };
 

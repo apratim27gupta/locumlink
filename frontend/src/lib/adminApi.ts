@@ -64,7 +64,7 @@ export async function adminDownloadUsersCsv(q: string): Promise<void> {
 
 export type AdminNotificationItem = {
   id: string;
-  type: 'registration' | 'credential' | 'flagged';
+  type: 'registration' | 'credential' | 'flagged' | 'payment';
   title: string;
   body: string;
   href: string;
@@ -184,5 +184,150 @@ export async function adminActionReport(
   return adminFetchJson(`/api/admin/reports/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
+  });
+}
+
+export type AdminMatchFeeStatusGuide = {
+  status: string;
+  label: string;
+  summary: string;
+  hostObligation: string;
+};
+
+export type AdminMatchFeeTimeline = {
+  invoiceCreatedAt: string;
+  earliestShiftDate: string | null;
+  dueAt: string;
+  duePolicyText: string;
+  paidAt: string | null;
+  primaryDateLabel: string;
+  secondaryDateLabel: string | null;
+  daysUntilDue: number | null;
+  daysOverdue: number | null;
+  canSendReminder: boolean;
+};
+
+export type AdminMatchFeeInvoice = {
+  id: string;
+  hostProfileId: string;
+  hostUserId: string | null;
+  hostEmail: string | null;
+  applicationId: string;
+  jobPostingId: string;
+  amountCents: number;
+  currency: string;
+  status: string;
+  dueAt: string;
+  paidAt: string | null;
+  mockPaymentRef: string | null;
+  paymentProvider: string | null;
+  stripeCheckoutSessionId: string | null;
+  stripePaymentIntentId: string | null;
+  lastReminderAt: string | null;
+  escalatedAt: string | null;
+  createdAt: string;
+  jobTitle: string;
+  locumName: string;
+  hostPracticeName: string;
+  matchFeeReviewRequired: boolean;
+  adminNotes: string | null;
+  statusGuide: AdminMatchFeeStatusGuide | null;
+  timeline: AdminMatchFeeTimeline;
+};
+
+export type AdminMatchFeeSummary = {
+  byStatus: Record<string, number>;
+  escalated: number;
+  reviewHosts: number;
+  stripeEnabled: boolean;
+};
+
+export async function adminMatchFeeSummary(): Promise<AdminMatchFeeSummary> {
+  return adminFetchJson('/api/admin/match-fees/summary');
+}
+
+export async function adminSendMatchFeeReminder(
+  invoiceId: string,
+  options: { sendEmail: boolean; sendNotification: boolean },
+): Promise<{ success: boolean }> {
+  return adminFetchJson(`/api/admin/match-fees/${encodeURIComponent(invoiceId)}/send-reminder`, {
+    method: 'POST',
+    body: JSON.stringify(options),
+  });
+}
+
+export async function adminListMatchFees(params?: {
+  cursor?: string;
+  limit?: number;
+  status?: string;
+  escalatedOnly?: boolean;
+}): Promise<{
+  items: AdminMatchFeeInvoice[];
+  statusGuide: AdminMatchFeeStatusGuide[];
+  nextCursor: string | null;
+  hasNextPage: boolean;
+}> {
+  const qs = new URLSearchParams();
+  if (params?.cursor) qs.set('cursor', params.cursor);
+  if (params?.limit != null) qs.set('limit', String(params.limit));
+  if (params?.status) qs.set('status', params.status);
+  if (params?.escalatedOnly) qs.set('escalatedOnly', 'true');
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return adminFetchJson(`/api/admin/match-fees${suffix}`);
+}
+
+export async function adminResolveMatchFeeRefund(
+  invoiceId: string,
+  resolution: 'REFUND' | 'CREDIT',
+  adminNotes?: string,
+): Promise<{ success: boolean }> {
+  return adminFetchJson(`/api/admin/match-fees/${encodeURIComponent(invoiceId)}/resolve-refund`, {
+    method: 'POST',
+    body: JSON.stringify({ resolution, adminNotes }),
+  });
+}
+
+export async function adminSetMatchFeeReplacementStatus(
+  invoiceId: string,
+  replacementStatus: 'SEARCHING' | 'FOUND' | 'NOT_FOUND',
+  adminNotes?: string,
+): Promise<{ success: boolean }> {
+  return adminFetchJson(`/api/admin/match-fees/${encodeURIComponent(invoiceId)}/replacement-status`, {
+    method: 'POST',
+    body: JSON.stringify({ replacementStatus, adminNotes }),
+  });
+}
+
+export async function adminWriteOffMatchFee(
+  invoiceId: string,
+  adminNotes?: string,
+): Promise<{ success: boolean }> {
+  return adminFetchJson(`/api/admin/match-fees/${encodeURIComponent(invoiceId)}/write-off`, {
+    method: 'POST',
+    body: JSON.stringify({ adminNotes }),
+  });
+}
+
+export async function adminClearMatchFeeReview(
+  hostProfileId: string,
+  adminNotes?: string,
+): Promise<{ success: boolean }> {
+  return adminFetchJson(
+    `/api/admin/hosts/${encodeURIComponent(hostProfileId)}/clear-match-fee-review`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ adminNotes }),
+    },
+  );
+}
+
+export async function adminOverrideMatchFee(
+  invoiceId: string,
+  status: AdminMatchFeeInvoice['status'],
+  adminNotes: string,
+): Promise<{ success: boolean }> {
+  return adminFetchJson(`/api/admin/match-fees/${encodeURIComponent(invoiceId)}/override`, {
+    method: 'POST',
+    body: JSON.stringify({ status, adminNotes }),
   });
 }
