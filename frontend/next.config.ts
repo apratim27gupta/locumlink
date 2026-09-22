@@ -87,6 +87,8 @@ const nextConfig: NextConfig = {
       { source: '/api/feedback',          destination: `${apiBase}/api/feedback` },
       { source: '/api/upload/:path*',     destination: `${apiBase}/api/upload/:path*` },
       { source: '/api/notifications/:path*', destination: `${apiBase}/api/notifications/:path*` },
+      // Stripe webhooks + any future payments routes (must reach Nest, not Next 404).
+      { source: '/api/payments/:path*', destination: `${apiBase}/api/payments/:path*` },
       { source: '/api/health',            destination: `${apiBase}/api/health` },
     ];
   },
