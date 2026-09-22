@@ -21,6 +21,10 @@ import {
   type JobPracticeFields,
 } from '@/components/host/HostJobPracticeSections';
 import {
+  DayConfigEditor,
+  type SlotKindOrEmpty,
+} from '@/components/host/DayConfigEditor';
+import {
   HOST_JOB_CREDENTIAL_OPTIONS,
   autoResponsibilitiesForJobTitle,
   buildKeyResponsibilitiesPayload,
@@ -40,24 +44,23 @@ import {
   todayIsoDateLocal,
   compareLocalCalendarDates,
 } from '@/lib/hostJobPostingForm';
-import { getJobSpecificDates, getJobShifts, getJobScheduleType, getJobDateRanges, type JobScheduleLike } from '@/lib/jobSchedule';
-/** Inclusive list of ISO days (YYYY-MM-DD) from start to end; capped for safety. */
-function expandIsoDateRange(startIso: string, endIso: string): string[] {
-  const out: string[] = [];
-  const [sy, sm, sd] = startIso.split('-').map(Number);
-  const [ey, em, ed] = endIso.split('-').map(Number);
-  if ([sy, sm, sd, ey, em, ed].some(Number.isNaN)) return out;
-  let cur = Date.UTC(sy, sm - 1, sd);
-  const last = Date.UTC(ey, em - 1, ed);
-  if (last < cur) return out;
-  for (let i = 0; cur <= last && i < 400; i++) {
-    out.push(new Date(cur).toISOString().slice(0, 10));
-    cur += 86400000;
-  }
-  return out;
-}
-// Reconstruct the per-range editor rows (local times) from a loaded RANGES job.
-function computeDateRangesFromJob(
+import {
+  getJobSpecificDates,
+  getJobShifts,
+  getJobScheduleType,
+  getJobScheduleModel,
+  getJobDateRanges,
+  expandIsoDateRange,
+  inferSlotsScheduleEditorState,
+  addClockHours,
+  HALF_SLOT_HOURS,
+  FULL_SLOT_HOURS,
+  halfSlotsOverlap,
+  type JobScheduleLike,
+} from '@/lib/jobSchedule';
+
+// Reconstruct the per-range editor rows (local times) from a loaded LEGACY RANGES job.
+function computeLegacyDateRangesFromJob(
   job: unknown,
   defStart: string,
   defEnd: string,
@@ -87,9 +90,23 @@ const sectionStack: React.CSSProperties = {
   gap: 14,
   marginTop: 14,
 };
-// Per-day local times derived from a loaded job, plus whether every day shares
-// one time (which drives the "same time for all" toggle in the form).
-function computeShiftTimesFromJob(
+
+function jobUsesSlotsEditor(job: unknown): boolean {
+  const j = job as JobScheduleLike;
+  if (getJobScheduleModel(j) === 'SLOTS') return true;
+  return getJobShifts(j).some(
+    (s) =>
+      s.slotKind === 'HALF' ||
+      s.slotKind === 'FULL' ||
+      s.shiftType === 'HALF_DAY' ||
+      s.shiftType === 'HALF_DAY_AM' ||
+      s.shiftType === 'HALF_DAY_PM' ||
+      s.shiftType === 'FULL_DAY',
+  );
+}
+
+// Per-day local times derived from a loaded LEGACY job.
+function computeLegacyShiftTimesFromJob(
   job: unknown,
   defStart: string,
   defEnd: string,
@@ -114,12 +131,31 @@ function computeShiftTimesFromJob(
 }
 
 // Stable serialization (sorted keys) so snapshots compare reliably.
-function normalizePerDateTimes(
+function normalizeLegacyPerDateTimes(
   o: Record<string, { start: string; end: string }>,
 ): Array<[string, string, string]> {
   return Object.keys(o)
     .sort()
     .map((k) => [k, o[k].start, o[k].end] as [string, string, string]);
+}
+
+function normalizeSlotsPerDateTimes(
+  o: Record<
+    string,
+    { start: string; slotKind: SlotKindOrEmpty; secondHalfStart: string | null }
+  >,
+): Array<[string, string, string, string]> {
+  return Object.keys(o)
+    .sort()
+    .map(
+      (k) =>
+        [
+          k,
+          o[k].start,
+          o[k].slotKind,
+          o[k].secondHalfStart ?? '',
+        ] as [string, string, string, string],
+    );
 }
 
 function toDatetimeLocalValue(iso: string | null | undefined): string {
@@ -150,23 +186,188 @@ export default function HostEditJobPage(props: {
   const [respCustom, setRespCustom] = useState('');
   const lastAutoRespJobTitleRef = useRef<string | null>(null);
   const [scheduleKind, setScheduleKind] = useState<'range' | 'list' | 'ranges'>('range');
+  const [isSlotsEditor, setIsSlotsEditor] = useState(false);
   const [startDateInput, setStartDateInput] = useState('');
   const [endDateInput, setEndDateInput] = useState('');
-  const [dateRanges, setDateRanges] = useState<
-    { startDate: string; endDate: string; startTime: string; endTime: string }[]
-  >([{ startDate: '', endDate: '', startTime: '05:00', endTime: '14:00' }]);
-  function addDateRange() {
-    setDateRanges((prev) => [...prev, { startDate: '', endDate: '', startTime: '05:00', endTime: '14:00' }]);
+  type DaySlotConfig = {
+    startTime: string;
+    slotKind: SlotKindOrEmpty;
+    secondHalfStart: string | null;
+  };
+  type LegacyRangeRow = {
+    startDate: string;
+    endDate: string;
+    startTime: string;
+    endTime: string;
+  };
+  type SlotsRangeRow = { startDate: string; endDate: string } & DaySlotConfig;
+  const emptyDaySlot = (): DaySlotConfig => ({
+    startTime: '',
+    slotKind: '',
+    secondHalfStart: null,
+  });
+  const [legacyDateRanges, setLegacyDateRanges] = useState<LegacyRangeRow[]>([
+    { startDate: '', endDate: '', startTime: '05:00', endTime: '14:00' },
+  ]);
+  const [slotsDateRanges, setSlotsDateRanges] = useState<SlotsRangeRow[]>([
+    { startDate: '', endDate: '', ...emptyDaySlot() },
+  ]);
+  const [specificDates, setSpecificDates] = useState<string[]>([]);
+  const [newDateInput, setNewDateInput] = useState('');
+  const [sameTimeForAll, setSameTimeForAll] = useState(true);
+  const [legacyPerDateTimes, setLegacyPerDateTimes] = useState<
+    Record<string, { start: string; end: string }>
+  >({});
+  const [slotsPerDateTimes, setSlotsPerDateTimes] = useState<
+    Record<string, { start: string; slotKind: SlotKindOrEmpty; secondHalfStart: string | null }>
+  >({});
+  const [startTime, setStartTime] = useState('05:00');
+  const [endTime, setEndTime] = useState('14:00');
+  const [slotKind, setSlotKind] = useState<SlotKindOrEmpty>('');
+  const [secondHalfStart, setSecondHalfStart] = useState<string | null>(null);
+  const slotsEndTime =
+    startTime.trim() && (slotKind === 'HALF' || slotKind === 'FULL')
+      ? addClockHours(
+          startTime,
+          slotKind === 'HALF' ? HALF_SLOT_HOURS : FULL_SLOT_HOURS,
+        )
+      : null;
+  const secondHalfEnd =
+    secondHalfStart != null && secondHalfStart.trim()
+      ? addClockHours(secondHalfStart, HALF_SLOT_HOURS)
+      : null;
+
+  function isSlotConfigReady(start: string, kind: SlotKindOrEmpty): boolean {
+    return Boolean(start.trim()) && (kind === 'HALF' || kind === 'FULL');
   }
-  function updateDateRange(i: number, field: 'startDate' | 'endDate' | 'startTime' | 'endTime', value: string) {
-    setDateRanges((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)));
+  function isSlotsRangeRowComplete(r: SlotsRangeRow): boolean {
+    if (
+      !(
+        Boolean(r.startDate.trim()) &&
+        Boolean(r.endDate.trim()) &&
+        isSlotConfigReady(r.startTime, r.slotKind) &&
+        (r.secondHalfStart == null || Boolean(r.secondHalfStart.trim()))
+      )
+    ) {
+      return false;
+    }
+    if (
+      r.slotKind === 'HALF' &&
+      r.secondHalfStart != null &&
+      halfSlotsOverlap(r.startTime, r.secondHalfStart)
+    ) {
+      return false;
+    }
+    return true;
+  }
+  function canAddAnotherSlotsRange(): boolean {
+    return slotsDateRanges.every(isSlotsRangeRowComplete);
+  }
+  function canAddSpecificDateSlots(): boolean {
+    if (
+      !(
+        Boolean(newDateInput) &&
+        isSlotConfigReady(startTime, slotKind) &&
+        (secondHalfStart == null || Boolean(secondHalfStart.trim()))
+      )
+    ) {
+      return false;
+    }
+    if (
+      slotKind === 'HALF' &&
+      secondHalfStart != null &&
+      halfSlotsOverlap(startTime, secondHalfStart)
+    ) {
+      return false;
+    }
+    return true;
+  }
+  function setSharedSlotKind(next: SlotKindOrEmpty) {
+    setSlotKind(next);
+    if (next !== 'HALF') setSecondHalfStart(null);
+  }
+  function slotsForDay(
+    day: string,
+    cfg: { start: string; slotKind: 'HALF' | 'FULL'; secondHalfStart?: string | null },
+  ): { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] {
+    const startUtc = localDateTimeToUtcParts(day, cfg.start || '00:00').utcTime;
+    const rows: { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] = [
+      { date: day, startTime: startUtc, slotKind: cfg.slotKind },
+    ];
+    if (cfg.slotKind === 'HALF' && cfg.secondHalfStart?.trim()) {
+      rows.push({
+        date: day,
+        startTime: localDateTimeToUtcParts(day, cfg.secondHalfStart.trim()).utcTime,
+        slotKind: 'HALF',
+      });
+    }
+    return rows;
+  }
+  function addDateRange() {
+    if (isSlotsEditor) {
+      if (!canAddAnotherSlotsRange()) return;
+      setSlotsDateRanges((prev) => [
+        ...prev,
+        { startDate: '', endDate: '', ...emptyDaySlot() },
+      ]);
+      return;
+    }
+    setLegacyDateRanges((prev) => [
+      ...prev,
+      { startDate: '', endDate: '', startTime: '05:00', endTime: '14:00' },
+    ]);
+  }
+  function updateLegacyDateRange(
+    i: number,
+    field: 'startDate' | 'endDate' | 'startTime' | 'endTime',
+    value: string,
+  ) {
+    setLegacyDateRanges((prev) =>
+      prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)),
+    );
+  }
+  function updateSlotsDateRange(
+    i: number,
+    field: 'startDate' | 'endDate' | 'startTime' | 'slotKind' | 'secondHalfStart',
+    value: string | null,
+  ) {
+    setSlotsDateRanges((prev) =>
+      prev.map((r, idx) => {
+        if (idx !== i) return r;
+        if (field === 'slotKind') {
+          const kind: SlotKindOrEmpty =
+            value === 'HALF' || value === 'FULL' ? value : '';
+          return {
+            ...r,
+            slotKind: kind,
+            secondHalfStart: kind === 'HALF' ? r.secondHalfStart : null,
+          };
+        }
+        return { ...r, [field]: value };
+      }),
+    );
   }
   function removeDateRange(i: number) {
-    setDateRanges((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
+    if (isSlotsEditor) {
+      setSlotsDateRanges((prev) =>
+        prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i),
+      );
+      return;
+    }
+    setLegacyDateRanges((prev) =>
+      prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i),
+    );
   }
-  function buildRangeShiftsPayload(): { date: string; startTime: string; endTime: string }[] {
-    const byDate = new Map<string, { date: string; startTime: string; endTime: string }>();
-    for (const r of dateRanges) {
+  function buildLegacyRangeShiftsPayload(): {
+    date: string;
+    startTime: string;
+    endTime: string;
+  }[] {
+    const byDate = new Map<
+      string,
+      { date: string; startTime: string; endTime: string }
+    >();
+    for (const r of legacyDateRanges) {
       const start = r.startDate.trim();
       const end = r.endDate.trim();
       if (!start || !end) continue;
@@ -180,20 +381,72 @@ export default function HostEditJobPage(props: {
     }
     return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   }
-  const [specificDates, setSpecificDates] = useState<string[]>([]);
-  const [newDateInput, setNewDateInput] = useState('');
-  const [sameTimeForAll, setSameTimeForAll] = useState(true);
-  const [perDateTimes, setPerDateTimes] = useState<
-    Record<string, { start: string; end: string }>
-  >({});
-  const [startTime, setStartTime] = useState('05:00');
-  const [endTime, setEndTime] = useState('14:00');
+  function buildSlotsRangeShiftsPayload(): {
+    date: string;
+    startTime: string;
+    slotKind: 'HALF' | 'FULL';
+  }[] {
+    const byDate = new Map<
+      string,
+      { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[]
+    >();
+    for (const r of slotsDateRanges) {
+      const start = r.startDate.trim();
+      const end = r.endDate.trim();
+      if (!start || !end) continue;
+      if (r.slotKind !== 'HALF' && r.slotKind !== 'FULL') continue;
+      for (const day of expandIsoDateRange(start, end)) {
+        byDate.set(
+          day,
+          slotsForDay(day, {
+            start: r.startTime,
+            slotKind: r.slotKind,
+            secondHalfStart: r.secondHalfStart,
+          }),
+        );
+      }
+    }
+    return [...byDate.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .flatMap(([, rows]) => rows);
+  }
   function addSpecificDate(iso: string) {
     const cal = calendarDatePartFromInput(iso);
     if (!cal) return;
-    setSpecificDates((prev) => (prev.includes(cal) ? prev : [...prev, cal].sort()));
+    if (isSlotsEditor) {
+      if (!isSlotConfigReady(startTime, slotKind)) return;
+      if (secondHalfStart != null && !secondHalfStart.trim()) return;
+      if (
+        slotKind === 'HALF' &&
+        secondHalfStart != null &&
+        halfSlotsOverlap(startTime, secondHalfStart)
+      )
+        return;
+      setSpecificDates((prev) =>
+        prev.includes(cal) ? prev : [...prev, cal].sort(),
+      );
+      if (!sameTimeForAll) {
+        setSlotsPerDateTimes((prev) =>
+          cal in prev
+            ? prev
+            : {
+                ...prev,
+                [cal]: {
+                  start: startTime,
+                  slotKind,
+                  secondHalfStart,
+                },
+              },
+        );
+      }
+      setNewDateInput('');
+      return;
+    }
+    setSpecificDates((prev) =>
+      prev.includes(cal) ? prev : [...prev, cal].sort(),
+    );
     if (!sameTimeForAll) {
-      setPerDateTimes((prev) =>
+      setLegacyPerDateTimes((prev) =>
         cal in prev ? prev : { ...prev, [cal]: { start: startTime, end: endTime } },
       );
     }
@@ -201,42 +454,126 @@ export default function HostEditJobPage(props: {
   }
   function removeSpecificDate(iso: string) {
     setSpecificDates((prev) => prev.filter((d) => d !== iso));
-    setPerDateTimes((prev) => {
+    setLegacyPerDateTimes((prev) => {
+      if (!(iso in prev)) return prev;
+      const next = { ...prev };
+      delete next[iso];
+      return next;
+    });
+    setSlotsPerDateTimes((prev) => {
       if (!(iso in prev)) return prev;
       const next = { ...prev };
       delete next[iso];
       return next;
     });
   }
-  function setPerDateTime(iso: string, field: 'start' | 'end', value: string) {
-    setPerDateTimes((prev) => {
+  function setLegacyPerDateTime(iso: string, field: 'start' | 'end', value: string) {
+    setLegacyPerDateTimes((prev) => {
       const current = prev[iso] ?? { start: startTime, end: endTime };
+      return { ...prev, [iso]: { ...current, [field]: value } };
+    });
+  }
+  function setSlotsPerDateTime(
+    iso: string,
+    field: 'start' | 'slotKind' | 'secondHalfStart',
+    value: string | null,
+  ) {
+    setSlotsPerDateTimes((prev) => {
+      const current = prev[iso] ?? {
+        start: startTime,
+        slotKind,
+        secondHalfStart,
+      };
+      if (field === 'slotKind') {
+        const kind: SlotKindOrEmpty =
+          value === 'HALF' || value === 'FULL' ? value : '';
+        return {
+          ...prev,
+          [iso]: {
+            ...current,
+            slotKind: kind,
+            secondHalfStart: kind === 'HALF' ? current.secondHalfStart : null,
+          },
+        };
+      }
       return { ...prev, [iso]: { ...current, [field]: value } };
     });
   }
   function handleSameTimeForAll(next: boolean) {
     setSameTimeForAll(next);
     if (!next) {
-      setPerDateTimes((prev) => {
-        const seeded = { ...prev };
-        for (const d of specificDates) {
-          if (!(d in seeded)) seeded[d] = { start: startTime, end: endTime };
-        }
-        return seeded;
-      });
+      if (isSlotsEditor) {
+        setSlotsPerDateTimes((prev) => {
+          const seeded = { ...prev };
+          for (const d of specificDates) {
+            if (!(d in seeded)) {
+              seeded[d] = {
+                start: startTime,
+                slotKind,
+                secondHalfStart,
+              };
+            }
+          }
+          return seeded;
+        });
+      } else {
+        setLegacyPerDateTimes((prev) => {
+          const seeded = { ...prev };
+          for (const d of specificDates) {
+            if (!(d in seeded)) seeded[d] = { start: startTime, end: endTime };
+          }
+          return seeded;
+        });
+      }
     }
   }
-  function buildShiftsPayload(): { date: string; startTime: string; endTime: string }[] {
+  function buildLegacyShiftsPayload(): {
+    date: string;
+    startTime: string;
+    endTime: string;
+  }[] {
     return [...specificDates].sort().map((d) => {
       const o = sameTimeForAll
         ? { start: startTime, end: endTime }
-        : perDateTimes[d] ?? { start: startTime, end: endTime };
+        : legacyPerDateTimes[d] ?? { start: startTime, end: endTime };
       return {
         date: d,
         startTime: localDateTimeToUtcParts(d, o.start || '00:00').utcTime,
         endTime: localDateTimeToUtcParts(d, o.end || '23:59').utcTime,
       };
     });
+  }
+  function buildSlotsShiftsPayload(): {
+    date: string;
+    startTime: string;
+    slotKind: 'HALF' | 'FULL';
+  }[] {
+    return [...specificDates]
+      .sort()
+      .flatMap((d) => {
+        const o = sameTimeForAll
+          ? { start: startTime, slotKind, secondHalfStart }
+          : slotsPerDateTimes[d] ?? {
+              start: startTime,
+              slotKind,
+              secondHalfStart,
+            };
+        if (o.slotKind !== 'HALF' && o.slotKind !== 'FULL') return [];
+        return slotsForDay(d, {
+          start: o.start,
+          slotKind: o.slotKind,
+          secondHalfStart: o.secondHalfStart,
+        });
+      });
+  }
+  function buildContinuousRangeShiftsPayload(
+    startIso: string,
+    endIso: string,
+  ): { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] {
+    if (slotKind !== 'HALF' && slotKind !== 'FULL') return [];
+    return expandIsoDateRange(startIso, endIso).flatMap((day) =>
+      slotsForDay(day, { start: startTime, slotKind, secondHalfStart }),
+    );
   }
   const [ratePerDay, setRatePerDay] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
@@ -262,16 +599,29 @@ export default function HostEditJobPage(props: {
   const scheduleValidationError = useMemo(() => {
     const startIso = parseMmDdYyyyToIso(startDateInput);
     const endIso = parseMmDdYyyyToIso(endDateInput);
-    if (!startIso || !endIso || !startTime.trim() || !endTime.trim())
+    const endForValidation = isSlotsEditor
+      ? slotsEndTime ?? ''
+      : endTime;
+    if (!startIso || !endIso || !startTime.trim() || !endForValidation.trim())
       return null;
+    if (isSlotsEditor && !slotKind) return null;
     return getJobScheduleValidationError({
       startDateIso: startIso,
       endDateIso: endIso,
       startTime,
-      endTime,
+      endTime: endForValidation,
       allowPastDates: jobStatus === 'DRAFT',
     });
-  }, [startDateInput, endDateInput, startTime, endTime, jobStatus]);
+  }, [
+    startDateInput,
+    endDateInput,
+    startTime,
+    endTime,
+    slotsEndTime,
+    isSlotsEditor,
+    slotKind,
+    jobStatus,
+  ]);
   useLayoutEffect(() => {
     setOverlayMounted(true);
   }, []);
@@ -289,17 +639,36 @@ export default function HostEditJobPage(props: {
         ]),
       ),
       respCustom: respCustom.trim(),
+      isSlotsEditor,
       scheduleKind,
       specificDates: [...specificDates].sort(),
       sameTimeForAll,
-      perDateTimes: normalizePerDateTimes(perDateTimes),
-      dateRanges: scheduleKind === 'ranges'
-        ? dateRanges.map((r) => [r.startDate, r.endDate, r.startTime, r.endTime])
-        : [],
+      perDateTimes: isSlotsEditor
+        ? normalizeSlotsPerDateTimes(slotsPerDateTimes)
+        : normalizeLegacyPerDateTimes(legacyPerDateTimes),
+      dateRanges:
+        scheduleKind === 'ranges'
+          ? isSlotsEditor
+            ? slotsDateRanges.map((r) => [
+                r.startDate,
+                r.endDate,
+                r.startTime,
+                r.slotKind,
+                r.secondHalfStart ?? '',
+              ])
+            : legacyDateRanges.map((r) => [
+                r.startDate,
+                r.endDate,
+                r.startTime,
+                r.endTime,
+              ])
+          : [],
       startDate: startIso || '',
       endDate: endIso || '',
       startTime: startTime || '',
-      endTime: endTime || '',
+      endTime: isSlotsEditor ? '' : endTime || '',
+      slotKind: isSlotsEditor ? slotKind : '',
+      secondHalfStart: isSlotsEditor ? secondHalfStart : null,
       ratePerDay: ratePerDay.trim(),
       expiresAt: expiresAt || '',
       practice,
@@ -355,6 +724,58 @@ export default function HostEditJobPage(props: {
         : ['CPSNS Full License'];
     const ppd = job?.payPerDay ?? job?.ratePerDay;
     const ye = job?.minYearsExperience;
+    const slots = jobUsesSlotsEditor(job);
+    if (slots) {
+      const inferred = inferSlotsScheduleEditorState(job);
+      const startIso =
+        inferred.scheduleKind === 'range' ? inferred.startDate : '';
+      const endIso = inferred.scheduleKind === 'range' ? inferred.endDate : '';
+      return JSON.stringify({
+        title: rawTitle.trim(),
+        description: rawDesc.trim(),
+        respBySection: Object.fromEntries(
+          Object.entries(parsed.respBySection).map(([k, v]) => [
+            k,
+            Array.from(v ?? []).sort(),
+          ]),
+        ),
+        respCustom: parsed.respCustom.trim(),
+        isSlotsEditor: true,
+        scheduleKind: inferred.scheduleKind,
+        specificDates: inferred.specificDates,
+        sameTimeForAll: inferred.sameTimeForAll,
+        perDateTimes: normalizeSlotsPerDateTimes(inferred.perDateTimes),
+        dateRanges:
+          inferred.scheduleKind === 'ranges'
+            ? inferred.dateRanges.map((r) => [
+                r.startDate,
+                r.endDate,
+                r.startTime,
+                r.slotKind,
+                r.secondHalfStart ?? '',
+              ])
+            : [],
+        startDate: startIso,
+        endDate: endIso,
+        startTime: inferred.startTime || '',
+        endTime: '',
+        slotKind: inferred.slotKind,
+        secondHalfStart: inferred.secondHalfStart,
+        ratePerDay:
+          ppd === null || ppd === undefined || ppd === ''
+            ? ''
+            : String(ppd).trim(),
+        expiresAt:
+          toDatetimeLocalValue(job?.expiresAt as string | null | undefined) ||
+          '',
+        practice,
+        isRural: Boolean(job?.isRural),
+        yearsExp:
+          ye === null || ye === undefined || ye === '' ? '' : String(ye).trim(),
+        credentials: [...credentials].sort(),
+        travelReq: Boolean(job?.travelRequired),
+      });
+    }
     const snapKind: 'range' | 'list' | 'ranges' =
       getJobSpecificDates(job).length > 0
         ? getJobScheduleType(job) === 'RANGES'
@@ -371,18 +792,19 @@ export default function HostEditJobPage(props: {
         ]),
       ),
       respCustom: parsed.respCustom.trim(),
+      isSlotsEditor: false,
       scheduleKind: snapKind,
       specificDates: getJobSpecificDates(job),
       ...(() => {
         const ds = startLocal?.localTime ?? '05:00';
         const de = endLocal?.localTime ?? '14:00';
-        const st = computeShiftTimesFromJob(job, ds, de);
+        const st = computeLegacyShiftTimesFromJob(job, ds, de);
         return {
           sameTimeForAll: st.sameTimeForAll,
-          perDateTimes: normalizePerDateTimes(st.perDateTimes),
+          perDateTimes: normalizeLegacyPerDateTimes(st.perDateTimes),
           dateRanges:
             snapKind === 'ranges'
-              ? computeDateRangesFromJob(job, ds, de).map((r) => [
+              ? computeLegacyDateRangesFromJob(job, ds, de).map((r) => [
                   r.startDate,
                   r.endDate,
                   r.startTime,
@@ -395,6 +817,8 @@ export default function HostEditJobPage(props: {
       endDate: endLocal?.localDate ?? '',
       startTime: startLocal?.localTime ?? '',
       endTime: endLocal?.localTime ?? '',
+      slotKind: '',
+      secondHalfStart: null,
       ratePerDay:
         ppd === null || ppd === undefined || ppd === ''
           ? ''
@@ -502,28 +926,74 @@ export default function HostEditJobPage(props: {
           job.endDate as string | null | undefined,
           job.endTime as string | null | undefined,
         );
-        setStartDateInput(
-          startLocal ? fmtIsoToMmDdYyyy(startLocal.localDate) : '',
-        );
-        setEndDateInput(
-          endLocal ? fmtIsoToMmDdYyyy(endLocal.localDate) : '',
-        );
-        const defStart = startLocal?.localTime ?? '05:00';
-        const defEnd = endLocal?.localTime ?? '14:00';
-        setStartTime(defStart);
-        setEndTime(defEnd);
-        const jobShifts = getJobShifts(job as JobScheduleLike);
-        if (jobShifts.length > 0 && getJobScheduleType(job) === 'RANGES') {
-          setScheduleKind('ranges');
-          const ranges = computeDateRangesFromJob(job, defStart, defEnd);
-          setDateRanges(ranges.length ? ranges : [{ startDate: '', endDate: '', startTime: defStart, endTime: defEnd }]);
+        const useSlots = jobUsesSlotsEditor(job);
+        setIsSlotsEditor(useSlots);
+        if (useSlots) {
+          const inferred = inferSlotsScheduleEditorState(job);
+          setScheduleKind(inferred.scheduleKind);
+          setStartDateInput(
+            inferred.startDate ? fmtIsoToMmDdYyyy(inferred.startDate) : '',
+          );
+          setEndDateInput(
+            inferred.endDate ? fmtIsoToMmDdYyyy(inferred.endDate) : '',
+          );
+          setStartTime(inferred.startTime || '');
+          setEndTime('');
+          setSlotKind(inferred.slotKind);
+          setSecondHalfStart(inferred.secondHalfStart);
+          setSlotsDateRanges(
+            inferred.dateRanges.length
+              ? inferred.dateRanges
+              : [{ startDate: '', endDate: '', ...emptyDaySlot() }],
+          );
+          setSpecificDates(inferred.specificDates);
+          setSameTimeForAll(inferred.sameTimeForAll);
+          setSlotsPerDateTimes(inferred.perDateTimes);
+          setLegacyDateRanges([
+            { startDate: '', endDate: '', startTime: '05:00', endTime: '14:00' },
+          ]);
+          setLegacyPerDateTimes({});
         } else {
-          setScheduleKind(jobShifts.length > 0 ? 'list' : 'range');
+          setStartDateInput(
+            startLocal ? fmtIsoToMmDdYyyy(startLocal.localDate) : '',
+          );
+          setEndDateInput(
+            endLocal ? fmtIsoToMmDdYyyy(endLocal.localDate) : '',
+          );
+          const defStart = startLocal?.localTime ?? '05:00';
+          const defEnd = endLocal?.localTime ?? '14:00';
+          setStartTime(defStart);
+          setEndTime(defEnd);
+          setSlotKind('');
+          setSecondHalfStart(null);
+          const jobShifts = getJobShifts(job as JobScheduleLike);
+          if (jobShifts.length > 0 && getJobScheduleType(job) === 'RANGES') {
+            setScheduleKind('ranges');
+            const ranges = computeLegacyDateRangesFromJob(job, defStart, defEnd);
+            setLegacyDateRanges(
+              ranges.length
+                ? ranges
+                : [
+                    {
+                      startDate: '',
+                      endDate: '',
+                      startTime: defStart,
+                      endTime: defEnd,
+                    },
+                  ],
+            );
+          } else {
+            setScheduleKind(jobShifts.length > 0 ? 'list' : 'range');
+          }
+          setSpecificDates(jobShifts.map((s) => s.date));
+          const st = computeLegacyShiftTimesFromJob(job, defStart, defEnd);
+          setSameTimeForAll(st.sameTimeForAll);
+          setLegacyPerDateTimes(st.perDateTimes);
+          setSlotsDateRanges([
+            { startDate: '', endDate: '', ...emptyDaySlot() },
+          ]);
+          setSlotsPerDateTimes({});
         }
-        setSpecificDates(jobShifts.map((s) => s.date));
-        const st = computeShiftTimesFromJob(job, defStart, defEnd);
-        setSameTimeForAll(st.sameTimeForAll);
-        setPerDateTimes(st.perDateTimes);
         const ppd =
           (
             job as {
@@ -653,17 +1123,19 @@ export default function HostEditJobPage(props: {
     }
     const listMode = scheduleKind === 'list';
     const rangesMode = scheduleKind === 'ranges';
-    const shiftsMode = listMode || rangesMode;
     const sortedDates = [...specificDates].sort();
     const startIso = parseMmDdYyyyToIso(startDateInput);
     const endIso = parseMmDdYyyyToIso(endDateInput);
-    if (!shiftsMode && startDateInput.trim() && !startIso) {
-      setErr('Start date must be a valid date in MM-DD-YYYY format.');
-      throw new Error('validation');
-    }
-    if (!shiftsMode && endDateInput.trim() && !endIso) {
-      setErr('End date must be a valid date in MM-DD-YYYY format.');
-      throw new Error('validation');
+    const todayIso = todayIsoDateLocal();
+    if (scheduleKind === 'range') {
+      if (startDateInput.trim() && !startIso) {
+        setErr('Start date must be a valid date in MM-DD-YYYY format.');
+        throw new Error('validation');
+      }
+      if (endDateInput.trim() && !endIso) {
+        setErr('End date must be a valid date in MM-DD-YYYY format.');
+        throw new Error('validation');
+      }
     }
     const rateNum = ratePerDay.trim() ? Number(ratePerDay) : NaN;
     if (!Number.isFinite(rateNum) || rateNum <= 0) {
@@ -675,14 +1147,190 @@ export default function HostEditJobPage(props: {
       setErr('Years of experience must be a number.');
       throw new Error('validation');
     }
-    let outShifts: { date: string; startTime: string; endTime: string }[] = [];
-    if (rangesMode) {
-      const filled = dateRanges.filter((r) => r.startDate.trim() || r.endDate.trim());
+
+    type LegacyShift = { date: string; startTime: string; endTime: string };
+    type SlotsShift = {
+      date: string;
+      startTime: string;
+      slotKind: 'HALF' | 'FULL';
+    };
+    let legacyShifts: LegacyShift[] = [];
+    let slotsShifts: SlotsShift[] = [];
+    let scheduleFields: {
+      startDate: string;
+      endDate: string;
+      startTime: string;
+      endTime: string;
+    } | null = null;
+
+    if (isSlotsEditor) {
+      if (rangesMode) {
+        const filled = slotsDateRanges.filter(
+          (r) => r.startDate.trim() || r.endDate.trim(),
+        );
+        if (filled.length === 0) {
+          setErr('Add at least one date range.');
+          throw new Error('validation');
+        }
+        for (const r of filled) {
+          if (!r.startDate.trim() || !r.endDate.trim()) {
+            setErr('Each range needs a start and end date.');
+            throw new Error('validation');
+          }
+          if (compareLocalCalendarDates(r.endDate, r.startDate) < 0) {
+            setErr('Each range end date must be on or after its start date.');
+            throw new Error('validation');
+          }
+          if (
+            jobStatus !== 'DRAFT' &&
+            compareLocalCalendarDates(r.startDate, todayIso) < 0
+          ) {
+            setErr('Dates cannot be in the past.');
+            throw new Error('validation');
+          }
+          if (!r.startTime.trim() || !r.slotKind) {
+            setErr('Set a start time and half/full day for each range.');
+            throw new Error('validation');
+          }
+          if (r.secondHalfStart != null && !r.secondHalfStart.trim()) {
+            setErr(
+              'Set the second half start time, or remove the second half-day.',
+            );
+            throw new Error('validation');
+          }
+          if (
+            r.slotKind === 'HALF' &&
+            r.secondHalfStart != null &&
+            halfSlotsOverlap(r.startTime, r.secondHalfStart)
+          ) {
+            setErr('Half-day slots must not overlap.');
+            throw new Error('validation');
+          }
+        }
+        slotsShifts = buildSlotsRangeShiftsPayload();
+        if (slotsShifts.length === 0) {
+          setErr('Add at least one date range.');
+          throw new Error('validation');
+        }
+      } else if (listMode) {
+        if (sortedDates.length === 0) {
+          setErr('Add at least one date.');
+          throw new Error('validation');
+        }
+        if (
+          jobStatus !== 'DRAFT' &&
+          sortedDates.some((d) => compareLocalCalendarDates(d, todayIso) < 0)
+        ) {
+          setErr('Dates cannot be in the past.');
+          throw new Error('validation');
+        }
+        if (sameTimeForAll) {
+          if (!startTime.trim() || !slotKind) {
+            setErr('Set the start time and half/full day.');
+            throw new Error('validation');
+          }
+          if (secondHalfStart != null && !secondHalfStart.trim()) {
+            setErr(
+              'Set the second half start time, or remove the second half-day.',
+            );
+            throw new Error('validation');
+          }
+          if (
+            slotKind === 'HALF' &&
+            secondHalfStart != null &&
+            halfSlotsOverlap(startTime, secondHalfStart)
+          ) {
+            setErr('Half-day slots must not overlap.');
+            throw new Error('validation');
+          }
+        } else {
+          for (const d of sortedDates) {
+            const o = slotsPerDateTimes[d] ?? {
+              start: startTime,
+              slotKind,
+              secondHalfStart,
+            };
+            if (!o.start.trim() || !o.slotKind) {
+              setErr(
+                `Set a start time and half/full day for ${fmtJobCalendarDate(d)}.`,
+              );
+              throw new Error('validation');
+            }
+            if (o.secondHalfStart != null && !o.secondHalfStart.trim()) {
+              setErr(
+                `Set the second half start time for ${fmtJobCalendarDate(d)}, or remove it.`,
+              );
+              throw new Error('validation');
+            }
+            if (
+              o.slotKind === 'HALF' &&
+              o.secondHalfStart != null &&
+              halfSlotsOverlap(o.start, o.secondHalfStart)
+            ) {
+              setErr(
+                `Half-day slots must not overlap on ${fmtJobCalendarDate(d)}.`,
+              );
+              throw new Error('validation');
+            }
+          }
+        }
+        slotsShifts = buildSlotsShiftsPayload();
+      } else {
+        if (!startDateInput.trim()) {
+          setErr('Start date is required.');
+          throw new Error('validation');
+        }
+        if (!endDateInput.trim()) {
+          setErr('End date is required.');
+          throw new Error('validation');
+        }
+        if (!startIso) {
+          setErr('Start date must be a valid date in MM-DD-YYYY format.');
+          throw new Error('validation');
+        }
+        if (!endIso) {
+          setErr('End date must be a valid date in MM-DD-YYYY format.');
+          throw new Error('validation');
+        }
+        if (!startTime.trim() || !slotKind) {
+          setErr('Set the start time and half/full day.');
+          throw new Error('validation');
+        }
+        if (secondHalfStart != null && !secondHalfStart.trim()) {
+          setErr(
+            'Set the second half start time, or remove the second half-day.',
+          );
+          throw new Error('validation');
+        }
+        if (
+          slotKind === 'HALF' &&
+          secondHalfStart != null &&
+          halfSlotsOverlap(startTime, secondHalfStart)
+        ) {
+          setErr('Half-day slots must not overlap.');
+          throw new Error('validation');
+        }
+        const scheduleCheck = validateJobPostingSchedule({
+          startDateIso: startIso,
+          endDateIso: endIso,
+          startTime,
+          endTime: slotsEndTime ?? '',
+          allowPastDates: jobStatus === 'DRAFT',
+        });
+        if (!scheduleCheck.valid) {
+          setErr(scheduleCheck.message);
+          throw new Error('validation');
+        }
+        slotsShifts = buildContinuousRangeShiftsPayload(startIso, endIso);
+      }
+    } else if (rangesMode) {
+      const filled = legacyDateRanges.filter(
+        (r) => r.startDate.trim() || r.endDate.trim(),
+      );
       if (filled.length === 0) {
         setErr('Add at least one date range.');
         throw new Error('validation');
       }
-      const todayIso = todayIsoDateLocal();
       for (const r of filled) {
         if (!r.startDate.trim() || !r.endDate.trim()) {
           setErr('Each range needs a start and end date.');
@@ -692,7 +1340,10 @@ export default function HostEditJobPage(props: {
           setErr('Each range end date must be on or after its start date.');
           throw new Error('validation');
         }
-        if (jobStatus !== 'DRAFT' && compareLocalCalendarDates(r.startDate, todayIso) < 0) {
+        if (
+          jobStatus !== 'DRAFT' &&
+          compareLocalCalendarDates(r.startDate, todayIso) < 0
+        ) {
           setErr('Dates cannot be in the past.');
           throw new Error('validation');
         }
@@ -701,23 +1352,22 @@ export default function HostEditJobPage(props: {
           throw new Error('validation');
         }
       }
-      outShifts = buildRangeShiftsPayload();
-      if (outShifts.length === 0) {
+      legacyShifts = buildLegacyRangeShiftsPayload();
+      if (legacyShifts.length === 0) {
         setErr('Add at least one date range.');
         throw new Error('validation');
       }
-    }
-    else if (listMode) {
+    } else if (listMode) {
       if (sortedDates.length === 0) {
         setErr('Add at least one date.');
         throw new Error('validation');
       }
-      if (jobStatus !== 'DRAFT') {
-        const todayIso = todayIsoDateLocal();
-        if (sortedDates.some((d) => compareLocalCalendarDates(d, todayIso) < 0)) {
-          setErr('Dates cannot be in the past.');
-          throw new Error('validation');
-        }
+      if (
+        jobStatus !== 'DRAFT' &&
+        sortedDates.some((d) => compareLocalCalendarDates(d, todayIso) < 0)
+      ) {
+        setErr('Dates cannot be in the past.');
+        throw new Error('validation');
       }
       if (sameTimeForAll) {
         if (!startTime.trim() || !endTime.trim()) {
@@ -726,16 +1376,18 @@ export default function HostEditJobPage(props: {
         }
       } else {
         for (const d of sortedDates) {
-          const o = perDateTimes[d] ?? { start: startTime, end: endTime };
+          const o = legacyPerDateTimes[d] ?? {
+            start: startTime,
+            end: endTime,
+          };
           if (!o.start.trim() || !o.end.trim()) {
             setErr(`Set a start and end time for ${fmtJobCalendarDate(d)}.`);
             throw new Error('validation');
           }
         }
       }
-      outShifts = buildShiftsPayload();
-    }
-    else if (startIso && endIso && startTime && endTime) {
+      legacyShifts = buildLegacyShiftsPayload();
+    } else if (startIso && endIso && startTime && endTime) {
       const scheduleCheck = validateJobPostingSchedule({
         startDateIso: startIso,
         endDateIso: endIso,
@@ -747,16 +1399,15 @@ export default function HostEditJobPage(props: {
         setErr(scheduleCheck.message);
         throw new Error('validation');
       }
+      scheduleFields = buildJobScheduleApiFields({
+        startDateIso: startIso,
+        endDateIso: endIso,
+        startTime,
+        endTime,
+      });
     }
-    const scheduleFields =
-      !shiftsMode && startIso && endIso && startTime && endTime
-        ? buildJobScheduleApiFields({
-            startDateIso: startIso,
-            endDateIso: endIso,
-            startTime,
-            endTime,
-          })
-        : null;
+
+    const slotsPayload = isSlotsEditor;
     await hostApi.updateJob(jobId, {
       title: t,
       description: description.trim() || undefined,
@@ -764,12 +1415,32 @@ export default function HostEditJobPage(props: {
         respBySection,
         respCustom,
       ),
-      shifts: shiftsMode ? outShifts : undefined,
-      scheduleType: rangesMode ? 'RANGES' : listMode ? 'DATES' : undefined,
-      startDate: shiftsMode ? undefined : scheduleFields?.startDate ?? undefined,
-      endDate: shiftsMode ? undefined : scheduleFields?.endDate ?? undefined,
-      startTime: shiftsMode ? undefined : scheduleFields?.startTime ?? (startTime || undefined),
-      endTime: shiftsMode ? undefined : scheduleFields?.endTime ?? (endTime || undefined),
+      shifts: slotsPayload
+        ? slotsShifts
+        : listMode || rangesMode
+          ? legacyShifts
+          : undefined,
+      scheduleType: slotsPayload
+        ? rangesMode
+          ? 'RANGES'
+          : 'DATES'
+        : rangesMode
+          ? 'RANGES'
+          : listMode
+            ? 'DATES'
+            : undefined,
+      startDate: slotsPayload
+        ? undefined
+        : scheduleFields?.startDate ?? undefined,
+      endDate: slotsPayload
+        ? undefined
+        : scheduleFields?.endDate ?? undefined,
+      startTime: slotsPayload
+        ? undefined
+        : scheduleFields?.startTime ?? (startTime || undefined),
+      endTime: slotsPayload
+        ? undefined
+        : scheduleFields?.endTime ?? (endTime || undefined),
       payPerDay: rateNum,
       minYearsExperience:
         yearsExp.trim() && Number.isFinite(yearsNum) ? yearsNum : undefined,
@@ -1179,53 +1850,130 @@ export default function HostEditJobPage(props: {
                       />
                     </div>
                   </div>
-                  <div
-                    className="host-job-schedule-grid"
-                    style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
-                  >
-                    <div>
-                      <label style={lbl}>Start Time *</label>
-                      <input type="time" style={inp} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                  {isSlotsEditor ? (
+                    <DayConfigEditor
+                      slotKind={slotKind}
+                      startTime={startTime}
+                      secondHalfStart={secondHalfStart}
+                      onSlotKindChange={setSharedSlotKind}
+                      onStartChange={setStartTime}
+                      onSecondChange={(v) => setSecondHalfStart(v)}
+                      onAddSecond={() => setSecondHalfStart('')}
+                      onRemoveSecond={() => setSecondHalfStart(null)}
+                      inputStyle={inp}
+                      labelStyle={lbl}
+                    />
+                  ) : (
+                    <div
+                      className="host-job-schedule-grid"
+                      style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
+                    >
+                      <div>
+                        <label style={lbl}>Start Time *</label>
+                        <input type="time" style={inp} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                      </div>
+                      <div>
+                        <label style={lbl}>End Time *</label>
+                        <input type="time" style={inp} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                      </div>
                     </div>
-                    <div>
-                      <label style={lbl}>End Time *</label>
-                      <input type="time" style={inp} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-                    </div>
-                  </div>
+                  )}
                   </>
                   ) : scheduleKind === 'ranges' ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {dateRanges.map((r, i) => (
+                    {(isSlotsEditor ? slotsDateRanges : legacyDateRanges).map((r, i) => (
                       <div key={i} style={{ border: '1px solid rgba(48, 155, 183, 0.24)', background: 'rgba(48, 155, 183, 0.06)', borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <span style={{ fontSize: 12, fontWeight: 600, color: '#1B6F86' }}>Range {i + 1}</span>
-                          {dateRanges.length > 1 && (
+                          {(isSlotsEditor ? slotsDateRanges : legacyDateRanges).length > 1 && (
                             <button type="button" aria-label={`Remove range ${i + 1}`} onClick={() => removeDateRange(i)} style={{ border: 'none', background: 'transparent', color: '#1B6F86', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: 0 }}>×</button>
                           )}
                         </div>
                         <div className="host-job-schedule-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                           <div>
                             <label style={lbl}>Start Date *</label>
-                            <input type="date" style={inp} min={todayIsoDateLocal()} value={r.startDate} onChange={(e) => updateDateRange(i, 'startDate', e.target.value)} />
+                            <input
+                              type="date"
+                              style={inp}
+                              min={todayIsoDateLocal()}
+                              value={r.startDate}
+                              onChange={(e) =>
+                                isSlotsEditor
+                                  ? updateSlotsDateRange(i, 'startDate', e.target.value)
+                                  : updateLegacyDateRange(i, 'startDate', e.target.value)
+                              }
+                            />
                           </div>
                           <div>
                             <label style={lbl}>End Date *</label>
-                            <input type="date" style={inp} min={r.startDate || todayIsoDateLocal()} value={r.endDate} onChange={(e) => updateDateRange(i, 'endDate', e.target.value)} />
+                            <input
+                              type="date"
+                              style={inp}
+                              min={r.startDate || todayIsoDateLocal()}
+                              value={r.endDate}
+                              onChange={(e) =>
+                                isSlotsEditor
+                                  ? updateSlotsDateRange(i, 'endDate', e.target.value)
+                                  : updateLegacyDateRange(i, 'endDate', e.target.value)
+                              }
+                            />
                           </div>
                         </div>
-                        <div className="host-job-schedule-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                          <div>
-                            <label style={lbl}>Start Time *</label>
-                            <input type="time" style={inp} value={r.startTime} onChange={(e) => updateDateRange(i, 'startTime', e.target.value)} />
+                        {isSlotsEditor ? (
+                          <DayConfigEditor
+                            slotKind={(r as SlotsRangeRow).slotKind}
+                            startTime={r.startTime}
+                            secondHalfStart={(r as SlotsRangeRow).secondHalfStart}
+                            onSlotKindChange={(kind) => updateSlotsDateRange(i, 'slotKind', kind)}
+                            onStartChange={(v) => updateSlotsDateRange(i, 'startTime', v)}
+                            onSecondChange={(v) => updateSlotsDateRange(i, 'secondHalfStart', v)}
+                            onAddSecond={() => updateSlotsDateRange(i, 'secondHalfStart', '')}
+                            onRemoveSecond={() => updateSlotsDateRange(i, 'secondHalfStart', null)}
+                            heading="Work day for this period"
+                            inputStyle={inp}
+                            labelStyle={lbl}
+                          />
+                        ) : (
+                          <div className="host-job-schedule-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                              <label style={lbl}>Start Time *</label>
+                              <input type="time" style={inp} value={r.startTime} onChange={(e) => updateLegacyDateRange(i, 'startTime', e.target.value)} />
+                            </div>
+                            <div>
+                              <label style={lbl}>End Time *</label>
+                              <input type="time" style={inp} value={(r as LegacyRangeRow).endTime} onChange={(e) => updateLegacyDateRange(i, 'endTime', e.target.value)} />
+                            </div>
                           </div>
-                          <div>
-                            <label style={lbl}>End Time *</label>
-                            <input type="time" style={inp} value={r.endTime} onChange={(e) => updateDateRange(i, 'endTime', e.target.value)} />
-                          </div>
-                        </div>
+                        )}
                       </div>
                     ))}
-                    <button type="button" onClick={addDateRange} style={{ alignSelf: 'flex-start', padding: '8px 14px', borderRadius: 8, border: '1px solid #309BB7', background: '#fff', color: '#1B6F86', fontWeight: 600, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>+ Add range</button>
+                    <button
+                      type="button"
+                      onClick={addDateRange}
+                      disabled={isSlotsEditor && !canAddAnotherSlotsRange()}
+                      style={{
+                        alignSelf: 'flex-start',
+                        padding: '8px 14px',
+                        borderRadius: 8,
+                        border: '1px solid #309BB7',
+                        background: '#fff',
+                        color:
+                          isSlotsEditor && !canAddAnotherSlotsRange()
+                            ? '#9CA3AF'
+                            : '#1B6F86',
+                        fontWeight: 600,
+                        fontSize: 13,
+                        fontFamily: 'inherit',
+                        cursor:
+                          isSlotsEditor && !canAddAnotherSlotsRange()
+                            ? 'not-allowed'
+                            : 'pointer',
+                        opacity:
+                          isSlotsEditor && !canAddAnotherSlotsRange() ? 0.6 : 1,
+                      }}
+                    >
+                      + Add range
+                    </button>
                   </div>
                   ) : (
                   <>
@@ -1242,17 +1990,30 @@ export default function HostEditJobPage(props: {
                       <button
                         type="button"
                         onClick={() => addSpecificDate(newDateInput)}
-                        disabled={!newDateInput}
+                        disabled={
+                          isSlotsEditor
+                            ? !canAddSpecificDateSlots()
+                            : !newDateInput
+                        }
                         style={{
                           padding: '9px 16px',
                           borderRadius: 8,
                           border: '1px solid #309BB7',
-                          background: newDateInput ? '#309BB7' : '#E5E7EB',
-                          color: newDateInput ? '#fff' : '#9CA3AF',
+                          background:
+                            (isSlotsEditor ? canAddSpecificDateSlots() : Boolean(newDateInput))
+                              ? '#309BB7'
+                              : '#E5E7EB',
+                          color:
+                            (isSlotsEditor ? canAddSpecificDateSlots() : Boolean(newDateInput))
+                              ? '#fff'
+                              : '#9CA3AF',
                           fontWeight: 600,
                           fontSize: 13,
                           fontFamily: 'inherit',
-                          cursor: newDateInput ? 'pointer' : 'not-allowed',
+                          cursor:
+                            (isSlotsEditor ? canAddSpecificDateSlots() : Boolean(newDateInput))
+                              ? 'pointer'
+                              : 'not-allowed',
                           whiteSpace: 'nowrap',
                         }}
                       >
@@ -1269,27 +2030,120 @@ export default function HostEditJobPage(props: {
                     />
                     Use the same time for every date
                   </label>
-                  <div
-                    className="host-job-schedule-grid"
-                    style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
-                  >
-                    <div>
-                      <label style={lbl}>
-                        {sameTimeForAll ? 'Start Time *' : 'Start time for next date *'}
-                      </label>
-                      <input type="time" style={inp} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                  {isSlotsEditor ? (
+                    <DayConfigEditor
+                      slotKind={slotKind}
+                      startTime={startTime}
+                      secondHalfStart={secondHalfStart}
+                      onSlotKindChange={setSharedSlotKind}
+                      onStartChange={setStartTime}
+                      onSecondChange={(v) => setSecondHalfStart(v)}
+                      onAddSecond={() => setSecondHalfStart('')}
+                      onRemoveSecond={() => setSecondHalfStart(null)}
+                      heading={
+                        sameTimeForAll
+                          ? 'What does each work day look like?'
+                          : 'Defaults for the next date you add'
+                      }
+                      inputStyle={inp}
+                      labelStyle={lbl}
+                    />
+                  ) : (
+                    <div
+                      className="host-job-schedule-grid"
+                      style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
+                    >
+                      <div>
+                        <label style={lbl}>
+                          {sameTimeForAll ? 'Start Time *' : 'Start time for next date *'}
+                        </label>
+                        <input type="time" style={inp} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                      </div>
+                      <div>
+                        <label style={lbl}>
+                          {sameTimeForAll ? 'End Time *' : 'End time for next date *'}
+                        </label>
+                        <input type="time" style={inp} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                      </div>
                     </div>
-                    <div>
-                      <label style={lbl}>
-                        {sameTimeForAll ? 'End Time *' : 'End time for next date *'}
-                      </label>
-                      <input type="time" style={inp} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-                    </div>
-                  </div>
+                  )}
                   {specificDates.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {specificDates.map((d) => {
-                          const t = perDateTimes[d] ?? { start: startTime, end: endTime };
+                          if (isSlotsEditor) {
+                            const t = slotsPerDateTimes[d] ?? {
+                              start: startTime,
+                              slotKind,
+                              secondHalfStart,
+                            };
+                            const dayEnd =
+                              t.start.trim() &&
+                              (t.slotKind === 'HALF' || t.slotKind === 'FULL')
+                                ? addClockHours(
+                                    t.start,
+                                    t.slotKind === 'HALF'
+                                      ? HALF_SLOT_HOURS
+                                      : FULL_SLOT_HOURS,
+                                  )
+                                : null;
+                            return (
+                              <div
+                                key={d}
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 10,
+                                  background: 'rgba(48, 155, 183, 0.06)',
+                                  border: '1px solid rgba(48, 155, 183, 0.24)',
+                                  borderRadius: 8,
+                                  padding: '10px 12px',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1B6F86' }}>
+                                    {fmtJobCalendarDate(d)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    aria-label={`Remove ${d}`}
+                                    onClick={() => removeSpecificDate(d)}
+                                    style={{
+                                      flexShrink: 0, border: 'none', background: 'transparent',
+                                      color: '#1B6F86', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: '0 2px',
+                                    }}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                                {!sameTimeForAll ? (
+                                  <DayConfigEditor
+                                    slotKind={t.slotKind}
+                                    startTime={t.start}
+                                    secondHalfStart={t.secondHalfStart}
+                                    onSlotKindChange={(kind) => setSlotsPerDateTime(d, 'slotKind', kind)}
+                                    onStartChange={(v) => setSlotsPerDateTime(d, 'start', v)}
+                                    onSecondChange={(v) => setSlotsPerDateTime(d, 'secondHalfStart', v)}
+                                    onAddSecond={() => setSlotsPerDateTime(d, 'secondHalfStart', '')}
+                                    onRemoveSecond={() => setSlotsPerDateTime(d, 'secondHalfStart', null)}
+                                    heading="Work day"
+                                    inputStyle={inp}
+                                    labelStyle={lbl}
+                                  />
+                                ) : (
+                                  <div style={{ fontSize: 12, color: '#6B7280' }}>
+                                    {startTime.trim() && slotKind
+                                      ? `${slotKind === 'HALF' ? 'First half' : 'Full day'} starts ${startTime}${dayEnd ? ` → ${dayEnd}` : ''}${
+                                          secondHalfStart
+                                            ? ` · Second half ${secondHalfStart} → ${secondHalfEnd ?? '-'}`
+                                            : ''
+                                        }`
+                                      : 'Uses the shared schedule above'}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          const t = legacyPerDateTimes[d] ?? { start: startTime, end: endTime };
                           return (
                           <div
                             key={d}
@@ -1314,7 +2168,7 @@ export default function HostEditJobPage(props: {
                                   aria-label={`Start time for ${d}`}
                                   style={{ ...inp, flex: '1 1 0', minWidth: 0, width: 'auto', padding: '9px 6px' }}
                                   value={t.start}
-                                  onChange={(e) => setPerDateTime(d, 'start', e.target.value)}
+                                  onChange={(e) => setLegacyPerDateTime(d, 'start', e.target.value)}
                                 />
                                 <span style={{ color: '#9CA3AF', fontSize: 12, flexShrink: 0 }}>-</span>
                                 <input
@@ -1322,7 +2176,7 @@ export default function HostEditJobPage(props: {
                                   aria-label={`End time for ${d}`}
                                   style={{ ...inp, flex: '1 1 0', minWidth: 0, width: 'auto', padding: '9px 6px' }}
                                   value={t.end}
-                                  onChange={(e) => setPerDateTime(d, 'end', e.target.value)}
+                                  onChange={(e) => setLegacyPerDateTime(d, 'end', e.target.value)}
                                 />
                               </>
                             )}
@@ -1571,138 +2425,16 @@ export default function HostEditJobPage(props: {
                 type="button"
                 onClick={async () => {
                   setErr('');
-                  const t = title.trim();
                   setBusy(true);
                   try {
-                    const listMode = scheduleKind === 'list';
-                    const rangesMode = scheduleKind === 'ranges';
-                    const shiftsMode = listMode || rangesMode;
-                    const sortedDates = [...specificDates].sort();
-                    let scheduleFields: { startDate: string; endDate: string; startTime: string; endTime: string } | null = null;
-                    let outShifts: { date: string; startTime: string; endTime: string }[] = [];
-                    if (rangesMode) {
-                      const filled = dateRanges.filter((r) => r.startDate.trim() || r.endDate.trim());
-                      if (filled.length === 0) {
-                        setErr('Add at least one date range.');
-                        return;
-                      }
-                      const todayIso = todayIsoDateLocal();
-                      for (const r of filled) {
-                        if (!r.startDate.trim() || !r.endDate.trim()) {
-                          setErr('Each range needs a start and end date.');
-                          return;
-                        }
-                        if (compareLocalCalendarDates(r.endDate, r.startDate) < 0) {
-                          setErr('Each range end date must be on or after its start date.');
-                          return;
-                        }
-                        if (compareLocalCalendarDates(r.startDate, todayIso) < 0) {
-                          setErr('Dates cannot be in the past.');
-                          return;
-                        }
-                        if (!r.startTime.trim() || !r.endTime.trim()) {
-                          setErr('Set a start and end time for each range.');
-                          return;
-                        }
-                      }
-                      outShifts = buildRangeShiftsPayload();
-                      if (outShifts.length === 0) {
-                        setErr('Add at least one date range.');
-                        return;
-                      }
-                    }
-                    else if (listMode) {
-                      if (sortedDates.length === 0) {
-                        setErr('Add at least one date.');
-                        return;
-                      }
-                      const todayIso = todayIsoDateLocal();
-                      if (sortedDates.some((d) => compareLocalCalendarDates(d, todayIso) < 0)) {
-                        setErr('Dates cannot be in the past.');
-                        return;
-                      }
-                      if (sameTimeForAll) {
-                        if (!startTime.trim() || !endTime.trim()) {
-                          setErr('Set the start and end time.');
-                          return;
-                        }
-                      } else {
-                        for (const d of sortedDates) {
-                          const o = perDateTimes[d] ?? { start: startTime, end: endTime };
-                          if (!o.start.trim() || !o.end.trim()) {
-                            setErr(`Set a start and end time for ${fmtJobCalendarDate(d)}.`);
-                            return;
-                          }
-                        }
-                      }
-                      outShifts = buildShiftsPayload();
-                    }
-                    else {
-                      const startIso = parseMmDdYyyyToIso(startDateInput);
-                      const endIso = parseMmDdYyyyToIso(endDateInput);
-                      const scheduleCheck = validateJobPostingSchedule({
-                        startDateIso: startIso || '',
-                        endDateIso: endIso || '',
-                        startTime,
-                        endTime,
-                      });
-                      if (!scheduleCheck.valid) {
-                        setErr(scheduleCheck.message);
-                        return;
-                      }
-                      scheduleFields = buildJobScheduleApiFields({
-                        startDateIso: startIso!,
-                        endDateIso: endIso!,
-                        startTime,
-                        endTime,
-                      });
-                      if (!scheduleFields) {
-                        setErr('Schedule could not be encoded.');
-                        return;
-                      }
-                    }
-                    const rateNum = ratePerDay.trim()
-                      ? Number(ratePerDay)
-                      : NaN;
-                    const yearsNum = yearsExp.trim()
-                      ? Number(yearsExp)
-                      : NaN;
-                    await hostApi.updateJob(jobId, {
-                      title: t,
-                      description: description.trim() || undefined,
-                      shifts: shiftsMode ? outShifts : undefined,
-                      scheduleType: rangesMode ? 'RANGES' : listMode ? 'DATES' : undefined,
-                      keyResponsibilities: buildKeyResponsibilitiesPayload(
-                        respBySection,
-                        respCustom,
-                      ),
-                      startDate: shiftsMode ? undefined : scheduleFields!.startDate,
-                      endDate: shiftsMode ? undefined : scheduleFields!.endDate,
-                      startTime: shiftsMode ? undefined : scheduleFields!.startTime,
-                      endTime: shiftsMode ? undefined : scheduleFields!.endTime,
-                      payPerDay: Number.isFinite(rateNum) ? rateNum : undefined,
-                      minYearsExperience:
-                        yearsExp.trim() && Number.isFinite(yearsNum)
-                          ? yearsNum
-                          : undefined,
-                      requiredCredentials: credentials,
-                      travelRequired: travelReq,
-                      expiresAt: expiresAt
-                        ? new Date(expiresAt).toISOString()
-                        : undefined,
-                      amenities: practice.amenities,
-                      isRural,
-                      accommodationProvided: practice.accommodationProvided,
-                      practiceType: practice.practiceType.trim() || '',
-                      numPhysicians: practice.numPhysicians.trim() || '',
-                      emr: practice.emr.trim() || '',
-                      patientVol: practice.patientVol.trim() || '',
-                      clinicDesc: practice.clinicDesc.trim() || '',
-                      status: 'ACTIVE',
-                    });
+                    await saveChanges();
+                    await hostApi.updateJob(jobId, { status: 'ACTIVE' });
                     beforeClientNavigation('/host/dashboard');
                     router.push('/host/dashboard');
                   } catch (e: unknown) {
+                    if (e instanceof Error && e.message === 'validation') {
+                      return;
+                    }
                     const msg =
                       e && typeof e === 'object' && 'message' in e
                         ? String((e as { message: unknown }).message)

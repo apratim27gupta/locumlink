@@ -1,4 +1,7 @@
-import { formatLocalCalendarDateForDisplay } from '@/lib/localDateTime';
+import {
+  formatLocalCalendarDateForDisplay,
+  utcPartsToLocalInputValues,
+} from '@/lib/localDateTime';
 
 /**
  * Single source of truth for reading and describing a job's schedule.
@@ -202,6 +205,240 @@ export function getJobDateRanges(job: JobScheduleLike | null | undefined): JobDa
     }
   }
   return ranges;
+}
+
+/** Per-day slot config used by the host SLOTS schedule editor. */
+export type SlotsDayEditorConfig = {
+  start: string;
+  slotKind: 'HALF' | 'FULL' | '';
+  secondHalfStart: string | null;
+};
+
+export type InferredSlotsRangeRow = {
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  slotKind: 'HALF' | 'FULL' | '';
+  secondHalfStart: string | null;
+};
+
+export type InferredSlotsScheduleEditorState = {
+  scheduleKind: 'range' | 'list' | 'ranges';
+  /** Continuous-range start (YYYY-MM-DD), empty when not range. */
+  startDate: string;
+  /** Continuous-range end (YYYY-MM-DD), empty when not range. */
+  endDate: string;
+  startTime: string;
+  slotKind: 'HALF' | 'FULL' | '';
+  secondHalfStart: string | null;
+  dateRanges: InferredSlotsRangeRow[];
+  specificDates: string[];
+  sameTimeForAll: boolean;
+  perDateTimes: Record<string, SlotsDayEditorConfig>;
+};
+
+type LocalDayPattern = {
+  date: string;
+  slotKind: 'HALF' | 'FULL';
+  startTime: string;
+  secondHalfStart: string | null;
+};
+
+function patternKey(p: {
+  slotKind: string;
+  startTime: string;
+  secondHalfStart: string | null;
+}): string {
+  return `${p.slotKind}|${p.startTime}|${p.secondHalfStart ?? ''}`;
+}
+
+/** Build a local day pattern from UTC shift rows that share one calendar date. */
+function dayPatternFromShifts(date: string, dayShifts: JobShiftLike[]): LocalDayPattern | null {
+  const withKind = dayShifts.filter(
+    (s) => s.slotKind === 'HALF' || s.slotKind === 'FULL',
+  );
+  if (withKind.length === 0) return null;
+
+  const kinds = new Set(withKind.map((s) => s.slotKind));
+  const slotKind: 'HALF' | 'FULL' =
+    kinds.has('HALF') && !kinds.has('FULL')
+      ? 'HALF'
+      : kinds.has('FULL') && !kinds.has('HALF')
+        ? 'FULL'
+        : kinds.has('HALF')
+          ? 'HALF'
+          : 'FULL';
+
+  const localStarts: string[] = [];
+  for (const s of withKind) {
+    if (s.slotKind !== slotKind) continue;
+    const local = s.startTime
+      ? utcPartsToLocalInputValues(s.date, s.startTime)?.localTime
+      : null;
+    if (local) localStarts.push(local);
+  }
+  localStarts.sort();
+  if (localStarts.length === 0) return null;
+
+  if (slotKind === 'FULL') {
+    return {
+      date,
+      slotKind: 'FULL',
+      startTime: localStarts[0],
+      secondHalfStart: null,
+    };
+  }
+  return {
+    date,
+    slotKind: 'HALF',
+    startTime: localStarts[0],
+    secondHalfStart: localStarts.length >= 2 ? localStarts[1] : null,
+  };
+}
+
+function groupContiguousSamePattern(days: LocalDayPattern[]): InferredSlotsRangeRow[] {
+  const out: InferredSlotsRangeRow[] = [];
+  for (const d of days) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      nextCalendarDay(prev.endDate) === d.date &&
+      patternKey(prev) === patternKey(d)
+    ) {
+      prev.endDate = d.date;
+    } else {
+      out.push({
+        startDate: d.date,
+        endDate: d.date,
+        startTime: d.startTime,
+        slotKind: d.slotKind,
+        secondHalfStart: d.secondHalfStart,
+      });
+    }
+  }
+  return out;
+}
+
+function dayConfigFromPattern(d: LocalDayPattern): SlotsDayEditorConfig {
+  return {
+    start: d.startTime,
+    slotKind: d.slotKind,
+    secondHalfStart: d.secondHalfStart,
+  };
+}
+
+/**
+ * Reconstruct host SLOTS editor state from a job's shifts (UTC → local).
+ *
+ * Prefer a continuous `range` when every day is contiguous and shares the same
+ * per-day slot pattern. Use `ranges` when scheduleType is RANGES. Otherwise
+ * fall back to a specific-dates `list`.
+ */
+export function inferSlotsScheduleEditorState(
+  job: JobScheduleLike | null | undefined,
+): InferredSlotsScheduleEditorState {
+  const empty: InferredSlotsScheduleEditorState = {
+    scheduleKind: 'range',
+    startDate: '',
+    endDate: '',
+    startTime: '',
+    slotKind: '',
+    secondHalfStart: null,
+    dateRanges: [
+      {
+        startDate: '',
+        endDate: '',
+        startTime: '',
+        slotKind: '',
+        secondHalfStart: null,
+      },
+    ],
+    specificDates: [],
+    sameTimeForAll: true,
+    perDateTimes: {},
+  };
+
+  const shifts = getJobShifts(job);
+  if (shifts.length === 0) return empty;
+
+  const byDate = new Map<string, JobShiftLike[]>();
+  for (const s of shifts) {
+    const list = byDate.get(s.date) ?? [];
+    list.push(s);
+    byDate.set(s.date, list);
+  }
+
+  const days: LocalDayPattern[] = [];
+  for (const date of [...byDate.keys()].sort()) {
+    const pat = dayPatternFromShifts(date, byDate.get(date) ?? []);
+    if (pat) days.push(pat);
+  }
+  if (days.length === 0) return empty;
+
+  const specificDates = days.map((d) => d.date);
+  const sameTimeForAll = new Set(days.map(patternKey)).size <= 1;
+  const shared = days[0];
+  const grouped = groupContiguousSamePattern(days);
+  const perDateTimes = Object.fromEntries(
+    days.map((d) => [d.date, dayConfigFromPattern(d)]),
+  );
+
+  if (getJobScheduleType(job) === 'RANGES') {
+    return {
+      scheduleKind: 'ranges',
+      startDate: '',
+      endDate: '',
+      startTime: shared.startTime,
+      slotKind: shared.slotKind,
+      secondHalfStart: shared.secondHalfStart,
+      dateRanges: grouped,
+      specificDates,
+      sameTimeForAll,
+      perDateTimes,
+    };
+  }
+
+  const isContiguousSamePattern =
+    grouped.length === 1 &&
+    expandIsoDateRange(grouped[0].startDate, grouped[0].endDate).length ===
+      days.length;
+
+  if (isContiguousSamePattern) {
+    const g = grouped[0];
+    return {
+      scheduleKind: 'range',
+      startDate: g.startDate,
+      endDate: g.endDate,
+      startTime: g.startTime,
+      slotKind: g.slotKind,
+      secondHalfStart: g.secondHalfStart,
+      dateRanges: [g],
+      specificDates,
+      sameTimeForAll: true,
+      perDateTimes,
+    };
+  }
+
+  return {
+    scheduleKind: 'list',
+    startDate: '',
+    endDate: '',
+    startTime: shared.startTime,
+    slotKind: shared.slotKind,
+    secondHalfStart: shared.secondHalfStart,
+    dateRanges: [
+      {
+        startDate: '',
+        endDate: '',
+        startTime: shared.startTime,
+        slotKind: shared.slotKind,
+        secondHalfStart: shared.secondHalfStart,
+      },
+    ],
+    specificDates,
+    sameTimeForAll,
+    perDateTimes,
+  };
 }
 
 /** Inclusive list of ISO days (YYYY-MM-DD) from start to end; capped for safety. */
