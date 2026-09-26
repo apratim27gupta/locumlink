@@ -5,12 +5,12 @@ import {
     JOB_DESCRIPTION_PRESET_OPTIONS,
     JOB_TITLE_PRESET_OPTIONS,
     RESPONSIBILITY_SECTIONS,
-    formatMmDdYyyyInput,
+    formatDdMmYyyyInput,
     hostJobFieldInp,
     hostJobFieldLbl,
-    isoToMmDdYyyy,
+    isoToDdMmYyyy,
     clampIsoDateToMin,
-    parseMmDdYyyyToIso,
+    parseDdMmYyyyToIso,
     todayIsoDateLocal,
 } from '@/lib/hostJobPostingForm';
 import { useAnchoredDropdownMenu } from '@/hooks/useAnchoredDropdownMenu';
@@ -87,7 +87,7 @@ function usePresetDropdownMenu(
     return useAnchoredDropdownMenu(open, setOpen, wrapRef, menuRef, preferredMaxHeight);
 }
 
-export function MmDdYyyyDateField({ value, onChange, inputStyle, minIso = todayIsoDateLocal(), }: {
+export function DdMmYyyyDateField({ value, onChange, inputStyle, minIso = todayIsoDateLocal(), }: {
     value: string;
     onChange: (value: string) => void;
     inputStyle?: React.CSSProperties;
@@ -95,13 +95,13 @@ export function MmDdYyyyDateField({ value, onChange, inputStyle, minIso = todayI
     minIso?: string;
 }) {
     const pickerRef = useRef<HTMLInputElement>(null);
-    const isoValue = parseMmDdYyyyToIso(value);
+    const isoValue = parseDdMmYyyyToIso(value);
     function commitFormatted(formatted: string) {
-        const iso = parseMmDdYyyyToIso(formatted);
+        const iso = parseDdMmYyyyToIso(formatted);
         if (iso && minIso) {
             const clamped = clampIsoDateToMin(iso, minIso);
             if (clamped !== iso) {
-                onChange(isoToMmDdYyyy(clamped));
+                onChange(isoToDdMmYyyy(clamped));
                 return;
             }
         }
@@ -120,12 +120,12 @@ export function MmDdYyyyDateField({ value, onChange, inputStyle, minIso = todayI
     }
     const base = inputStyle ?? hostJobFieldInp;
     return (<div className="host-job-date-field" style={{ position: 'relative', width: '100%', minWidth: 0 }}>
-      <input type="text" className="host-job-date-text" inputMode="numeric" autoComplete="off" placeholder="MM-DD-YYYY" pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}" title="MM-DD-YYYY" style={{
+      <input type="text" className="host-job-date-text" inputMode="numeric" autoComplete="off" placeholder="dd-mm-yyyy" pattern="[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}" title="dd-mm-yyyy" style={{
             ...base,
             paddingRight: 40,
             width: '100%',
             boxSizing: 'border-box',
-        }} value={value} onChange={(e) => commitFormatted(formatMmDdYyyyInput(e.target.value))}/>
+        }} value={value} onChange={(e) => commitFormatted(formatDdMmYyyyInput(e.target.value))}/>
       <button type="button" className="host-job-date-trigger" aria-label="Open calendar" onClick={openCalendar} style={{
             position: 'absolute',
             right: 2,
@@ -150,7 +150,7 @@ export function MmDdYyyyDateField({ value, onChange, inputStyle, minIso = todayI
                 return;
             }
             const clamped = minIso ? clampIsoDateToMin(iso, minIso) : iso;
-            onChange(isoToMmDdYyyy(clamped));
+            onChange(isoToDdMmYyyy(clamped));
         }} style={{
             position: 'absolute',
             right: 0,
@@ -166,6 +166,9 @@ export function MmDdYyyyDateField({ value, onChange, inputStyle, minIso = todayI
         }}/>
     </div>);
 }
+
+/** @deprecated Prefer DdMmYyyyDateField. */
+export const MmDdYyyyDateField = DdMmYyyyDateField;
 
 export function HostJobTitleField({ value, onChange, inputStyle, labelStyle, }: {
     value: string;

@@ -7,7 +7,8 @@ import {
 import { formatCalendarDateForApi } from '../host/job-schedule.util.js';
 
 export type MatchFeeStatusAdminGuide = {
-  status: MatchFeeInvoiceStatus;
+  /** Invoice status when applicable; flag keys like ESCALATED for non-status chips. */
+  status: MatchFeeInvoiceStatus | 'ESCALATED' | 'HOSTS_UNDER_REVIEW';
   label: string;
   summary: string;
   hostObligation: string;
@@ -23,8 +24,15 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
   {
     status: 'OVERDUE',
     label: 'Overdue',
-    summary: 'Due date passed without payment. Account may be flagged after 30 days overdue.',
+    summary: 'Due date passed without payment. The invoice status is Overdue from day 1 past due.',
     hostObligation: 'Pay immediately or contact support.',
+  },
+  {
+    status: 'ESCALATED',
+    label: 'Escalated',
+    summary:
+      'Not a separate invoice status. An Overdue invoice that has stayed unpaid for 30+ days past its due date gets an escalated flag (invoice remains Overdue). Admin should follow up; the host account may also be marked under review.',
+    hostObligation: 'Pay the overdue fee immediately. LocumLink will follow up until resolved.',
   },
   {
     status: 'PAID',
@@ -51,6 +59,13 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
     summary:
       'Invoice voided: no payment was collected (e.g. posting removed or match ended while the fee was still unpaid).',
     hostObligation: 'None.',
+  },
+  {
+    status: 'HOSTS_UNDER_REVIEW',
+    label: 'Hosts under review',
+    summary:
+      'Not an invoice status — a count of host accounts flagged for admin attention (usually after an invoice escalates from long overdue). Clear the flag from the invoice row once the host has paid or the issue is handled.',
+    hostObligation: 'Host should clear outstanding match fees; admin clears the review flag when done.',
   },
 ];
 

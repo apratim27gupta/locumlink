@@ -112,7 +112,7 @@ export function evaluateCancellationPolicy(params: {
         replacementStatus: 'NONE',
         nonRefundable: wasPaid,
         reason:
-          'Host cancelled within 14 days of start. The match fee is non-refundable if already paid.',
+          'Host cancelled within 14 days of start. The match fee is non-refundable.',
       };
     }
     return {

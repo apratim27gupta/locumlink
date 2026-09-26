@@ -126,17 +126,20 @@ export function autoResponsibilitiesForJobTitle(title: string): Record<string, S
     return null;
 }
 
-export function fmtIsoToMmDdYyyy(iso: string | null | undefined): string {
+export function fmtIsoToDdMmYyyy(iso: string | null | undefined): string {
     if (!iso)
         return '';
     const cal = calendarDatePartFromInput(iso);
     if (cal)
-        return isoToMmDdYyyy(cal);
+        return isoToDdMmYyyy(cal);
     const d = new Date(iso);
     if (Number.isNaN(d.getTime()))
         return '';
-    return isoToMmDdYyyy(localCalendarDateToIso(d));
+    return isoToDdMmYyyy(localCalendarDateToIso(d));
 }
+
+/** @deprecated Prefer fmtIsoToDdMmYyyy — continuous dates use DD-MM-YYYY. */
+export const fmtIsoToMmDdYyyy = fmtIsoToDdMmYyyy;
 
 /** Job schedule dates for cards/lists (no UTC off-by-one on YYYY-MM-DD). */
 export function fmtJobCalendarDate(iso: string | null | undefined): string {
@@ -150,15 +153,16 @@ export function isPostingEndDatePassed(
     return isLocalPostingEndDatePassed(endDate);
 }
 
-export function parseMmDdYyyyToIso(input: string): string {
+/** Parse DD-MM-YYYY display input to YYYY-MM-DD ISO calendar day. */
+export function parseDdMmYyyyToIso(input: string): string {
     const t = input.trim();
     if (!t)
         return '';
     const m = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
     if (!m)
         return '';
-    const mm = Number(m[1]);
-    const dd = Number(m[2]);
+    const dd = Number(m[1]);
+    const mm = Number(m[2]);
     const yyyy = Number(m[3]);
     if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || yyyy < 1900 || yyyy > 2100)
         return '';
@@ -169,14 +173,20 @@ export function parseMmDdYyyyToIso(input: string): string {
         : '';
 }
 
-export function isoToMmDdYyyy(iso: string): string {
+/** @deprecated Prefer parseDdMmYyyyToIso. */
+export const parseMmDdYyyyToIso = parseDdMmYyyyToIso;
+
+export function isoToDdMmYyyy(iso: string): string {
     const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m)
         return '';
-    return `${m[2]}-${m[3]}-${m[1]}`;
+    return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
-export function formatMmDdYyyyInput(raw: string): string {
+/** @deprecated Prefer isoToDdMmYyyy. */
+export const isoToMmDdYyyy = isoToDdMmYyyy;
+
+export function formatDdMmYyyyInput(raw: string): string {
     const digits = raw.replace(/\D/g, '').slice(0, 8);
     if (digits.length <= 2)
         return digits;
@@ -184,6 +194,9 @@ export function formatMmDdYyyyInput(raw: string): string {
         return `${digits.slice(0, 2)}-${digits.slice(2)}`;
     return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
 }
+
+/** @deprecated Prefer formatDdMmYyyyInput. */
+export const formatMmDdYyyyInput = formatDdMmYyyyInput;
 
 /** Local calendar date as YYYY-MM-DD (for date input `min`). */
 export function todayIsoDateLocal(): string {

@@ -12,6 +12,7 @@ import {
   FileCheck,
   MessageSquare,
   Shield,
+  Ticket,
   Users,
 } from 'lucide-react';
 import { adminApiBase } from '@/lib/adminApi';
@@ -106,6 +107,12 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
       label: 'Feedbacks',
       href: '/admin/feedback',
       icon: <MessageSquare size={20} />,
+    },
+    {
+      id: 'tickets',
+      label: 'Host tickets',
+      href: '/admin/tickets',
+      icon: <Ticket size={20} />,
     },
     {
       id: 'payments',

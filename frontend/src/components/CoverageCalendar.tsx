@@ -21,12 +21,36 @@ export type CoverageApplicant = {
 };
 
 type Stage = 'accepted' | 'confirmed' | 'shortlisted' | 'applied';
+/** Chip/legend styles — workflow order in legend: applied → shortlisted → confirmed → accepted. */
 const STAGE_STYLE: Record<Stage, { bg: string; color: string; label: string }> = {
-  accepted: { bg: '#ECFDF5', color: '#047857', label: 'Accepted' },
-  confirmed: { bg: '#EEF0FB', color: '#4338CA', label: 'Confirmed' },
-  shortlisted: { bg: '#ECFDF5', color: '#0D9488', label: 'Shortlisted' },
-  applied: { bg: '#F3F4F6', color: '#4B5563', label: 'Applied' },
+  applied: {
+    bg: '#F3F4F6',
+    color: '#4B5563',
+    label: 'Locum applied',
+  },
+  shortlisted: {
+    bg: '#FFF7ED',
+    color: '#C2410C',
+    label: 'Shortlisted by host',
+  },
+  confirmed: {
+    bg: '#EEF0FB',
+    color: '#4338CA',
+    label: 'Confirmed by host',
+  },
+  accepted: {
+    bg: '#ECFDF5',
+    color: '#047857',
+    label: 'Accepted by locum',
+  },
 };
+
+const LEGEND_STAGE_ORDER: Stage[] = [
+  'applied',
+  'shortlisted',
+  'confirmed',
+  'accepted',
+];
 
 function stageOf(a: CoverageApplicant): Stage | null {
   if (a.status === 'REJECTED' || a.status === 'WITHDRAWN' || a.locumResponse === 'REJECTED') {
@@ -228,7 +252,7 @@ export function CoverageCalendar({
           })}
         </div>
         <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
-          {(['accepted', 'confirmed', 'shortlisted', 'applied'] as Stage[]).map((s) => (
+          {LEGEND_STAGE_ORDER.map((s) => (
             <span
               key={s}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6B7280' }}
@@ -334,7 +358,7 @@ export function CoverageCalendar({
         })}
       </div>
       <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
-        {(['accepted', 'confirmed', 'shortlisted', 'applied'] as Stage[]).map((s) => (
+        {LEGEND_STAGE_ORDER.map((s) => (
           <span
             key={s}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6B7280' }}

@@ -1768,11 +1768,11 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             const startIso = parseMmDdYyyyToIso(startDateInput);
             const endIso = parseMmDdYyyyToIso(endDateInput);
             if (!startIso) {
-                setSubmitError('Start date must be a valid date in MM-DD-YYYY format.');
+                setSubmitError('Start date must be a valid date in dd-mm-yyyy format.');
                 return;
             }
             if (!endIso) {
-                setSubmitError('End date must be a valid date in MM-DD-YYYY format.');
+                setSubmitError('End date must be a valid date in dd-mm-yyyy format.');
                 return;
             }
             if (!startTime.trim() || !slotKind) {
@@ -3241,7 +3241,8 @@ export default function HostDashboard(props: {
                 'You have not posted any locum shifts yet'}
                       {activeTab === 'ongoing' &&
                 'No confirmed locum shifts yet'}
-                      {activeTab === 'recent' && 'No completed locum shifts'}
+                      {activeTab === 'recent' &&
+                'No completed locum shifts. After the last shift on a match-fee invoice, you can raise a ticket from Match Fees if you have concerns.'}
                       {activeTab === 'draft' && 'No draft locum shifts saved'}
                       {activeTab === 'deleted' &&
                 'Locum shifts you delete from the dashboard appear here'}

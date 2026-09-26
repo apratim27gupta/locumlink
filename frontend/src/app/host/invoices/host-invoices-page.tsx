@@ -27,6 +27,9 @@ export default function HostInvoicesPage() {
   const [payingId, setPayingId] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
+  const [ticketFor, setTicketFor] = useState<MatchFeeInvoice | null>(null);
+  const [ticketMessage, setTicketMessage] = useState('');
+  const [ticketBusy, setTicketBusy] = useState(false);
 
   const stripeEnabled = policy?.paymentMethods?.enabled === true;
 
@@ -79,6 +82,27 @@ export default function HostInvoicesPage() {
     }
   }
 
+  async function submitTicket() {
+    if (!ticketFor || !ticketMessage.trim() || ticketBusy) return;
+    setTicketBusy(true);
+    setError(null);
+    try {
+      await hostApi.createSupportTicket({
+        jobPostingId: ticketFor.jobPostingId,
+        matchFeeInvoiceId: ticketFor.id,
+        message: ticketMessage.trim(),
+      });
+      setBanner('Ticket submitted. LocumLink will follow up on your invoice concerns.');
+      setTicketFor(null);
+      setTicketMessage('');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not submit ticket.');
+    } finally {
+      setTicketBusy(false);
+    }
+  }
+
   const overdueCount = invoices.filter((i) => i.status === 'OVERDUE').length;
 
   return (
@@ -92,9 +116,6 @@ export default function HostInvoicesPage() {
         <h1 style={{ fontSize: 26, fontWeight: 700, color: '#111827', margin: '0 0 8px' }}>
           Match Fees
         </h1>
-        <p style={{ margin: '0 0 8px', color: '#6B7280', fontSize: 14, lineHeight: 1.5 }}>
-          Free to post. Pay $125 or $250 per matched locum when they accept your confirmed match.
-        </p>
         <button
           type="button"
           onClick={() => setPolicyOpen(true)}
@@ -193,6 +214,19 @@ export default function HostInvoicesPage() {
                     >
                       {invoice.jobTitle}
                     </div>
+                    <div style={{ fontSize: 14, color: '#111827', marginTop: 6, fontWeight: 600 }}>
+                      Locum: {invoice.locumName}
+                    </div>
+                    {invoice.replacedByLocumName ? (
+                      <div style={{ fontSize: 13, color: '#374151', marginTop: 4 }}>
+                        {invoice.replacedByLocumName} replaced {invoice.locumName}
+                      </div>
+                    ) : invoice.replacementStatus === 'SEARCHING' ||
+                      invoice.status === 'PENDING_REPLACEMENT' ? (
+                      <div style={{ fontSize: 13, color: '#B45309', marginTop: 4 }}>
+                        Seeking replacement for {invoice.locumName}
+                      </div>
+                    ) : null}
                     {invoice.postingScheduleLabel ? (
                       <div style={{ fontSize: 13, color: '#374151', marginTop: 6 }}>
                         Shifts: {invoice.postingScheduleLabel}
@@ -252,6 +286,29 @@ export default function HostInvoicesPage() {
                     <Link href={postingHref} style={matchFeeOutlineButtonStyle(busy)}>
                       View job
                     </Link>
+                    {invoice.postingCompleted && !invoice.supportTicket ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          setTicketFor(invoice);
+                          setTicketMessage('');
+                        }}
+                        style={matchFeeOutlineButtonStyle(busy)}
+                      >
+                        Raise a ticket
+                      </button>
+                    ) : null}
+                    {invoice.supportTicket ? (
+                      <span style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>
+                        Ticket{' '}
+                        {invoice.supportTicket.status === 'OPEN'
+                          ? 'submitted'
+                          : invoice.supportTicket.status === 'RESOLVED'
+                            ? 'resolved'
+                            : 'closed'}
+                      </span>
+                    ) : null}
                     {canPay ? (
                       <button
                         type="button"
@@ -293,6 +350,90 @@ export default function HostInvoicesPage() {
           </div>
         )}
       </div>
+
+      {ticketFor ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            background: 'rgba(15, 23, 42, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (!ticketBusy && e.target === e.currentTarget) {
+              setTicketFor(null);
+            }
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              padding: 20,
+              width: '100%',
+              maxWidth: 440,
+            }}
+          >
+            <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700 }}>Raise a ticket</h2>
+            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
+              For invoice on {ticketFor.jobTitle}. Share any concerns after the last shift on this
+              invoice - LocumLink will follow up. Fees are not adjusted mid-placement.
+            </p>
+            <textarea
+              value={ticketMessage}
+              onChange={(e) => setTicketMessage(e.target.value)}
+              rows={5}
+              maxLength={2000}
+              placeholder="What happened?"
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: 10,
+                borderRadius: 8,
+                border: '1px solid #D1D5DB',
+                fontFamily: 'inherit',
+                fontSize: 14,
+                resize: 'vertical',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+              <button
+                type="button"
+                disabled={ticketBusy}
+                onClick={() => setTicketFor(null)}
+                style={matchFeeOutlineButtonStyle(ticketBusy)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={ticketBusy || !ticketMessage.trim()}
+                onClick={() => void submitTicket()}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background:
+                    ticketBusy || !ticketMessage.trim() ? '#94A3B8' : '#0F2A7A',
+                  color: '#fff',
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: ticketBusy || !ticketMessage.trim() ? 'default' : 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {ticketBusy ? 'Submitting…' : 'Submit ticket'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <MatchFeePolicyModal
         policy={policy}

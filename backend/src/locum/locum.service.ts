@@ -651,10 +651,15 @@ export class LocumService {
       throw new BadRequestException(
         'This job is no longer accepting applications.',
       );
-    const existing = await this.prisma.application.findFirst({
-      where: { jobPostingId: jobId, locumProfileId: locumProfile.id },
+    // Re-apply after withdraw is a new application (withdrawn rows stay for history).
+    const existingActive = await this.prisma.application.findFirst({
+      where: {
+        jobPostingId: jobId,
+        locumProfileId: locumProfile.id,
+        status: { not: 'WITHDRAWN' },
+      },
     });
-    if (existing && existing.status !== 'WITHDRAWN')
+    if (existingActive)
       throw new BadRequestException('You have already applied to this job.');
 
     // Validate declared availability against the posting's required days.
@@ -713,32 +718,17 @@ export class LocumService {
       finalShiftIds = openShiftIds;
     }
 
-    const application = existing
-      ? await this.prisma.application.update({
-          where: { id: existing.id },
-          data: {
-            status: 'APPLIED',
-            locumResponse: null,
-            locumAcceptedAt: null,
-            placedAt: null,
-            coverNote: coverNote ?? null,
-            availabilityKind: finalKind,
-            availableDates: finalDates,
-            requestedShiftIds: finalShiftIds,
-            appliedAt: new Date(),
-          },
-        })
-      : await this.prisma.application.create({
-          data: {
-            jobPostingId: jobId,
-            locumProfileId: locumProfile.id,
-            status: 'APPLIED',
-            coverNote: coverNote ?? null,
-            availabilityKind: finalKind,
-            availableDates: finalDates,
-            requestedShiftIds: finalShiftIds,
-          },
-        });
+    const application = await this.prisma.application.create({
+      data: {
+        jobPostingId: jobId,
+        locumProfileId: locumProfile.id,
+        status: 'APPLIED',
+        coverNote: coverNote ?? null,
+        availabilityKind: finalKind,
+        availableDates: finalDates,
+        requestedShiftIds: finalShiftIds,
+      },
+    });
     // H-001: Notify host of new application
     try {
       const jobWithHost = await this.prisma.jobPosting.findUnique({

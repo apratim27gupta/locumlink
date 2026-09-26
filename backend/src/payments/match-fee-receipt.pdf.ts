@@ -14,6 +14,8 @@ export type MatchFeeReceiptData = {
   postingScheduleLabel: string | null;
   postingLocation: string | null;
   locumName: string;
+  /** When set, this locum replaced the original confirmed locum. */
+  replacedByLocumName?: string | null;
   practiceName: string;
   hostEmail: string;
   paymentProvider: string;
@@ -67,6 +69,11 @@ export async function buildMatchFeeReceiptPdf(
       doc.text(`Location: ${data.postingLocation}`);
     }
     doc.text(`Confirmed locum: ${data.locumName}`);
+    if (data.replacedByLocumName) {
+      doc.text(
+        `Replacement: ${data.replacedByLocumName} replaced ${data.locumName}`,
+      );
+    }
     doc.moveDown();
 
     doc.fontSize(12).text('Amount', { underline: true });

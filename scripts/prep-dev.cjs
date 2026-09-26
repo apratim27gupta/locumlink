@@ -37,3 +37,23 @@ catch {
         '\n[prep-dev] Starting API + UI anyway…\n',
     );
 }
+
+try {
+    execSync('npx prisma generate --schema=database/prisma/schema.prisma', {
+        stdio: 'inherit',
+        cwd: root,
+        env: process.env,
+    });
+    execSync('node scripts/link-prisma-client.cjs', {
+        stdio: 'inherit',
+        cwd: root,
+        env: process.env,
+    });
+}
+catch {
+    console.warn(
+        '\n[prep-dev] prisma generate / link-prisma-client failed.',
+        '\n[prep-dev] Run: npm run prisma:generate',
+        '\n[prep-dev] Starting API + UI anyway…\n',
+    );
+}

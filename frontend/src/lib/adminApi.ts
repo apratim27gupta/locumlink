@@ -228,6 +228,8 @@ export type AdminMatchFeeInvoice = {
   createdAt: string;
   jobTitle: string;
   locumName: string;
+  replacedByLocumName?: string | null;
+  replacementApplicationId?: string | null;
   hostPracticeName: string;
   matchFeeReviewRequired: boolean;
   adminNotes: string | null;
@@ -235,6 +237,8 @@ export type AdminMatchFeeInvoice = {
   cancellationReason?: string | null;
   replacementStatus?: string | null;
   daysUntilStart: number | null;
+  postingCompleted?: boolean;
+  refundedCents?: number;
   statusGuide: AdminMatchFeeStatusGuide | null;
   timeline: AdminMatchFeeTimeline;
   events: MatchFeeInvoiceEventItem[];
@@ -311,6 +315,83 @@ export async function adminResolveMatchFeeRefund(
   return adminFetchJson(`/api/admin/match-fees/${encodeURIComponent(invoiceId)}/resolve-refund`, {
     method: 'POST',
     body: JSON.stringify({ adminNotes }),
+  });
+}
+
+export async function adminDiscretionaryMatchFeeRefund(
+  invoiceId: string,
+  params: { amountCents: 12500 | 25000; adminNotes?: string; ticketId?: string },
+): Promise<{ success: boolean }> {
+  return adminFetchJson(
+    `/api/admin/match-fees/${encodeURIComponent(invoiceId)}/discretionary-refund`,
+    {
+      method: 'POST',
+      body: JSON.stringify(params),
+    },
+  );
+}
+
+export async function adminAddMatchFeeNote(
+  invoiceId: string,
+  adminNotes: string,
+): Promise<{ success: boolean }> {
+  return adminFetchJson(
+    `/api/admin/match-fees/${encodeURIComponent(invoiceId)}/admin-note`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ adminNotes }),
+    },
+  );
+}
+
+export type AdminSupportTicket = {
+  id: string;
+  status: 'OPEN' | 'RESOLVED' | 'DISMISSED';
+  message: string;
+  adminNotes: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  jobPostingId: string;
+  jobTitle: string;
+  postingStatus: string;
+  hostProfileId: string;
+  hostPracticeName: string;
+  hostName: string;
+  hostEmail: string;
+  matchFeeInvoiceId: string | null;
+  invoice: {
+    id: string;
+    amountCents: number;
+    refundedCents: number;
+    status: string;
+    currency: string;
+    locumName?: string;
+    replacedByLocumName?: string | null;
+    remainingRefundableCents: number;
+    events?: Array<{
+      id: string;
+      eventType: string;
+      detail: string | null;
+      actor: string;
+      occurredAt: string;
+    }>;
+  } | null;
+};
+
+export async function adminListSupportTickets(status?: string): Promise<{
+  items: AdminSupportTicket[];
+}> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return adminFetchJson(`/api/admin/support-tickets${qs}`);
+}
+
+export async function adminResolveSupportTicket(
+  ticketId: string,
+  params: { status: 'RESOLVED' | 'DISMISSED'; adminNotes?: string },
+): Promise<{ success: boolean }> {
+  return adminFetchJson(`/api/admin/support-tickets/${encodeURIComponent(ticketId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(params),
   });
 }
 

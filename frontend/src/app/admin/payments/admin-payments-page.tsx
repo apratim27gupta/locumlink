@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import {
+  adminAddMatchFeeNote,
   adminClearMatchFeeReview,
+  adminDiscretionaryMatchFeeRefund,
   adminListMatchFees,
   adminMatchFeeSummary,
   adminResolveMatchFeeRefund,
@@ -21,6 +23,12 @@ import {
 import { MatchFeeEventTimeline } from '@/components/payments/MatchFeeEventTimeline';
 import { AdminMatchFeeRefundConfirmModal } from '@/components/payments/AdminMatchFeeRefundConfirmModal';
 
+type RefundConfirmState = {
+  invoice: AdminMatchFeeInvoice;
+  mode: 'policy' | 'discretionary' | 'no_replacement';
+  amountCents?: number;
+};
+
 export default function AdminPaymentsPage() {
   const [items, setItems] = useState<AdminMatchFeeInvoice[]>([]);
   const [statusGuide, setStatusGuide] = useState<AdminMatchFeeStatusGuide[]>([]);
@@ -32,10 +40,7 @@ export default function AdminPaymentsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [reminderMenuId, setReminderMenuId] = useState<string | null>(null);
-  const [refundConfirmInvoice, setRefundConfirmInvoice] =
-    useState<AdminMatchFeeInvoice | null>(null);
-  const [noReplacementConfirmInvoice, setNoReplacementConfirmInvoice] =
-    useState<AdminMatchFeeInvoice | null>(null);
+  const [refundConfirm, setRefundConfirm] = useState<RefundConfirmState | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,14 +87,30 @@ export default function AdminPaymentsPage() {
     await runAction(invoice.id, () => adminSendMatchFeeReminder(invoice.id, options));
   }
 
-  async function confirmAdminRefund() {
-    if (!refundConfirmInvoice) return;
-    const invoiceId = refundConfirmInvoice.id;
-    setBusyId(invoiceId);
+  async function confirmRefund(params: { notes: string; amountCents?: number }) {
+    if (!refundConfirm) return;
+    const { invoice, mode } = refundConfirm;
+    setBusyId(invoice.id);
     setError(null);
     try {
-      await adminResolveMatchFeeRefund(invoiceId);
-      setRefundConfirmInvoice(null);
+      if (mode === 'policy') {
+        await adminResolveMatchFeeRefund(invoice.id, params.notes || undefined);
+      } else if (mode === 'no_replacement') {
+        await adminSetMatchFeeReplacementStatus(
+          invoice.id,
+          'NOT_FOUND',
+          params.notes || undefined,
+        );
+      } else {
+        const amount = (params.amountCents ?? refundConfirm.amountCents) as
+          | 12500
+          | 25000;
+        await adminDiscretionaryMatchFeeRefund(invoice.id, {
+          amountCents: amount,
+          adminNotes: params.notes || undefined,
+        });
+      }
+      setRefundConfirm(null);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Refund failed.');
@@ -98,20 +119,12 @@ export default function AdminPaymentsPage() {
     }
   }
 
-  async function confirmNoReplacement() {
-    if (!noReplacementConfirmInvoice) return;
-    const invoiceId = noReplacementConfirmInvoice.id;
-    setBusyId(invoiceId);
-    setError(null);
-    try {
-      await adminSetMatchFeeReplacementStatus(invoiceId, 'NOT_FOUND');
-      setNoReplacementConfirmInvoice(null);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not mark no replacement.');
-    } finally {
-      setBusyId(null);
-    }
+  async function addNote(invoice: AdminMatchFeeInvoice) {
+    const notes = window.prompt('Add a note to this invoice history:');
+    if (notes == null) return;
+    const trimmed = notes.trim();
+    if (!trimmed) return;
+    await runAction(invoice.id, () => adminAddMatchFeeNote(invoice.id, trimmed));
   }
 
   const cardStyle: CSSProperties = {
@@ -139,7 +152,7 @@ export default function AdminPaymentsPage() {
                 ['OVERDUE', 'Overdue'],
                 ['PAID', 'Paid'],
                 ['REFUNDED', 'Refunded'],
-                ['PENDING_REPLACEMENT', 'Replacement'],
+                ['PENDING_REPLACEMENT', 'Replacement pending'],
               ] as const
             ).map(([key, label]) => (
               <div key={key} style={cardStyle}>
@@ -212,7 +225,7 @@ export default function AdminPaymentsPage() {
             <option value="PENDING">Pending</option>
             <option value="OVERDUE">Overdue</option>
             <option value="PAID">Paid</option>
-            <option value="PENDING_REPLACEMENT">Pending replacement</option>
+            <option value="PENDING_REPLACEMENT">Replacement pending</option>
             <option value="REFUNDED">Refunded</option>
             <option value="CANCELLED">Cancelled</option>
           </select>
@@ -254,8 +267,21 @@ export default function AdminPaymentsPage() {
                     <div style={{ fontWeight: 700 }}>{invoice.jobTitle}</div>
                     <div style={{ fontSize: 13, color: '#6B7280' }}>
                       {invoice.hostPracticeName}
-                      {invoice.hostEmail ? ` · ${invoice.hostEmail}` : ''} · {invoice.locumName}
+                      {invoice.hostEmail ? ` · ${invoice.hostEmail}` : ''}
                     </div>
+                    <div style={{ fontSize: 13, color: '#111827', marginTop: 6, fontWeight: 600 }}>
+                      Locum: {invoice.locumName}
+                    </div>
+                    {invoice.replacedByLocumName ? (
+                      <div style={{ fontSize: 13, color: '#374151', marginTop: 4 }}>
+                        {invoice.replacedByLocumName} replaced {invoice.locumName}
+                      </div>
+                    ) : invoice.replacementStatus === 'SEARCHING' ||
+                      invoice.status === 'PENDING_REPLACEMENT' ? (
+                      <div style={{ fontSize: 13, color: '#B45309', marginTop: 4 }}>
+                        Seeking replacement for {invoice.locumName}
+                      </div>
+                    ) : null}
                     {guide ? (
                       <div style={{ fontSize: 13, color: '#374151', marginTop: 8, lineHeight: 1.45 }}>
                         <strong>{guide.label}.</strong> {guide.summary}
@@ -372,7 +398,12 @@ export default function AdminPaymentsPage() {
                         type="button"
                         className="btn btn-secondary"
                         disabled={disabled}
-                        onClick={() => setNoReplacementConfirmInvoice(invoice)}
+                        onClick={() =>
+                          setRefundConfirm({
+                            invoice,
+                            mode: 'no_replacement',
+                          })
+                        }
                       >
                         No replacement
                       </button>
@@ -381,22 +412,74 @@ export default function AdminPaymentsPage() {
                   {invoice.status === 'PAID' ? (
                     (() => {
                       const eligibility = adminMatchFeeRefundEligibility(invoice);
+                      const remaining =
+                        invoice.amountCents - (invoice.refundedCents ?? 0);
+                      const postCompletion =
+                        invoice.postingCompleted === true && remaining > 0;
                       return (
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          disabled={disabled || !eligibility.allowed}
-                          title={eligibility.reason}
-                          onClick={() => {
-                            if (!eligibility.allowed) return;
-                            setRefundConfirmInvoice(invoice);
-                          }}
-                        >
-                          Refund to payment method
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={disabled || !eligibility.allowed}
+                            title={eligibility.reason}
+                            onClick={() => {
+                              if (!eligibility.allowed) return;
+                              setRefundConfirm({ invoice, mode: 'policy' });
+                            }}
+                          >
+                            Refund to payment method
+                          </button>
+                          {postCompletion ? (
+                            <>
+                              {remaining >= 12500 ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  disabled={disabled}
+                                  title="Post-completion refund ($125) — requires confirmation"
+                                  onClick={() =>
+                                    setRefundConfirm({
+                                      invoice,
+                                      mode: 'discretionary',
+                                      amountCents: 12500,
+                                    })
+                                  }
+                                >
+                                  Refund $125
+                                </button>
+                              ) : null}
+                              {remaining >= 25000 ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  disabled={disabled}
+                                  title="Post-completion refund ($250) — requires confirmation"
+                                  onClick={() =>
+                                    setRefundConfirm({
+                                      invoice,
+                                      mode: 'discretionary',
+                                      amountCents: 25000,
+                                    })
+                                  }
+                                >
+                                  Refund $250
+                                </button>
+                              ) : null}
+                            </>
+                          ) : null}
+                        </>
                       );
                     })()
                   ) : null}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={disabled}
+                    onClick={() => void addNote(invoice)}
+                  >
+                    Add note
+                  </button>
                   {invoice.matchFeeReviewRequired ? (
                     <button
                       type="button"
@@ -419,93 +502,16 @@ export default function AdminPaymentsPage() {
       </div>
 
       <AdminMatchFeeRefundConfirmModal
-        invoice={refundConfirmInvoice}
-        open={refundConfirmInvoice != null}
-        busy={busyId === refundConfirmInvoice?.id}
+        invoice={refundConfirm?.invoice ?? null}
+        open={refundConfirm != null}
+        busy={busyId === refundConfirm?.invoice.id}
+        mode={refundConfirm?.mode ?? 'policy'}
+        amountCents={refundConfirm?.amountCents}
         onClose={() => {
-          if (busyId !== refundConfirmInvoice?.id) setRefundConfirmInvoice(null);
+          if (busyId !== refundConfirm?.invoice.id) setRefundConfirm(null);
         }}
-        onConfirm={() => void confirmAdminRefund()}
+        onConfirm={(params) => void confirmRefund(params)}
       />
-
-      {noReplacementConfirmInvoice ? (
-        <div
-          role="presentation"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 10000,
-            background: 'rgba(15, 23, 42, 0.45)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-          }}
-          onMouseDown={(e) => {
-            if (
-              busyId !== noReplacementConfirmInvoice.id &&
-              e.target === e.currentTarget
-            ) {
-              setNoReplacementConfirmInvoice(null);
-            }
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="admin-no-replacement-title"
-            style={{
-              background: '#fff',
-              borderRadius: 12,
-              maxWidth: 480,
-              width: '100%',
-              padding: '22px 22px 18px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <h2
-              id="admin-no-replacement-title"
-              style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 700, color: '#111827' }}
-            >
-              No replacement found?
-            </h2>
-            <p style={{ margin: '0 0 8px', fontSize: 14, color: '#374151', lineHeight: 1.55 }}>
-              Locum cancelled within 14 days of start for{' '}
-              <strong>{noReplacementConfirmInvoice.jobTitle}</strong>. Per policy, if no
-              replacement is found, the host receives a refund of{' '}
-              <strong>
-                ${(noReplacementConfirmInvoice.amountCents / 100).toFixed(0)}{' '}
-                {noReplacementConfirmInvoice.currency}
-              </strong>
-              .
-            </p>
-            <p style={{ margin: '0 0 18px', fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
-              Confirm only after you have tried to find a replacement.
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={busyId === noReplacementConfirmInvoice.id}
-                onClick={() => setNoReplacementConfirmInvoice(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                disabled={busyId === noReplacementConfirmInvoice.id}
-                onClick={() => void confirmNoReplacement()}
-              >
-                {busyId === noReplacementConfirmInvoice.id
-                  ? 'Refunding…'
-                  : 'Confirm - refund host'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </AdminLayout>
   );
 }

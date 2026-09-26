@@ -1129,11 +1129,11 @@ export default function HostEditJobPage(props: {
     const todayIso = todayIsoDateLocal();
     if (scheduleKind === 'range') {
       if (startDateInput.trim() && !startIso) {
-        setErr('Start date must be a valid date in MM-DD-YYYY format.');
+        setErr('Start date must be a valid date in dd-mm-yyyy format.');
         throw new Error('validation');
       }
       if (endDateInput.trim() && !endIso) {
-        setErr('End date must be a valid date in MM-DD-YYYY format.');
+        setErr('End date must be a valid date in dd-mm-yyyy format.');
         throw new Error('validation');
       }
     }
@@ -1285,11 +1285,11 @@ export default function HostEditJobPage(props: {
           throw new Error('validation');
         }
         if (!startIso) {
-          setErr('Start date must be a valid date in MM-DD-YYYY format.');
+          setErr('Start date must be a valid date in dd-mm-yyyy format.');
           throw new Error('validation');
         }
         if (!endIso) {
-          setErr('End date must be a valid date in MM-DD-YYYY format.');
+          setErr('End date must be a valid date in dd-mm-yyyy format.');
           throw new Error('validation');
         }
         if (!startTime.trim() || !slotKind) {

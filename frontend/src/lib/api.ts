@@ -1258,6 +1258,22 @@ export const hostApi = {
         }
         return res.json() as Promise<{ success: boolean }>;
     },
+    createSupportTicket: async (params: {
+        jobPostingId: string;
+        message: string;
+        matchFeeInvoiceId: string;
+    }): Promise<{ success: boolean; ticket: { id: string } }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/host/support-tickets`, {
+            method: 'POST',
+            headers: nestHeaders(true),
+            body: JSON.stringify(params),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Submitting ticket');
+        }
+        return res.json() as Promise<{ success: boolean; ticket: { id: string } }>;
+    },
 };
 export type MatchFeeInvoiceStatus =
     | 'PENDING'
@@ -1287,7 +1303,16 @@ export type MatchFeeInvoice = {
     jobTitle: string;
     postingLocation: string | null;
     postingScheduleLabel: string | null;
+    /** Posting ended / COMPLETED — host may raise a support ticket. */
+    postingCompleted?: boolean;
+    /** Existing host ticket for this invoice (at most one). */
+    supportTicket?: { id: string; status: string } | null;
+    refundedCents?: number;
+    /** Original confirmed locum this invoice was created for. */
     locumName: string;
+    /** Locum who accepted as replacement (when applicable). */
+    replacedByLocumName?: string | null;
+    replacementApplicationId?: string | null;
     daysUntilStart: number | null;
     events: MatchFeeInvoiceEvent[];
 };

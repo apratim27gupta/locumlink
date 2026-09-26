@@ -73,7 +73,7 @@ export function MatchFeePolicyBody({ policy, listStyle }: MatchFeePolicyBodyProp
       </ul>
 
       <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 8 }}>
-        Cancellation
+        Cancellation &amp; after completion
       </div>
       <ol
         style={{
@@ -268,7 +268,7 @@ export function adminMatchFeeRefundEligibility(invoice: {
     return {
       allowed: false,
       reason:
-        'Host cancelled within 14 days of start - the match fee is non-refundable if already paid.',
+        'Host cancelled within 14 days of start - the match fee is non-refundable.',
     };
   }
 

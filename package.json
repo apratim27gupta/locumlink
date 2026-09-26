@@ -35,7 +35,7 @@
     "dev:frontend:webpack": "npm run dev:webpack -w frontend",
     "dev:frontend:clean": "npm run dev:clean -w frontend",
     "dev:frontend:3002": "npm run dev:3002 -w frontend",
-    "prisma:generate": "prisma generate --schema=database/prisma/schema.prisma",
+    "prisma:generate": "prisma generate --schema=database/prisma/schema.prisma && node scripts/link-prisma-client.cjs",
     "prisma:migrate": "prisma migrate dev --schema=database/prisma/schema.prisma",
     "prisma:studio": "prisma studio --schema=database/prisma/schema.prisma",
     "db:up": "docker compose up -d",

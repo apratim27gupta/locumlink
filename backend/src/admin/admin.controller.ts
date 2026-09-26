@@ -26,6 +26,7 @@ import { CurrentAdmin } from '../admin-auth/decorators/current-admin.decorator.j
 import type { AdminJwtPayload } from '../admin-auth/admin-auth.types.js';
 import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
 import { FeedbackService } from '../feedback/feedback.service.js';
+import { SupportTicketsService } from '../support-tickets/support-tickets.service.js';
 import { AdminService } from './admin.service.js';
 import { AdminReportActionDto } from './dto/admin-report-action.dto.js';
 import { AdminRemindUserDto } from './dto/admin-remind-user.dto.js';
@@ -34,6 +35,7 @@ import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
 import { PaymentsService } from '../payments/payments.service.js';
 import {
+  AdminDiscretionaryRefundDto,
   AdminOverrideDto,
   AdminReplacementStatusDto,
   AdminResolveRefundDto,
@@ -50,6 +52,7 @@ export class AdminController {
     private readonly adminNotifications: AdminNotificationsService,
     private readonly feedback: FeedbackService,
     private readonly payments: PaymentsService,
+    private readonly supportTickets: SupportTicketsService,
   ) {}
 
   @Get('stats')
@@ -149,6 +152,27 @@ export class AdminController {
   @Get('feedback')
   async listFeedback() {
     return this.feedback.listForAdmin();
+  }
+
+  @Get('support-tickets')
+  async listSupportTickets(@Query('status') status?: string) {
+    return this.supportTickets.listForAdmin(status);
+  }
+
+  @Patch('support-tickets/:id')
+  @HttpCode(HttpStatus.OK)
+  async resolveSupportTicket(
+    @Param('id') id: string,
+    @Body() body: { status?: 'RESOLVED' | 'DISMISSED'; adminNotes?: string },
+  ) {
+    const status = body?.status;
+    if (status !== 'RESOLVED' && status !== 'DISMISSED') {
+      throw new BadRequestException('status must be RESOLVED or DISMISSED');
+    }
+    return this.supportTickets.resolveTicket(id, {
+      status,
+      adminNotes: body.adminNotes,
+    });
   }
 
   @Get('reports/:id')
@@ -366,6 +390,31 @@ export class AdminController {
     @Body() dto: AdminResolveRefundDto,
   ) {
     return this.payments.resolveRefund(id, dto.adminNotes);
+  }
+
+  @Post('match-fees/:id/discretionary-refund')
+  @HttpCode(HttpStatus.OK)
+  async discretionaryMatchFeeRefund(
+    @Param('id') id: string,
+    @Body() dto: AdminDiscretionaryRefundDto,
+  ) {
+    return this.payments.discretionaryRefund(id, {
+      amountCents: dto.amountCents,
+      adminNotes: dto.adminNotes,
+      ticketId: dto.ticketId,
+    });
+  }
+
+  @Post('match-fees/:id/admin-note')
+  @HttpCode(HttpStatus.OK)
+  async addMatchFeeAdminNote(
+    @Param('id') id: string,
+    @Body() dto: AdminWriteOffDto,
+  ) {
+    if (!dto.adminNotes?.trim()) {
+      throw new BadRequestException('Notes are required.');
+    }
+    return this.payments.addAdminNote(id, dto.adminNotes);
   }
 
   @Post('match-fees/:id/replacement-status')

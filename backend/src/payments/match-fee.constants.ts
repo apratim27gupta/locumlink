@@ -16,6 +16,20 @@ export const MATCH_FEE_ESCALATION_DAYS_AFTER_DUE = 30;
 
 export type MatchFeeTier = 'HALF' | 'FULL';
 
+/**
+ * Postings created (platform calendar day) before MATCH_FEE_START_DATE
+ * (YYYY-MM-DD) are grandfathered and never invoiced. Unset or invalid means
+ * every posting is invoiced.
+ */
+export function isPostingGrandfatheredFromMatchFee(
+  postingCreatedDay: string,
+  startDate: string | undefined = process.env.MATCH_FEE_START_DATE,
+): boolean {
+  const start = startDate?.trim();
+  if (!start || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return false;
+  return postingCreatedDay < start;
+}
+
 /** $125 if total claimed hours <= 3.5, else $250. */
 export function computeMatchFeeAmountCents(totalHours: number): number {
   if (!Number.isFinite(totalHours) || totalHours <= HALF_SLOT_HOURS) {
@@ -60,7 +74,7 @@ export const MATCH_FEE_POLICY = {
     {
       id: 'host_late_cancel',
       summary:
-        'Host cancels within 14 days of start - the match fee is non-refundable if already paid.',
+        'Host cancels within 14 days of start - the match fee is non-refundable.',
     },
     {
       id: 'locum_late_cancel',
@@ -70,7 +84,12 @@ export const MATCH_FEE_POLICY = {
     {
       id: 'locum_late_cancel_replacement_fee',
       summary:
-        'A replacement locum who accepts generates a new match fee invoice.',
+        'When a replacement locum accepts, the original paid match fee stands - no second invoice.',
+    },
+    {
+      id: 'post_completion_tickets',
+      summary:
+        'Match fees stay as invoiced, during the placement. After the last shift on that invoice, you can raise a ticket about any concerns and LocumLink will follow up.',
     },
     {
       id: 'overdue_escalation',

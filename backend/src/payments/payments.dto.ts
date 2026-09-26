@@ -1,4 +1,5 @@
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
+import { MATCH_FEE_FULL_CENTS, MATCH_FEE_HALF_CENTS } from './match-fee.constants.js';
 
 export class CancelMatchDto {
   @IsOptional()
@@ -52,4 +53,20 @@ export class AdminSendReminderDto {
 
   @IsBoolean()
   sendNotification!: boolean;
+}
+
+/** Post-completion discretionary refund: $125 or $250 (cents). */
+export class AdminDiscretionaryRefundDto {
+  @IsInt()
+  @IsIn([MATCH_FEE_HALF_CENTS, MATCH_FEE_FULL_CENTS])
+  amountCents!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  adminNotes?: string;
+
+  @IsOptional()
+  @IsString()
+  ticketId?: string;
 }

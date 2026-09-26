@@ -4,7 +4,7 @@ import type {
   MatchFeeInvoiceEvent,
   MatchFeeInvoiceEventActor,
   MatchFeeInvoiceEventType,
-} from '@prisma/client';
+} from '../prisma/prisma-client.js';
 
 export type MatchFeeInvoiceEventDto = {
   id: string;
@@ -29,6 +29,8 @@ const EVENT_LABELS: Record<MatchFeeInvoiceEventType, string> = {
   ADMIN_NOTE: 'Admin update',
   POSTING_REMOVED: 'Job posting removed',
   FEE_NON_REFUNDABLE: 'Fee retained (no refund per policy)',
+  TICKET_OPENED: 'Host ticket opened',
+  TICKET_RESOLVED: 'Host ticket closed',
 };
 
 /** Normalize user-facing detail text (legacy rows may still contain em dashes). */

@@ -171,6 +171,8 @@ enum MatchFeeInvoiceEventType {
   ADMIN_NOTE
   POSTING_REMOVED
   FEE_NON_REFUNDABLE
+  TICKET_OPENED
+  TICKET_RESOLVED
 }
 
 enum MatchFeeInvoiceEventActor {
@@ -178,6 +180,12 @@ enum MatchFeeInvoiceEventActor {
   HOST
   LOCUM
   ADMIN
+}
+
+enum SupportTicketStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
 }
 
 model User {
@@ -331,6 +339,7 @@ model HostProfile {
 
   postings                JobPosting[]
   matchFeeInvoices        MatchFeeInvoice[]
+  supportTickets          SupportTicket[]
 
   @@map("host_profiles")
 }
@@ -395,6 +404,7 @@ model JobPosting {
   applications          Application[]
   messages              Message[]
   matchFeeInvoices      MatchFeeInvoice[]
+  supportTickets        SupportTicket[]
 
   @@index([status, id], map: "job_postings_status_id_idx")
   @@map("job_postings")
@@ -461,9 +471,14 @@ model Application {
   placedAt        DateTime?         @map("placed_at")
 
   matchFeeInvoice MatchFeeInvoice?
+  /** Invoices where this application was accepted as the replacement locum. */
+  matchFeeInvoicesAsReplacement MatchFeeInvoice[] @relation("MatchFeeInvoiceReplacement")
   shiftClaims     ApplicationShiftClaim[]
 
-  @@unique([jobPostingId, locumProfileId])
+  // Active uniqueness (status <> WITHDRAWN) is enforced by a partial unique index
+  // in SQL — see migration applications_active_unique. Withdrawn rows can coexist
+  // so re-apply creates a new application instead of updating the withdrawn one.
+  @@index([jobPostingId, locumProfileId], map: "applications_jobPostingId_locumProfileId_idx")
   @@index([jobPostingId, id], map: "applications_job_posting_id_id_idx")
   @@index([locumProfileId, id], map: "applications_locum_profile_id_id_idx")
   @@map("applications")
@@ -760,20 +775,26 @@ model MatchFeeInvoice {
   cancellationReason String?                   @map("cancellation_reason") @db.Text
   refundResolution   MatchFeeRefundResolution  @default(NONE) @map("refund_resolution")
   replacementStatus  MatchFeeReplacementStatus @default(NONE) @map("replacement_status")
+  /** Application that accepted as the replacement for the original invoiced locum. */
+  replacementApplicationId String? @unique @map("replacement_application_id")
   adminNotes         String?                   @map("admin_notes") @db.Text
   escalatedAt        DateTime?                 @map("escalated_at")
   paymentProvider    MatchFeePaymentProvider   @default(MOCK) @map("payment_provider")
   stripeCheckoutSessionId String?              @map("stripe_checkout_session_id")
   stripePaymentIntentId   String?              @map("stripe_payment_intent_id")
   stripeRefundId          String?              @map("stripe_refund_id")
+  /** Cents already refunded (supports $125 partial on a $250 invoice). */
+  refundedCents      Int                       @default(0) @map("refunded_cents")
   lastReminderAt     DateTime?                 @map("last_reminder_at")
   createdAt          DateTime                  @default(now()) @map("created_at")
   updatedAt          DateTime                  @updatedAt @map("updated_at")
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  replacementApplication Application? @relation("MatchFeeInvoiceReplacement", fields: [replacementApplicationId], references: [id], onDelete: SetNull)
   hostProfile HostProfile @relation(fields: [hostProfileId], references: [id], onDelete: Cascade)
   jobPosting  JobPosting  @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
   events      MatchFeeInvoiceEvent[]
+  supportTicket SupportTicket?
 
   @@index([hostProfileId, status])
   @@index([status, dueAt])
@@ -793,4 +814,27 @@ model MatchFeeInvoiceEvent {
 
   @@index([invoiceId, occurredAt])
   @@map("match_fee_invoice_events")
+}
+
+/** Host issues raised after a posting is completed; admin reviews and may refund. One per invoice. */
+model SupportTicket {
+  id                String              @id @default(cuid())
+  hostProfileId     String              @map("host_profile_id")
+  jobPostingId      String              @map("job_posting_id")
+  matchFeeInvoiceId String              @unique @map("match_fee_invoice_id")
+  message           String              @db.VarChar(2000)
+  status            SupportTicketStatus @default(OPEN)
+  adminNotes        String?             @map("admin_notes") @db.Text
+  resolvedAt        DateTime?           @map("resolved_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  hostProfile     HostProfile     @relation(fields: [hostProfileId], references: [id], onDelete: Cascade)
+  jobPosting      JobPosting      @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  matchFeeInvoice MatchFeeInvoice @relation(fields: [matchFeeInvoiceId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([hostProfileId, createdAt])
+  @@index([jobPostingId])
+  @@map("support_tickets")
 }
