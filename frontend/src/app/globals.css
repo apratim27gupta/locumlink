@@ -3197,8 +3197,13 @@ body.app-body {
     padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   }
 
-  .host-applicant-detail-resize-handle {
+  .host-applicant-detail-resize-handle,
+  .resizable-drawer-handle {
     display: none !important;
+  }
+
+  .resizable-drawer-panel {
+    width: 100vw !important;
   }
 
   .host-quick-message-panel {
@@ -4312,4 +4317,10 @@ main.dash-main-content {
     flex-shrink: 0 !important;
     gap: 8px !important;
   }
+}
+
+.resizable-drawer-handle:hover,
+.host-applicant-detail-resize-handle:hover,
+.host-job-post-panel-resize-handle:hover {
+  background: rgba(59, 79, 216, 0.12) !important;
 }

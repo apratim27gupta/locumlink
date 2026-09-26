@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { Fragment } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { JobScheduleDates } from '@/components/JobScheduleDates';
@@ -14,6 +15,13 @@ import { jobPostedAtIso, relativeHoursOrDaysAgo, toLocalDateTime } from '@/lib/r
 const LOGO_TEAL = '#309BB7';
 const LOGO_TEAL_BG = 'rgba(48, 155, 183, 0.14)';
 const LOGO_TEAL_BORDER = 'rgba(48, 155, 183, 0.28)';
+
+const responsibilityListStyle: CSSProperties = {
+  listStyleType: 'disc',
+  listStylePosition: 'outside',
+  paddingLeft: 20,
+  margin: 0,
+};
 
 /** Cosmetic blur for host-identifying details shown to logged-out visitors. */
 function LockedUntilSignIn({ children }: { children: ReactNode }) {
@@ -264,15 +272,38 @@ export function LocumBrowseJobDetail({
             wordBreak: 'break-word',
           }}
         >
-          {job.hostProfile.city}, {job.hostProfile.province} ·{' '}
-          <span
-            title={toLocalDateTime(jobPostedAtIso(job))}
-            style={{ cursor: 'help', borderBottom: '1px dotted currentColor' }}
-          >
-            {relativeHoursOrDaysAgo(jobPostedAtIso(job))}
-          </span>{' '}
-          · {job.applicationsCount} applicant
-          {job.applicationsCount !== 1 ? 's' : ''}
+          {(() => {
+            const location = [job.hostProfile.city, job.hostProfile.province]
+              .map((s) => s?.trim())
+              .filter(Boolean)
+              .join(', ');
+            const postedIso = jobPostedAtIso(job);
+            const postedAgo = relativeHoursOrDaysAgo(postedIso);
+            const parts: ReactNode[] = [];
+            if (location) parts.push(location);
+            if (postedAgo) {
+              parts.push(
+                <span
+                  title={toLocalDateTime(postedIso)}
+                  style={{
+                    cursor: 'help',
+                    borderBottom: '1px dotted currentColor',
+                  }}
+                >
+                  {postedAgo}
+                </span>,
+              );
+            }
+            parts.push(
+              `${job.applicationsCount} applicant${job.applicationsCount !== 1 ? 's' : ''}`,
+            );
+            return parts.map((part, i) => (
+              <Fragment key={i}>
+                {i > 0 ? ' · ' : null}
+                {part}
+              </Fragment>
+            ));
+          })()}
         </p>
 
         <div
@@ -544,7 +575,7 @@ export function LocumBrowseJobDetail({
                         >
                           {section.title}
                         </div>
-                        <ul style={{ paddingLeft: 16, margin: 0 }}>
+                        <ul style={responsibilityListStyle}>
                           {section.items.map((item) => (
                             <li
                               key={item}
@@ -573,7 +604,7 @@ export function LocumBrowseJobDetail({
                         >
                           Other
                         </div>
-                        <ul style={{ paddingLeft: 16, margin: 0 }}>
+                        <ul style={responsibilityListStyle}>
                           {grouped.other.map((item) => (
                             <li
                               key={item}

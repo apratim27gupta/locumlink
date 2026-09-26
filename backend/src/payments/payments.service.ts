@@ -723,7 +723,7 @@ export class PaymentsService {
 
   async listHostInvoices(
     userId: string,
-    query: { cursor?: string; limit?: number; status?: string },
+    query: { cursor?: string; limit?: number; status?: string; jobPostingId?: string },
   ) {
     const hostProfile = await this.prisma.hostProfile.findUnique({
       where: { userId },
@@ -736,6 +736,7 @@ export class PaymentsService {
     const limit = Math.min(Math.max(query.limit ?? 20, 1), 50);
     const where: Prisma.MatchFeeInvoiceWhereInput = {
       hostProfileId: hostProfile.id,
+      ...(query.jobPostingId ? { jobPostingId: query.jobPostingId } : {}),
       ...(query.status &&
       [
         'PENDING',
@@ -864,14 +865,17 @@ export class PaymentsService {
     });
     if (!app) return;
 
+    // A replacement locum has no invoice of their own; they are covered by the
+    // original invoice they replaced, so their cancellation reopens that one.
     const invoice = await this.prisma.matchFeeInvoice.findFirst({
       where: {
-        jobPostingId: app.jobPostingId,
+        OR: [{ applicationId: app.id }, { replacementApplicationId: app.id }],
         status: { in: ['PENDING', 'OVERDUE', 'PAID', 'PENDING_REPLACEMENT'] },
       },
       orderBy: { createdAt: 'desc' },
     });
     if (!invoice) return;
+    const cancelledByReplacement = invoice.replacementApplicationId === app.id;
 
     if (['PAID', 'CANCELLED', 'REFUNDED', 'CREDITED'].includes(invoice.status)) {
       if (invoice.status === 'PAID' && params.cancelledBy !== 'ADMIN') {
@@ -938,6 +942,7 @@ export class PaymentsService {
         cancellationReason: policy.reason,
         refundResolution: policy.refundResolution,
         replacementStatus: policy.replacementStatus,
+        ...(cancelledByReplacement ? { replacementApplicationId: null } : {}),
       },
     });
 

@@ -688,6 +688,7 @@ export class HostService {
             date: s.date,
             startTime: s.startTime ?? '',
             slotKind: s.slotKind as 'HALF' | 'FULL',
+            endTime: s.endTime ?? null,
           })),
           { allowPast: saveAsDraft },
         );
@@ -1066,6 +1067,7 @@ export class HostService {
               date: s.date,
               startTime: s.startTime ?? '',
               slotKind: s.slotKind as 'HALF' | 'FULL',
+              endTime: s.endTime ?? null,
             }))
           : coerceShiftsWithSlotKind(dto.shifts);
         const parsed = parseJobShiftsSlots(slotShifts, {

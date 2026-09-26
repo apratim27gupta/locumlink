@@ -1,4 +1,5 @@
 'use client';
+import { showConfirm } from '@/components/ui/AppDialog';
 import {
   useEffect,
   useState,
@@ -571,9 +572,14 @@ export default function LocumBrowsePage(props: {
   async function handleWithdraw(app: MyApplication) {
     if (!canMutateApplicationBeforeOngoing(app)) return;
     if (
-      !window.confirm(
-        'Withdraw this application? The host will be notified. You can apply again later if the posting is still open.',
-      )
+      !(await showConfirm({
+        title: 'Withdraw application?',
+        message:
+          'The host will be notified. You can apply again later if the posting is still open.',
+        confirmLabel: 'Withdraw',
+        cancelLabel: 'Keep application',
+        tone: 'danger',
+      }))
     ) {
       return;
     }
@@ -1116,19 +1122,28 @@ export default function LocumBrowsePage(props: {
                       Posting removed
                     </span>
                   ) : null}
-                  <div
-                    style={{
-                      fontFamily: 'Inter, sans-serif',
-                      fontSize: 'var(--font-body)',
-                      fontWeight: 'var(--font-weight-normal)',
-                      lineHeight: '150%',
-                      color: removed ? BROWSE_REMOVED_MUTED : 'var(--text-muted)',
-                      textTransform: 'capitalize',
-                      marginBottom: 4,
-                    }}
-                  >
-                    {j.hostProfile.city}, {j.hostProfile.province}
-                  </div>
+                  {(() => {
+                    const location = [j.hostProfile.city, j.hostProfile.province]
+                      .map((s) => s?.trim())
+                      .filter(Boolean)
+                      .join(', ');
+                    if (!location) return null;
+                    return (
+                      <div
+                        style={{
+                          fontFamily: 'Inter, sans-serif',
+                          fontSize: 'var(--font-body)',
+                          fontWeight: 'var(--font-weight-normal)',
+                          lineHeight: '150%',
+                          color: removed ? BROWSE_REMOVED_MUTED : 'var(--text-muted)',
+                          textTransform: 'capitalize',
+                          marginBottom: 4,
+                        }}
+                      >
+                        {location}
+                      </div>
+                    );
+                  })()}
                   {(getJobScheduleMode(j) !== 'none') && (() => {
                     let label: string;
                     if (getJobScheduleMode(j) === 'list') {

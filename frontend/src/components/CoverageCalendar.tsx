@@ -24,8 +24,8 @@ type Stage = 'accepted' | 'confirmed' | 'shortlisted' | 'applied';
 /** Chip/legend styles — workflow order in legend: applied → shortlisted → confirmed → accepted. */
 const STAGE_STYLE: Record<Stage, { bg: string; color: string; label: string }> = {
   applied: {
-    bg: '#F3F4F6',
-    color: '#4B5563',
+    bg: '#E0F2FE',
+    color: '#0369A1',
     label: 'Locum applied',
   },
   shortlisted: {
@@ -60,6 +60,59 @@ function stageOf(a: CoverageApplicant): Stage | null {
   if (a.status === 'CONFIRMED') return 'confirmed';
   if (a.status === 'SHORTLISTED') return 'shortlisted';
   return 'applied';
+}
+
+/** covered: a locum accepted · pending: applicants but none accepted · gap: nobody applied. */
+type CellState = 'covered' | 'pending' | 'gap';
+
+function cellState(entries: { stage: Stage }[]): CellState {
+  if (entries.some((x) => x.stage === 'accepted')) return 'covered';
+  return entries.length > 0 ? 'pending' : 'gap';
+}
+
+const CELL_STYLE: Record<CellState, { border: string; bg: string }> = {
+  covered: { border: '#A7F3D0', bg: '#F0FDF4' },
+  pending: { border: '#E5E7EB', bg: '#fff' },
+  gap: { border: '#FECACA', bg: '#FEF2F2' },
+};
+
+/** Worst state wins so a day with any unfilled slot still stands out. */
+function dayState(states: CellState[]): CellState {
+  if (states.includes('gap')) return 'gap';
+  if (states.includes('pending')) return 'pending';
+  return 'covered';
+}
+
+function GapLabel() {
+  return <span style={{ fontSize: 11, color: '#B91C1C', fontWeight: 600 }}>No applicants</span>;
+}
+
+function CoverageLegend() {
+  return (
+    <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
+      {LEGEND_STAGE_ORDER.map((s) => (
+        <span
+          key={s}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6B7280' }}
+        >
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: STAGE_STYLE[s].color }} />
+          {STAGE_STYLE[s].label}
+        </span>
+      ))}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#B91C1C' }}>
+        <span
+          style={{
+            width: 9,
+            height: 9,
+            borderRadius: 2,
+            background: CELL_STYLE.gap.bg,
+            border: '1px solid #F87171',
+          }}
+        />
+        Gap (no locum applied)
+      </span>
+    </div>
+  );
 }
 
 function initials(name: string): string {
@@ -186,20 +239,18 @@ export function CoverageCalendar({
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
           {daySegs.map((day) => {
             const [, mo, dayNum] = day.date.split('-');
-            const anyAccepted = day.segments.some((seg) =>
-              (byShift.get(seg.shiftId) ?? []).some((x) => x.stage === 'accepted'),
-            );
-            const allAccepted = day.segments.every((seg) =>
-              (byShift.get(seg.shiftId) ?? []).some((x) => x.stage === 'accepted'),
-            );
+            const dayStyle =
+              CELL_STYLE[
+                dayState(day.segments.map((seg) => cellState(byShift.get(seg.shiftId) ?? [])))
+              ];
             return (
               <div
                 key={day.date}
                 style={{
                   minWidth: day.segments.length > 1 ? 110 : 92,
                   flexShrink: 0,
-                  border: `1px solid ${allAccepted ? '#A7F3D0' : anyAccepted ? '#FDE68A' : '#FED7AA'}`,
-                  background: allAccepted ? '#F0FDF4' : '#FFFBF5',
+                  border: `1px solid ${dayStyle.border}`,
+                  background: dayStyle.bg,
                   borderRadius: 8,
                   padding: 8,
                   display: 'flex',
@@ -212,7 +263,6 @@ export function CoverageCalendar({
                 </div>
                 {day.segments.map((seg) => {
                   const entries = byShift.get(seg.shiftId) ?? [];
-                  const slotCovered = entries.some((x) => x.stage === 'accepted');
                   return (
                     <div
                       key={seg.shiftId}
@@ -235,10 +285,8 @@ export function CoverageCalendar({
                             : ''}
                         </div>
                       ) : null}
-                      {!slotCovered && entries.length === 0 ? (
-                        <span style={{ fontSize: 11, color: '#9A3412', fontWeight: 600 }}>Gap</span>
-                      ) : entries.length === 0 ? (
-                        <span style={{ fontSize: 11, color: '#9A3412', fontWeight: 600 }}>Gap</span>
+                      {entries.length === 0 ? (
+                        <GapLabel />
                       ) : (
                         entries.map(({ a, stage }) => (
                           <ApplicantChip key={`${seg.shiftId}-${a.id}`} a={a} stage={stage} />
@@ -251,29 +299,7 @@ export function CoverageCalendar({
             );
           })}
         </div>
-        <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
-          {LEGEND_STAGE_ORDER.map((s) => (
-            <span
-              key={s}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6B7280' }}
-            >
-              <span style={{ width: 9, height: 9, borderRadius: '50%', background: STAGE_STYLE[s].color }} />
-              {STAGE_STYLE[s].label}
-            </span>
-          ))}
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#9A3412' }}>
-            <span
-              style={{
-                width: 9,
-                height: 9,
-                borderRadius: 2,
-                background: '#FED7AA',
-                border: '1px solid #F59E0B',
-              }}
-            />
-            Gap (no accepted locum on slot)
-          </span>
-        </div>
+        <CoverageLegend />
       </div>
     );
   }
@@ -328,7 +354,7 @@ export function CoverageCalendar({
       <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
         {postingDays.map((d) => {
           const entries = byDay.get(d) ?? [];
-          const dayCovered = entries.some((x) => x.stage === 'accepted');
+          const dayStyle = CELL_STYLE[cellState(entries)];
           const [, mo, day] = d.split('-');
           return (
             <div
@@ -336,8 +362,8 @@ export function CoverageCalendar({
               style={{
                 minWidth: 92,
                 flexShrink: 0,
-                border: `1px solid ${dayCovered ? '#A7F3D0' : '#FED7AA'}`,
-                background: dayCovered ? '#F0FDF4' : '#FFFBF5',
+                border: `1px solid ${dayStyle.border}`,
+                background: dayStyle.bg,
                 borderRadius: 8,
                 padding: 8,
                 display: 'flex',
@@ -349,7 +375,7 @@ export function CoverageCalendar({
                 {formatSpecificDate(d).replace(/,.*$/, '') || `${mo}-${day}`}
               </div>
               {entries.length === 0 ? (
-                <span style={{ fontSize: 11, color: '#9A3412', fontWeight: 600 }}>Gap</span>
+                <GapLabel />
               ) : (
                 entries.map(({ a, stage }) => <ApplicantChip key={a.id} a={a} stage={stage} />)
               )}
@@ -357,29 +383,7 @@ export function CoverageCalendar({
           );
         })}
       </div>
-      <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
-        {LEGEND_STAGE_ORDER.map((s) => (
-          <span
-            key={s}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6B7280' }}
-          >
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: STAGE_STYLE[s].color }} />
-            {STAGE_STYLE[s].label}
-          </span>
-        ))}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#9A3412' }}>
-          <span
-            style={{
-              width: 9,
-              height: 9,
-              borderRadius: 2,
-              background: '#FED7AA',
-              border: '1px solid #F59E0B',
-            }}
-          />
-          Gap (no accepted locum)
-        </span>
-      </div>
+      <CoverageLegend />
     </div>
   );
 }

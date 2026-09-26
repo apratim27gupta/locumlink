@@ -1,4 +1,5 @@
 'use client';
+import { showAlert } from '@/components/ui/AppDialog';
 import { ReactNode, useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
@@ -523,7 +524,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             window.location.replace('/');
         }
         catch (err) {
-            window.alert(err instanceof Error
+            void showAlert(err instanceof Error
                 ? err.message
                 : 'Could not deactivate your account. Try again.');
         }
@@ -544,6 +545,13 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 dismissedNotifIdsRef.current.delete(notif.id);
                 void fetchNotifications();
             });
+    }
+    function markAllNotifsRead() {
+        setNotifications((prev) => prev.map((n) => (n.read === true ? n : { ...n, read: true })));
+        setNotifTotal(0);
+        void notificationsApi.markAllRead().catch(() => {
+            void fetchNotifications();
+        });
     }
     function notificationHref(notif: NotificationItem): string | null {
         return resolveNotificationAction(notif).href;
@@ -814,8 +822,22 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                   <span style={{ fontSize: 'var(--font-heading)', fontWeight: 'var(--font-weight-bold)', color: '#0f1523' }}>
                     Notifications
                   </span>
-                  {notifTotal > 0 && (<span style={{ fontSize: 'var(--font-small)', color: '#6B7280' }}>
-                      {notifTotal} unread
+                  {notifTotal > 0 && (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 'var(--font-small)', color: '#6B7280' }}>
+                        {notifTotal} unread
+                      </span>
+                      <button type="button" onClick={markAllNotifsRead} style={{
+                    border: 'none',
+                    background: 'none',
+                    padding: 0,
+                    fontSize: 'var(--font-small)',
+                    fontWeight: 600,
+                    color: '#1522A6',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                }}>
+                        Mark all as read
+                      </button>
                     </span>)}
                 </div>
 
@@ -968,7 +990,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 return;
             const maxBytes = 5 * 1024 * 1024;
             if (file.size > maxBytes) {
-                window.alert('Image must be 5 MB or smaller.');
+                void showAlert('Image must be 5 MB or smaller.');
                 return;
             }
             setAvatarUploadBusy(true);
@@ -980,7 +1002,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     setAvatarMenuOpen(false);
                 }
                 catch (err) {
-                    window.alert(err instanceof Error
+                    void showAlert(err instanceof Error
                         ? err.message
                         : 'Could not upload photo.');
                 }
@@ -1182,7 +1204,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                             setAvatarMenuOpen(false);
                           }
                           catch (err) {
-                            window.alert(err instanceof Error
+                            void showAlert(err instanceof Error
                               ? err.message
                               : 'Could not remove profile photo.');
                           }

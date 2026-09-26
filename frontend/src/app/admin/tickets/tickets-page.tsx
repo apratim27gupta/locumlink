@@ -196,12 +196,17 @@ export default function AdminTicketsPage() {
               >
                 <div style={{ fontWeight: 700 }}>{ticket.jobTitle}</div>
                 <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
-                  {ticket.hostPracticeName}
-                  {ticket.hostEmail ? ` · ${ticket.hostEmail}` : ''} · {fmtDate(ticket.createdAt)} ·{' '}
-                  {ticket.status}
-                  {ticket.matchFeeInvoiceId
-                    ? ` · invoice …${ticket.matchFeeInvoiceId.slice(-6)}`
-                    : ''}
+                  {[
+                    ticket.hostPracticeName?.trim(),
+                    ticket.hostEmail,
+                    fmtDate(ticket.createdAt),
+                    ticket.status,
+                    ticket.matchFeeInvoiceId
+                      ? `invoice …${ticket.matchFeeInvoiceId.slice(-6)}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </div>
                 {ticket.invoice?.locumName ? (
                   <div style={{ fontSize: 13, color: '#111827', marginTop: 6, fontWeight: 600 }}>

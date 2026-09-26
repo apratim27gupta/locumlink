@@ -1,10 +1,12 @@
 'use client';
+import { showAlert } from '@/components/ui/AppDialog';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import DashLayout from '@/components/DashLayout';
 import { hostApi, messageApi, normalizeHostJob, type ApplicationRecord, type Job } from '@/lib/api';
+import { ApplicationInvoiceCell, usePostingInvoices } from '@/components/payments/ApplicationInvoiceCell';
 import { getToken } from '@/lib/auth';
 import { useAuth } from '@/providers/AuthProvider';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
@@ -72,6 +74,19 @@ const STATUS_COLOR: Record<string, string> = {
     WITHDRAWN: '#9CA3AF',
 };
 const VISIBLE_TAGS = 2;
+const APPLICANT_TABLE_COLUMNS: { label: string; title?: string; track: string }[] = [
+    { label: 'Name', track: 'minmax(180px, 1.4fr)' },
+    { label: 'Availability', track: 'minmax(150px, 1.1fr)' },
+    { label: 'Yrs exp', title: 'Years of experience', track: 'minmax(64px, 0.4fr)' },
+    { label: 'Specialization', track: 'minmax(130px, 1fr)' },
+    { label: 'Status', track: 'minmax(120px, 0.8fr)' },
+    { label: 'Response', title: 'Locum response', track: 'minmax(96px, 0.7fr)' },
+    { label: 'Invoice', track: 'minmax(120px, 0.8fr)' },
+];
+const APPLICANT_GRID_TEMPLATE = APPLICANT_TABLE_COLUMNS.map((c) => c.track).join(' ');
+const APPLICANT_GRID_GAP = 12;
+/** Sum of column minimums + gaps + horizontal padding; below this the table scrolls. */
+const APPLICANT_TABLE_MIN_WIDTH = 860 + APPLICANT_GRID_GAP * (APPLICANT_TABLE_COLUMNS.length - 1) + 36;
 function displayName(a: ApplicationRecord): string {
     const f = a.locumProfile.firstName?.trim() || '';
     const l = a.locumProfile.lastName?.trim() || '';
@@ -225,7 +240,7 @@ function DocRow({ label, subtitle, url, }: {
           {inner}
         </a>);
     }
-    return (<button type="button" onClick={() => window.alert('No document uploaded')} style={{
+    return (<button type="button" onClick={() => void showAlert(`This locum hasn't uploaded their ${label} yet.`, { title: 'No document uploaded' })} style={{
             all: 'unset',
             cursor: 'pointer',
             width: '100%',
@@ -520,6 +535,7 @@ export default function HostApplicantsPage(props: {
         }
         return groups;
     }, [apps]);
+    const invoiceByApplication = usePostingInvoices(jobId);
     const postingDays = useMemo(() => getPostingDays(job ?? undefined), [job]);
     const coverageApplicants = useMemo(
         () =>
@@ -868,15 +884,17 @@ export default function HostApplicantsPage(props: {
           </div>
 
           
+          <div style={{ overflowX: 'auto' }}>
+          <div style={{ minWidth: APPLICANT_TABLE_MIN_WIDTH }}>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(200px, 1.2fr) minmax(180px, 1.4fr) minmax(70px, 0.5fr) minmax(160px, 1.2fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)',
+            gridTemplateColumns: APPLICANT_GRID_TEMPLATE,
             padding: '12px 18px',
             alignItems: 'center',
-            gap: 14,
+            gap: APPLICANT_GRID_GAP,
             boxSizing: 'border-box',
         }}>
-            {['NAME', 'AVAILABILITY', 'YEARS OF EXP', 'SPECIALIZATION', 'STATUS', 'LOCUM RESPONSE'].map((h) => (<div key={h} style={{
+            {APPLICANT_TABLE_COLUMNS.map(({ label, title }) => (<div key={label} title={title} style={{
                 fontFamily: 'Hanken Grotesk, Inter, sans-serif',
                 fontWeight: 600,
                 fontSize: 13,
@@ -884,8 +902,10 @@ export default function HostApplicantsPage(props: {
                 color: '#6B7280',
                 letterSpacing: '0.04em',
                 whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
             }}>
-              {h}
+              {label}
             </div>))}
           </div>
 
@@ -901,11 +921,11 @@ export default function HostApplicantsPage(props: {
                             setSelected(a);
                     }} style={{
                         display: 'grid',
-                        gridTemplateColumns: 'minmax(200px, 1.2fr) minmax(180px, 1.4fr) minmax(70px, 0.5fr) minmax(160px, 1.2fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)',
+                        gridTemplateColumns: APPLICANT_GRID_TEMPLATE,
                         padding: '10px 18px',
                         minHeight: 64,
                         alignItems: 'center',
-                        gap: 14,
+                        gap: APPLICANT_GRID_GAP,
                         borderTop: idx === 0 ? '1px solid #DEDEDE' : '1px solid #DEDEDE',
                         boxSizing: 'border-box',
                         cursor: 'pointer',
@@ -958,7 +978,6 @@ export default function HostApplicantsPage(props: {
                         fontSize: 15,
                         fontWeight: 500,
                         color: '#0B0F1F',
-                        textAlign: 'center',
                     }}>
                     {yoe ?? '—'}
                   </div>
@@ -970,7 +989,7 @@ export default function HostApplicantsPage(props: {
                   <StatusBadge status={a.status} />
 
                   
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex' }}>
                     <span style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -984,8 +1003,14 @@ export default function HostApplicantsPage(props: {
                       {a.locumResponse === 'ACCEPTED' ? 'Accepted' : a.locumResponse === 'REJECTED' ? 'Rejected' : '—'}
                     </span>
                   </div>
+
+                  <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} style={{ minWidth: 0 }}>
+                    <ApplicationInvoiceCell app={a} link={invoiceByApplication.get(a.id)} />
+                  </div>
                 </div>);
             })}
+          </div>
+          </div>
           </div>
         </div>)}
 
@@ -1072,21 +1097,22 @@ export default function HostApplicantsPage(props: {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{
-                    fontFamily: 'Inter, sans-serif',
-                    fontWeight: 500,
-                    fontSize: 14,
-                    lineHeight: '140%',
-                    color: '#6B7280',
-                    textTransform: 'capitalize',
-                  }}>
-                    {(() => {
-                        const city = (selected.locumProfile as any).city as string | null | undefined;
-                        const prov = (selected.locumProfile as any).province as string | null | undefined;
-                        const loc = [city, prov].filter(Boolean).join(', ');
-                        return loc || 'Location pending';
-                    })()}
-                  </span>
+                  {(() => {
+                      const city = (selected.locumProfile as any).city as string | null | undefined;
+                      const prov = (selected.locumProfile as any).province as string | null | undefined;
+                      const loc = [city, prov].filter(Boolean).join(', ');
+                      if (!loc) return null;
+                      return (<span style={{
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 500,
+                        fontSize: 14,
+                        lineHeight: '140%',
+                        color: '#6B7280',
+                        textTransform: 'capitalize',
+                      }}>
+                        {loc}
+                      </span>);
+                  })()}
                   <span style={{
                     fontFamily: 'Inter, sans-serif',
                     fontWeight: 500,

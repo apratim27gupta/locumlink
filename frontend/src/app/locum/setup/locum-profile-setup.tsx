@@ -1,4 +1,5 @@
 'use client';
+import { showAlert } from '@/components/ui/AppDialog';
 import {
   useCallback,
   useEffect,
@@ -1367,7 +1368,7 @@ export default function LocumSetupPage() {
                               ),
                             }));
                           } catch (err) {
-                            alert(
+                            void showAlert(
                               err instanceof Error
                                 ? err.message
                                 : 'Upload failed. Try again.',
@@ -1442,7 +1443,7 @@ export default function LocumSetupPage() {
                               ),
                             }));
                           } catch (err) {
-                            alert(
+                            void showAlert(
                               err instanceof Error
                                 ? err.message
                                 : 'Upload failed. Try again.',
@@ -1520,7 +1521,7 @@ export default function LocumSetupPage() {
                               ),
                             }));
                           } catch (err) {
-                            alert(
+                            void showAlert(
                               err instanceof Error
                                 ? err.message
                                 : 'Upload failed. Try again.',

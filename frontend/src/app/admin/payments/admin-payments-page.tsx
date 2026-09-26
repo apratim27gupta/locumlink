@@ -1,4 +1,5 @@
 'use client';
+import { showPrompt } from '@/components/ui/AppDialog';
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import AdminLayout from '@/components/AdminLayout';
@@ -120,7 +121,13 @@ export default function AdminPaymentsPage() {
   }
 
   async function addNote(invoice: AdminMatchFeeInvoice) {
-    const notes = window.prompt('Add a note to this invoice history:');
+    const notes = await showPrompt({
+      title: 'Add note',
+      message: 'Add a note to this invoice history.',
+      placeholder: 'Note',
+      confirmLabel: 'Add note',
+      multiline: true,
+    });
     if (notes == null) return;
     const trimmed = notes.trim();
     if (!trimmed) return;

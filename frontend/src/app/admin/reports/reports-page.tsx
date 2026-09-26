@@ -1,4 +1,5 @@
 'use client';
+import { showAlert } from '@/components/ui/AppDialog';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminLayout from '@/components/AdminLayout';
@@ -160,7 +161,7 @@ export default function AdminReportsPage({ initialReportId }: { initialReportId?
       setModal(null);
       await Promise.all([loadReports(), refresh()]);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'Could not update report');
+      void showAlert(e instanceof Error ? e.message : 'Could not update report');
     } finally {
       setActionBusy(false);
     }

@@ -11,7 +11,7 @@ import {
 import { Type } from 'class-transformer';
 
 // One individually chosen day with its own optional start/end time (LEGACY),
-// or startTime + slotKind for SLOTS (endTime computed server-side).
+// or startTime + slotKind for SLOTS (endTime optional; defaults to start + slot hours).
 export class JobShiftDto {
   @IsString()
   date!: string;
@@ -24,7 +24,7 @@ export class JobShiftDto {
   @IsOptional()
   endTime?: string;
 
-  /** SLOTS only: HALF (3.5h) or FULL (7h). End time is computed. */
+  /** SLOTS only: HALF (3.5h) or FULL (7h) billing unit. */
   @IsOptional()
   @IsIn(['HALF', 'FULL'])
   slotKind?: 'HALF' | 'FULL';

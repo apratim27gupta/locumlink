@@ -45,6 +45,7 @@ export class HostPaymentsController {
       cursor: query.cursor,
       limit: query.limit ? Number(query.limit) : undefined,
       status: query.status,
+      jobPostingId: query.jobPostingId,
     });
   }
 

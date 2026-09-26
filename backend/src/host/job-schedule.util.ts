@@ -274,6 +274,8 @@ export type JobSlotShiftInput = {
   date: string;
   startTime: string;
   slotKind: SlotKind;
+  /** Optional host override; defaults to start + nominal slot hours. */
+  endTime?: string | null;
 };
 
 export type ParsedJobShift = {
@@ -409,7 +411,7 @@ export function parseJobShifts(
 
 /**
  * Validate SLOTS schedule: per day either 1 full (7h) or 1–2 halves (3.5h each),
- * total <= 7h. End time is computed from start + slot kind.
+ * total <= 7h. End time defaults to start + slot kind unless the host sets one.
  */
 export function parseJobShiftsSlots(
   shifts: JobSlotShiftInput[],
@@ -451,8 +453,23 @@ export function parseJobShiftsSlots(
       throw new BadRequestException('Each slot must be HALF or FULL.');
     }
     const slotKind = kind as SlotKind;
+    // Billing hours stay nominal per slot kind; a custom end time only changes the window.
     const hours = slotKind === 'HALF' ? HALF_SLOT_HOURS : FULL_SLOT_HOURS;
-    const endTime = addClockHours(startTime, hours);
+    const customEnd = raw.endTime?.trim() || '';
+    let endTime: string;
+    if (customEnd) {
+      if (!parseClockTimeHm(customEnd)) {
+        throw new BadRequestException('Invalid end time.');
+      }
+      if (hoursBetweenClockTimes(startTime, customEnd) == null) {
+        throw new BadRequestException(
+          `Day ${cal}: end time must be after start time on the same day.`,
+        );
+      }
+      endTime = customEnd;
+    } else {
+      endTime = addClockHours(startTime, hours);
+    }
     const entry: DaySlot = {
       cal,
       date: parseCalendarDateForDb(cal),
@@ -508,7 +525,7 @@ export function parseJobShiftsSlots(
     for (let i = 1; i < intervals.length; i++) {
       if (intervals[i].start < intervals[i - 1].end) {
         throw new BadRequestException(
-          `Day ${cal}: half-day slots must not overlap.`,
+          `Day ${cal}: slots must not overlap.`,
         );
       }
     }

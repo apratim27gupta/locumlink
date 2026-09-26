@@ -1,4 +1,5 @@
 'use client';
+import { showAlert } from '@/components/ui/AppDialog';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import DashLayout from '@/components/DashLayout';
@@ -59,7 +60,7 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
       const next = { ...prev, [key]: !prev[key] };
       void authApi.updateEmailPrefs({ [key]: next[key] }).catch(() => {
         setEmailPrefs(prev);
-        window.alert('Could not save email preference. Try again.');
+        void showAlert('Could not save email preference. Try again.');
       });
       return next;
     });
@@ -140,7 +141,7 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
       logout();
       window.location.replace('/');
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Could not deactivate. Try again.');
+      void showAlert(err instanceof Error ? err.message : 'Could not deactivate. Try again.');
     } finally {
       setBusy(false);
     }
@@ -154,7 +155,7 @@ export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
       logout();
       window.location.replace('/');
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Could not delete account. Try again.');
+      void showAlert(err instanceof Error ? err.message : 'Could not delete account. Try again.');
     } finally {
       setBusy(false);
     }

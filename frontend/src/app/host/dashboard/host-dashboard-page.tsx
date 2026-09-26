@@ -1,4 +1,5 @@
 'use client';
+import { showAlert, showConfirm } from '@/components/ui/AppDialog';
 import { useEffect, useState, useCallback, useRef, useLayoutEffect, useMemo, type MouseEvent as ReactMouseEvent, } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
@@ -29,7 +30,15 @@ import {
   type JobPracticeFields,
 } from '@/components/host/HostJobPracticeSections';
 import { AvailabilityStrip } from '@/components/AvailabilityStrip';
-import { getPostingDays, addClockHours, HALF_SLOT_HOURS, FULL_SLOT_HOURS, halfSlotsOverlap } from '@/lib/jobSchedule';
+import { ApplicationInvoiceCell, usePostingInvoices } from '@/components/payments/ApplicationInvoiceCell';
+import {
+    getPostingDays,
+    halfSlotsOverlap,
+    effectiveSlotEnd,
+    slotEndInvalid,
+    type SlotEndOverrides,
+    type SlotsDayEditorConfig,
+} from '@/lib/jobSchedule';
 import { DayConfigEditor, type SlotKindOrEmpty } from '@/components/host/DayConfigEditor';
 import {
     maxIsoDate,
@@ -441,23 +450,23 @@ function ReOpenModal({ job, onConfirm, onCancel, }: {
             return;
         }
         if (!startDate.trim() || !endDate.trim()) {
-            window.alert('Choose a start date and an end date.');
+            void showAlert('Choose a start date and an end date.');
             return;
         }
         const todayIso = todayIsoDateLocal();
         if (compareLocalCalendarDates(startDate.trim(), todayIso) < 0
             || compareLocalCalendarDates(endDate.trim(), todayIso) < 0) {
-            window.alert('Dates cannot be in the past.');
+            void showAlert('Dates cannot be in the past.');
             return;
         }
         if (compareLocalCalendarDates(endDate.trim(), startDate.trim()) < 0) {
-            window.alert('End date must be on or after the start date.');
+            void showAlert('End date must be on or after the start date.');
             return;
         }
         const startIso = toTimezoneAwareIso(startDate.trim(), '12:00');
         const endIso = toTimezoneAwareIso(endDate.trim(), '23:59');
         if (!startIso || !endIso) {
-            window.alert('Invalid dates.');
+            void showAlert('Invalid dates.');
             return;
         }
         setBusy(true);
@@ -468,7 +477,7 @@ function ReOpenModal({ job, onConfirm, onCancel, }: {
             });
         }
         catch (e) {
-            window.alert(e instanceof Error ? e.message : 'Could not reopen this job.');
+            void showAlert(e instanceof Error ? e.message : 'Could not reopen this job.');
         }
         finally {
             setBusy(false);
@@ -592,9 +601,12 @@ function InlineApplicantsTable({ job, applications, loading, onViewAll, }: {
     const router = useRouter();
     const preview = applications.slice(0, 7);
     const postingDays = useMemo(() => getPostingDays(job), [job]);
-    const gridCols = postingDays.length > 0
-        ? '32px minmax(120px, 1.1fr) minmax(150px, 1.4fr) 70px minmax(100px, 1fr) 110px 80px'
-        : '32px 1fr 90px 1fr 130px 80px';
+    const invoiceByApplication = usePostingInvoices(job.id);
+    const hasAvailability = postingDays.length > 0;
+    const gridCols = hasAvailability
+        ? '32px minmax(120px, 1.1fr) minmax(150px, 1.4fr) 64px minmax(100px, 1fr) 110px 90px 120px'
+        : '32px minmax(120px, 1fr) 64px minmax(100px, 1fr) 110px 90px 120px';
+    const tableMinWidth = hasAvailability ? 880 : 720;
     return (<div style={{
             marginTop: 12,
             border: '1px solid #E5E7EB',
@@ -631,6 +643,8 @@ function InlineApplicantsTable({ job, applications, loading, onViewAll, }: {
       </div>
 
       
+      <div style={{ overflowX: 'auto' }}>
+      <div style={{ minWidth: tableMinWidth }}>
       <div style={{
             display: 'grid',
             gridTemplateColumns: gridCols,
@@ -639,14 +653,17 @@ function InlineApplicantsTable({ job, applications, loading, onViewAll, }: {
             borderBottom: '1px solid #F3F4F6',
             alignItems: 'center',
         }}>
-        {(postingDays.length > 0
-          ? ['', 'NAME', 'AVAILABILITY', 'YRS EXP', 'SPECIALIZATION', 'STATUS', 'LOCUM RESPONSE']
-          : ['', 'NAME', 'YRS EXP', 'SPECIALIZATION', 'STATUS', 'LOCUM RESPONSE']
-        ).map((h, i) => (<span key={i} style={{
+        {(hasAvailability
+          ? ['', 'NAME', 'AVAILABILITY', 'YRS EXP', 'SPECIALIZATION', 'STATUS', 'RESPONSE', 'INVOICE']
+          : ['', 'NAME', 'YRS EXP', 'SPECIALIZATION', 'STATUS', 'RESPONSE', 'INVOICE']
+        ).map((h, i) => (<span key={i} title={h === 'RESPONSE' ? 'Locum response' : undefined} style={{
                 fontSize: 'var(--font-small)',
                 fontWeight: 'var(--font-weight-bold)',
                 color: '#9CA3AF',
                 letterSpacing: '0.06em',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
             }}>
             {h}
           </span>))}
@@ -704,7 +721,7 @@ function InlineApplicantsTable({ job, applications, loading, onViewAll, }: {
                   <AvailabilityStrip postingDays={postingDays} app={app} job={job} cell={10} />
                 </div>
               )}
-              <span style={{ fontSize: 'var(--font-body)', color: '#6B7280', textAlign: 'center' }}>
+              <span style={{ fontSize: 'var(--font-body)', color: '#6B7280' }}>
                 {app.locumProfile.yearsOfExperience ?? '-'}
               </span>
               <div style={{
@@ -748,7 +765,7 @@ function InlineApplicantsTable({ job, applications, loading, onViewAll, }: {
                   {statusUi.label}
                 </span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div style={{ display: 'flex' }}>
                 <span style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -764,8 +781,13 @@ function InlineApplicantsTable({ job, applications, loading, onViewAll, }: {
                   {app.locumResponse === 'ACCEPTED' ? 'Accepted' : app.locumResponse === 'REJECTED' ? 'Rejected' : '-'}
                 </span>
               </div>
+              <div onClick={(e) => e.stopPropagation()} style={{ minWidth: 0 }}>
+                <ApplicationInvoiceCell app={app} link={invoiceByApplication.get(app.id)} />
+              </div>
             </div>);
             })}
+      </div>
+      </div>
     </div>);
 }
 function JobActionsKebabIcon() {
@@ -880,7 +902,12 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
     const showExpiredActiveCard = !isSoftDeleted && job.status === 'ACTIVE' && isJobPastEndDate(job);
     const dimJobUi = showExpiredActiveCard || isSoftDeleted;
     async function handleDeleteJob() {
-        if (!window.confirm('Delete this job posting? This cannot be undone.')) {
+        if (!(await showConfirm({
+            title: 'Delete job posting?',
+            message: 'This cannot be undone.',
+            confirmLabel: 'Delete',
+            tone: 'danger',
+        }))) {
             setMenuOpen(false);
             return;
         }
@@ -891,7 +918,7 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
             onJobDeleted();
         }
         catch (e) {
-            window.alert(e instanceof Error ? e.message : 'Could not delete this job.');
+            void showAlert(e instanceof Error ? e.message : 'Could not delete this job.');
         }
         finally {
             setDeleting(false);
@@ -1157,7 +1184,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         startTime: string;
         slotKind: SlotKindOrEmpty;
         secondHalfStart: string | null;
-    };
+    } & SlotEndOverrides;
     const emptyDaySlot = (): DaySlotConfig => ({
         startTime: '',
         slotKind: '',
@@ -1175,7 +1202,14 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     }
     function updateDateRange(
         i: number,
-        field: 'startDate' | 'endDate' | 'startTime' | 'slotKind' | 'secondHalfStart',
+        field:
+            | 'startDate'
+            | 'endDate'
+            | 'startTime'
+            | 'slotKind'
+            | 'secondHalfStart'
+            | 'endOverride'
+            | 'secondHalfEndOverride',
         value: string | null,
     ) {
         setDateRanges((prev) =>
@@ -1188,7 +1222,12 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                         ...r,
                         slotKind: kind,
                         secondHalfStart: kind === 'HALF' ? r.secondHalfStart : null,
+                        endOverride: null,
+                        secondHalfEndOverride: null,
                     };
+                }
+                if (field === 'secondHalfStart' && value == null) {
+                    return { ...r, secondHalfStart: null, secondHalfEndOverride: null };
                 }
                 return { ...r, [field]: value };
             }),
@@ -1203,23 +1242,33 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     // When true, every specific date uses the shared start/slot below.
     const [sameTimeForAll, setSameTimeForAll] = useState(true);
     // Per-date slots (local HH:mm + HALF/FULL), used only when sameTimeForAll is false.
-    const [perDateTimes, setPerDateTimes] = useState<
-        Record<string, { start: string; slotKind: SlotKindOrEmpty; secondHalfStart: string | null }>
-    >({});
+    const [perDateTimes, setPerDateTimes] = useState<Record<string, SlotsDayEditorConfig>>({});
     const [startTime, setStartTime] = useState('');
     const [slotKind, setSlotKind] = useState<SlotKindOrEmpty>('');
     const [secondHalfStart, setSecondHalfStart] = useState<string | null>(null);
-    const endTime =
-        startTime.trim() && (slotKind === 'HALF' || slotKind === 'FULL')
-            ? addClockHours(
-                  startTime,
-                  slotKind === 'HALF' ? HALF_SLOT_HOURS : FULL_SLOT_HOURS,
-              )
-            : null;
+    const [endOverride, setEndOverride] = useState<string | null>(null);
+    const [secondHalfEndOverride, setSecondHalfEndOverride] = useState<string | null>(null);
+    const endTime = effectiveSlotEnd(startTime, slotKind, endOverride);
     const secondHalfEnd =
         secondHalfStart != null && secondHalfStart.trim()
-            ? addClockHours(secondHalfStart, HALF_SLOT_HOURS)
+            ? effectiveSlotEnd(secondHalfStart, 'HALF', secondHalfEndOverride)
             : null;
+    const sharedDayConfig: SlotsDayEditorConfig = {
+        start: startTime,
+        slotKind,
+        secondHalfStart,
+        endOverride,
+        secondHalfEndOverride,
+    };
+    function slotEndsInvalid(c: {
+        start: string;
+        secondHalfStart: string | null;
+    } & SlotEndOverrides): boolean {
+        return (
+            slotEndInvalid(c.start, c.endOverride) ||
+            (c.secondHalfStart != null && slotEndInvalid(c.secondHalfStart, c.secondHalfEndOverride))
+        );
+    }
 
     function isSlotConfigReady(start: string, kind: SlotKindOrEmpty): boolean {
         return Boolean(start.trim()) && (kind === 'HALF' || kind === 'FULL');
@@ -1228,10 +1277,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     function isRangeRowComplete(r: {
         startDate: string;
         endDate: string;
-        startTime: string;
-        slotKind: SlotKindOrEmpty;
-        secondHalfStart: string | null;
-    }): boolean {
+    } & DaySlotConfig): boolean {
         if (
             !(
                 Boolean(r.startDate.trim()) &&
@@ -1245,10 +1291,11 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         if (
             r.slotKind === 'HALF' &&
             r.secondHalfStart != null &&
-            halfSlotsOverlap(r.startTime, r.secondHalfStart)
+            halfSlotsOverlap(r.startTime, r.secondHalfStart, r.endOverride, r.secondHalfEndOverride)
         ) {
             return false;
         }
+        if (slotEndsInvalid({ ...r, start: r.startTime })) return false;
         return true;
     }
 
@@ -1269,33 +1316,48 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         if (
             slotKind === 'HALF' &&
             secondHalfStart != null &&
-            halfSlotsOverlap(startTime, secondHalfStart)
+            halfSlotsOverlap(startTime, secondHalfStart, endOverride, secondHalfEndOverride)
         ) {
             return false;
         }
+        if (slotEndsInvalid(sharedDayConfig)) return false;
         return true;
     }
 
     function setSharedSlotKind(next: SlotKindOrEmpty) {
         setSlotKind(next);
+        setEndOverride(null);
+        setSecondHalfEndOverride(null);
         if (next !== 'HALF') setSecondHalfStart(null);
     }
 
+    type SlotShiftPayload = {
+        date: string;
+        startTime: string;
+        slotKind: 'HALF' | 'FULL';
+        endTime?: string;
+    };
     /** Expand one calendar day into 1–2 SLOTS payload rows. */
     function slotsForDay(
         day: string,
-        cfg: { start: string; slotKind: 'HALF' | 'FULL'; secondHalfStart?: string | null },
-    ): { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] {
-        const startUtc = localDateTimeToUtcParts(day, cfg.start || '00:00').utcTime;
-        const rows: { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] = [
-            { date: day, startTime: startUtc, slotKind: cfg.slotKind },
+        cfg: { start: string; slotKind: 'HALF' | 'FULL'; secondHalfStart?: string | null } & SlotEndOverrides,
+    ): SlotShiftPayload[] {
+        const toUtc = (hm: string) => localDateTimeToUtcParts(day, hm).utcTime;
+        const withEnd = (row: SlotShiftPayload, end?: string | null): SlotShiftPayload =>
+            end?.trim() ? { ...row, endTime: toUtc(end.trim()) } : row;
+        const rows: SlotShiftPayload[] = [
+            withEnd(
+                { date: day, startTime: toUtc(cfg.start || '00:00'), slotKind: cfg.slotKind },
+                cfg.endOverride,
+            ),
         ];
         if (cfg.slotKind === 'HALF' && cfg.secondHalfStart?.trim()) {
-            rows.push({
-                date: day,
-                startTime: localDateTimeToUtcParts(day, cfg.secondHalfStart.trim()).utcTime,
-                slotKind: 'HALF',
-            });
+            rows.push(
+                withEnd(
+                    { date: day, startTime: toUtc(cfg.secondHalfStart.trim()), slotKind: 'HALF' },
+                    cfg.secondHalfEndOverride,
+                ),
+            );
         }
         return rows;
     }
@@ -1374,8 +1436,10 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         if (
             slotKind === 'HALF' &&
             secondHalfStart != null &&
-            halfSlotsOverlap(startTime, secondHalfStart)
+            halfSlotsOverlap(startTime, secondHalfStart, endOverride, secondHalfEndOverride)
         )
+            return;
+        if (slotEndsInvalid(sharedDayConfig))
             return;
         setSpecificDates((prev) =>
             prev.includes(cal) ? prev : [...prev, cal].sort(),
@@ -1383,16 +1447,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         // Seed a per-date time when the host is setting times individually.
         if (!sameTimeForAll) {
             setPerDateTimes((prev) =>
-                cal in prev
-                    ? prev
-                    : {
-                          ...prev,
-                          [cal]: {
-                              start: startTime,
-                              slotKind,
-                              secondHalfStart,
-                          },
-                      },
+                cal in prev ? prev : { ...prev, [cal]: { ...sharedDayConfig } },
             );
         }
         setNewDateInput('');
@@ -1408,15 +1463,11 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     }
     function setPerDateTime(
         iso: string,
-        field: 'start' | 'slotKind' | 'secondHalfStart',
+        field: 'start' | 'slotKind' | 'secondHalfStart' | 'endOverride' | 'secondHalfEndOverride',
         value: string | null,
     ) {
         setPerDateTimes((prev) => {
-            const current = prev[iso] ?? {
-                start: startTime,
-                slotKind,
-                secondHalfStart,
-            };
+            const current = prev[iso] ?? sharedDayConfig;
             if (field === 'slotKind') {
                 const kind: SlotKindOrEmpty =
                     value === 'HALF' || value === 'FULL' ? value : '';
@@ -1426,7 +1477,15 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                         ...current,
                         slotKind: kind,
                         secondHalfStart: kind === 'HALF' ? current.secondHalfStart : null,
+                        endOverride: null,
+                        secondHalfEndOverride: null,
                     },
+                };
+            }
+            if (field === 'secondHalfStart' && value == null) {
+                return {
+                    ...prev,
+                    [iso]: { ...current, secondHalfStart: null, secondHalfEndOverride: null },
                 };
             }
             return { ...prev, [iso]: { ...current, [field]: value } };
@@ -1438,13 +1497,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             setPerDateTimes((prev) => {
                 const seeded = { ...prev };
                 for (const d of specificDates) {
-                    if (!(d in seeded)) {
-                        seeded[d] = {
-                            start: startTime,
-                            slotKind,
-                            secondHalfStart,
-                        };
-                    }
+                    if (!(d in seeded)) seeded[d] = { ...sharedDayConfig };
                 }
                 return seeded;
             });
@@ -1516,15 +1569,8 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         return false;
     }
     // Multiple date ranges: expand each range into per-day SLOTS (UTC start + slotKind).
-    function buildRangeShiftsPayload(): {
-        date: string;
-        startTime: string;
-        slotKind: 'HALF' | 'FULL';
-    }[] {
-        const byDate = new Map<
-            string,
-            { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[]
-        >();
+    function buildRangeShiftsPayload(): SlotShiftPayload[] {
+        const byDate = new Map<string, SlotShiftPayload[]>();
         for (const r of dateRanges) {
             const start = r.startDate.trim();
             const end = r.endDate.trim();
@@ -1537,6 +1583,8 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                         start: r.startTime,
                         slotKind: r.slotKind,
                         secondHalfStart: r.secondHalfStart,
+                        endOverride: r.endOverride,
+                        secondHalfEndOverride: r.secondHalfEndOverride,
                     }),
                 );
             }
@@ -1546,37 +1594,25 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             .flatMap(([, rows]) => rows);
     }
     // Specific-dates payload: each chosen day + start + slotKind (SLOTS).
-    function buildShiftsPayload(): {
-        date: string;
-        startTime: string;
-        slotKind: 'HALF' | 'FULL';
-    }[] {
+    function buildShiftsPayload(): SlotShiftPayload[] {
         return [...specificDates]
             .sort()
             .flatMap((d) => {
                 const o = sameTimeForAll
-                    ? { start: startTime, slotKind, secondHalfStart }
-                    : perDateTimes[d] ?? {
-                          start: startTime,
-                          slotKind,
-                          secondHalfStart,
-                      };
+                    ? sharedDayConfig
+                    : perDateTimes[d] ?? sharedDayConfig;
                 if (o.slotKind !== 'HALF' && o.slotKind !== 'FULL') return [];
-                return slotsForDay(d, {
-                    start: o.start,
-                    slotKind: o.slotKind,
-                    secondHalfStart: o.secondHalfStart,
-                });
+                return slotsForDay(d, { ...o, slotKind: o.slotKind });
             });
     }
     /** Continuous range → one or two slots per day (new posts always use SLOTS). */
     function buildContinuousRangeShiftsPayload(
         startIso: string,
         endIso: string,
-    ): { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] {
+    ): SlotShiftPayload[] {
         if (slotKind !== 'HALF' && slotKind !== 'FULL') return [];
         return expandIsoDateRange(startIso, endIso).flatMap((day) =>
-            slotsForDay(day, { start: startTime, slotKind, secondHalfStart }),
+            slotsForDay(day, { ...sharedDayConfig, slotKind }),
         );
     }
     function buildDraftPayload(): CreateJobPayload {
@@ -1637,7 +1673,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             onClose();
         }
         catch (e) {
-            window.alert(e instanceof Error ? e.message : 'Could not save draft. Please try again.');
+            void showAlert(e instanceof Error ? e.message : 'Could not save draft. Please try again.');
         }
         finally {
             setSavingDraft(false);
@@ -1691,9 +1727,13 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 if (
                     r.slotKind === 'HALF' &&
                     r.secondHalfStart != null &&
-                    halfSlotsOverlap(r.startTime, r.secondHalfStart)
+                    halfSlotsOverlap(r.startTime, r.secondHalfStart, r.endOverride, r.secondHalfEndOverride)
                 ) {
                     setSubmitError('Half-day slots must not overlap.');
+                    return;
+                }
+                if (slotEndsInvalid({ ...r, start: r.startTime })) {
+                    setSubmitError('End time must be after start time.');
                     return;
                 }
             }
@@ -1724,14 +1764,18 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 if (
                     slotKind === 'HALF' &&
                     secondHalfStart != null &&
-                    halfSlotsOverlap(startTime, secondHalfStart)
+                    halfSlotsOverlap(startTime, secondHalfStart, endOverride, secondHalfEndOverride)
                 ) {
                     setSubmitError('Half-day slots must not overlap.');
                     return;
                 }
+                if (slotEndsInvalid(sharedDayConfig)) {
+                    setSubmitError('End time must be after start time.');
+                    return;
+                }
             } else {
                 for (const d of sortedDates) {
-                    const o = perDateTimes[d] ?? { start: startTime, slotKind, secondHalfStart };
+                    const o = perDateTimes[d] ?? sharedDayConfig;
                     if (!o.start.trim() || !o.slotKind) {
                         setSubmitError(`Set a start time and half/full day for ${fmtJobCalendarDate(d)}.`);
                         return;
@@ -1745,11 +1789,15 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                     if (
                         o.slotKind === 'HALF' &&
                         o.secondHalfStart != null &&
-                        halfSlotsOverlap(o.start, o.secondHalfStart)
+                        halfSlotsOverlap(o.start, o.secondHalfStart, o.endOverride, o.secondHalfEndOverride)
                     ) {
                         setSubmitError(
                             `Half-day slots must not overlap on ${fmtJobCalendarDate(d)}.`,
                         );
+                        return;
+                    }
+                    if (slotEndsInvalid(o)) {
+                        setSubmitError(`End time must be after start time on ${fmtJobCalendarDate(d)}.`);
                         return;
                     }
                 }
@@ -1786,9 +1834,13 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             if (
                 slotKind === 'HALF' &&
                 secondHalfStart != null &&
-                halfSlotsOverlap(startTime, secondHalfStart)
+                halfSlotsOverlap(startTime, secondHalfStart, endOverride, secondHalfEndOverride)
             ) {
                 setSubmitError('Half-day slots must not overlap.');
+                return;
+            }
+            if (slotEndsInvalid(sharedDayConfig)) {
+                setSubmitError('End time must be after start time.');
                 return;
             }
             const scheduleCheck = validateJobPostingSchedule({
@@ -2134,7 +2186,14 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                   onStartChange={setStartTime}
                   onSecondChange={(v) => setSecondHalfStart(v)}
                   onAddSecond={() => setSecondHalfStart('')}
-                  onRemoveSecond={() => setSecondHalfStart(null)}
+                  onRemoveSecond={() => {
+                    setSecondHalfStart(null);
+                    setSecondHalfEndOverride(null);
+                  }}
+                  endOverride={endOverride}
+                  secondHalfEndOverride={secondHalfEndOverride}
+                  onEndChange={setEndOverride}
+                  onSecondEndChange={setSecondHalfEndOverride}
                 />
                 </>
                 ) : scheduleKind === 'ranges' ? (
@@ -2166,6 +2225,10 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                         onSecondChange={(v) => updateDateRange(i, 'secondHalfStart', v)}
                         onAddSecond={() => updateDateRange(i, 'secondHalfStart', '')}
                         onRemoveSecond={() => updateDateRange(i, 'secondHalfStart', null)}
+                        endOverride={r.endOverride}
+                        secondHalfEndOverride={r.secondHalfEndOverride}
+                        onEndChange={(v) => updateDateRange(i, 'endOverride', v)}
+                        onSecondEndChange={(v) => updateDateRange(i, 'secondHalfEndOverride', v)}
                         heading="Work day for this period"
                       />
                     </div>
@@ -2241,7 +2304,14 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                   onStartChange={setStartTime}
                   onSecondChange={(v) => setSecondHalfStart(v)}
                   onAddSecond={() => setSecondHalfStart('')}
-                  onRemoveSecond={() => setSecondHalfStart(null)}
+                  onRemoveSecond={() => {
+                    setSecondHalfStart(null);
+                    setSecondHalfEndOverride(null);
+                  }}
+                  endOverride={endOverride}
+                  secondHalfEndOverride={secondHalfEndOverride}
+                  onEndChange={setEndOverride}
+                  onSecondEndChange={setSecondHalfEndOverride}
                   heading={
                     sameTimeForAll
                       ? 'What does each work day look like?'
@@ -2251,19 +2321,10 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 {specificDates.length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {specificDates.map((d) => {
-                        const t = perDateTimes[d] ?? {
-                          start: startTime,
-                          slotKind,
-                          secondHalfStart,
-                        };
-                        const dayEnd =
-                          t.start.trim() &&
-                          (t.slotKind === 'HALF' || t.slotKind === 'FULL')
-                            ? addClockHours(
-                                  t.start,
-                                  t.slotKind === 'HALF' ? HALF_SLOT_HOURS : FULL_SLOT_HOURS,
-                              )
-                            : null;
+                        const t = perDateTimes[d] ?? sharedDayConfig;
+                        const dayEnd = sameTimeForAll
+                          ? endTime
+                          : effectiveSlotEnd(t.start, t.slotKind, t.endOverride);
                         return (
                         <div
                           key={d}
@@ -2303,6 +2364,10 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                               onSecondChange={(v) => setPerDateTime(d, 'secondHalfStart', v)}
                               onAddSecond={() => setPerDateTime(d, 'secondHalfStart', '')}
                               onRemoveSecond={() => setPerDateTime(d, 'secondHalfStart', null)}
+                              endOverride={t.endOverride}
+                              secondHalfEndOverride={t.secondHalfEndOverride}
+                              onEndChange={(v) => setPerDateTime(d, 'endOverride', v)}
+                              onSecondEndChange={(v) => setPerDateTime(d, 'secondHalfEndOverride', v)}
                               heading="Work day"
                             />
                           ) : (
@@ -3252,7 +3317,7 @@ export default function HostDashboard(props: {
                         type="button"
                         onClick={() => {
                           if (!verified) {
-                            window.alert('Shift is saved under "Draft Locum Shifts". Please post again after profile is verified. Thanks.');
+                            void showAlert('Shift is saved under "Draft Locum Shifts". Please post again after profile is verified. Thanks.');
                             return;
                           }
                           setShowJobOverlay(true);
@@ -3296,7 +3361,7 @@ export default function HostDashboard(props: {
                     router.push(href);
                 }} onPublish={async (j) => {
                     if (!verified) {
-                      window.alert('Shift is saved under "Draft Locum Shifts". Please post again after profile is verified. Thanks.');
+                      void showAlert('Shift is saved under "Draft Locum Shifts". Please post again after profile is verified. Thanks.');
                       return;
                     }
                     try {
@@ -3304,7 +3369,7 @@ export default function HostDashboard(props: {
                       void loadDashboardFromApi({ silent: true });
                       setActiveTab('active');
                     } catch (e) {
-                      window.alert(e instanceof Error ? e.message : 'Could not post job.');
+                      void showAlert(e instanceof Error ? e.message : 'Could not post job.');
                     }
                 }} onJobDeleted={loadDashboardFromApi}/>))}
               </div>

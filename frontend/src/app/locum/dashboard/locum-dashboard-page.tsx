@@ -1,11 +1,13 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { useResizableDrawer } from '@/lib/useResizableDrawer';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import LocumProfileStatusBanner from '@/components/LocumProfileStatusBanner';
 import { LocumBrowseJobDetail } from '@/components/locum/LocumBrowseJobDetail';
 import { LocumApplyModal } from '@/components/locum/LocumApplyModal';
+import { InlineAvailabilityEditor } from '@/components/locum/InlineAvailabilityEditor';
 import { fetchAllPaginated, locumApi, type BrowseJob, type MyApplication } from '@/lib/api';
 import { getToken } from '@/lib/auth';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
@@ -332,6 +334,10 @@ export default function LocumDashboard(props: {
     const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
     const [withdrawConfirmAppId, setWithdrawConfirmAppId] = useState<string | null>(null);
     const [detailAppId, setDetailAppId] = useState<string | null>(null);
+    const detailDrawer = useResizableDrawer({
+        storageKey: 'l2-locum-application-detail-width',
+        defaultWidth: 520,
+    });
     const [respondError, setRespondError] = useState<string | null>(null);
     const respondingRef = useRef(false);
     useEffect(() => {
@@ -813,8 +819,10 @@ export default function LocumDashboard(props: {
                     }}>
                 <Image src="/avatar-clinic.png" alt="" width={18} height={18} style={{ flexShrink: 0, objectFit: 'contain' }}/>
                 <span style={{ fontSize: 13, color: mutedText }}>
-                  {jp.hostProfile.practiceName}, {jp.hostProfile.city},{' '}
-                  {jp.hostProfile.province}
+                  {[jp.hostProfile.practiceName, jp.hostProfile.city, jp.hostProfile.province]
+                    .map((s) => s?.trim())
+                    .filter(Boolean)
+                    .join(', ')}
                 </span>
               </div>
               {jp.description?.trim() ? (<div style={{
@@ -1014,8 +1022,11 @@ export default function LocumDashboard(props: {
               role="dialog"
               aria-modal="true"
               aria-label="Shift details"
+              className="resizable-drawer-panel"
               style={{
-                width: 'min(520px, 100%)',
+                position: 'relative',
+                width: detailDrawer.width,
+                maxWidth: '100%',
                 height: '100%',
                 background: '#fff',
                 boxShadow: '-8px 0 32px rgba(0,0,0,0.18)',
@@ -1024,6 +1035,15 @@ export default function LocumDashboard(props: {
               }}
               onMouseDown={(e) => e.stopPropagation()}
             >
+              <div
+                className="resizable-drawer-handle"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize panel"
+                title="Drag to resize"
+                onMouseDown={detailDrawer.onHandleMouseDown}
+                style={detailDrawer.handleStyle}
+              />
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -1092,7 +1112,18 @@ export default function LocumDashboard(props: {
                         </span>
                       ) : null}
                     </div>
-                    {myFocus.items.length > 0 ? (
+                    {canMutateApplicationBeforeOngoing(app) ? (
+                      <InlineAvailabilityEditor
+                        job={applicationToBrowseJob(app)}
+                        label={myFocus.label}
+                        initialKind={app.availabilityKind === 'PARTIAL' ? 'PARTIAL' : 'FULL'}
+                        initialDates={app.availableDates ?? []}
+                        initialShiftIds={app.requestedShiftIds ?? []}
+                        saving={availabilityBusy}
+                        error={editAvailabilityAppId ? null : availabilityError}
+                        onSave={(opts) => void saveAvailability(app.id, opts)}
+                      />
+                    ) : myFocus.items.length > 0 ? (
                       <div style={{
                         background: '#F0FDFA',
                         border: '1px solid #99F6E4',

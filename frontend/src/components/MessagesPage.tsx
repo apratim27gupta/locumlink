@@ -1,4 +1,5 @@
 'use client';
+import { showAlert } from '@/components/ui/AppDialog';
 import EmojiPicker from 'emoji-picker-react';
 import { useEffect, useState, useRef, useCallback, useMemo, Suspense, type MouseEvent as ReactMouseEvent, } from 'react';
 import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
@@ -996,7 +997,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         for (const f of files) {
             const err = messageAttachmentError(f);
             if (err) {
-                window.alert(`${f.name}: ${err}`);
+                void showAlert(`${f.name}: ${err}`);
                 continue;
             }
             next.push(f);
@@ -1030,7 +1031,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                 }
             }
             if (options.length === 0) {
-                window.alert('No pending applications found for this locum.');
+                void showAlert('No pending applications found for this locum.');
                 return;
             }
             const preSelected = options.find((o) => o.jobId === composeJobPostingId) ?? null;
@@ -1040,7 +1041,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             setShowConfirmJobOverlay(true);
         }
         catch (e: unknown) {
-            window.alert(e instanceof Error ? e.message : 'Could not load jobs.');
+            void showAlert(e instanceof Error ? e.message : 'Could not load jobs.');
         }
         finally {
             setConfirmLocumBusy(false);
@@ -1058,7 +1059,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             setSelectedConfirmJob(null);
         }
         catch (e: unknown) {
-            window.alert(e instanceof Error ? e.message : 'Could not confirm this applicant.');
+            void showAlert(e instanceof Error ? e.message : 'Could not confirm this applicant.');
         }
         finally {
             setConfirmLocumBusy(false);
@@ -1119,7 +1120,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             void loadConversations({ skipTopLoader: true });
         }
         catch (e: unknown) {
-            window.alert(e instanceof Error ? e.message : 'Could not block this user.');
+            void showAlert(e instanceof Error ? e.message : 'Could not block this user.');
         }
         finally {
             setBlockBusy(false);
@@ -1144,12 +1145,12 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             }
             setReportMode(null);
             setThreadMenuOpen(false);
-            window.alert(shouldBlock
+            void showAlert(shouldBlock
                 ? 'User blocked and report submitted. Our team will review it.'
                 : 'Report submitted. Our team will review it.');
         }
         catch (e: unknown) {
-            window.alert(e instanceof Error ? e.message : 'Could not submit this report.');
+            void showAlert(e instanceof Error ? e.message : 'Could not submit this report.');
         }
         finally {
             setReportBusy(false);
@@ -1169,7 +1170,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             void loadConversations({ skipTopLoader: true });
         }
         catch (e: unknown) {
-            window.alert(e instanceof Error ? e.message : 'Could not unblock this user.');
+            void showAlert(e instanceof Error ? e.message : 'Could not unblock this user.');
         }
         finally {
             setBlockBusy(false);

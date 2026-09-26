@@ -56,7 +56,11 @@ import {
   HALF_SLOT_HOURS,
   FULL_SLOT_HOURS,
   halfSlotsOverlap,
+  effectiveSlotEnd,
+  slotEndInvalid,
   type JobScheduleLike,
+  type SlotEndOverrides,
+  type SlotsDayEditorConfig,
 } from '@/lib/jobSchedule';
 
 // Reconstruct the per-range editor rows (local times) from a loaded LEGACY RANGES job.
@@ -140,22 +144,18 @@ function normalizeLegacyPerDateTimes(
 }
 
 function normalizeSlotsPerDateTimes(
-  o: Record<
-    string,
-    { start: string; slotKind: SlotKindOrEmpty; secondHalfStart: string | null }
-  >,
-): Array<[string, string, string, string]> {
+  o: Record<string, SlotsDayEditorConfig>,
+): string[][] {
   return Object.keys(o)
     .sort()
-    .map(
-      (k) =>
-        [
-          k,
-          o[k].start,
-          o[k].slotKind,
-          o[k].secondHalfStart ?? '',
-        ] as [string, string, string, string],
-    );
+    .map((k) => [
+      k,
+      o[k].start,
+      o[k].slotKind,
+      o[k].secondHalfStart ?? '',
+      o[k].endOverride ?? '',
+      o[k].secondHalfEndOverride ?? '',
+    ]);
 }
 
 function toDatetimeLocalValue(iso: string | null | undefined): string {
@@ -193,7 +193,7 @@ export default function HostEditJobPage(props: {
     startTime: string;
     slotKind: SlotKindOrEmpty;
     secondHalfStart: string | null;
-  };
+  } & SlotEndOverrides;
   type LegacyRangeRow = {
     startDate: string;
     endDate: string;
@@ -219,23 +219,35 @@ export default function HostEditJobPage(props: {
     Record<string, { start: string; end: string }>
   >({});
   const [slotsPerDateTimes, setSlotsPerDateTimes] = useState<
-    Record<string, { start: string; slotKind: SlotKindOrEmpty; secondHalfStart: string | null }>
+    Record<string, SlotsDayEditorConfig>
   >({});
   const [startTime, setStartTime] = useState('05:00');
   const [endTime, setEndTime] = useState('14:00');
   const [slotKind, setSlotKind] = useState<SlotKindOrEmpty>('');
   const [secondHalfStart, setSecondHalfStart] = useState<string | null>(null);
-  const slotsEndTime =
-    startTime.trim() && (slotKind === 'HALF' || slotKind === 'FULL')
-      ? addClockHours(
-          startTime,
-          slotKind === 'HALF' ? HALF_SLOT_HOURS : FULL_SLOT_HOURS,
-        )
-      : null;
+  const [endOverride, setEndOverride] = useState<string | null>(null);
+  const [secondHalfEndOverride, setSecondHalfEndOverride] = useState<string | null>(null);
+  const slotsEndTime = effectiveSlotEnd(startTime, slotKind, endOverride);
   const secondHalfEnd =
     secondHalfStart != null && secondHalfStart.trim()
-      ? addClockHours(secondHalfStart, HALF_SLOT_HOURS)
+      ? effectiveSlotEnd(secondHalfStart, 'HALF', secondHalfEndOverride)
       : null;
+  const sharedDayConfig: SlotsDayEditorConfig = {
+    start: startTime,
+    slotKind,
+    secondHalfStart,
+    endOverride,
+    secondHalfEndOverride,
+  };
+  function slotEndsInvalid(c: {
+    start: string;
+    secondHalfStart: string | null;
+  } & SlotEndOverrides): boolean {
+    return (
+      slotEndInvalid(c.start, c.endOverride) ||
+      (c.secondHalfStart != null && slotEndInvalid(c.secondHalfStart, c.secondHalfEndOverride))
+    );
+  }
 
   function isSlotConfigReady(start: string, kind: SlotKindOrEmpty): boolean {
     return Boolean(start.trim()) && (kind === 'HALF' || kind === 'FULL');
@@ -254,10 +266,11 @@ export default function HostEditJobPage(props: {
     if (
       r.slotKind === 'HALF' &&
       r.secondHalfStart != null &&
-      halfSlotsOverlap(r.startTime, r.secondHalfStart)
+      halfSlotsOverlap(r.startTime, r.secondHalfStart, r.endOverride, r.secondHalfEndOverride)
     ) {
       return false;
     }
+    if (slotEndsInvalid({ ...r, start: r.startTime })) return false;
     return true;
   }
   function canAddAnotherSlotsRange(): boolean {
@@ -276,30 +289,46 @@ export default function HostEditJobPage(props: {
     if (
       slotKind === 'HALF' &&
       secondHalfStart != null &&
-      halfSlotsOverlap(startTime, secondHalfStart)
+      halfSlotsOverlap(startTime, secondHalfStart, endOverride, secondHalfEndOverride)
     ) {
       return false;
     }
+    if (slotEndsInvalid({ start: startTime, secondHalfStart, endOverride, secondHalfEndOverride }))
+      return false;
     return true;
   }
   function setSharedSlotKind(next: SlotKindOrEmpty) {
     setSlotKind(next);
+    setEndOverride(null);
+    setSecondHalfEndOverride(null);
     if (next !== 'HALF') setSecondHalfStart(null);
   }
+  type SlotShiftPayload = {
+    date: string;
+    startTime: string;
+    slotKind: 'HALF' | 'FULL';
+    endTime?: string;
+  };
   function slotsForDay(
     day: string,
-    cfg: { start: string; slotKind: 'HALF' | 'FULL'; secondHalfStart?: string | null },
-  ): { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] {
-    const startUtc = localDateTimeToUtcParts(day, cfg.start || '00:00').utcTime;
-    const rows: { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] = [
-      { date: day, startTime: startUtc, slotKind: cfg.slotKind },
+    cfg: { start: string; slotKind: 'HALF' | 'FULL'; secondHalfStart?: string | null } & SlotEndOverrides,
+  ): SlotShiftPayload[] {
+    const toUtc = (hm: string) => localDateTimeToUtcParts(day, hm).utcTime;
+    const withEnd = (row: SlotShiftPayload, end?: string | null): SlotShiftPayload =>
+      end?.trim() ? { ...row, endTime: toUtc(end.trim()) } : row;
+    const rows: SlotShiftPayload[] = [
+      withEnd(
+        { date: day, startTime: toUtc(cfg.start || '00:00'), slotKind: cfg.slotKind },
+        cfg.endOverride,
+      ),
     ];
     if (cfg.slotKind === 'HALF' && cfg.secondHalfStart?.trim()) {
-      rows.push({
-        date: day,
-        startTime: localDateTimeToUtcParts(day, cfg.secondHalfStart.trim()).utcTime,
-        slotKind: 'HALF',
-      });
+      rows.push(
+        withEnd(
+          { date: day, startTime: toUtc(cfg.secondHalfStart.trim()), slotKind: 'HALF' },
+          cfg.secondHalfEndOverride,
+        ),
+      );
     }
     return rows;
   }
@@ -328,7 +357,14 @@ export default function HostEditJobPage(props: {
   }
   function updateSlotsDateRange(
     i: number,
-    field: 'startDate' | 'endDate' | 'startTime' | 'slotKind' | 'secondHalfStart',
+    field:
+      | 'startDate'
+      | 'endDate'
+      | 'startTime'
+      | 'slotKind'
+      | 'secondHalfStart'
+      | 'endOverride'
+      | 'secondHalfEndOverride',
     value: string | null,
   ) {
     setSlotsDateRanges((prev) =>
@@ -341,7 +377,12 @@ export default function HostEditJobPage(props: {
             ...r,
             slotKind: kind,
             secondHalfStart: kind === 'HALF' ? r.secondHalfStart : null,
+            endOverride: null,
+            secondHalfEndOverride: null,
           };
+        }
+        if (field === 'secondHalfStart' && value == null) {
+          return { ...r, secondHalfStart: null, secondHalfEndOverride: null };
         }
         return { ...r, [field]: value };
       }),
@@ -381,15 +422,8 @@ export default function HostEditJobPage(props: {
     }
     return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   }
-  function buildSlotsRangeShiftsPayload(): {
-    date: string;
-    startTime: string;
-    slotKind: 'HALF' | 'FULL';
-  }[] {
-    const byDate = new Map<
-      string,
-      { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[]
-    >();
+  function buildSlotsRangeShiftsPayload(): SlotShiftPayload[] {
+    const byDate = new Map<string, SlotShiftPayload[]>();
     for (const r of slotsDateRanges) {
       const start = r.startDate.trim();
       const end = r.endDate.trim();
@@ -402,6 +436,8 @@ export default function HostEditJobPage(props: {
             start: r.startTime,
             slotKind: r.slotKind,
             secondHalfStart: r.secondHalfStart,
+            endOverride: r.endOverride,
+            secondHalfEndOverride: r.secondHalfEndOverride,
           }),
         );
       }
@@ -419,24 +455,16 @@ export default function HostEditJobPage(props: {
       if (
         slotKind === 'HALF' &&
         secondHalfStart != null &&
-        halfSlotsOverlap(startTime, secondHalfStart)
+        halfSlotsOverlap(startTime, secondHalfStart, endOverride, secondHalfEndOverride)
       )
         return;
+      if (slotEndsInvalid(sharedDayConfig)) return;
       setSpecificDates((prev) =>
         prev.includes(cal) ? prev : [...prev, cal].sort(),
       );
       if (!sameTimeForAll) {
         setSlotsPerDateTimes((prev) =>
-          cal in prev
-            ? prev
-            : {
-                ...prev,
-                [cal]: {
-                  start: startTime,
-                  slotKind,
-                  secondHalfStart,
-                },
-              },
+          cal in prev ? prev : { ...prev, [cal]: { ...sharedDayConfig } },
         );
       }
       setNewDateInput('');
@@ -475,15 +503,11 @@ export default function HostEditJobPage(props: {
   }
   function setSlotsPerDateTime(
     iso: string,
-    field: 'start' | 'slotKind' | 'secondHalfStart',
+    field: 'start' | 'slotKind' | 'secondHalfStart' | 'endOverride' | 'secondHalfEndOverride',
     value: string | null,
   ) {
     setSlotsPerDateTimes((prev) => {
-      const current = prev[iso] ?? {
-        start: startTime,
-        slotKind,
-        secondHalfStart,
-      };
+      const current = prev[iso] ?? sharedDayConfig;
       if (field === 'slotKind') {
         const kind: SlotKindOrEmpty =
           value === 'HALF' || value === 'FULL' ? value : '';
@@ -493,7 +517,15 @@ export default function HostEditJobPage(props: {
             ...current,
             slotKind: kind,
             secondHalfStart: kind === 'HALF' ? current.secondHalfStart : null,
+            endOverride: null,
+            secondHalfEndOverride: null,
           },
+        };
+      }
+      if (field === 'secondHalfStart' && value == null) {
+        return {
+          ...prev,
+          [iso]: { ...current, secondHalfStart: null, secondHalfEndOverride: null },
         };
       }
       return { ...prev, [iso]: { ...current, [field]: value } };
@@ -506,13 +538,7 @@ export default function HostEditJobPage(props: {
         setSlotsPerDateTimes((prev) => {
           const seeded = { ...prev };
           for (const d of specificDates) {
-            if (!(d in seeded)) {
-              seeded[d] = {
-                start: startTime,
-                slotKind,
-                secondHalfStart,
-              };
-            }
+            if (!(d in seeded)) seeded[d] = { ...sharedDayConfig };
           }
           return seeded;
         });
@@ -543,36 +569,24 @@ export default function HostEditJobPage(props: {
       };
     });
   }
-  function buildSlotsShiftsPayload(): {
-    date: string;
-    startTime: string;
-    slotKind: 'HALF' | 'FULL';
-  }[] {
+  function buildSlotsShiftsPayload(): SlotShiftPayload[] {
     return [...specificDates]
       .sort()
       .flatMap((d) => {
         const o = sameTimeForAll
-          ? { start: startTime, slotKind, secondHalfStart }
-          : slotsPerDateTimes[d] ?? {
-              start: startTime,
-              slotKind,
-              secondHalfStart,
-            };
+          ? sharedDayConfig
+          : slotsPerDateTimes[d] ?? sharedDayConfig;
         if (o.slotKind !== 'HALF' && o.slotKind !== 'FULL') return [];
-        return slotsForDay(d, {
-          start: o.start,
-          slotKind: o.slotKind,
-          secondHalfStart: o.secondHalfStart,
-        });
+        return slotsForDay(d, { ...o, slotKind: o.slotKind });
       });
   }
   function buildContinuousRangeShiftsPayload(
     startIso: string,
     endIso: string,
-  ): { date: string; startTime: string; slotKind: 'HALF' | 'FULL' }[] {
+  ): SlotShiftPayload[] {
     if (slotKind !== 'HALF' && slotKind !== 'FULL') return [];
     return expandIsoDateRange(startIso, endIso).flatMap((day) =>
-      slotsForDay(day, { start: startTime, slotKind, secondHalfStart }),
+      slotsForDay(day, { ...sharedDayConfig, slotKind }),
     );
   }
   const [ratePerDay, setRatePerDay] = useState('');
@@ -655,6 +669,8 @@ export default function HostEditJobPage(props: {
                 r.startTime,
                 r.slotKind,
                 r.secondHalfStart ?? '',
+                r.endOverride ?? '',
+                r.secondHalfEndOverride ?? '',
               ])
             : legacyDateRanges.map((r) => [
                 r.startDate,
@@ -669,6 +685,8 @@ export default function HostEditJobPage(props: {
       endTime: isSlotsEditor ? '' : endTime || '',
       slotKind: isSlotsEditor ? slotKind : '',
       secondHalfStart: isSlotsEditor ? secondHalfStart : null,
+      endOverride: isSlotsEditor ? endOverride ?? '' : '',
+      secondHalfEndOverride: isSlotsEditor ? secondHalfEndOverride ?? '' : '',
       ratePerDay: ratePerDay.trim(),
       expiresAt: expiresAt || '',
       practice,
@@ -753,6 +771,8 @@ export default function HostEditJobPage(props: {
                 r.startTime,
                 r.slotKind,
                 r.secondHalfStart ?? '',
+                r.endOverride ?? '',
+                r.secondHalfEndOverride ?? '',
               ])
             : [],
         startDate: startIso,
@@ -761,6 +781,8 @@ export default function HostEditJobPage(props: {
         endTime: '',
         slotKind: inferred.slotKind,
         secondHalfStart: inferred.secondHalfStart,
+        endOverride: inferred.endOverride ?? '',
+        secondHalfEndOverride: inferred.secondHalfEndOverride ?? '',
         ratePerDay:
           ppd === null || ppd === undefined || ppd === ''
             ? ''
@@ -819,6 +841,8 @@ export default function HostEditJobPage(props: {
       endTime: endLocal?.localTime ?? '',
       slotKind: '',
       secondHalfStart: null,
+      endOverride: '',
+      secondHalfEndOverride: '',
       ratePerDay:
         ppd === null || ppd === undefined || ppd === ''
           ? ''
@@ -941,6 +965,8 @@ export default function HostEditJobPage(props: {
           setEndTime('');
           setSlotKind(inferred.slotKind);
           setSecondHalfStart(inferred.secondHalfStart);
+          setEndOverride(inferred.endOverride ?? null);
+          setSecondHalfEndOverride(inferred.secondHalfEndOverride ?? null);
           setSlotsDateRanges(
             inferred.dateRanges.length
               ? inferred.dateRanges
@@ -966,6 +992,8 @@ export default function HostEditJobPage(props: {
           setEndTime(defEnd);
           setSlotKind('');
           setSecondHalfStart(null);
+          setEndOverride(null);
+          setSecondHalfEndOverride(null);
           const jobShifts = getJobShifts(job as JobScheduleLike);
           if (jobShifts.length > 0 && getJobScheduleType(job) === 'RANGES') {
             setScheduleKind('ranges');
@@ -1050,7 +1078,7 @@ export default function HostEditJobPage(props: {
           fromJob.accommodationProvided;
         const resolvedPractice = hasJobPractice
           ? fromJob
-          : jobPracticeFromProfile(profile ?? null);
+          : { ...jobPracticeFromProfile(profile ?? null), amenities };
         setPractice(resolvedPractice);
         setIsRural(Boolean(job.isRural));
         const ye = (
@@ -1201,9 +1229,13 @@ export default function HostEditJobPage(props: {
           if (
             r.slotKind === 'HALF' &&
             r.secondHalfStart != null &&
-            halfSlotsOverlap(r.startTime, r.secondHalfStart)
+            halfSlotsOverlap(r.startTime, r.secondHalfStart, r.endOverride, r.secondHalfEndOverride)
           ) {
             setErr('Half-day slots must not overlap.');
+            throw new Error('validation');
+          }
+          if (slotEndsInvalid({ ...r, start: r.startTime })) {
+            setErr('End time must be after start time.');
             throw new Error('validation');
           }
         }
@@ -1238,18 +1270,18 @@ export default function HostEditJobPage(props: {
           if (
             slotKind === 'HALF' &&
             secondHalfStart != null &&
-            halfSlotsOverlap(startTime, secondHalfStart)
+            halfSlotsOverlap(startTime, secondHalfStart, endOverride, secondHalfEndOverride)
           ) {
             setErr('Half-day slots must not overlap.');
             throw new Error('validation');
           }
+          if (slotEndsInvalid(sharedDayConfig)) {
+            setErr('End time must be after start time.');
+            throw new Error('validation');
+          }
         } else {
           for (const d of sortedDates) {
-            const o = slotsPerDateTimes[d] ?? {
-              start: startTime,
-              slotKind,
-              secondHalfStart,
-            };
+            const o = slotsPerDateTimes[d] ?? sharedDayConfig;
             if (!o.start.trim() || !o.slotKind) {
               setErr(
                 `Set a start time and half/full day for ${fmtJobCalendarDate(d)}.`,
@@ -1265,11 +1297,15 @@ export default function HostEditJobPage(props: {
             if (
               o.slotKind === 'HALF' &&
               o.secondHalfStart != null &&
-              halfSlotsOverlap(o.start, o.secondHalfStart)
+              halfSlotsOverlap(o.start, o.secondHalfStart, o.endOverride, o.secondHalfEndOverride)
             ) {
               setErr(
                 `Half-day slots must not overlap on ${fmtJobCalendarDate(d)}.`,
               );
+              throw new Error('validation');
+            }
+            if (slotEndsInvalid(o)) {
+              setErr(`End time must be after start time on ${fmtJobCalendarDate(d)}.`);
               throw new Error('validation');
             }
           }
@@ -1305,9 +1341,13 @@ export default function HostEditJobPage(props: {
         if (
           slotKind === 'HALF' &&
           secondHalfStart != null &&
-          halfSlotsOverlap(startTime, secondHalfStart)
+          halfSlotsOverlap(startTime, secondHalfStart, endOverride, secondHalfEndOverride)
         ) {
           setErr('Half-day slots must not overlap.');
+          throw new Error('validation');
+        }
+        if (slotEndsInvalid(sharedDayConfig)) {
+          setErr('End time must be after start time.');
           throw new Error('validation');
         }
         const scheduleCheck = validateJobPostingSchedule({
@@ -1859,7 +1899,14 @@ export default function HostEditJobPage(props: {
                       onStartChange={setStartTime}
                       onSecondChange={(v) => setSecondHalfStart(v)}
                       onAddSecond={() => setSecondHalfStart('')}
-                      onRemoveSecond={() => setSecondHalfStart(null)}
+                      onRemoveSecond={() => {
+                        setSecondHalfStart(null);
+                        setSecondHalfEndOverride(null);
+                      }}
+                      endOverride={endOverride}
+                      secondHalfEndOverride={secondHalfEndOverride}
+                      onEndChange={setEndOverride}
+                      onSecondEndChange={setSecondHalfEndOverride}
                       inputStyle={inp}
                       labelStyle={lbl}
                     />
@@ -1929,6 +1976,10 @@ export default function HostEditJobPage(props: {
                             onSecondChange={(v) => updateSlotsDateRange(i, 'secondHalfStart', v)}
                             onAddSecond={() => updateSlotsDateRange(i, 'secondHalfStart', '')}
                             onRemoveSecond={() => updateSlotsDateRange(i, 'secondHalfStart', null)}
+                            endOverride={(r as SlotsRangeRow).endOverride}
+                            secondHalfEndOverride={(r as SlotsRangeRow).secondHalfEndOverride}
+                            onEndChange={(v) => updateSlotsDateRange(i, 'endOverride', v)}
+                            onSecondEndChange={(v) => updateSlotsDateRange(i, 'secondHalfEndOverride', v)}
                             heading="Work day for this period"
                             inputStyle={inp}
                             labelStyle={lbl}
@@ -2039,7 +2090,14 @@ export default function HostEditJobPage(props: {
                       onStartChange={setStartTime}
                       onSecondChange={(v) => setSecondHalfStart(v)}
                       onAddSecond={() => setSecondHalfStart('')}
-                      onRemoveSecond={() => setSecondHalfStart(null)}
+                      onRemoveSecond={() => {
+                        setSecondHalfStart(null);
+                        setSecondHalfEndOverride(null);
+                      }}
+                      endOverride={endOverride}
+                      secondHalfEndOverride={secondHalfEndOverride}
+                      onEndChange={setEndOverride}
+                      onSecondEndChange={setSecondHalfEndOverride}
                       heading={
                         sameTimeForAll
                           ? 'What does each work day look like?'
@@ -2071,21 +2129,10 @@ export default function HostEditJobPage(props: {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {specificDates.map((d) => {
                           if (isSlotsEditor) {
-                            const t = slotsPerDateTimes[d] ?? {
-                              start: startTime,
-                              slotKind,
-                              secondHalfStart,
-                            };
-                            const dayEnd =
-                              t.start.trim() &&
-                              (t.slotKind === 'HALF' || t.slotKind === 'FULL')
-                                ? addClockHours(
-                                    t.start,
-                                    t.slotKind === 'HALF'
-                                      ? HALF_SLOT_HOURS
-                                      : FULL_SLOT_HOURS,
-                                  )
-                                : null;
+                            const t = slotsPerDateTimes[d] ?? sharedDayConfig;
+                            const dayEnd = sameTimeForAll
+                              ? slotsEndTime
+                              : effectiveSlotEnd(t.start, t.slotKind, t.endOverride);
                             return (
                               <div
                                 key={d}
@@ -2125,6 +2172,10 @@ export default function HostEditJobPage(props: {
                                     onSecondChange={(v) => setSlotsPerDateTime(d, 'secondHalfStart', v)}
                                     onAddSecond={() => setSlotsPerDateTime(d, 'secondHalfStart', '')}
                                     onRemoveSecond={() => setSlotsPerDateTime(d, 'secondHalfStart', null)}
+                                    endOverride={t.endOverride}
+                                    secondHalfEndOverride={t.secondHalfEndOverride}
+                                    onEndChange={(v) => setSlotsPerDateTime(d, 'endOverride', v)}
+                                    onSecondEndChange={(v) => setSlotsPerDateTime(d, 'secondHalfEndOverride', v)}
                                     heading="Work day"
                                     inputStyle={inp}
                                     labelStyle={lbl}

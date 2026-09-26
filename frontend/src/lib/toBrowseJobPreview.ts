@@ -75,12 +75,11 @@ export function toBrowseJobPreview(
         asNullableString((job as { patientVol?: unknown }).patientVol) ??
         (profile?.patientVol?.trim() || null),
       servicesOffered: (() => {
-        const fromJob = asStringArray(
+        const raw =
           (job as { amenities?: unknown; servicesRequired?: unknown })
             .amenities ??
-            (job as { servicesRequired?: unknown }).servicesRequired,
-        );
-        if (fromJob.length > 0) return fromJob;
+          (job as { servicesRequired?: unknown }).servicesRequired;
+        if (Array.isArray(raw)) return asStringArray(raw);
         return Array.isArray(profile?.amenities) ? profile.amenities : [];
       })(),
       highlights:

@@ -1,4 +1,5 @@
 'use client';
+import { showAlert } from '@/components/ui/AppDialog';
 import {
   useState,
   useEffect,
@@ -1556,7 +1557,7 @@ export default function LocumProfilePage(props: {
                     setLicenseLabel(originalUploadFileName(result, file));
                     setLicenseViewUrl(result.signedUrl);
                   } catch {
-                    alert('Upload failed. Try again.');
+                    void showAlert('Upload failed. Try again.');
                   } finally {
                     setUploading(null);
                     e.target.value = '';
@@ -1693,7 +1694,7 @@ export default function LocumProfilePage(props: {
                     setResumeLabel(originalUploadFileName(result, file));
                     setResumeViewUrl(result.signedUrl);
                   } catch {
-                    alert('Upload failed. Try again.');
+                    void showAlert('Upload failed. Try again.');
                   } finally {
                     setUploading(null);
                     e.target.value = '';
@@ -1832,7 +1833,7 @@ export default function LocumProfilePage(props: {
                 setExtraLabel(originalUploadFileName(result, file));
                 setExtraViewUrl(result.signedUrl);
               } catch {
-                alert('Upload failed. Try again.');
+                void showAlert('Upload failed. Try again.');
               } finally {
                 setUploading(null);
                 e.target.value = '';

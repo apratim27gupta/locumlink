@@ -14,7 +14,7 @@ import { matchFeeOutlineButtonStyle } from '@/components/payments/MatchFeeRefund
 import type { MatchFeePolicyContent } from '@/components/payments/MatchFeePolicy';
 import { HOST_DASH_NAV } from '@/lib/hostNav';
 import { notifyMatchFeesUpdated } from '@/lib/matchFeeUpdatedEvent';
-import { hostApi, type MatchFeeInvoice } from '@/lib/api';
+import { fetchAllPaginated, hostApi, type MatchFeeInvoice } from '@/lib/api';
 import type { HostProfile } from '@/types';
 
 export default function HostInvoicesPage() {
@@ -37,14 +37,14 @@ export default function HostInvoicesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [p, pol, list] = await Promise.all([
+      const [p, pol, items] = await Promise.all([
         hostApi.getProfile(),
         hostApi.getMatchFeePolicy(),
-        hostApi.listMatchFees(),
+        fetchAllPaginated((cursor) => hostApi.listMatchFees({ limit: 50, cursor })),
       ]);
       setProfile(p);
       setPolicy(pol);
-      setInvoices(list.items);
+      setInvoices(items);
       notifyMatchFeesUpdated();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load match fees.');
@@ -64,6 +64,15 @@ export default function HostInvoicesPage() {
       setBanner('Checkout cancelled. You can pay anytime before the due date.');
     }
   }, [searchParams]);
+
+  const focusInvoiceId = searchParams.get('invoiceId');
+
+  useEffect(() => {
+    if (loading || !focusInvoiceId) return;
+    document
+      .getElementById(`invoice-${focusInvoiceId}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [loading, focusInvoiceId]);
 
   async function payInvoice(invoice: MatchFeeInvoice) {
     setPayingId(invoice.id);
@@ -194,13 +203,16 @@ export default function HostInvoicesPage() {
               const canPay = invoice.status === 'PENDING' || invoice.status === 'OVERDUE';
               const busy = payingId === invoice.id;
               const postingHref = `/host/applicants/${encodeURIComponent(invoice.jobPostingId)}`;
+              const focused = invoice.id === focusInvoiceId;
               return (
                 <div
                   key={invoice.id}
+                  id={`invoice-${invoice.id}`}
                   style={{
-                    border: '1px solid #E5E7EB',
+                    border: focused ? '2px solid #3A65DB' : '1px solid #E5E7EB',
+                    boxShadow: focused ? '0 0 0 4px rgba(58,101,219,0.12)' : undefined,
                     borderRadius: 12,
-                    padding: 16,
+                    padding: focused ? 15 : 16,
                     background: '#fff',
                   }}
                 >

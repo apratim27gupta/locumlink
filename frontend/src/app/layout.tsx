@@ -11,6 +11,7 @@ import RouteTransitionLoader from '@/components/ui/RouteTransitionLoader';
 import PageLoader from '@/components/ui/PageLoader';
 import { Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AppDialogHost } from '@/components/ui/AppDialog';
 
 const inter = Inter({
     subsets: ['latin'],
@@ -60,6 +61,7 @@ export default function RootLayout({ children, }: {
                     <PathTracker />
                     <GuidedTourGate />
                     <ErrorBoundary><Providers>{children}</Providers></ErrorBoundary>
+                    <AppDialogHost />
                 </div>
 <GoogleAnalytics gaId="G-JLBQZSQFW3" />
             </body>

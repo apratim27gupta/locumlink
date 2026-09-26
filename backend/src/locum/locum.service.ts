@@ -523,14 +523,6 @@ export class LocumService {
             ? hostProfile
             : (() => {
                 const hp = hostProfile;
-                const hasJobPracticeSnapshot =
-                  Boolean(j.practiceType?.trim()) ||
-                  Boolean(j.emr?.trim()) ||
-                  Boolean(j.clinicDesc?.trim()) ||
-                  Boolean(j.numPhysicians?.trim()) ||
-                  Boolean(j.patientVol?.trim()) ||
-                  (Array.isArray(j.servicesRequired) &&
-                    j.servicesRequired.length > 0);
                 return {
                   ...hp,
                   practiceType:
@@ -538,9 +530,7 @@ export class LocumService {
                   emr: j.emr?.trim() || hp.emr || null,
                   numPhysicians: j.numPhysicians?.trim() || null,
                   patientVol: j.patientVol?.trim() || null,
-                  servicesOffered: hasJobPracticeSnapshot
-                    ? (j.servicesRequired ?? [])
-                    : hp.servicesOffered,
+                  servicesOffered: j.servicesRequired ?? [],
                   highlights: j.clinicDesc?.trim() || hp.highlights || null,
                 };
               })(),
@@ -1037,14 +1027,6 @@ export class LocumService {
         }
 
         const hp = jp?.hostProfile;
-        const hasJobPracticeSnapshot =
-          Boolean(jp?.practiceType?.trim()) ||
-          Boolean(jp?.emr?.trim()) ||
-          Boolean(jp?.clinicDesc?.trim()) ||
-          Boolean(jp?.numPhysicians?.trim()) ||
-          Boolean(jp?.patientVol?.trim()) ||
-          (Array.isArray(jp?.servicesRequired) &&
-            (jp?.servicesRequired?.length ?? 0) > 0);
         const hostProfile = hp
           ? {
               ...hp,
@@ -1052,9 +1034,7 @@ export class LocumService {
               emr: jp?.emr?.trim() || hp.emr || null,
               numPhysicians: jp?.numPhysicians?.trim() || null,
               patientVol: jp?.patientVol?.trim() || null,
-              servicesOffered: hasJobPracticeSnapshot
-                ? (jp?.servicesRequired ?? [])
-                : (hp.servicesOffered ?? []),
+              servicesOffered: jp?.servicesRequired ?? [],
               highlights: jp?.clinicDesc?.trim() || hp.highlights || null,
             }
           : undefined;

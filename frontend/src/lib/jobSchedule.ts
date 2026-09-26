@@ -62,14 +62,42 @@ export function clockToMinutes(hm: string): number | null {
   return h * 60 + min;
 }
 
-/** True when two half-day windows (start + 3.5h) overlap on the same day. */
-export function halfSlotsOverlap(startA: string, startB: string): boolean {
+/** Default slot end: start + 7h (full) or + 3.5h (half). */
+export function defaultSlotEnd(start: string, kind: 'HALF' | 'FULL' | ''): string | null {
+  if (!start.trim() || (kind !== 'HALF' && kind !== 'FULL')) return null;
+  return addClockHours(start, kind === 'HALF' ? HALF_SLOT_HOURS : FULL_SLOT_HOURS);
+}
+
+/** Host-set end time when present, otherwise the default for the slot kind. */
+export function effectiveSlotEnd(
+  start: string,
+  kind: 'HALF' | 'FULL' | '',
+  endOverride?: string | null,
+): string | null {
+  return endOverride?.trim() ? endOverride.trim() : defaultSlotEnd(start, kind);
+}
+
+/** True when an end override is set but not after its start. */
+export function slotEndInvalid(start: string, endOverride?: string | null): boolean {
+  if (!endOverride?.trim() || !start.trim()) return false;
+  const s = clockToMinutes(start);
+  const e = clockToMinutes(endOverride);
+  return s == null || e == null || e <= s;
+}
+
+/** True when two half-day windows overlap; ends default to start + 3.5h. */
+export function halfSlotsOverlap(
+  startA: string,
+  startB: string,
+  endA?: string | null,
+  endB?: string | null,
+): boolean {
   const a0 = clockToMinutes(startA);
   const b0 = clockToMinutes(startB);
   if (a0 == null || b0 == null) return false;
   const dur = Math.round(HALF_SLOT_HOURS * 60);
-  const a1 = a0 + dur;
-  const b1 = b0 + dur;
+  const a1 = (endA?.trim() ? clockToMinutes(endA) : null) ?? a0 + dur;
+  const b1 = (endB?.trim() ? clockToMinutes(endB) : null) ?? b0 + dur;
   return a0 < b1 && b0 < a1;
 }
 
@@ -207,12 +235,18 @@ export function getJobDateRanges(job: JobScheduleLike | null | undefined): JobDa
   return ranges;
 }
 
+/** Custom end times (local HH:mm); unset means start + default slot hours. */
+export type SlotEndOverrides = {
+  endOverride?: string | null;
+  secondHalfEndOverride?: string | null;
+};
+
 /** Per-day slot config used by the host SLOTS schedule editor. */
 export type SlotsDayEditorConfig = {
   start: string;
   slotKind: 'HALF' | 'FULL' | '';
   secondHalfStart: string | null;
-};
+} & SlotEndOverrides;
 
 export type InferredSlotsRangeRow = {
   startDate: string;
@@ -220,7 +254,7 @@ export type InferredSlotsRangeRow = {
   startTime: string;
   slotKind: 'HALF' | 'FULL' | '';
   secondHalfStart: string | null;
-};
+} & SlotEndOverrides;
 
 export type InferredSlotsScheduleEditorState = {
   scheduleKind: 'range' | 'list' | 'ranges';
@@ -235,21 +269,21 @@ export type InferredSlotsScheduleEditorState = {
   specificDates: string[];
   sameTimeForAll: boolean;
   perDateTimes: Record<string, SlotsDayEditorConfig>;
-};
+} & SlotEndOverrides;
 
 type LocalDayPattern = {
   date: string;
   slotKind: 'HALF' | 'FULL';
   startTime: string;
   secondHalfStart: string | null;
-};
+} & SlotEndOverrides;
 
 function patternKey(p: {
   slotKind: string;
   startTime: string;
   secondHalfStart: string | null;
-}): string {
-  return `${p.slotKind}|${p.startTime}|${p.secondHalfStart ?? ''}`;
+} & SlotEndOverrides): string {
+  return `${p.slotKind}|${p.startTime}|${p.secondHalfStart ?? ''}|${p.endOverride ?? ''}|${p.secondHalfEndOverride ?? ''}`;
 }
 
 /** Build a local day pattern from UTC shift rows that share one calendar date. */
@@ -269,30 +303,41 @@ function dayPatternFromShifts(date: string, dayShifts: JobShiftLike[]): LocalDay
           ? 'HALF'
           : 'FULL';
 
-  const localStarts: string[] = [];
+  const localSlots: { start: string; end: string | null }[] = [];
   for (const s of withKind) {
     if (s.slotKind !== slotKind) continue;
-    const local = s.startTime
+    const start = s.startTime
       ? utcPartsToLocalInputValues(s.date, s.startTime)?.localTime
       : null;
-    if (local) localStarts.push(local);
+    if (!start) continue;
+    const end = s.endTime
+      ? utcPartsToLocalInputValues(s.date, s.endTime)?.localTime ?? null
+      : null;
+    localSlots.push({ start, end });
   }
-  localStarts.sort();
-  if (localStarts.length === 0) return null;
+  localSlots.sort((a, b) => a.start.localeCompare(b.start));
+  if (localSlots.length === 0) return null;
+
+  const overrideFor = (slot: { start: string; end: string | null } | undefined) =>
+    slot?.end && slot.end !== defaultSlotEnd(slot.start, slotKind) ? slot.end : null;
 
   if (slotKind === 'FULL') {
     return {
       date,
       slotKind: 'FULL',
-      startTime: localStarts[0],
+      startTime: localSlots[0].start,
       secondHalfStart: null,
+      endOverride: overrideFor(localSlots[0]),
+      secondHalfEndOverride: null,
     };
   }
   return {
     date,
     slotKind: 'HALF',
-    startTime: localStarts[0],
-    secondHalfStart: localStarts.length >= 2 ? localStarts[1] : null,
+    startTime: localSlots[0].start,
+    secondHalfStart: localSlots[1]?.start ?? null,
+    endOverride: overrideFor(localSlots[0]),
+    secondHalfEndOverride: overrideFor(localSlots[1]),
   };
 }
 
@@ -313,6 +358,8 @@ function groupContiguousSamePattern(days: LocalDayPattern[]): InferredSlotsRange
         startTime: d.startTime,
         slotKind: d.slotKind,
         secondHalfStart: d.secondHalfStart,
+        endOverride: d.endOverride,
+        secondHalfEndOverride: d.secondHalfEndOverride,
       });
     }
   }
@@ -324,6 +371,8 @@ function dayConfigFromPattern(d: LocalDayPattern): SlotsDayEditorConfig {
     start: d.startTime,
     slotKind: d.slotKind,
     secondHalfStart: d.secondHalfStart,
+    endOverride: d.endOverride,
+    secondHalfEndOverride: d.secondHalfEndOverride,
   };
 }
 
@@ -391,6 +440,8 @@ export function inferSlotsScheduleEditorState(
       startTime: shared.startTime,
       slotKind: shared.slotKind,
       secondHalfStart: shared.secondHalfStart,
+      endOverride: shared.endOverride,
+      secondHalfEndOverride: shared.secondHalfEndOverride,
       dateRanges: grouped,
       specificDates,
       sameTimeForAll,
@@ -412,6 +463,8 @@ export function inferSlotsScheduleEditorState(
       startTime: g.startTime,
       slotKind: g.slotKind,
       secondHalfStart: g.secondHalfStart,
+      endOverride: g.endOverride,
+      secondHalfEndOverride: g.secondHalfEndOverride,
       dateRanges: [g],
       specificDates,
       sameTimeForAll: true,
@@ -426,6 +479,8 @@ export function inferSlotsScheduleEditorState(
     startTime: shared.startTime,
     slotKind: shared.slotKind,
     secondHalfStart: shared.secondHalfStart,
+    endOverride: shared.endOverride,
+    secondHalfEndOverride: shared.secondHalfEndOverride,
     dateRanges: [
       {
         startDate: '',
@@ -433,6 +488,8 @@ export function inferSlotsScheduleEditorState(
         startTime: shared.startTime,
         slotKind: shared.slotKind,
         secondHalfStart: shared.secondHalfStart,
+        endOverride: shared.endOverride,
+        secondHalfEndOverride: shared.secondHalfEndOverride,
       },
     ],
     specificDates,

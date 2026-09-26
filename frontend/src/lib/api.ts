@@ -1194,7 +1194,7 @@ export const hostApi = {
         }
         return res.json() as Promise<{ dueCount: number; overdueCount: number }>;
     },
-    listMatchFees: async (params?: PaginationQuery): Promise<PaginatedResult<MatchFeeInvoice>> => {
+    listMatchFees: async (params?: PaginationQuery & { jobPostingId?: string }): Promise<PaginatedResult<MatchFeeInvoice>> => {
         const res = await trackedFetch(`${NEST_BASE}/api/host/match-fees${buildPaginationQs(params)}`, {
             cache: 'no-store',
             headers: nestHeaders(false),
@@ -1679,6 +1679,15 @@ export const notificationsApi = {
             skipTopLoader: true,
         });
         if (!res.ok) throw new Error('Failed to mark notification read');
+    },
+    markAllRead: async (): Promise<void> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/notifications/read-all`, {
+            method: 'PATCH',
+            cache: 'no-store',
+            headers: nestHeaders(true),
+            skipTopLoader: true,
+        });
+        if (!res.ok) throw new Error('Failed to mark notifications read');
     },
 };
 

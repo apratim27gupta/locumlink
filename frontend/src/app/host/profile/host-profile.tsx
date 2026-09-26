@@ -1,4 +1,5 @@
 'use client';
+import { showAlert } from '@/components/ui/AppDialog';
 import {
   useState,
   useEffect,
@@ -1296,7 +1297,7 @@ export default function HostProfilePage(props: {
                               originalUploadFileName(result, file),
                             );
                           } catch {
-                            alert('Upload failed. Try again.');
+                            void showAlert('Upload failed. Try again.');
                           } finally {
                             setUploading(false);
                             e.target.value = '';
