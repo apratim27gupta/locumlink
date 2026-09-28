@@ -35,7 +35,12 @@ import {
   didCpsnsNumberChange,
   mergeCredentialReviewPatchForAccountPending,
   mergeCredentialSubmittedAtPatch,
+  adminCpsnsNumberOrEmpty,
 } from '../cpsns/cpsns-verified.js';
+import {
+  findLinkedCpsns,
+  linkedCpsnsVerifiedPatch,
+} from '../cpsns/linked-cpsns.js';
 import {
   assertJobScheduleAcceptable,
   clockTimeToDbTime,
@@ -244,6 +249,17 @@ export class HostService {
     }
   }
 
+  private async assertNoUnpaidMatchFees(hostProfileId: string): Promise<void> {
+    const unpaid = await this.prisma.matchFeeInvoice.count({
+      where: { hostProfileId, status: { in: ['PENDING', 'OVERDUE'] } },
+    });
+    if (unpaid > 0) {
+      throw new ForbiddenException(
+        'You have an unpaid match fee. Please pay it from Match Fees before posting a new job.',
+      );
+    }
+  }
+
   private mapProfileToApi(
     profile: HostProfileRow,
     user: Pick<User, 'status' | 'suspensionNote' | 'suspendedAt'>,
@@ -339,9 +355,14 @@ export class HostService {
       }),
       this.prisma.user.findUnique({
         where: { id: userId },
-        select: { status: true },
+        select: { status: true, email: true },
       }),
     ]);
+    const autoVerify = linkedCpsnsVerifiedPatch(
+      await findLinkedCpsns(this.prisma, userId),
+      cpsnsDigits || adminCpsnsNumberOrEmpty(existing?.cpsnsNumber),
+      existing?.cpsnsVerificationStatus,
+    );
     const profileSubmittedForReview = Boolean(
       dto.licenseFile || dto.photoIdFile || dto.clinicName?.trim(),
     );
@@ -368,10 +389,13 @@ export class HostService {
         account?.status === UserStatus.PENDING,
       ),
     );
+    const statusPatch = autoVerify
+      ? { ...autoVerify, rejectionReason: null, rejectedAt: null }
+      : verificationPatch;
     const profile = await this.prisma.hostProfile.upsert({
       where: { userId },
-      create: { ...data, ...verificationPatch },
-      update: { ...update, ...verificationPatch },
+      create: { ...data, ...statusPatch },
+      update: { ...update, ...statusPatch },
     });
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -391,6 +415,20 @@ export class HostService {
       existing?.licenseFile,
       dto.licenseFile,
     );
+    if (autoVerify) {
+      try {
+        if (account?.email) {
+          await this.notifService.notifyHostAccountVerified({
+            recipientId: userId,
+            recipientEmail: account.email,
+            contactFirstName: profile.contactFirstName,
+            contactLastName: profile.contactLastName,
+            referenceId: profile.id,
+          });
+        }
+      } catch {}
+      return { success: true, profile: this.mapProfileToApi(profile, user) };
+    }
     try {
       if (cpsnsNumberChanged) {
         await this.adminNotif.notifyCpsnsUpdated({
@@ -424,6 +462,14 @@ export class HostService {
     } catch {}
 
     return { success: true, profile: this.mapProfileToApi(profile, user) };
+  }
+
+  async getLinkedCpsns(userId: string) {
+    const linked = await findLinkedCpsns(this.prisma, userId);
+    return {
+      cpsnsNumber: linked?.cpsnsNumber ?? null,
+      verified: linked?.verified ?? false,
+    };
   }
 
   async getProfile(userId: string) {
@@ -669,6 +715,9 @@ export class HostService {
         : isVerified
           ? PostingStatus.ACTIVE
           : PostingStatus.DRAFT;
+    if (status === PostingStatus.ACTIVE) {
+      await this.assertNoUnpaidMatchFees(hostProfileId);
+    }
 
     // Schedule can arrive three ways (most specific wins): per-day `shifts`
     // (each with its own time / slotKind), plain `dates` (shared job-level time), or the
@@ -1045,6 +1094,9 @@ export class HostService {
     }
 
     const publishingActive = statusToSave === PostingStatus.ACTIVE;
+    if (publishingActive && job.status !== PostingStatus.ACTIVE) {
+      await this.assertNoUnpaidMatchFees(hostProfileId);
+    }
     const allowPastEdit =
       !publishingActive && job.status === PostingStatus.DRAFT;
     // Same precedence as createJob: per-day `shifts` > plain `dates` > range.
@@ -1296,6 +1348,7 @@ export class HostService {
         'This job cannot be reopened (must be filled, expired, or past end date).',
       );
     }
+    await this.assertNoUnpaidMatchFees(hostProfileId);
 
     const hasBothSchedule =
       dto.startDate != null &&

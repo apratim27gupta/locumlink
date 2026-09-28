@@ -601,7 +601,21 @@ export const landingApi = {
     },
 };
 
+export type LinkedCpsns = { cpsnsNumber: string | null; verified: boolean };
+async function fetchLinkedCpsns(role: 'host' | 'locum'): Promise<LinkedCpsns> {
+    const res = await trackedFetch(`${NEST_BASE}/api/${role}/profile/linked-cpsns`, {
+        cache: 'no-store',
+        headers: nestHeaders(false),
+        skipTopLoader: true,
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw nestHttpError(text, res.status, 'Loading linked CPSNS');
+    }
+    return res.json() as Promise<LinkedCpsns>;
+}
 export const locumApi = {
+    getLinkedCpsns: () => fetchLinkedCpsns('locum'),
     getProfile: async (): Promise<{
         exists: boolean;
         profile: LocumProfile | null;
@@ -976,6 +990,7 @@ function parseHostProfileResponse(data: unknown): HostProfile | null {
     return mapRawToHostProfile(raw);
 }
 export const hostApi = {
+    getLinkedCpsns: () => fetchLinkedCpsns('host'),
     getProfile: async (): Promise<HostProfile | null> => {
         const res = await trackedFetch(`${NEST_BASE}/api/host/profile`, {
             cache: 'no-store',

@@ -54,6 +54,10 @@ import {
   mergeCredentialSubmittedAtPatch,
 } from '../cpsns/cpsns-verified.js';
 import {
+  findLinkedCpsns,
+  linkedCpsnsVerifiedPatch,
+} from '../cpsns/linked-cpsns.js';
+import {
   getReviewPlaygroundEmails,
   isReviewPlaygroundEmail,
   playgroundModeForViewer,
@@ -249,9 +253,14 @@ export class LocumService {
       }),
       this.prisma.user.findUnique({
         where: { id: userId },
-        select: { status: true },
+        select: { status: true, email: true },
       }),
     ]);
+    const autoVerify = linkedCpsnsVerifiedPatch(
+      await findLinkedCpsns(this.prisma, userId),
+      cpsnsDigits || adminCpsnsNumberOrEmpty(existing?.cpsnsId),
+      existing?.cpsnsVerificationStatus,
+    );
     const profileSubmittedForReview = Boolean(
       dto.licenseFileName?.trim() ||
       dto.resumeFileName?.trim() ||
@@ -281,12 +290,15 @@ export class LocumService {
         account?.status === UserStatus.PENDING,
       ),
     );
+    const statusPatch = autoVerify
+      ? { ...autoVerify, rejectionReason: null, rejectedAt: null }
+      : verificationPatch;
     const profile = await this.prisma.locumProfile.upsert({
       where: { userId },
       create: {
         userId,
         cpsnsId,
-        ...verificationPatch,
+        ...statusPatch,
         specialty,
         summary,
         firstName: dto.firstName,
@@ -308,7 +320,7 @@ export class LocumService {
       },
       update: {
         ...(cpsnsDigits ? { cpsnsId: cpsnsDigits } : {}),
-        ...verificationPatch,
+        ...statusPatch,
         specialty,
         summary,
         firstName: dto.firstName,
@@ -385,6 +397,20 @@ export class LocumService {
       existing?.licenseFileName,
       dto.licenseFileName,
     );
+    if (autoVerify) {
+      try {
+        if (account?.email) {
+          await this.notifService.notifyLocumAccountVerified({
+            recipientId: userId,
+            recipientEmail: account.email,
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            referenceId: profile.id,
+          });
+        }
+      } catch {}
+      return { success: true, profile: this.mapProfileToApi(profile, user) };
+    }
     try {
       if (cpsnsNumberChanged) {
         await this.adminNotif.notifyCpsnsUpdated({
@@ -419,6 +445,14 @@ export class LocumService {
 
     return { success: true, profile: this.mapProfileToApi(profile, user) };
   }
+  async getLinkedCpsns(userId: string) {
+    const linked = await findLinkedCpsns(this.prisma, userId);
+    return {
+      cpsnsNumber: linked?.cpsnsNumber ?? null,
+      verified: linked?.verified ?? false,
+    };
+  }
+
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

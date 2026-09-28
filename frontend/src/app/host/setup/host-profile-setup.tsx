@@ -184,6 +184,7 @@ export default function HostSetupPage(props: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [oauthNameLocked, setOauthNameLocked] = useState(false);
+  const [linkedVerifiedCpsns, setLinkedVerifiedCpsns] = useState<string | null>(null);
   const [form, setForm] = useState<HostProfile>({
     clinicName: '',
     contactFirstName: '',
@@ -263,6 +264,15 @@ export default function HostSetupPage(props: {
         };
         setOauthNameLocked(true);
       }
+      try {
+        const linked = await hostApi.getLinkedCpsns();
+        if (linked.cpsnsNumber) {
+          if (!(nextForm.cpsnsNumber ?? '').trim()) {
+            nextForm = { ...nextForm, cpsnsNumber: linked.cpsnsNumber };
+          }
+          if (linked.verified) setLinkedVerifiedCpsns(linked.cpsnsNumber);
+        }
+      } catch {}
       setForm(nextForm);
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only init
@@ -813,6 +823,12 @@ export default function HostSetupPage(props: {
                           set('cpsnsNumber', normalizeCpsns(e.target.value))
                         }
                       />
+                      {linkedVerifiedCpsns &&
+                      normalizeCpsns(form.cpsnsNumber) === linkedVerifiedCpsns ? (
+                        <p style={{ margin: '6px 0 0', fontSize: 12, color: '#047857', fontWeight: 500 }}>
+                          Already verified on your locum profile. No need to verify again.
+                        </p>
+                      ) : null}
                     </div>
 
                     {/* Speciality */}

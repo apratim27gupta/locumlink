@@ -53,6 +53,13 @@ export class HostController {
   ) {
     return this.hostService.getProfile(req.user.id);
   }
+  @Get('profile/linked-cpsns')
+  getLinkedCpsns(
+    @Req()
+    req: JwtRequest,
+  ) {
+    return this.hostService.getLinkedCpsns(req.user.id);
+  }
   @Get('stats')
   getDashboardStats(
     @Req()

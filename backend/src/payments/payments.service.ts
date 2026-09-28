@@ -572,10 +572,11 @@ export class PaymentsService {
       });
     }
 
+    const tierLabel = matchFeeTier === 'HALF' ? 'Half' : 'Full';
     await this.recordMatchFeeEvent(invoice.id, 'INVOICED', {
       detail: existingByApp
-        ? `Re-invoiced after prior cycle closed - ${app.jobPosting.title} - ${claimedHours}h (${matchFeeTier} tier, $${(amountCents / 100).toFixed(0)} CAD)`
-        : `${app.jobPosting.title} - ${claimedHours}h (${matchFeeTier} tier, $${(amountCents / 100).toFixed(0)} CAD)`,
+        ? `Re-invoiced after prior cycle closed - ${app.jobPosting.title} - ${claimedHours}h (${tierLabel} tier, $${(amountCents / 100).toFixed(0)} CAD)`
+        : `${app.jobPosting.title} - ${claimedHours}h (${tierLabel} tier, $${(amountCents / 100).toFixed(0)} CAD)`,
     });
   }
 

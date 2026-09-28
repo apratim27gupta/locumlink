@@ -46,6 +46,13 @@ export class LocumController {
   ) {
     return this.locumService.getProfile(req.user!.id);
   }
+  @Get('profile/linked-cpsns')
+  getLinkedCpsns(
+    @Req()
+    req: JwtRequest,
+  ) {
+    return this.locumService.getLinkedCpsns(req.user!.id);
+  }
   @Public()
   @Get('jobs/browse-count')
   async browseJobsCount(@Req() req: JwtRequest) {

@@ -219,6 +219,7 @@ export default function LocumSetupPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [oauthNameLocked, setOauthNameLocked] = useState(false);
+  const [linkedVerifiedCpsns, setLinkedVerifiedCpsns] = useState<string | null>(null);
   const [form, setForm] = useState<LocumProfile>({
     firstName: '',
     lastName: '',
@@ -382,6 +383,15 @@ export default function LocumSetupPage() {
         };
         setOauthNameLocked(true);
       }
+      try {
+        const linked = await locumApi.getLinkedCpsns();
+        if (linked.cpsnsNumber) {
+          if (!(nextForm.cpsnsNumber ?? '').trim()) {
+            nextForm = { ...nextForm, cpsnsNumber: linked.cpsnsNumber };
+          }
+          if (linked.verified) setLinkedVerifiedCpsns(linked.cpsnsNumber);
+        }
+      } catch {}
       setForm(nextForm);
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only init
@@ -678,6 +688,12 @@ export default function LocumSetupPage() {
                           set('cpsnsNumber', sanitizeCpsnsInput(e.target.value))
                         }
                       />
+                      {linkedVerifiedCpsns &&
+                      (form.cpsnsNumber ?? '').replace(/\D/g, '') === linkedVerifiedCpsns ? (
+                        <p style={{ margin: 0, fontSize: 12, color: '#047857', fontWeight: 500 }}>
+                          Already verified on your host profile. No need to verify again.
+                        </p>
+                      ) : null}
                     </div>
 
                     <div
