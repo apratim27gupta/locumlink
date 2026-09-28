@@ -1,40 +1,13 @@
 'use client';
 import { useEffect, useState } from 'react';
-import DashLayout, { NavIcon } from '@/components/DashLayout';
+import { HOST_DASH_NAV } from '@/lib/hostNav';
+import DashLayout from '@/components/DashLayout';
 import ResourceGuideArticle from '@/components/ResourceGuideArticle';
 import { hostApi } from '@/lib/api';
 import { HOST_PHYSICIAN_GUIDE, sortResourcesByTitle } from '@/lib/resourceGuides';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { HostProfile } from '@/types';
 
-const NAV = [
-    {
-        label: 'My Postings',
-        href: '/host/dashboard',
-        icon: <NavIcon name="postings"/>,
-    },
-    { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile"/> },
-    {
-        label: 'Messages',
-        href: '/host/messages',
-        icon: <NavIcon name="messages"/>,
-    },
-    {
-        label: 'Resources',
-        href: '/host/resources',
-        icon: <NavIcon name="resources"/>,
-    },
-    {
-        label: 'FAQs',
-        href: '/host/faq',
-        icon: <NavIcon name="faq"/>,
-    },
-    {
-        label: 'Settings',
-        href: '/host/settings',
-        icon: <NavIcon name="settings"/>,
-    },
-];
 
 const DOCUMENTS = [
     {
@@ -148,7 +121,7 @@ export default function HostResourcesPage(props: {
     }, []);
 
     return (
-        <DashLayout navItems={NAV} activeHref="/host/resources" topbarFirstName={profile?.contactFirstName} topbarLastName={profile?.contactLastName}>
+        <DashLayout navItems={HOST_DASH_NAV} activeHref="/host/resources" topbarFirstName={profile?.contactFirstName} topbarLastName={profile?.contactLastName}>
             <div style={{ maxWidth: 720 }}>
                 {showGuide ? (
                     <>

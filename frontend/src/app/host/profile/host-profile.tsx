@@ -1,5 +1,6 @@
 'use client';
 import { showAlert } from '@/components/ui/AppDialog';
+import { HOST_DASH_NAV } from '@/lib/hostNav';
 import {
   useState,
   useEffect,
@@ -7,7 +8,7 @@ import {
   useCallback,
   type KeyboardEvent,
 } from 'react';
-import DashLayout, { NavIcon } from '@/components/DashLayout';
+import DashLayout from '@/components/DashLayout';
 import {
   ProfileStatusGlyph,
   type ProfileStatusGlyphVariant,
@@ -45,34 +46,6 @@ import {
 import { useAnchoredDropdownMenu } from '@/hooks/useAnchoredDropdownMenu';
 import { AnchoredDropdownPortal } from '@/components/ui/AnchoredDropdownMenu';
 
-const NAV = [
-  {
-    label: 'My Postings',
-    href: '/host/dashboard',
-    icon: <NavIcon name="postings" />,
-  },
-  { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile" /> },
-  {
-    label: 'Messages',
-    href: '/host/messages',
-    icon: <NavIcon name="messages" />,
-  },
-  {
-    label: 'Resources',
-    href: '/host/resources',
-    icon: <NavIcon name="resources" />,
-  },
-  {
-    label: 'FAQs',
-    href: '/host/faq',
-    icon: <NavIcon name="faq" />,
-  },
-  {
-    label: 'Settings',
-    href: '/host/settings',
-    icon: <NavIcon name="settings" />,
-  },
-];
 
 const inp: React.CSSProperties = {
   width: '100%',
@@ -636,7 +609,7 @@ export default function HostProfilePage(props: {
   if (loading) {
     return (
       <DashLayout
-        navItems={NAV}
+        navItems={HOST_DASH_NAV}
         activeHref="/host/profile"
         topbarFirstName={profile?.contactFirstName}
         topbarLastName={profile?.contactLastName}
@@ -657,7 +630,7 @@ export default function HostProfilePage(props: {
 
   return (
     <DashLayout
-      navItems={NAV}
+      navItems={HOST_DASH_NAV}
       activeHref="/host/profile"
       topbarFirstName={profile?.contactFirstName}
       topbarLastName={profile?.contactLastName}

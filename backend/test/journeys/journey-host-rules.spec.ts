@@ -60,7 +60,7 @@ describe('Journey - Host posting rules and linked CPSNS', () => {
       where: { applicationId: application.id },
       include: { events: true },
     });
-    return invoice;
+    return { ...invoice, locumUserId: locum.user.id };
   }
 
   it('blocks publishing only while a match fee is overdue, allows drafts, and unblocks after payment', async () => {
@@ -92,6 +92,18 @@ describe('Journey - Host posting rules and linked CPSNS', () => {
       .expect(403);
 
     await http.post(`/api/host/match-fees/${invoice.id}/pay-mock`).expect(200);
+
+    const locumPaidNotice = await getTestDb().notificationEvent.findFirst({
+      where: {
+        recipientId: invoice.locumUserId,
+        eventType: 'L_016_PLACEMENT_PAYMENT_CONFIRMED',
+      },
+    });
+    expect(locumPaidNotice).not.toBeNull();
+    const hostPaidNotice = await getTestDb().notificationEvent.findFirst({
+      where: { recipientId: host.user.id, eventType: 'H_017_MATCH_FEE_PAID' },
+    });
+    expect(JSON.stringify(hostPaidNotice?.payload)).toContain('$250');
 
     await http
       .patch(`/api/host/jobs/${draft.body.job.id}`, { status: 'ACTIVE' })

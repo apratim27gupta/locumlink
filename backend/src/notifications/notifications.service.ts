@@ -98,6 +98,7 @@ export type NotifEventType =
   | 'L_014_PROFILE_REMINDER'
   | 'L_015_MATCH_FEE_INFO'
   | 'L_015_APPLICATION_SUBMITTED'
+  | 'L_016_PLACEMENT_PAYMENT_CONFIRMED'
   // Shared / system
   | 'U_001_ADMIN_MESSAGE'
   // Admin
@@ -140,6 +141,10 @@ export type NotificationItem = {
   actionLabel?: string;
   eventType?: string;
 };
+
+function formatMatchFee(amountCents: number): string {
+  return `$${(amountCents / 100).toFixed(0)}`;
+}
 
 function eventTypeToCategory(eventType: string): NotificationItem['type'] {
   if (eventType.includes('MESSAGE')) return 'message';
@@ -1274,13 +1279,15 @@ export class NotificationsService {
     dueAt: Date;
     invoiceId: string;
     applicationId: string;
+    amountCents: number;
   }): Promise<void> {
     const dueStr = params.dueAt.toLocaleDateString('en-CA');
+    const fee = formatMatchFee(params.amountCents);
     await this.create({
       recipientId: params.recipientId,
       eventType: 'H_014_MATCH_FEE_INVOICED',
       title: 'Match fee invoice due',
-      body: `A $250 LocumLink match fee is due for ${params.jobTitle} by ${dueStr}. Pay from Match Fees when ready.`,
+      body: `A ${fee} LocumLink match fee is due for ${params.jobTitle} by ${dueStr}. Pay from Match Fees when ready.`,
       href: '/host/invoices',
       priority: 'HIGH',
       actionLabel: 'View Invoice',
@@ -1288,7 +1295,7 @@ export class NotificationsService {
       referenceType: 'MatchFeeInvoice',
       emailTo: params.recipientEmail,
       emailSubject: `Match fee invoice: ${params.jobTitle}`,
-      emailBody: `Your locum confirmed the match for ${params.jobTitle}. The $250 LocumLink match fee is due by ${dueStr}. Sign in to pay from Match Fees.`,
+      emailBody: `Your locum confirmed the match for ${params.jobTitle}. The ${fee} LocumLink match fee is due by ${dueStr}. Sign in to pay from Match Fees.`,
     });
   }
 
@@ -1297,12 +1304,14 @@ export class NotificationsService {
     recipientEmail: string;
     jobTitle: string;
     invoiceId: string;
+    amountCents: number;
   }): Promise<void> {
+    const fee = formatMatchFee(params.amountCents);
     await this.create({
       recipientId: params.recipientId,
       eventType: 'H_016_MATCH_FEE_OVERDUE',
       title: 'Match fee overdue',
-      body: `Your $250 match fee for ${params.jobTitle} is overdue. Please pay from Match Fees.`,
+      body: `Your ${fee} match fee for ${params.jobTitle} is overdue. Please pay from Match Fees.`,
       href: '/host/invoices',
       priority: 'CRITICAL',
       actionLabel: 'Pay Match Fee',
@@ -1310,7 +1319,7 @@ export class NotificationsService {
       referenceType: 'MatchFeeInvoice',
       emailTo: params.recipientEmail,
       emailSubject: `Overdue match fee: ${params.jobTitle}`,
-      emailBody: `Your $250 LocumLink match fee for ${params.jobTitle} is overdue. Please sign in and pay from Match Fees.`,
+      emailBody: `Your ${fee} LocumLink match fee for ${params.jobTitle} is overdue. Please sign in and pay from Match Fees.`,
     });
   }
 
@@ -1319,12 +1328,14 @@ export class NotificationsService {
     recipientEmail: string;
     jobTitle: string;
     invoiceId: string;
+    amountCents: number;
   }): Promise<void> {
+    const fee = formatMatchFee(params.amountCents);
     await this.create({
       recipientId: params.recipientId,
       eventType: 'H_017_MATCH_FEE_PAID',
       title: 'Match fee received',
-      body: `We received your $250 match fee for ${params.jobTitle}. Thank you.`,
+      body: `We received your ${fee} match fee for ${params.jobTitle}. Thank you.`,
       href: '/host/invoices',
       priority: 'NORMAL',
       actionLabel: 'View Receipt',
@@ -1332,7 +1343,7 @@ export class NotificationsService {
       referenceType: 'MatchFeeInvoice',
       emailTo: params.recipientEmail,
       emailSubject: `Match fee paid: ${params.jobTitle}`,
-      emailBody: `Thank you. Your $250 LocumLink match fee for ${params.jobTitle} has been recorded.`,
+      emailBody: `Thank you. Your ${fee} LocumLink match fee for ${params.jobTitle} has been recorded.`,
     });
   }
 
@@ -1342,16 +1353,18 @@ export class NotificationsService {
     jobTitle: string;
     dueAt: Date;
     invoiceId: string;
+    amountCents: number;
     status: 'PENDING' | 'OVERDUE';
     sendEmail: boolean;
     sendNotification: boolean;
   }): Promise<void> {
     const dueStr = params.dueAt.toLocaleDateString('en-CA');
+    const fee = formatMatchFee(params.amountCents);
     const overdue = params.status === 'OVERDUE';
     const title = overdue ? 'Match fee overdue reminder' : 'Match fee payment reminder';
     const body = overdue
-      ? `Your $250 match fee for ${params.jobTitle} was due by ${dueStr}. Please pay from Match Fees.`
-      : `Reminder: your $250 match fee for ${params.jobTitle} is due by ${dueStr}.`;
+      ? `Your ${fee} match fee for ${params.jobTitle} was due by ${dueStr}. Please pay from Match Fees.`
+      : `Reminder: your ${fee} match fee for ${params.jobTitle} is due by ${dueStr}.`;
     const eventType = overdue ? 'H_016_MATCH_FEE_OVERDUE' : 'H_015_MATCH_FEE_DUE_SOON';
     const emailSubject = `${title}: ${params.jobTitle}`;
     const emailBody = `${body}\n\nSign in to LocumLink and open Match Fees to pay.`;
@@ -1440,7 +1453,7 @@ export class NotificationsService {
       recipientId: params.recipientId,
       eventType: 'L_015_MATCH_FEE_INFO',
       title: 'Placement confirmed',
-      body: `You accepted ${params.jobTitle}. LocumLink is free for locums; the host pays the $250 match fee.`,
+      body: `You accepted ${params.jobTitle}. LocumLink is free for locums; the host pays the platform match fee.`,
       href: '/locum/dashboard',
       priority: 'LOW',
       actionLabel: 'View Dashboard',
@@ -1448,7 +1461,35 @@ export class NotificationsService {
       referenceType: 'Application',
       emailTo: params.recipientEmail,
       emailSubject: `Placement confirmed: ${params.jobTitle}`,
-      emailBody: `You accepted ${params.jobTitle}. LocumLink is free for locums. The host pays the $250 platform match fee.`,
+      emailBody: `You accepted ${params.jobTitle}. LocumLink is free for locums. The host pays the platform match fee.`,
+    });
+  }
+
+  /** L-016: host paid the match fee for this locum's placement */
+  async notifyLocumMatchFeePaid(params: {
+    recipientId: string;
+    recipientEmail: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    jobTitle: string;
+    clinicName: string;
+    invoiceId: string;
+  }): Promise<void> {
+    const doctorName = formatLocumDoctorName(params.firstName, params.lastName);
+    const at = params.clinicName ? ` at ${params.clinicName}` : '';
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'L_016_PLACEMENT_PAYMENT_CONFIRMED',
+      title: 'Placement payment confirmed',
+      body: `The host has paid the LocumLink match fee for ${params.jobTitle}${at}. Your placement is all set.`,
+      href: '/locum/dashboard',
+      priority: 'NORMAL',
+      actionLabel: 'View Placement',
+      referenceId: params.invoiceId,
+      referenceType: 'MatchFeeInvoice',
+      emailTo: params.recipientEmail,
+      emailSubject: `Placement payment confirmed: ${params.jobTitle}`,
+      emailBody: `Hello ${doctorName}, The host has paid the LocumLink match fee for ${params.jobTitle}${at}, so your placement is all set. You do not need to do anything. LocumLink is free for locums. You can view the shift details from My Applications in Locum Link.`,
     });
   }
 }

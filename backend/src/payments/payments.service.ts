@@ -569,6 +569,7 @@ export class PaymentsService {
         dueAt,
         invoiceId: invoice.id,
         applicationId,
+        amountCents,
       });
     }
 
@@ -1074,6 +1075,7 @@ export class PaymentsService {
           recipientEmail: host.user.email,
           jobTitle: invoice.jobPosting.title,
           invoiceId: invoice.id,
+          amountCents: invoice.amountCents,
         });
       }
       await this.syncHostReviewFlag(invoice.hostProfileId);
@@ -1272,6 +1274,7 @@ export class PaymentsService {
         jobTitle: invoice.jobPosting.title,
         dueAt: invoice.dueAt,
         invoiceId: invoice.id,
+        amountCents: invoice.amountCents,
         status: reminderStatus,
         sendEmail: options.sendEmail,
         sendNotification: options.sendNotification,
@@ -1377,7 +1380,24 @@ export class PaymentsService {
       include: {
         jobPosting: { select: { title: true, hostProfileId: true } },
         hostProfile: {
-          select: { id: true, userId: true, user: { select: { email: true } } },
+          select: {
+            id: true,
+            userId: true,
+            practiceName: true,
+            user: { select: { email: true } },
+          },
+        },
+        application: {
+          select: {
+            locumProfile: {
+              select: {
+                userId: true,
+                firstName: true,
+                lastName: true,
+                user: { select: { email: true } },
+              },
+            },
+          },
         },
       },
     });
@@ -1416,7 +1436,27 @@ export class PaymentsService {
         recipientEmail: host.user.email,
         jobTitle: invoice.jobPosting.title,
         invoiceId: params.invoiceId,
+        amountCents: invoice.amountCents,
       });
+    }
+
+    const locum = invoice.application?.locumProfile;
+    if (locum?.userId && locum.user?.email) {
+      try {
+        await this.notifications.notifyLocumMatchFeePaid({
+          recipientId: locum.userId,
+          recipientEmail: locum.user.email,
+          firstName: locum.firstName,
+          lastName: locum.lastName,
+          jobTitle: invoice.jobPosting.title,
+          clinicName: invoice.hostProfile?.practiceName ?? '',
+          invoiceId: params.invoiceId,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Locum payment confirmation failed for invoice ${params.invoiceId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
     return updated;

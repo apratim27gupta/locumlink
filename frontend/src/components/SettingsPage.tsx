@@ -1,5 +1,6 @@
 'use client';
 import { showAlert } from '@/components/ui/AppDialog';
+import { HOST_DASH_NAV } from '@/lib/hostNav';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import DashLayout from '@/components/DashLayout';
@@ -9,14 +10,6 @@ import { authApi, DEFAULT_EMAIL_PREFS, type EmailPrefs } from '@/lib/api';
 import { getRole, clearProfileCompleteCookies } from '@/lib/auth';
 import { beforeClientNavigation } from '@/lib/topLoader';
 
-const HOST_NAV = [
-  { label: 'My Postings', href: '/host/dashboard', icon: <NavIcon name="postings" /> },
-  { label: 'Profile', href: '/host/profile', icon: <NavIcon name="profile" /> },
-  { label: 'Messages', href: '/host/messages', icon: <NavIcon name="messages" /> },
-  { label: 'Resources', href: '/host/resources', icon: <NavIcon name="resources" /> },
-  { label: 'FAQs', href: '/host/faq', icon: <NavIcon name="faq" /> },
-  { label: 'Settings', href: '/host/settings', icon: <NavIcon name="settings" /> },
-];
 const LOCUM_NAV = [
   { label: 'Browse Opportunities', href: '/locum/browse', icon: <NavIcon name="browse" /> },
   { label: 'My Applications', href: '/locum/dashboard', icon: <NavIcon name="postings" /> },
@@ -32,7 +25,7 @@ type DeactivateModal = null | 'temporary' | 'permanent';
 export default function SettingsPage({ role }: { role: 'host' | 'locum' }) {
   const router = useRouter();
   const { logout } = useAuth();
-  const nav = role === 'host' ? HOST_NAV : LOCUM_NAV;
+  const nav = role === 'host' ? HOST_DASH_NAV : LOCUM_NAV;
   const activeHref = role === 'host' ? '/host/settings' : '/locum/settings';
 
   const NOTIF_KEYS = ['messages', 'applications', 'reminders', 'account'] as const;

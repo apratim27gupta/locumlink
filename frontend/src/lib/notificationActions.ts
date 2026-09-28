@@ -30,6 +30,7 @@ const EVENT_DEFAULTS: Record<string, { href: string; actionLabel: string }> = {
   L_013_ACCOUNT_WARNING: { href: SUPPORT_PAGE_PATH, actionLabel: 'Contact Support' },
   L_014_PROFILE_REMINDER: { href: '/locum/profile', actionLabel: 'Complete Profile' },
   L_015_APPLICATION_SUBMITTED: { href: '/locum/dashboard', actionLabel: 'View Application' },
+  L_016_PLACEMENT_PAYMENT_CONFIRMED: { href: '/locum/dashboard', actionLabel: 'View Placement' },
   U_001_ADMIN_MESSAGE: { href: '/locum/dashboard', actionLabel: 'Open dashboard' },
 };
 
@@ -62,6 +63,7 @@ const EVENT_TITLES: Record<string, string> = {
   L_013_ACCOUNT_WARNING: 'Account warning',
   L_014_PROFILE_REMINDER: 'Complete your Locum Link profile',
   L_015_APPLICATION_SUBMITTED: 'Application Submitted',
+  L_016_PLACEMENT_PAYMENT_CONFIRMED: 'Placement payment confirmed',
   U_001_ADMIN_MESSAGE: 'Message from Locum Link',
 };
 

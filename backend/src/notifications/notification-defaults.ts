@@ -150,6 +150,10 @@ export const NOTIFICATION_EVENT_DEFAULTS: Record<
     href: '/locum/dashboard',
     actionLabel: 'View Application',
   },
+  L_016_PLACEMENT_PAYMENT_CONFIRMED: {
+    href: '/locum/dashboard',
+    actionLabel: 'View Placement',
+  },
   U_001_ADMIN_MESSAGE: {
     href: '/locum/dashboard',
     actionLabel: 'Open dashboard',
@@ -193,6 +197,7 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   L_014_PROFILE_REMINDER: 'Complete your Locum Link profile',
   L_015_MATCH_FEE_INFO: 'Placement confirmed',
   L_015_APPLICATION_SUBMITTED: 'Application Submitted',
+  L_016_PLACEMENT_PAYMENT_CONFIRMED: 'Placement payment confirmed',
   U_001_ADMIN_MESSAGE: 'Message from Locum Link',
 };
 

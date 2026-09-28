@@ -12,6 +12,7 @@ import PageLoader from '@/components/ui/PageLoader';
 import { Suspense } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AppDialogHost } from '@/components/ui/AppDialog';
+import PickerInputOpener from '@/components/PickerInputOpener';
 
 const inter = Inter({
     subsets: ['latin'],
@@ -62,6 +63,7 @@ export default function RootLayout({ children, }: {
                     <GuidedTourGate />
                     <ErrorBoundary><Providers>{children}</Providers></ErrorBoundary>
                     <AppDialogHost />
+                    <PickerInputOpener />
                 </div>
 <GoogleAnalytics gaId="G-JLBQZSQFW3" />
             </body>
