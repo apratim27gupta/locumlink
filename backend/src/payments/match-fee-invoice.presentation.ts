@@ -37,7 +37,7 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
   {
     status: 'PAID',
     label: 'Paid',
-    summary: 'Match fee collected (test payment or Stripe).',
+    summary: 'Match fee collected.',
     hostObligation:
       'Nothing to do. The fee is refunded to the original payment method only if the posting or match is cancelled more than 14 days before the shift starts (see policy).',
   },

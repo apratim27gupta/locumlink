@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import DashLayout from '@/components/DashLayout';
 import {
   MatchFeePolicyModal,
-  matchFeeStatusColor,
-  matchFeeStatusLabel,
+  MatchFeeStatusChip,
 } from '@/components/payments/MatchFeePolicy';
 import { MatchFeeEventTimeline } from '@/components/payments/MatchFeeEventTimeline';
 import { matchFeeOutlineButtonStyle } from '@/components/payments/MatchFeeRefundConfirmModal';
@@ -19,6 +18,7 @@ import type { HostProfile } from '@/types';
 
 export default function HostInvoicesPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [profile, setProfile] = useState<HostProfile | null>(null);
   const [policy, setPolicy] = useState<MatchFeePolicyContent | null>(null);
   const [invoices, setInvoices] = useState<MatchFeeInvoice[]>([]);
@@ -26,6 +26,11 @@ export default function HostInvoicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [payingId, setPayingId] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const [paymentNotice, setPaymentNotice] = useState<{
+    tone: 'success' | 'info';
+    title: string;
+    message: string;
+  } | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
   const [ticketFor, setTicketFor] = useState<MatchFeeInvoice | null>(null);
   const [ticketMessage, setTicketMessage] = useState('');
@@ -57,15 +62,36 @@ export default function HostInvoicesPage() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (searchParams.get('paid') === '1') {
-      setBanner('Payment submitted. Your invoice will update once payment is confirmed.');
-    } else if (searchParams.get('cancelled') === '1') {
-      setBanner('Checkout cancelled. You can pay anytime before the due date.');
-    }
-  }, [searchParams]);
-
   const focusInvoiceId = searchParams.get('invoiceId');
+
+  useEffect(() => {
+    const paid = searchParams.get('paid') === '1';
+    const cancelled = searchParams.get('cancelled') === '1';
+    if (!paid && !cancelled) return;
+    setPaymentNotice(
+      paid
+        ? {
+            tone: 'success',
+            title: 'Payment submitted',
+            message:
+              'Thank you. We are confirming your payment with Stripe. The invoice will show as Paid in a moment.',
+          }
+        : {
+            tone: 'info',
+            title: 'Checkout cancelled',
+            message: 'No payment was taken. You can pay this invoice anytime from this page.',
+          },
+    );
+    router.replace(
+      focusInvoiceId
+        ? `/host/invoices?invoiceId=${encodeURIComponent(focusInvoiceId)}`
+        : '/host/invoices',
+      { scroll: false },
+    );
+    if (!paid) return;
+    const refresh = window.setTimeout(() => void load(), 4000);
+    return () => window.clearTimeout(refresh);
+  }, [searchParams, focusInvoiceId, router, load]);
 
   useEffect(() => {
     if (loading || !focusInvoiceId) return;
@@ -85,6 +111,12 @@ export default function HostInvoicesPage() {
       }
       await hostApi.payMatchFeeMock(invoice.id);
       await load();
+      setPayingId(null);
+      setPaymentNotice({
+        tone: 'success',
+        title: 'Payment received',
+        message: `Your $${(invoice.amountCents / 100).toFixed(0)} ${invoice.currency} match fee for ${invoice.jobTitle} is paid. You can download the receipt from this page.`,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Payment failed.');
       setPayingId(null);
@@ -199,7 +231,6 @@ export default function HostInvoicesPage() {
         ) : (
           <div style={{ display: 'grid', gap: 12 }}>
             {invoices.map((invoice) => {
-              const colors = matchFeeStatusColor(invoice.status);
               const canPay = invoice.status === 'PENDING' || invoice.status === 'OVERDUE';
               const busy = payingId === invoice.id;
               const postingHref = `/host/applicants/${encodeURIComponent(invoice.jobPostingId)}`;
@@ -219,12 +250,22 @@ export default function HostInvoicesPage() {
                   <div style={{ marginBottom: 10 }}>
                     <div
                       style={{
-                        fontWeight: 700,
-                        color: '#0F2A7A',
-                        fontSize: 16,
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        gap: 12,
                       }}
                     >
-                      {invoice.jobTitle}
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          color: '#0F2A7A',
+                          fontSize: 16,
+                        }}
+                      >
+                        {invoice.jobTitle}
+                      </div>
+                      <MatchFeeStatusChip status={invoice.status} />
                     </div>
                     <div style={{ fontSize: 14, color: '#111827', marginTop: 6, fontWeight: 600 }}>
                       Locum: {invoice.locumName}
@@ -259,18 +300,6 @@ export default function HostInvoicesPage() {
                       gap: 10,
                     }}
                   >
-                    <span
-                      style={{
-                        padding: '3px 10px',
-                        borderRadius: 999,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        background: colors.bg,
-                        color: colors.text,
-                      }}
-                    >
-                      {matchFeeStatusLabel(invoice.status)}
-                    </span>
                     <span style={{ fontWeight: 700, fontSize: 16, color: '#111827' }}>
                       ${(invoice.amountCents / 100).toFixed(0)} {invoice.currency}
                     </span>
@@ -362,6 +391,90 @@ export default function HostInvoicesPage() {
           </div>
         )}
       </div>
+
+      {paymentNotice ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="payment-notice-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            background: 'rgba(15, 23, 42, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setPaymentNotice(null);
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 14,
+              padding: 24,
+              width: '100%',
+              maxWidth: 400,
+              boxShadow: '0 20px 50px rgba(15, 23, 42, 0.25)',
+            }}
+          >
+            <div
+              aria-hidden
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                background: paymentNotice.tone === 'success' ? '#ECFDF5' : '#EFF6FF',
+                color: paymentNotice.tone === 'success' ? '#059669' : '#2563EB',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 14,
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                {paymentNotice.tone === 'success' ? (
+                  <path d="M5 12.5l4.5 4.5L19 7.5" />
+                ) : (
+                  <path d="M12 8v5M12 16.5v.5" />
+                )}
+              </svg>
+            </div>
+            <h2
+              id="payment-notice-title"
+              style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: '#0f1523' }}
+            >
+              {paymentNotice.title}
+            </h2>
+            <p style={{ margin: 0, fontSize: 14, color: '#4B5563', lineHeight: 1.5 }}>
+              {paymentNotice.message}
+            </p>
+            <button
+              type="button"
+              autoFocus
+              onClick={() => setPaymentNotice(null)}
+              style={{
+                marginTop: 20,
+                width: '100%',
+                padding: '11px 16px',
+                borderRadius: 8,
+                border: 'none',
+                background: '#0F2A7A',
+                color: '#fff',
+                fontWeight: 600,
+                fontSize: 14,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {ticketFor ? (
         <div

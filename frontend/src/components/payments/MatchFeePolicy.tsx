@@ -301,6 +301,56 @@ export function matchFeeStatusLabel(status: string): string {
   }
 }
 
+function matchFeeStatusMood(status: string): 'happy' | 'neutral' | 'sad' {
+  if (status === 'PAID' || status === 'REFUNDED' || status === 'CREDITED') return 'happy';
+  if (status === 'OVERDUE') return 'sad';
+  return 'neutral';
+}
+
+const MOUTH_PATH = {
+  happy: 'M8 14.5c1 1.3 2.4 2 4 2s3-.7 4-2',
+  neutral: 'M8.5 15h7',
+  sad: 'M8 16.5c1-1.3 2.4-2 4-2s3 .7 4 2',
+} as const;
+
+export function MatchFeeStatusChip({ status }: { status: string }) {
+  const colors = matchFeeStatusColor(status);
+  const mood = matchFeeStatusMood(status);
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '4px 10px 4px 7px',
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 600,
+        background: colors.bg,
+        color: colors.text,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        aria-hidden
+      >
+        <circle cx="12" cy="12" r="9.5" />
+        <circle cx="9" cy="10" r="0.6" fill="currentColor" />
+        <circle cx="15" cy="10" r="0.6" fill="currentColor" />
+        <path d={MOUTH_PATH[mood]} />
+      </svg>
+      {matchFeeStatusLabel(status)}
+    </span>
+  );
+}
+
 export function matchFeeStatusColor(status: string): { bg: string; text: string } {
   switch (status) {
     case 'PAID':
