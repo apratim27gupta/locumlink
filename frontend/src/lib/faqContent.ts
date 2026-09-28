@@ -133,7 +133,7 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
         id: FAQ_AFTER_APPLYING_ID,
         question: 'My application says Applied. What happens next?',
         answer:
-          'Applied means your application was sent and the clinic can review it.\n\nFrom there, the clinic may:\n• shortlist you while they consider applicants\n• confirm you for the shift, after which you can accept or decline\n• decide to go with another physician\n\nClinics review applications on their own timeline, and not every application is shortlisted or confirmed. You will get an in-app notification and an email if your status changes.\n\nYou can message the clinic once they message you or confirm you for the shift.',
+          'Applied means your application was sent and the host can review it.\n\nFrom there, the host may:\n• shortlist you while they consider applicants\n• confirm you for the shift, after which you can accept or decline\n• decide to go with another physician\n\nHosts review applications on their own timeline, and not every application is shortlisted or confirmed. You will get an in-app notification and an email if your status changes.\n\nYou can message the host once they message you or confirm you for the shift.',
       },
       {
         question: 'What if I can’t find a locum?',
