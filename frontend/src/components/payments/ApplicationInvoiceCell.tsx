@@ -78,7 +78,7 @@ export function ApplicationInvoiceCell({
     const awaitingLocum = app.status === 'CONFIRMED' && app.locumResponse !== 'ACCEPTED';
     return (
       <span style={{ fontSize: 12, color: '#9CA3AF' }}>
-        {awaitingLocum ? 'Awaiting locum' : '—'}
+        {awaitingLocum ? 'Awaiting locum' : '-'}
       </span>
     );
   }

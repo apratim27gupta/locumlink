@@ -1169,12 +1169,12 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     const JOB_POST_PANEL_MIN = 320;
     const JOB_POST_PANEL_MAX_CAP = 1200;
     const [postPanelWidth, setPostPanelWidth] = useState(480);
-    const [unpaidMatchFees, setUnpaidMatchFees] = useState(0);
+    const [overdueMatchFees, setOverdueMatchFees] = useState(0);
     useEffect(() => {
         if (!verified) return;
         let cancelled = false;
         hostApi.getMatchFeeDueCount()
-            .then(({ dueCount }) => { if (!cancelled) setUnpaidMatchFees(dueCount); })
+            .then(({ overdueCount }) => { if (!cancelled) setOverdueMatchFees(overdueCount); })
             .catch(() => {});
         return () => { cancelled = true; };
     }, [verified]);
@@ -1959,7 +1959,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
         }}>
           ⚠️  CPSNS is not verified - this job will be saved as a Draft.
         </div>)}
-      {verified && unpaidMatchFees > 0 && (<div style={{
+      {verified && overdueMatchFees > 0 && (<div style={{
             position: 'fixed',
             top: 80,
             left: '50%',
@@ -1979,7 +1979,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             lineHeight: 1.4,
             boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
         }}>
-          You have an unpaid match fee. Please pay it from{' '}
+          You have an overdue match fee. Please pay it from{' '}
           <a href="/host/invoices" style={{ color: '#991B1B', fontWeight: 700 }}>Match Fees</a>
           {' '}before posting a new job. You can still save this job as a draft.
         </div>)}

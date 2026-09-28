@@ -1601,7 +1601,7 @@ export class PaymentsService {
           params.adminNotes ? `Notes: ${params.adminNotes}` : null,
         ]
           .filter(Boolean)
-          .join(' — '),
+          .join(' - '),
         actor: 'ADMIN',
       });
     }

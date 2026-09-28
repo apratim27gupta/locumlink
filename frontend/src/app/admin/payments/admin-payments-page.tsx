@@ -444,7 +444,7 @@ export default function AdminPaymentsPage() {
                                   type="button"
                                   className="btn btn-secondary"
                                   disabled={disabled}
-                                  title="Post-completion refund ($125) — requires confirmation"
+                                  title="Post-completion refund ($125) - requires confirmation"
                                   onClick={() =>
                                     setRefundConfirm({
                                       invoice,
@@ -461,7 +461,7 @@ export default function AdminPaymentsPage() {
                                   type="button"
                                   className="btn btn-secondary"
                                   disabled={disabled}
-                                  title="Post-completion refund ($250) — requires confirmation"
+                                  title="Post-completion refund ($250) - requires confirmation"
                                   onClick={() =>
                                     setRefundConfirm({
                                       invoice,

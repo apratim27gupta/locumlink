@@ -79,7 +79,7 @@ export function AdminMatchFeeRefundConfirmModal({
 
   const title =
     mode === 'no_replacement'
-      ? 'Confirm no replacement — refund host?'
+      ? 'Confirm no replacement - refund host?'
       : mode === 'discretionary'
         ? `Confirm refund of ${amountLabel}?`
         : 'Confirm refund?';

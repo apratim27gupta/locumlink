@@ -63,7 +63,7 @@ describe('Journey - Host posting rules and linked CPSNS', () => {
     return invoice;
   }
 
-  it('blocks publishing while a match fee is unpaid, allows drafts, and unblocks after payment', async () => {
+  it('blocks publishing only while a match fee is overdue, allows drafts, and unblocks after payment', async () => {
     const host = await createHostUser();
     const invoice = await createPendingInvoice(host);
     expect(invoice.status).toBe('PENDING');
@@ -71,10 +71,18 @@ describe('Journey - Host posting rules and linked CPSNS', () => {
     expect(invoicedEvent?.detail).toContain('(Full tier');
 
     const http = authedAgent(ctx.agent, host.token);
+    await http
+      .post('/api/host/jobs', buildCreateJobPayload({ saveAsDraft: false, status: 'ACTIVE' }))
+      .expect(201);
+
+    await getTestDb().matchFeeInvoice.update({
+      where: { id: invoice.id },
+      data: { status: 'OVERDUE' },
+    });
     const blocked = await http
       .post('/api/host/jobs', buildCreateJobPayload({ saveAsDraft: false, status: 'ACTIVE' }))
       .expect(403);
-    expect(blocked.body.message).toMatch(/unpaid match fee/i);
+    expect(blocked.body.message).toMatch(/overdue match fee/i);
 
     const draft = await http
       .post('/api/host/jobs', buildCreateJobPayload({ saveAsDraft: true }))

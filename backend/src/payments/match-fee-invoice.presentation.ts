@@ -19,13 +19,13 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
     status: 'PENDING',
     label: 'Pending payment',
     summary: 'Match confirmed; host has not paid yet and due date has not passed.',
-    hostObligation: 'Pay the invoiced match fee ($125 or $250) by the policy due date (see due date on each row).',
+    hostObligation: 'Pay the match fee ($125 or $250) by the due date shown on the invoice.',
   },
   {
     status: 'OVERDUE',
     label: 'Overdue',
-    summary: 'Due date passed without payment. The invoice status is Overdue from day 1 past due.',
-    hostObligation: 'Pay immediately or contact support.',
+    summary: 'The due date has passed and the fee is still unpaid. The invoice becomes Overdue the day after its due date.',
+    hostObligation: 'Pay now or contact support. The host cannot post new jobs until overdue fees are paid.',
   },
   {
     status: 'ESCALATED',
@@ -37,34 +37,35 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
   {
     status: 'PAID',
     label: 'Paid',
-    summary: 'Platform match fee collected (mock or Stripe).',
+    summary: 'Match fee collected (test payment or Stripe).',
     hostObligation:
-      'None while the match stands. Refund to your payment method only if you cancel the posting or match more than 14 days before start (see policy).',
+      'Nothing to do. The fee is refunded to the original payment method only if the posting or match is cancelled more than 14 days before the shift starts (see policy).',
   },
   {
     status: 'PENDING_REPLACEMENT',
     label: 'Replacement pending',
     summary: 'Locum cancelled within 14 days of start after fee was paid; LocumLink seeks a replacement.',
-    hostObligation: 'Await replacement locum accept or admin refund if none.',
+    hostObligation:
+      'Nothing to do for now. LocumLink is looking for a replacement locum. If none accepts, an admin refunds the fee.',
   },
   {
     status: 'REFUNDED',
     label: 'Refunded',
-    summary: 'Fee returned to the original payment method per policy or admin action.',
-    hostObligation: 'None.',
+    summary: 'Fee returned to the original payment method, either under the cancellation policy or by an admin.',
+    hostObligation: 'Nothing to do.',
   },
   {
     status: 'CANCELLED',
     label: 'Cancelled',
     summary:
       'Invoice voided: no payment was collected (e.g. posting removed or match ended while the fee was still unpaid).',
-    hostObligation: 'None.',
+    hostObligation: 'Nothing to do.',
   },
   {
     status: 'HOSTS_UNDER_REVIEW',
     label: 'Hosts under review',
     summary:
-      'Not an invoice status — a count of host accounts flagged for admin attention (usually after an invoice escalates from long overdue). Clear the flag from the invoice row once the host has paid or the issue is handled.',
+      'Not an invoice status - a count of host accounts flagged for admin attention (usually after an invoice escalates from long overdue). Clear the flag from the invoice row once the host has paid or the issue is handled.',
     hostObligation: 'Host should clear outstanding match fees; admin clears the review flag when done.',
   },
 ];

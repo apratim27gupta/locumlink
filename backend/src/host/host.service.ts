@@ -249,13 +249,13 @@ export class HostService {
     }
   }
 
-  private async assertNoUnpaidMatchFees(hostProfileId: string): Promise<void> {
-    const unpaid = await this.prisma.matchFeeInvoice.count({
-      where: { hostProfileId, status: { in: ['PENDING', 'OVERDUE'] } },
+  private async assertNoOverdueMatchFees(hostProfileId: string): Promise<void> {
+    const overdue = await this.prisma.matchFeeInvoice.count({
+      where: { hostProfileId, status: 'OVERDUE' },
     });
-    if (unpaid > 0) {
+    if (overdue > 0) {
       throw new ForbiddenException(
-        'You have an unpaid match fee. Please pay it from Match Fees before posting a new job.',
+        'You have an overdue match fee. Please pay it from Match Fees before posting a new job.',
       );
     }
   }
@@ -716,7 +716,7 @@ export class HostService {
           ? PostingStatus.ACTIVE
           : PostingStatus.DRAFT;
     if (status === PostingStatus.ACTIVE) {
-      await this.assertNoUnpaidMatchFees(hostProfileId);
+      await this.assertNoOverdueMatchFees(hostProfileId);
     }
 
     // Schedule can arrive three ways (most specific wins): per-day `shifts`
@@ -1095,7 +1095,7 @@ export class HostService {
 
     const publishingActive = statusToSave === PostingStatus.ACTIVE;
     if (publishingActive && job.status !== PostingStatus.ACTIVE) {
-      await this.assertNoUnpaidMatchFees(hostProfileId);
+      await this.assertNoOverdueMatchFees(hostProfileId);
     }
     const allowPastEdit =
       !publishingActive && job.status === PostingStatus.DRAFT;
@@ -1348,7 +1348,7 @@ export class HostService {
         'This job cannot be reopened (must be filled, expired, or past end date).',
       );
     }
-    await this.assertNoUnpaidMatchFees(hostProfileId);
+    await this.assertNoOverdueMatchFees(hostProfileId);
 
     const hasBothSchedule =
       dto.startDate != null &&
