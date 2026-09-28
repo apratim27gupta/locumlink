@@ -53,16 +53,16 @@ describe('Journey — Messaging block (host ↔ locum)', () => {
       .delete(`/api/messages/blocks/${locum.user.id}`)
       .expect(200);
 
-    await locumHttp
+    await hostHttp
       .post('/api/messages', {
-        recipientId: host.user.id,
+        recipientId: locum.user.id,
         body: 'Hello again',
       })
       .expect(200);
 
-    await hostHttp
+    await locumHttp
       .post('/api/messages', {
-        recipientId: locum.user.id,
+        recipientId: host.user.id,
         body: 'Reply',
       })
       .expect(200);

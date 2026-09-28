@@ -532,7 +532,12 @@ export class LocumService {
     });
     const locumProfile = await this.prisma.locumProfile.findUnique({
       where: { userId },
-      select: { id: true, cpsnsVerificationStatus: true },
+      select: {
+        id: true,
+        cpsnsVerificationStatus: true,
+        firstName: true,
+        lastName: true,
+      },
     });
     if (!locumProfile)
       throw new NotFoundException(
@@ -547,7 +552,7 @@ export class LocumService {
       where: { id: jobId },
       include: {
         hostProfile: {
-          select: { user: { select: { email: true } } },
+          select: { practiceName: true, user: { select: { email: true } } },
         },
       },
     });
@@ -633,6 +638,20 @@ export class LocumService {
         });
       }
     } catch {}
+    if (locumUser?.email) {
+      try {
+        await this.notifService.notifyLocumApplicationSubmitted({
+          recipientId: userId,
+          recipientEmail: locumUser.email,
+          firstName: locumProfile.firstName,
+          lastName: locumProfile.lastName,
+          jobTitle: job.title,
+          clinicName: job.hostProfile.practiceName,
+          submittedAt: application.appliedAt,
+          applicationId: application.id,
+        });
+      } catch {}
+    }
     return { success: true, application };
   }
   async getMyApplications(userId: string, query: Record<string, unknown> = {}) {
@@ -669,16 +688,41 @@ export class LocumService {
               title: true,
               description: true,
               isDeleted: true,
+              status: true,
+              createdAt: true,
+              publishedAt: true,
               startDate: true,
               endDate: true,
               startTime: true,
               endTime: true,
+              payPerDay: true,
+              requiredCredentials: true,
+              keyResponsibilities: true,
+              minYearsExperience: true,
+              isRural: true,
+              accommodationProvided: true,
+              practiceType: true,
+              emr: true,
+              clinicDesc: true,
+              numPhysicians: true,
+              patientVol: true,
+              servicesRequired: true,
               hostProfile: {
                 select: {
                   userId: true,
                   practiceName: true,
+                  contactFirstName: true,
+                  contactLastName: true,
+                  cpsnsVerificationStatus: true,
                   city: true,
                   province: true,
+                  postalCode: true,
+                  address: true,
+                  address1: true,
+                  practiceType: true,
+                  emr: true,
+                  servicesOffered: true,
+                  highlights: true,
                 },
               },
             },
@@ -688,7 +732,55 @@ export class LocumService {
     );
 
     return {
-      items: page.items,
+      items: page.items.map((app) => {
+        const { jobPosting: jp, ...rest } = app as typeof app & {
+          jobPosting: {
+            practiceType: string | null;
+            emr: string | null;
+            clinicDesc: string | null;
+            numPhysicians: string | null;
+            patientVol: string | null;
+            servicesRequired: string[] | null;
+            payPerDay: unknown;
+            hostProfile: {
+              city: string;
+              province: string;
+              practiceType: string | null;
+              emr: string | null;
+              servicesOffered: string[];
+              highlights: string | null;
+            };
+          };
+        };
+        const hp = jp.hostProfile;
+        const hasJobPracticeSnapshot =
+          Boolean(jp.practiceType?.trim()) ||
+          Boolean(jp.emr?.trim()) ||
+          Boolean(jp.clinicDesc?.trim()) ||
+          Boolean(jp.numPhysicians?.trim()) ||
+          Boolean(jp.patientVol?.trim()) ||
+          (Array.isArray(jp.servicesRequired) &&
+            jp.servicesRequired.length > 0);
+        return {
+          ...rest,
+          jobPosting: {
+            ...jp,
+            payPerDay: jp.payPerDay != null ? Number(jp.payPerDay) : null,
+            location: [hp.city, hp.province].filter(Boolean).join(', '),
+            hostProfile: {
+              ...hp,
+              practiceType: jp.practiceType?.trim() || hp.practiceType || null,
+              emr: jp.emr?.trim() || hp.emr || null,
+              numPhysicians: jp.numPhysicians?.trim() || null,
+              patientVol: jp.patientVol?.trim() || null,
+              servicesOffered: hasJobPracticeSnapshot
+                ? (jp.servicesRequired ?? [])
+                : (hp.servicesOffered ?? []),
+              highlights: jp.clinicDesc?.trim() || hp.highlights || null,
+            },
+          },
+        };
+      }),
       nextCursor: page.nextCursor,
       hasNextPage: page.hasNextPage,
     };

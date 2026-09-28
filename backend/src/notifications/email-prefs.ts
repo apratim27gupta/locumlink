@@ -60,6 +60,7 @@ export function emailPrefKeyForEventType(
   }
   if (
     eventType.includes('APPLIED') ||
+    eventType.includes('SUBMITTED') ||
     eventType.includes('ACCEPTED') ||
     eventType.includes('DECLINED') ||
     eventType.includes('CONFIRMED') ||

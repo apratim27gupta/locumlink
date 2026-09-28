@@ -114,6 +114,10 @@ export const NOTIFICATION_EVENT_DEFAULTS: Record<
     href: '/locum/profile',
     actionLabel: 'Complete Profile',
   },
+  L_015_APPLICATION_SUBMITTED: {
+    href: '/locum/dashboard',
+    actionLabel: 'View Application',
+  },
   U_001_ADMIN_MESSAGE: {
     href: '/locum/dashboard',
     actionLabel: 'Open dashboard',
@@ -148,6 +152,7 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   L_012_SHIFT_CANCELLED: 'Shift Cancelled',
   L_013_ACCOUNT_WARNING: 'Account warning',
   L_014_PROFILE_REMINDER: 'Complete your Locum Link profile',
+  L_015_APPLICATION_SUBMITTED: 'Application Submitted',
   U_001_ADMIN_MESSAGE: 'Message from Locum Link',
 };
 
