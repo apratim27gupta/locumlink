@@ -6,7 +6,7 @@ import { onPwaRefresh } from '@/lib/pwaEvents';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
-import { fetchAllPaginated, hostApi, locumApi, messageApi, uploadFile, type ApplicationRecord, type BlockStatus, type Conversation, type ConversationPartner, type MyApplication, type ReportReason, type ThreadMessage, type ThreadPartner, } from '@/lib/api';
+import { fetchAllPaginated, hostApi, locumApi, messageApi, uploadFile, type ApplicationRecord, type BlockStatus, type Conversation, type ConversationPartner, type MessagingPermission, type MyApplication, type ReportReason, type ThreadMessage, type ThreadPartner, } from '@/lib/api';
 import { getEmail, getToken } from '@/lib/auth';
 import { subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { dispatchMessagesUpdated } from '@/lib/messagesUpdatedEvent';
@@ -87,6 +87,10 @@ const EMPTY_BLOCK_STATUS: BlockStatus = {
     blockedByMe: false,
     blockedByPartner: false,
     isMessagingBlocked: false,
+};
+const OPEN_MESSAGING_PERMISSION: MessagingPermission = {
+    canSend: true,
+    reason: null,
 };
 const REPORT_REASONS: Array<{ value: ReportReason; label: string }> = [
     { value: 'HARASSMENT', label: 'Harassment or abusive behavior' },
@@ -639,6 +643,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const [savingEdit, setSavingEdit] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<ThreadMessage | null>(null);
     const [blockStatus, setBlockStatus] = useState<BlockStatus>(EMPTY_BLOCK_STATUS);
+    const [messagingPermission, setMessagingPermission] = useState<MessagingPermission>(OPEN_MESSAGING_PERMISSION);
     const [threadMenuOpen, setThreadMenuOpen] = useState(false);
     const [showBlockModal, setShowBlockModal] = useState(false);
     const [showUnblockModal, setShowUnblockModal] = useState(false);
@@ -792,7 +797,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const loadThread = useCallback(async (partnerId: string) => {
         setLoadingThread(true);
         try {
-            const { items, partner: p, blockStatus: status } = await messageApi.getThread(partnerId, { limit: 100 });
+            const { items, partner: p, blockStatus: status, messagingPermission: permission } = await messageApi.getThread(partnerId, { limit: 100 });
             const hiddenIds = new Set(JSON.parse(localStorage.getItem('deleted-for-me') || '[]'));
             const visible = items.filter((m: ThreadMessage) => !hiddenIds.has(m.id));
             setThread(visible);
@@ -800,6 +805,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             threadSinceRef.current = last?.sentAt ?? null;
             setPartner(p);
             setBlockStatus(status ?? EMPTY_BLOCK_STATUS);
+            setMessagingPermission(permission ?? OPEN_MESSAGING_PERMISSION);
             setConversations((prev) => prev.map((c) => c.partnerId === partnerId ? { ...c, unreadCount: 0, blockStatus: status ?? c.blockStatus } : c));
             dispatchMessagesUpdated();
         }
@@ -874,6 +880,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     useEffect(() => {
         threadSinceRef.current = null;
         setBlockStatus(EMPTY_BLOCK_STATUS);
+        setMessagingPermission(OPEN_MESSAGING_PERMISSION);
         setThreadMenuOpen(false);
     }, [selectedPartnerId]);
     const pollMessages = useCallback(async () => {
@@ -1179,15 +1186,9 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const locumApplicationSidebarRows = useMemo(() => {
         if (role !== 'locum')
             return [];
-        const rows = myApplications.filter((a) => (a.status === 'SHORTLISTED' || a.status === 'APPLIED') &&
+        const rows = myApplications.filter((a) => a.status === 'CONFIRMED' &&
             !hostIdsWithConvs.has(a.jobPosting.hostProfile.userId));
-        const rank = (s: MyApplication['status']) => s === 'SHORTLISTED' ? 0 : s === 'APPLIED' ? 1 : 2;
-        return [...rows].sort((a, b) => {
-            const d = rank(a.status) - rank(b.status);
-            if (d !== 0)
-                return d;
-            return (new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
-        });
+        return [...rows].sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
     }, [role, myApplications, hostIdsWithConvs]);
     const filteredLocumAppRows = useMemo(() => {
         if (!debouncedSearchQuery)
@@ -1259,6 +1260,11 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         (threadHostApplication?.status === 'APPLIED' || threadHostApplication?.status === 'SHORTLISTED'));
     const hostThreadAlreadyConfirmed = Boolean(showHostThreadConfirm && threadHostApplication?.status === 'CONFIRMED');
     const isMessagingBlocked = blockStatus.isMessagingBlocked;
+    const locumAwaitingHost = role === 'locum' &&
+        !isMessagingBlocked &&
+        !messagingPermission.canSend &&
+        !thread.some((m) => m.senderId === selectedPartnerId);
+    const composerDisabled = isMessagingBlocked || locumAwaitingHost;
     function onListPanelResizeMouseDown(e: ReactMouseEvent<HTMLDivElement>) {
         e.preventDefault();
         e.stopPropagation();
@@ -1520,7 +1526,6 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                     const isSelected = selectedPartnerId === hostId;
                     const practice = app.jobPosting.hostProfile.practiceName;
                     const jobTitle = app.jobPosting.title;
-                    const isShortlisted = app.status === 'SHORTLISTED';
                     return (<div key={app.id} onClick={() => {
                             setSelectedPartnerId(hostId);
                             setComposeJobPostingId(app.jobPosting.id);
@@ -1576,13 +1581,13 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                               <span style={{
                             fontSize: 10,
                             fontWeight: 600,
-                            color: isShortlisted ? '#059669' : '#1D4ED8',
-                            background: isShortlisted ? '#ECFDF5' : '#EFF6FF',
+                            color: '#059669',
+                            background: '#ECFDF5',
                             padding: '2px 6px',
                             borderRadius: 4,
                             flexShrink: 0,
                         }}>
-                                {isShortlisted ? 'Shortlisted' : 'Applied'}
+                                Confirmed
                               </span>
                             </div>
                             <div style={{
@@ -1657,10 +1662,10 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                         color: '#374151',
                         marginBottom: 6,
                     }}>
-                            No active applications to show
+                            No messages yet
                           </div>
                           <div style={{ fontSize: 12, color: '#9CA3AF' }}>
-                            Confirmed or closed applications are not listed here
+                            You can message a host once they confirm you for a shift, or reply after they message you
                           </div>
                         </>) : role === 'locum' ? (<>
                           <div style={{
@@ -2044,7 +2049,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                     color: '#9CA3AF',
                     paddingTop: 40,
                 }}>
-                  No messages yet. Say hello!
+                  {locumAwaitingHost ? 'No messages yet.' : 'No messages yet. Say hello!'}
                 </div>) : (thread.map((msg, idx) => {
                 const isMine = msg.senderId !== selectedPartnerId;
                 const isDeleted = !!msg.deletedAt;
@@ -2378,7 +2383,19 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                       {' '}to send messages again.
                     </>) : 'You can\u2019t send messages in this conversation.'}
                 </div>)}
-              {!isMessagingBlocked && pendingFiles.length > 0 && (<div style={{
+              {locumAwaitingHost && (<div style={{
+                    marginBottom: 10,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    background: '#EFF6FF',
+                    border: '1px solid #BFDBFE',
+                    fontSize: 12,
+                    color: '#1E3A8A',
+                    lineHeight: 1.5,
+                }}>
+                  {messagingPermission.reason ?? 'You can message this host once they confirm you for a shift, or reply after they message you.'}
+                </div>)}
+              {!composerDisabled && pendingFiles.length > 0 && (<div style={{
                     display: 'flex',
                     flexWrap: 'wrap',
                     gap: 8,
@@ -2420,7 +2437,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                       </button>
                     </div>))}
                 </div>)}
-              {!isMessagingBlocked && (<>
+              {!composerDisabled && (<>
               <textarea ref={inputRef} value={messageText} onChange={(e) => setMessageText(e.target.value)} onKeyDown={handleKeyDown} placeholder="Type a message… (Enter for new line, Ctrl+Enter or ⌘+Enter to send)" rows={2} style={{
                 width: '100%',
                 border: '1px solid #E5E7EB',

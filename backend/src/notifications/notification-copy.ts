@@ -140,6 +140,37 @@ export function buildL004ApplicationDeclined(params: {
   };
 }
 
+/** L-015 - Application submitted (confirmation to the locum) */
+export function buildL015ApplicationSubmitted(params: {
+  doctorName: string;
+  jobTitle: string;
+  clinicName: string;
+  submittedAtStr: string;
+}) {
+  const at = params.clinicName ? ` at ${params.clinicName}` : '';
+  const when = params.submittedAtStr ? ` on ${params.submittedAtStr}` : '';
+  return {
+    inAppTitle: 'Application Submitted',
+    inAppBody: `Your application for ${params.jobTitle}${at} was submitted. The host will review it and you will be notified if your status changes.`,
+    emailSubject: `Application Submitted: ${params.jobTitle}`,
+    emailBody: `Hello ${params.doctorName}, Your application for ${params.jobTitle}${at} was submitted${when}. The host will review applications and decide who to shortlist or confirm. Not every application is shortlisted. We will notify you if your status changes. You can track this application from My Applications in Locum Link.`,
+    priority: 'NORMAL' as LocumCopyPriority,
+    actionLabel: 'View Application',
+  };
+}
+
+export function formatSubmittedAt(date: Date, timeZone: string): string {
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone,
+    timeZoneName: 'short',
+  });
+}
+
 /** L-005 — Shift reminder 48 hours */
 export function buildL005ShiftReminder48h(params: {
   doctorName: string;

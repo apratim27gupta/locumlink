@@ -347,6 +347,11 @@ export default function LocumBrowsePage(props: {
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState<string | null>(null);
   const [applyError, setApplyError] = useState('');
+  const [submittedApplication, setSubmittedApplication] = useState<{
+    jobTitle: string;
+    practiceName: string;
+    submittedAt: Date;
+  } | null>(null);
   const [profile, setProfile] = useState<LocumProfile | null>(null);
   const [listPanelWidth, setListPanelWidth] = useState(readStoredBrowseListWidth);
   const loadJobs = useCallback(async () => {
@@ -491,6 +496,11 @@ export default function LocumBrowsePage(props: {
       await locumApi.applyToJob(jobId);
       syncCookies();
       setApplied((prev) => new Set([...prev, jobId]));
+      setSubmittedApplication({
+        jobTitle: targetJob?.title ?? 'this shift',
+        practiceName: targetJob?.hostProfile.practiceName ?? '',
+        submittedAt: new Date(),
+      });
     } catch (e: unknown) {
       const msg =
         e instanceof Error ? e.message : 'Failed to apply. Please try again.';
@@ -1283,6 +1293,118 @@ export default function LocumBrowsePage(props: {
       topbarLastName={profile?.lastName}
     >
       {pageContent}
+      {submittedApplication ? (
+        <div
+          role="presentation"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.45)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setSubmittedApplication(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="locum-application-submitted-title"
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              padding: '24px 28px',
+              maxWidth: 420,
+              width: '100%',
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
+              fontFamily: 'Inter, sans-serif',
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div
+              aria-hidden
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                background: '#ECFDF5',
+                color: '#059669',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 14,
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
+            <h3
+              id="locum-application-submitted-title"
+              style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600, color: '#0B0F1F' }}
+            >
+              Application submitted
+            </h3>
+            <p style={{ margin: '0 0 10px 0', fontSize: 14, color: '#374151', lineHeight: 1.5 }}>
+              Your application for <strong>{submittedApplication.jobTitle}</strong>
+              {submittedApplication.practiceName ? ` at ${submittedApplication.practiceName}` : ''} was
+              sent on{' '}
+              {submittedApplication.submittedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {' at '}
+              {submittedApplication.submittedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.
+            </p>
+            <p style={{ margin: '0 0 22px 0', fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
+              The clinic will review it and we will notify you if your status changes. A confirmation is also in your notifications, and in your email if application emails are turned on in Settings.
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                type="button"
+                onClick={() => setSubmittedApplication(null)}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  border: '1px solid #D0D5DD',
+                  borderRadius: 8,
+                  background: '#fff',
+                  color: '#374151',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Keep browsing
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmittedApplication(null);
+                  beforeClientNavigation('/locum/dashboard');
+                  router.push('/locum/dashboard');
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  border: 'none',
+                  borderRadius: 8,
+                  background: '#0F2A7A',
+                  color: '#fff',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                View my applications
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </DashLayout>
   );
 }

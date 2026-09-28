@@ -1103,6 +1103,7 @@ export class HostService {
           locumResponse: true,
           appliedAt: true,
           placedAt: true,
+          hostViewedAt: true,
           locumProfile: {
             select: {
               id: true,
@@ -1158,6 +1159,34 @@ export class HostService {
       nextCursor: page.nextCursor,
       hasNextPage: page.hasNextPage,
     };
+  }
+
+  /** Records the first time the host opens an applicant's profile; later opens keep the original time. */
+  async markApplicationViewed(userId: string, jobId: string, appId: string) {
+    const hostProfileId = await this.getHostProfileId(userId);
+    const app = await this.prisma.application.findFirst({
+      where: { id: appId, jobPostingId: jobId },
+      select: {
+        hostViewedAt: true,
+        jobPosting: { select: { hostProfileId: true } },
+      },
+    });
+    if (!app) throw new NotFoundException('Application not found');
+    if (app.jobPosting.hostProfileId !== hostProfileId)
+      throw new ForbiddenException();
+    if (app.hostViewedAt) return { hostViewedAt: app.hostViewedAt };
+
+    const viewedAt = new Date();
+    await this.prisma.$executeRaw`
+      UPDATE "applications"
+      SET "host_viewed_at" = ${viewedAt}
+      WHERE "id" = ${appId} AND "host_viewed_at" IS NULL
+    `;
+    const row = await this.prisma.application.findUnique({
+      where: { id: appId },
+      select: { hostViewedAt: true },
+    });
+    return { hostViewedAt: row?.hostViewedAt ?? viewedAt };
   }
 
   async updateApplication(

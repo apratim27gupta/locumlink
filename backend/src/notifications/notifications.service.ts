@@ -9,6 +9,7 @@ import { EmailService } from './email.service.js';
 import { allowsEmailForEvent } from './email-prefs.js';
 import { isDigestEventType } from './email-digest.js';
 import { EmailDigestService } from './email-digest.service.js';
+import { getPlatformTimezone } from '../host/job-schedule.util.js';
 import {
   buildL001NewOpportunity,
   buildL002HostConfirmed,
@@ -20,9 +21,11 @@ import {
   buildL008NewMessage,
   buildL013AccountWarning,
   buildL012ShiftCancelled,
+  buildL015ApplicationSubmitted,
   contactSupportMailtoHref,
   formatLocumDoctorName,
   formatJobDate,
+  formatSubmittedAt,
   formatJobDateHostApplicantTitle,
   formatSuspensionReason,
   formatVerificationRejectionReason,
@@ -84,6 +87,7 @@ export type NotifEventType =
   | 'L_012_SHIFT_CANCELLED'
   | 'L_013_ACCOUNT_WARNING'
   | 'L_014_PROFILE_REMINDER'
+  | 'L_015_APPLICATION_SUBMITTED'
   // Shared / system
   | 'U_001_ADMIN_MESSAGE'
   // Admin
@@ -320,6 +324,39 @@ export class NotificationsService {
     await this.create({
       recipientId: params.recipientId,
       eventType: 'L_003_APPLICATION_ACCEPTED',
+      title: copy.inAppTitle,
+      body: copy.inAppBody,
+      href: '/locum/dashboard',
+      priority: copy.priority,
+      actionLabel: copy.actionLabel,
+      referenceId: params.applicationId,
+      referenceType: 'Application',
+      emailTo: params.recipientEmail,
+      emailSubject: copy.emailSubject,
+      emailBody: copy.emailBody,
+    });
+  }
+
+  /** L-015: confirmation to the locum that their application was submitted */
+  async notifyLocumApplicationSubmitted(params: {
+    recipientId: string;
+    recipientEmail: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    jobTitle: string;
+    clinicName?: string | null;
+    submittedAt: Date;
+    applicationId: string;
+  }): Promise<void> {
+    const copy = buildL015ApplicationSubmitted({
+      doctorName: formatLocumDoctorName(params.firstName, params.lastName),
+      jobTitle: params.jobTitle,
+      clinicName: params.clinicName?.trim() ?? '',
+      submittedAtStr: formatSubmittedAt(params.submittedAt, getPlatformTimezone()),
+    });
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'L_015_APPLICATION_SUBMITTED',
       title: copy.inAppTitle,
       body: copy.inAppBody,
       href: '/locum/dashboard',
