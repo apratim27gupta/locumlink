@@ -267,7 +267,7 @@ function AppliedStatusInfo({ align = 'right' }: { align?: 'left' | 'right' }) {
             What happens next?
           </div>
           <div style={{ marginBottom: 6 }}>
-            Your application was sent and the clinic can review it. The clinic may shortlist you, confirm you for the shift, or go with another physician.
+            Your application was sent and the host can review it. The host may shortlist you, confirm you for the shift, or go with another physician.
           </div>
           <div style={{ marginBottom: 10 }}>
             Not every application is shortlisted or confirmed. We will notify you if your status changes.

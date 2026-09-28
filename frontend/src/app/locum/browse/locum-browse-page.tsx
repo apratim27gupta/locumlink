@@ -1358,7 +1358,7 @@ export default function LocumBrowsePage(props: {
               {submittedApplication.submittedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.
             </p>
             <p style={{ margin: '0 0 22px 0', fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
-              The clinic will review it and we will notify you if your status changes. A confirmation is also in your notifications, and in your email if application emails are turned on in Settings.
+              The host will review it. You can track its status from My Applications.
             </p>
             <div style={{ display: 'flex', gap: 12 }}>
               <button
@@ -1399,7 +1399,7 @@ export default function LocumBrowsePage(props: {
                   fontFamily: 'inherit',
                 }}
               >
-                View my applications
+                View my application
               </button>
             </div>
           </div>
