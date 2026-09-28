@@ -466,6 +466,8 @@ model Application {
   appliedAt       DateTime          @default(now())
   statusChangedAt DateTime          @updatedAt
   locumAcceptedAt DateTime?         @map("locum_accepted_at")
+  // First time the host opened this applicant's profile. Written with raw SQL so statusChangedAt is not bumped.
+  hostViewedAt    DateTime?         @map("host_viewed_at")
 
   // Placement timestamp for fill rate + avg time-to-placement (L2-E7.1)
   placedAt        DateTime?         @map("placed_at")

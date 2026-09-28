@@ -174,6 +174,51 @@ export class MessageService {
     }
   }
 
+  /**
+   * Locums may not start a conversation with a host. They can send once the host has
+   * messaged them, or once the host has confirmed them on one of the host's postings.
+   */
+  private async locumFirstMessageRestriction(
+    senderId: string,
+    recipientId: string,
+  ): Promise<string | null> {
+    const [sender, recipient] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: senderId },
+        select: { role: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: recipientId },
+        select: { role: true },
+      }),
+    ]);
+    if (sender?.role !== 'LOCUM' || recipient?.role !== 'HOST') return null;
+    const [hostMessage, confirmedApplication] = await Promise.all([
+      this.prisma.message.findFirst({
+        where: { senderId: recipientId, recipientId: senderId },
+        select: { id: true },
+      }),
+      this.prisma.application.findFirst({
+        where: {
+          status: 'CONFIRMED',
+          locumProfile: { userId: senderId },
+          jobPosting: { hostProfile: { userId: recipientId } },
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (hostMessage || confirmedApplication) return null;
+    return 'You can message this host once they confirm you for a shift, or reply after they message you.';
+  }
+
+  private async getMessagingPermission(
+    userId: string,
+    partnerId: string,
+  ): Promise<{ canSend: boolean; reason: string | null }> {
+    const reason = await this.locumFirstMessageRestriction(userId, partnerId);
+    return { canSend: reason == null, reason };
+  }
+
   /** Prevents probing arbitrary user IDs via getThread when no messages exist yet. */
   private async hasMessagingContext(
     userId: string,
@@ -607,8 +652,11 @@ export class MessageService {
     });
 
     if (!conversationExists) {
-      const canView = await this.hasMessagingContext(userId, partnerId);
-      const blockStatus = await this.getBlockStatus(userId, partnerId);
+      const [canView, blockStatus, messagingPermission] = await Promise.all([
+        this.hasMessagingContext(userId, partnerId),
+        this.getBlockStatus(userId, partnerId),
+        this.getMessagingPermission(userId, partnerId),
+      ]);
       const partner = canView
         ? await this.fetchPartnerProfile(partnerId)
         : null;
@@ -618,12 +666,14 @@ export class MessageService {
         hasNextPage: false,
         partner,
         blockStatus,
+        messagingPermission,
       };
     }
 
-    const [partner, blockStatus] = await Promise.all([
+    const [partner, blockStatus, messagingPermission] = await Promise.all([
       this.fetchPartnerProfile(partnerId),
       this.getBlockStatus(userId, partnerId),
+      this.getMessagingPermission(userId, partnerId),
     ]);
 
     return {
@@ -632,6 +682,7 @@ export class MessageService {
       hasNextPage: page.hasNextPage,
       partner,
       blockStatus,
+      messagingPermission,
     };
   }
   async sendMessage(
@@ -651,6 +702,13 @@ export class MessageService {
       throw new ForbiddenException('Message body or attachment is required');
     }
     await this.assertCanMessage(senderId, recipientId);
+    const firstMessageRestriction = await this.locumFirstMessageRestriction(
+      senderId,
+      recipientId,
+    );
+    if (firstMessageRestriction) {
+      throw new ForbiddenException(firstMessageRestriction);
+    }
     for (const a of attachments ?? []) {
       assertOwnsStoragePath(a.storagePath, senderId);
     }

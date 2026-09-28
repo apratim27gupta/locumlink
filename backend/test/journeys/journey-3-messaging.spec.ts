@@ -11,6 +11,9 @@ import {
   createMessage,
   createMessageThread,
 } from '../factories/message.factory';
+import { createJobPosting } from '../factories/job.factory';
+import { createApplication } from '../factories/application.factory';
+import { ApplicationStatus } from '@prisma/client';
 
 describe('Journey 3 — Messaging between locum and host', () => {
   let ctx: TestAppContext;
@@ -179,5 +182,72 @@ describe('Journey 3 — Messaging between locum and host', () => {
       expect.objectContaining({ id: locum.user.id }),
     );
     expect(res.body.partner?.email).toBeUndefined();
+  });
+
+  it('locum cannot message a host first while the application is not confirmed', async () => {
+    const host = await createHostUser();
+    const locum = await createLocumUser();
+    const job = await createJobPosting(host.hostProfileId);
+    await createApplication({
+      jobPostingId: job.id,
+      locumProfileId: locum.locumProfileId,
+      status: ApplicationStatus.SHORTLISTED,
+    });
+    const locumHttp = authedAgent(ctx.agent, locum.token);
+
+    const thread = await locumHttp
+      .get(`/api/messages/thread/${host.user.id}`)
+      .expect(200);
+    expect(thread.body.messagingPermission).toEqual(
+      expect.objectContaining({ canSend: false }),
+    );
+
+    await locumHttp
+      .post('/api/messages', { recipientId: host.user.id, body: 'Hi first' })
+      .expect(403);
+    expect(await getTestDb().message.count()).toBe(0);
+  });
+
+  it('locum can reply once the host has messaged them', async () => {
+    const host = await createHostUser();
+    const locum = await createLocumUser();
+    await createMessage({
+      senderId: host.user.id,
+      recipientId: locum.user.id,
+      body: 'Are you available?',
+    });
+    const locumHttp = authedAgent(ctx.agent, locum.token);
+
+    const thread = await locumHttp
+      .get(`/api/messages/thread/${host.user.id}`)
+      .expect(200);
+    expect(thread.body.messagingPermission).toEqual({
+      canSend: true,
+      reason: null,
+    });
+
+    await locumHttp
+      .post('/api/messages', { recipientId: host.user.id, body: 'Yes' })
+      .expect(200);
+  });
+
+  it('locum can message a host first once the host has confirmed them', async () => {
+    const host = await createHostUser();
+    const locum = await createLocumUser();
+    const job = await createJobPosting(host.hostProfileId);
+    await createApplication({
+      jobPostingId: job.id,
+      locumProfileId: locum.locumProfileId,
+      status: ApplicationStatus.CONFIRMED,
+    });
+    const locumHttp = authedAgent(ctx.agent, locum.token);
+
+    await locumHttp
+      .post('/api/messages', {
+        recipientId: host.user.id,
+        body: 'Thanks for confirming',
+        jobPostingId: job.id,
+      })
+      .expect(200);
   });
 });

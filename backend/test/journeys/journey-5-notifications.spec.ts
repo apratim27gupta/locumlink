@@ -50,6 +50,20 @@ describe('Journey 5 — Notifications after application', () => {
     expect(notifRow).not.toBeNull();
     expect(notifRow?.deliveryStatus).not.toBe('READ');
 
+    const locumNotif = await db.notificationEvent.findFirst({
+      where: {
+        recipientId: locum.user.id,
+        eventType: 'L_015_APPLICATION_SUBMITTED',
+      },
+    });
+    expect(locumNotif).not.toBeNull();
+    expect(locumNotif?.payload).toEqual(
+      expect.objectContaining({
+        title: 'Application Submitted',
+        href: '/locum/dashboard',
+      }),
+    );
+
     const hostHttp = authedAgent(ctx.agent, host.token);
 
     const all = await hostHttp.get('/api/notifications').expect(200);

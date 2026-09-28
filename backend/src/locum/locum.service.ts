@@ -598,7 +598,12 @@ export class LocumService {
     });
     const locumProfile = await this.prisma.locumProfile.findUnique({
       where: { userId },
-      select: { id: true, cpsnsVerificationStatus: true },
+      select: {
+        id: true,
+        cpsnsVerificationStatus: true,
+        firstName: true,
+        lastName: true,
+      },
     });
     if (!locumProfile)
       throw new NotFoundException(
@@ -614,7 +619,7 @@ export class LocumService {
       include: {
         shifts: { select: { id: true, date: true } },
         hostProfile: {
-          select: { user: { select: { email: true } } },
+          select: { practiceName: true, user: { select: { email: true } } },
         },
       },
     });
@@ -752,6 +757,20 @@ export class LocumService {
         });
       }
     } catch {}
+    if (locumUser?.email) {
+      try {
+        await this.notifService.notifyLocumApplicationSubmitted({
+          recipientId: userId,
+          recipientEmail: locumUser.email,
+          firstName: locumProfile.firstName,
+          lastName: locumProfile.lastName,
+          jobTitle: job.title,
+          clinicName: job.hostProfile.practiceName,
+          submittedAt: application.appliedAt,
+          applicationId: application.id,
+        });
+      } catch {}
+    }
     return { success: true, application };
   }
   async getMyApplications(userId: string, query: Record<string, unknown> = {}) {

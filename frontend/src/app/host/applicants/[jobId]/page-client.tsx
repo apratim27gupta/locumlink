@@ -527,6 +527,18 @@ export default function HostApplicantsPage(props: {
         setComposeError(null);
         setComposeSent(false);
     }, [selected?.id]);
+    useEffect(() => {
+        if (!jobId || !selected || selected.hostViewedAt)
+            return;
+        const appId = selected.id;
+        void hostApi
+            .markApplicationViewed(jobId, appId)
+            .then(({ hostViewedAt }) => {
+            setApps((prev) => prev.map((a) => (a.id === appId ? { ...a, hostViewedAt } : a)));
+            setSelected((prev) => (prev?.id === appId ? { ...prev, hostViewedAt } : prev));
+        })
+            .catch(() => { });
+    }, [jobId, selected]);
     const byStatus = useMemo(() => {
         const groups: Record<string, ApplicationRecord[]> = {};
         for (const a of apps) {

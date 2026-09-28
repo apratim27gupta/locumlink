@@ -539,6 +539,7 @@ export type MyApplication = {
     locumAcceptedAt?: string | null;
     /** Present when host-confirmed and locum has not accepted yet. */
     acceptPreview?: PlacementAcceptPreview | null;
+    hostViewedAt?: string | null;
     jobPosting: {
         id: string;
         title: string;
@@ -849,6 +850,7 @@ export type ApplicationRecord = {
     availableDates?: string[] | null;
     requestedShiftIds?: string[] | null;
     shiftClaims?: { shiftId: string }[] | null;
+    hostViewedAt?: string | null;
     locumProfile: {
         id: string;
         userId: string;
@@ -1156,6 +1158,22 @@ export const hostApi = {
         }
         return res.json();
     },
+    markApplicationViewed: async (jobId: string, appId: string): Promise<{
+        hostViewedAt: string;
+    }> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/host/jobs/${encodeURIComponent(jobId)}/applications/${encodeURIComponent(appId)}/view`, {
+            method: 'POST',
+            headers: nestHeaders(true),
+            skipTopLoader: true,
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Marking application viewed');
+        }
+        return res.json() as Promise<{
+            hostViewedAt: string;
+        }>;
+    },
     reopenJob: async (jobId: string, payload: {
         startDate?: string;
         endDate?: string;
@@ -1360,6 +1378,10 @@ export type BlockStatus = {
     blockedByPartner: boolean;
     isMessagingBlocked: boolean;
 };
+export type MessagingPermission = {
+    canSend: boolean;
+    reason: string | null;
+};
 export type BlockedUser = {
     userId: string;
     blockedAt: string;
@@ -1448,6 +1470,7 @@ export const messageApi = {
     }): Promise<PaginatedResult<ThreadMessage> & {
         partner: ThreadPartner | null;
         blockStatus?: BlockStatus;
+        messagingPermission?: MessagingPermission;
     }> => {
         const sp = new URLSearchParams();
         if (opts?.since)
@@ -1471,6 +1494,7 @@ export const messageApi = {
         return res.json() as Promise<PaginatedResult<ThreadMessage> & {
             partner: ThreadPartner | null;
             blockStatus?: BlockStatus;
+            messagingPermission?: MessagingPermission;
         }>;
     },
     sendMessage: async (recipientId: string, body: string, jobPostingId?: string, attachments?: {

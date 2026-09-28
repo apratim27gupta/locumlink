@@ -130,6 +130,18 @@ export class HostController {
   ) {
     return this.hostService.getApplications(req.user.id, jobId, query);
   }
+  @Post('jobs/:jobId/applications/:appId/view')
+  @HttpCode(HttpStatus.OK)
+  markApplicationViewed(
+    @Req()
+    req: JwtRequest,
+    @Param('jobId')
+    jobId: string,
+    @Param('appId')
+    appId: string,
+  ) {
+    return this.hostService.markApplicationViewed(req.user.id, jobId, appId);
+  }
   @Patch('jobs/:jobId/applications/:appId')
   updateApplication(
     @Req()

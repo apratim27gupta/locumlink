@@ -9,6 +9,7 @@ import { LocumBrowseJobDetail } from '@/components/locum/LocumBrowseJobDetail';
 import { LocumApplyModal } from '@/components/locum/LocumApplyModal';
 import { InlineAvailabilityEditor } from '@/components/locum/InlineAvailabilityEditor';
 import { fetchAllPaginated, locumApi, type BrowseJob, type MyApplication } from '@/lib/api';
+import { FAQ_AFTER_APPLYING_ID } from '@/lib/faqContent';
 import { getToken } from '@/lib/auth';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { useAuth } from '@/providers/AuthProvider';
@@ -308,6 +309,98 @@ function applicationStatusPresentation(app: MyApplication): {
                 color: '#5a6478',
             };
     }
+}
+function fmtDateTime(iso: string): string {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime()))
+        return '';
+    const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return `${date} at ${time}`;
+}
+/** Hosts only act on applicants after opening them, so any status past APPLIED implies a view. */
+function hostViewedLabel(app: MyApplication): { viewed: boolean; text: string } {
+    if (app.hostViewedAt)
+        return { viewed: true, text: `Viewed on ${fmtDateTime(app.hostViewedAt)}` };
+    if (app.status !== 'APPLIED')
+        return { viewed: true, text: 'Viewed' };
+    return { viewed: false, text: 'Not viewed yet' };
+}
+function AppliedStatusInfo({ align = 'right' }: { align?: 'left' | 'right' }) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef<HTMLSpanElement>(null);
+    useEffect(() => {
+        if (!open)
+            return;
+        function onDown(e: MouseEvent) {
+            if (wrapRef.current && !wrapRef.current.contains(e.target as Node))
+                setOpen(false);
+        }
+        function onKey(e: KeyboardEvent) {
+            if (e.key === 'Escape')
+                setOpen(false);
+        }
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+    return (<span ref={wrapRef} style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+      <button type="button" aria-label="What does Applied mean?" aria-expanded={open} onClick={(e) => {
+            e.stopPropagation();
+            setOpen((v) => !v);
+        }} style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 26,
+            height: 26,
+            padding: 0,
+            border: 'none',
+            borderRadius: '50%',
+            background: open ? '#EEF0FB' : 'transparent',
+            color: '#3B4FD8',
+            cursor: 'pointer',
+        }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 16v-4M12 8h.01"/>
+        </svg>
+      </button>
+      {open ? (<div role="dialog" aria-label="What happens after you apply" style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                ...(align === 'right' ? { right: 0 } : { left: 0 }),
+                zIndex: 50,
+                width: 280,
+                maxWidth: 'calc(100vw - 48px)',
+                background: '#fff',
+                border: '1px solid #E5E7EB',
+                borderRadius: 10,
+                boxShadow: '0 10px 30px rgba(15, 23, 42, 0.15)',
+                padding: '12px 14px',
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: '#374151',
+                textAlign: 'left',
+                fontWeight: 400,
+            }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#0f1523', marginBottom: 6 }}>
+            What happens next?
+          </div>
+          <div style={{ marginBottom: 6 }}>
+            Your application was sent and the clinic can review it. The clinic may shortlist you, confirm you for the shift, or go with another physician.
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            Not every application is shortlisted or confirmed. We will notify you if your status changes.
+          </div>
+          <a href={`/locum/faq#${FAQ_AFTER_APPLYING_ID}`} style={{ color: '#3B4FD8', fontWeight: 600, textDecoration: 'none' }}>
+            Read more in FAQs
+          </a>
+        </div>) : null}
+    </span>);
 }
 export default function LocumDashboard(props: {
     params?: Promise<Record<string, string | string[] | undefined>>;
@@ -798,6 +891,13 @@ export default function LocumDashboard(props: {
                 <span style={{
                         display: 'inline-flex',
                         alignItems: 'center',
+                        gap: 4,
+                        flexShrink: 0,
+                        marginLeft: 8,
+                    }}>
+                  <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
                         fontSize: 11,
                         fontWeight: 600,
                         color: st.color,
@@ -805,10 +905,10 @@ export default function LocumDashboard(props: {
                         background: st.bg,
                         borderRadius: 8,
                         border: `1px solid ${st.border}`,
-                        flexShrink: 0,
-                        marginLeft: 8,
                     }}>
-                  {st.label}
+                    {st.label}
+                  </span>
+                  {st.label === 'Applied' ? <AppliedStatusInfo /> : null}
                 </span>
               </div>
               <div style={{
@@ -1003,6 +1103,8 @@ export default function LocumDashboard(props: {
           (preview?.takenShiftIds?.length ?? 0) > 0
             ? formatApplicationSlotLabels(app, app.jobPosting, preview!.takenShiftIds)
             : (preview?.takenDates ?? []).map(formatSpecificDate).filter(Boolean);
+        const viewed = hostViewedLabel(app);
+        const appliedAtText = fmtDateTime(app.appliedAt);
         return (
           <div
             role="presentation"
@@ -1111,6 +1213,39 @@ export default function LocumDashboard(props: {
                           Posting removed
                         </span>
                       ) : null}
+                      {st.label === 'Applied' ? <AppliedStatusInfo align="left" /> : null}
+                    </div>
+                    <div style={{
+                      background: '#F9FAFB',
+                      border: '1px solid #E5E7EB',
+                      borderRadius: 10,
+                      padding: '12px 14px',
+                      display: 'grid',
+                      gridTemplateColumns: 'auto 1fr',
+                      columnGap: 16,
+                      rowGap: 8,
+                      fontSize: 13,
+                      lineHeight: 1.4,
+                    }}>
+                      <span style={{ color: '#6B7280', fontWeight: 600 }}>Applied on</span>
+                      <span style={{ color: '#0f1523', fontWeight: 600 }}>{appliedAtText || 'Not available'}</span>
+                      <span style={{ color: '#6B7280', fontWeight: 600 }}>Host viewed</span>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        color: viewed.viewed ? '#047857' : '#6B7280',
+                        fontWeight: 600,
+                      }}>
+                        <span aria-hidden style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: viewed.viewed ? '#10B981' : '#D1D5DB',
+                          flexShrink: 0,
+                        }} />
+                        {viewed.text}
+                      </span>
                     </div>
                     {canMutateApplicationBeforeOngoing(app) ? (
                       <InlineAvailabilityEditor

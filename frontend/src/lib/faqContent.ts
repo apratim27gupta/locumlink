@@ -1,7 +1,11 @@
 export type FaqItem = {
   question: string;
   answer: string;
+  /** Anchor for deep links, e.g. /locum/faq#after-applying */
+  id?: string;
 };
+
+export const FAQ_AFTER_APPLYING_ID = 'after-applying';
 
 export type FaqSection = {
   title: string;
@@ -114,7 +118,7 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
       {
         question: 'How does messaging work?',
         answer:
-          'Only once a clinic shortlists a physician.\nThis keeps communication relevant and protects users from unnecessary messages.',
+          'Clinics can message physicians who have applied to their opportunities.\nPhysicians can reply once a clinic messages them, or message a clinic directly after the clinic confirms them for a shift.\nThis keeps communication relevant and protects users from unnecessary messages.',
       },
       {
         question: 'How do I post a job?',
@@ -124,6 +128,12 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
       {
         question: 'How do I apply?',
         answer: '• Register.\n• Verify.\n• Browse jobs.\n• Apply.',
+      },
+      {
+        id: FAQ_AFTER_APPLYING_ID,
+        question: 'My application says Applied. What happens next?',
+        answer:
+          'Applied means your application was sent and the clinic can review it.\n\nFrom there, the clinic may:\n• shortlist you while they consider applicants\n• confirm you for the shift, after which you can accept or decline\n• decide to go with another physician\n\nClinics review applications on their own timeline, and not every application is shortlisted or confirmed. You will get an in-app notification and an email if your status changes.\n\nYou can message the clinic once they message you or confirm you for the shift.',
       },
       {
         question: 'What if I can’t find a locum?',

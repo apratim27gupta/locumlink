@@ -1,11 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { LOCUMLINK_FAQ_SECTIONS } from '@/lib/faqContent';
 
 export default function FaqAccordion() {
   const [openKey, setOpenKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const hash = decodeURIComponent(window.location.hash.replace(/^#/, ''));
+    if (!hash) return;
+    for (const section of LOCUMLINK_FAQ_SECTIONS) {
+      const index = section.items.findIndex((item) => item.id === hash);
+      if (index === -1) continue;
+      setOpenKey(`${section.title}:${index}`);
+      window.requestAnimationFrame(() => {
+        document.getElementById(hash)?.scrollIntoView({ block: 'start' });
+      });
+      return;
+    }
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
@@ -31,11 +45,13 @@ export default function FaqAccordion() {
               return (
                 <div
                   key={key}
+                  id={item.id}
                   style={{
                     border: '1px solid #E5E7EB',
                     borderRadius: 12,
                     background: '#fff',
                     overflow: 'hidden',
+                    scrollMarginTop: 16,
                   }}
                 >
                   <button
