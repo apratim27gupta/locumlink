@@ -10,6 +10,22 @@ export const MATCH_FEE_FULL_CENTS = 25000;
 export const MATCH_FEE_AMOUNT_CENTS = MATCH_FEE_FULL_CENTS;
 
 export const MATCH_FEE_CURRENCY = 'CAD';
+/** HST charged on top of the match fee, in basis points (1400 = 14%). Snapshotted per invoice. */
+export const MATCH_FEE_HST_RATE_BPS = 1400;
+
+export function computeMatchFeeTaxCents(amountCents: number, taxRateBps: number): number {
+  return Math.round((amountCents * taxRateBps) / 10_000);
+}
+
+/** What the host pays: match fee plus the HST snapshotted on the invoice. */
+export function matchFeeTotalCents(invoice: { amountCents: number; taxCents: number }): number {
+  return invoice.amountCents + invoice.taxCents;
+}
+
+export function formatTaxRate(taxRateBps: number): string {
+  const pct = taxRateBps / 100;
+  return `${Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(2)}%`;
+}
 export const MATCH_FEE_DUE_DAYS = 7;
 export const MATCH_FEE_CANCELLATION_WINDOW_DAYS = 14;
 export const MATCH_FEE_ESCALATION_DAYS_AFTER_DUE = 30;
@@ -55,10 +71,11 @@ export const MATCH_FEE_POLICY = {
     'When a locum confirms a match on your posting, LocumLink invoices a platform match fee per locum.',
     '$125 CAD when the locum claims up to 3.5 hours total.',
     '$250 CAD when the locum claims more than 3.5 hours total.',
+    '14% HST is added to each match fee invoice.',
   ],
   /** @deprecated Prefer matchFeePoints; kept for older clients. */
   matchFeeDescription:
-    'When a locum confirms a match on your posting, a platform match fee is invoiced per locum: $125 CAD for up to 3.5 hours total claimed, or $250 CAD when the locum claims more than 3.5 hours.',
+    'When a locum confirms a match on your posting, a platform match fee is invoiced per locum: $125 CAD for up to 3.5 hours total claimed, or $250 CAD when the locum claims more than 3.5 hours. 14% HST is added to each invoice.',
   perLocumFeeRule:
     'Each matched locum generates a separate invoice. Another locum on the same posting means another match fee at the same rates.',
   dueRule:
@@ -69,7 +86,7 @@ export const MATCH_FEE_POLICY = {
     {
       id: 'early_cancel',
       summary:
-        'More than 14 days before start - either party may cancel. If the fee was paid, the host receives a refund to the original payment method.',
+        'More than 14 days before start - either party may cancel. If the fee was paid, LocumLink reviews the cancellation and refunds the fee and HST to the original payment method.',
     },
     {
       id: 'host_late_cancel',
@@ -79,7 +96,7 @@ export const MATCH_FEE_POLICY = {
     {
       id: 'locum_late_cancel',
       summary:
-        'Locum cancels within 14 days of start - LocumLink will try to find a replacement. If none is found, the host receives a refund to the original payment method.',
+        'Locum cancels within 14 days of start - LocumLink will try to find a replacement. If none is found, LocumLink refunds the fee and HST to the original payment method.',
     },
     {
       id: 'locum_late_cancel_replacement_fee',

@@ -805,6 +805,8 @@ export type Job = {
     isDeleted?: boolean;
     applicationsCount: number;
     hasAcceptedLocum?: boolean;
+    /** Slots (SLOTS postings) or days covered by accepted locums; null without a discrete schedule. */
+    slotCoverage?: { filled: number; total: number; unit: 'slot' | 'day' } | null;
     startDate?: string | null;
     endDate?: string | null;
     /** Individually chosen days (YYYY-MM-DD). Non-empty => specific-dates posting. */
@@ -1238,16 +1240,16 @@ export const hostApi = {
         }
         return res.json() as Promise<PaginatedResult<MatchFeeInvoice>>;
     },
-    payMatchFeeMock: async (invoiceId: string): Promise<{ success: boolean; invoice: MatchFeeInvoice }> => {
-        const res = await trackedFetch(`${NEST_BASE}/api/host/match-fees/${encodeURIComponent(invoiceId)}/pay-mock`, {
+    syncMatchFeePayment: async (invoiceId: string): Promise<MatchFeeInvoice> => {
+        const res = await trackedFetch(`${NEST_BASE}/api/host/match-fees/${encodeURIComponent(invoiceId)}/sync-payment`, {
             method: 'POST',
             headers: nestHeaders(true),
         });
         if (!res.ok) {
             const text = await res.text();
-            throw nestHttpError(text, res.status, 'Paying match fee');
+            throw nestHttpError(text, res.status, 'Confirming payment');
         }
-        return res.json() as Promise<{ success: boolean; invoice: MatchFeeInvoice }>;
+        return res.json() as Promise<MatchFeeInvoice>;
     },
     payMatchFeeStripe: async (invoiceId: string): Promise<{ success: boolean; url: string }> => {
         const res = await trackedFetch(`${NEST_BASE}/api/host/match-fees/${encodeURIComponent(invoiceId)}/pay-stripe`, {
@@ -1320,12 +1322,18 @@ export type MatchFeeInvoice = {
     id: string;
     applicationId: string;
     jobPostingId: string;
+    /** Match fee before HST. */
     amountCents: number;
+    taxRateBps: number;
+    taxCents: number;
+    /** What the host pays, including HST. */
+    totalCents: number;
     currency: string;
     status: MatchFeeInvoiceStatus;
+    /** Cancellation qualified for a refund; LocumLink has not approved it yet. */
+    refundPendingReview: boolean;
     dueAt: string;
     paidAt: string | null;
-    mockPaymentRef: string | null;
     cancelledAt: string | null;
     cancelledBy: string | null;
     cancellationReason: string | null;
@@ -1372,7 +1380,7 @@ export type MatchFeePolicyResponse = {
     dueRule: string;
     clinicalPayNote: string;
     cancellationRules: Array<{ id: string; summary: string }>;
-    paymentMethods?: { enabled: boolean; mockEnabled: boolean };
+    paymentMethods?: { enabled: boolean };
 };
 export type ConversationPartner = {
     id: string;

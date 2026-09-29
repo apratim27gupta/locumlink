@@ -10,7 +10,11 @@ import {
   type MatchFeeInvoice,
 } from '@/lib/api';
 import { beforeClientNavigation } from '@/lib/topLoader';
-import { matchFeeStatusColor, matchFeeStatusLabel } from '@/components/payments/MatchFeePolicy';
+import {
+  formatCents,
+  matchFeeStatusColor,
+  matchFeeStatusLabel,
+} from '@/components/payments/MatchFeePolicy';
 
 export type ApplicationInvoiceLink = {
   invoice: MatchFeeInvoice;
@@ -127,7 +131,7 @@ export function ApplicationInvoiceCell({
             whiteSpace: 'nowrap',
           }}
         >
-          Pay ${(invoice.amountCents / 100).toFixed(0)}
+          Pay {formatCents(invoice.totalCents)}
         </Link>
         {overdue ? <div style={{ ...subStyle, color: '#B91C1C' }}>Overdue</div> : null}
       </div>

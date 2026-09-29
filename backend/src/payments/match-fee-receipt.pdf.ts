@@ -7,7 +7,13 @@ export type MatchFeeReceiptData = {
   issuedAt: Date;
   paidAt: Date | null;
   dueAt: Date;
+  /** Match fee before HST. */
   amountCents: number;
+  taxCents: number;
+  taxRateLabel: string;
+  /** Total refunded so far, including HST. */
+  refundedCents: number;
+  hstRegistrationNumber: string | null;
   currency: string;
   status: string;
   jobTitle: string;
@@ -46,6 +52,9 @@ export async function buildMatchFeeReceiptPdf(
     doc.fillColor('#000');
 
     doc.fontSize(10).text(`Receipt # ${data.invoiceNumber}`);
+    if (data.hstRegistrationNumber) {
+      doc.text(`HST registration: ${data.hstRegistrationNumber}`);
+    }
     doc.text(`Invoice ID: ${data.invoiceId}`);
     doc.text(`Issued: ${formatDate(data.issuedAt)}`);
     doc.text(`Due: ${formatDate(data.dueAt)}`);
@@ -77,7 +86,17 @@ export async function buildMatchFeeReceiptPdf(
     doc.moveDown();
 
     doc.fontSize(12).text('Amount', { underline: true });
-    doc.fontSize(14).text(formatMoney(data.amountCents, data.currency));
+    const totalCents = data.amountCents + data.taxCents;
+    if (data.taxCents > 0) {
+      doc.fontSize(10).text(`Match fee: ${formatMoney(data.amountCents, data.currency)}`);
+      doc.text(`HST (${data.taxRateLabel}): ${formatMoney(data.taxCents, data.currency)}`);
+      doc.fontSize(14).text(`Total: ${formatMoney(totalCents, data.currency)}`);
+    } else {
+      doc.fontSize(14).text(formatMoney(totalCents, data.currency));
+    }
+    if (data.refundedCents > 0) {
+      doc.fontSize(10).text(`Refunded: ${formatMoney(data.refundedCents, data.currency)}`);
+    }
     doc.fontSize(10).text(
       'LocumLink platform match fee (not clinical pay). MSI pays the locum directly for clinical work.',
     );

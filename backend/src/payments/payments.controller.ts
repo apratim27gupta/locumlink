@@ -68,16 +68,16 @@ export class HostPaymentsController {
     return this.payments.getHostInvoice(req.user.id, id);
   }
 
-  @Post(':id/pay-mock')
-  @HttpCode(HttpStatus.OK)
-  payMock(@Req() req: JwtRequest, @Param('id') id: string) {
-    return this.payments.payMock(req.user.id, id);
-  }
-
   @Post(':id/pay-stripe')
   @HttpCode(HttpStatus.OK)
   payStripe(@Req() req: JwtRequest, @Param('id') id: string) {
     return this.payments.createStripeCheckoutForHost(req.user.id, id);
+  }
+
+  @Post(':id/sync-payment')
+  @HttpCode(HttpStatus.OK)
+  syncPayment(@Req() req: JwtRequest, @Param('id') id: string) {
+    return this.payments.syncHostInvoicePayment(req.user.id, id);
   }
 }
 

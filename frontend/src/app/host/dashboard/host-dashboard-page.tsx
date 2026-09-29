@@ -880,6 +880,9 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
         (job.status === 'ONGOING' || job.status === 'SCHEDULED');
     const isDraft = !isSoftDeleted && job.status === 'DRAFT';
     const appCount = job.applicationsCount;
+    const slotCoverage = job.slotCoverage ?? null;
+    const allSlotsFilled =
+        slotCoverage != null && slotCoverage.total > 0 && slotCoverage.filled >= slotCoverage.total;
     const startFmt = fmtDate(job.startDate);
     const endFmt = fmtDate(job.endDate);
     const scheduleMode = getJobScheduleMode(job);
@@ -1004,6 +1007,18 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
               </div>)}
             {pay && (<span style={{ fontWeight: 'var(--font-weight-bold)', fontSize: 'var(--font-heading)', color: dimJobUi ? '#78716C' : '#0B0F1F' }}>
                 {pay}
+              </span>)}
+            {slotCoverage && !isDraft && !isSoftDeleted && (<span style={{
+                fontSize: 'var(--font-small)',
+                fontWeight: 'var(--font-weight-bold)',
+                padding: '3px 10px',
+                borderRadius: 999,
+                background: allSlotsFilled ? '#ECFDF5' : '#EEF0FB',
+                color: allSlotsFilled ? '#047857' : '#1C32D2',
+                whiteSpace: 'nowrap',
+            }}>
+                {slotCoverage.filled} of {slotCoverage.total} {slotCoverage.unit}
+                {slotCoverage.total !== 1 ? 's' : ''} filled
               </span>)}
           </div>
         </div>

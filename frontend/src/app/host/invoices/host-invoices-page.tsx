@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import DashLayout from '@/components/DashLayout';
 import {
+  formatCents,
+  formatTaxRate,
   MatchFeePolicyModal,
   MatchFeeStatusChip,
 } from '@/components/payments/MatchFeePolicy';
@@ -88,9 +90,38 @@ export default function HostInvoicesPage() {
         : '/host/invoices',
       { scroll: false },
     );
-    if (!paid) return;
-    const refresh = window.setTimeout(() => void load(), 4000);
-    return () => window.clearTimeout(refresh);
+    if (!paid || !focusInvoiceId) return;
+
+    let cancelledSync = false;
+    let timer: number | undefined;
+    const confirmPayment = async (triesLeft: number) => {
+      try {
+        const invoice = await hostApi.syncMatchFeePayment(focusInvoiceId);
+        if (cancelledSync) return;
+        if (invoice.status === 'PAID') {
+          setPaymentNotice({
+            tone: 'success',
+            title: 'Payment received',
+            message: `Your ${formatCents(invoice.totalCents)} ${invoice.currency} match fee for ${invoice.jobTitle} is paid. You can download the receipt from this page.`,
+          });
+          await load();
+          return;
+        }
+      } catch {
+        // Fall through and retry; the webhook or reconciliation will still settle it.
+      }
+      if (cancelledSync) return;
+      if (triesLeft > 0) {
+        timer = window.setTimeout(() => void confirmPayment(triesLeft - 1), 3000);
+      } else {
+        await load();
+      }
+    };
+    void confirmPayment(4);
+    return () => {
+      cancelledSync = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, [searchParams, focusInvoiceId, router, load]);
 
   useEffect(() => {
@@ -101,22 +132,15 @@ export default function HostInvoicesPage() {
   }, [loading, focusInvoiceId]);
 
   async function payInvoice(invoice: MatchFeeInvoice) {
+    if (!stripeEnabled) {
+      setError('Online payments are not available right now. Please try again later.');
+      return;
+    }
     setPayingId(invoice.id);
     setError(null);
     try {
-      if (stripeEnabled) {
-        const { url } = await hostApi.payMatchFeeStripe(invoice.id);
-        window.location.href = url;
-        return;
-      }
-      await hostApi.payMatchFeeMock(invoice.id);
-      await load();
-      setPayingId(null);
-      setPaymentNotice({
-        tone: 'success',
-        title: 'Payment received',
-        message: `Your $${(invoice.amountCents / 100).toFixed(0)} ${invoice.currency} match fee for ${invoice.jobTitle} is paid. You can download the receipt from this page.`,
-      });
+      const { url } = await hostApi.payMatchFeeStripe(invoice.id);
+      window.location.href = url;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Payment failed.');
       setPayingId(null);
@@ -301,8 +325,14 @@ export default function HostInvoicesPage() {
                     }}
                   >
                     <span style={{ fontWeight: 700, fontSize: 16, color: '#111827' }}>
-                      ${(invoice.amountCents / 100).toFixed(0)} {invoice.currency}
+                      {formatCents(invoice.totalCents)} {invoice.currency}
                     </span>
+                    {invoice.taxCents > 0 ? (
+                      <span style={{ fontSize: 13, color: '#6B7280' }}>
+                        {formatCents(invoice.amountCents)} fee +{' '}
+                        {formatCents(invoice.taxCents)} HST ({formatTaxRate(invoice.taxRateBps)})
+                      </span>
+                    ) : null}
                     <span style={{ fontSize: 13, color: '#6B7280' }}>
                       Due {new Date(invoice.dueAt).toLocaleDateString('en-CA')}
                       {invoice.paidAt
@@ -310,6 +340,22 @@ export default function HostInvoicesPage() {
                         : ''}
                     </span>
                   </div>
+                  {invoice.refundPendingReview ? (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: '#1E40AF',
+                        background: '#EFF6FF',
+                        borderRadius: 8,
+                        padding: '8px 12px',
+                        marginTop: 10,
+                      }}
+                    >
+                      Refund under review. LocumLink will refund{' '}
+                      {formatCents(invoice.totalCents - (invoice.refundedCents ?? 0))}{' '}
+                      {invoice.currency} to your original payment method once approved.
+                    </div>
+                  ) : null}
 
                   {invoice.events?.length ? (
                     <MatchFeeEventTimeline events={invoice.events} compact />
@@ -367,11 +413,7 @@ export default function HostInvoicesPage() {
                           fontFamily: 'inherit',
                         }}
                       >
-                        {busy && payingId === invoice.id
-                          ? stripeEnabled
-                            ? 'Redirecting…'
-                            : 'Processing…'
-                          : 'Pay'}
+                        {busy && payingId === invoice.id ? 'Redirecting…' : 'Pay'}
                       </button>
                     ) : null}
                   {invoice.paidAt ? (

@@ -8,6 +8,7 @@
   },
   "globalSetup": "<rootDir>/setup/global-setup.ts",
   "globalTeardown": "<rootDir>/setup/global-teardown.ts",
+  "setupFiles": ["<rootDir>/setup/test-env.ts"],
   "setupFilesAfterEnv": ["<rootDir>/setup/setup-after-env.ts"],
   "moduleNameMapper": {
     "^(\\.{1,2}/.*)\\.js$": "$1"

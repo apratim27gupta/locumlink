@@ -891,6 +891,30 @@ export function isPostingFullyCovered(
   return required.every((d) => covered.has(d));
 }
 
+/**
+ * How much of a posting accepted locums cover, using the same rules as isPostingFullyCovered.
+ * SLOTS postings count shift slots; others count calendar days. Null when there is no discrete schedule.
+ */
+export function postingSlotCoverage(
+  posting: PostingDaysSource,
+  acceptedApps: CoverageApplicationWithClaims[],
+): { filled: number; total: number; unit: 'slot' | 'day' } | null {
+  if (posting.scheduleModel === 'SLOTS') {
+    const requiredShiftIds = postingShiftIds(posting);
+    if (requiredShiftIds.length > 0) {
+      const covered = computeCoveredShiftIds(acceptedApps, posting);
+      const filled = requiredShiftIds.filter((id) => covered.has(id)).length;
+      return { filled, total: requiredShiftIds.length, unit: 'slot' };
+    }
+  }
+
+  const required = getPostingRequiredDates(posting);
+  if (required.length === 0) return null;
+  const covered = computeCoveredDates(acceptedApps, required);
+  const filled = required.filter((d) => covered.has(d)).length;
+  return { filled, total: required.length, unit: 'day' };
+}
+
 /** True after the stored calendar end day (UTC date components) has fully passed. */
 export function isPostingEndDatePassed(
   endDate: Date | null | undefined,

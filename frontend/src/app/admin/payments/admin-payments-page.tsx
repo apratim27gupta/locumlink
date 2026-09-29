@@ -9,14 +9,19 @@ import {
   adminDiscretionaryMatchFeeRefund,
   adminListMatchFees,
   adminMatchFeeSummary,
+  adminRefundDuplicatePayment,
   adminResolveMatchFeeRefund,
   adminSendMatchFeeReminder,
   adminSetMatchFeeReplacementStatus,
   type AdminMatchFeeInvoice,
+  type AdminMatchFeePaymentAttempt,
+  type AdminMatchFeeRefund,
   type AdminMatchFeeStatusGuide,
   type AdminMatchFeeSummary,
 } from '@/lib/adminApi';
 import {
+  formatCents,
+  hstFor,
   matchFeeStatusColor,
   matchFeeStatusLabel,
   adminMatchFeeRefundEligibility,
@@ -24,10 +29,45 @@ import {
 import { MatchFeeEventTimeline } from '@/components/payments/MatchFeeEventTimeline';
 import { AdminMatchFeeRefundConfirmModal } from '@/components/payments/AdminMatchFeeRefundConfirmModal';
 
+const ATTEMPT_STATUS_LABEL: Record<AdminMatchFeePaymentAttempt['status'], string> = {
+  OPEN: 'Checkout open',
+  PAID: 'Paid',
+  EXPIRED: 'Expired',
+  FAILED: 'Failed',
+  SUPERSEDED: 'Replaced by newer checkout',
+  REJECTED: 'Rejected - needs review',
+  DUPLICATE: 'Extra payment - refund needed',
+  DUPLICATE_REFUNDED: 'Extra payment - refunded',
+};
+
+const ATTEMPT_STATUS_COLOR: Partial<Record<AdminMatchFeePaymentAttempt['status'], string>> = {
+  PAID: '#047857',
+  FAILED: '#B91C1C',
+  REJECTED: '#B91C1C',
+  DUPLICATE: '#B91C1C',
+  DUPLICATE_REFUNDED: '#B45309',
+};
+
+const REFUND_STATUS_LABEL: Record<AdminMatchFeeRefund['status'], string> = {
+  REQUESTED: 'Sent to Stripe',
+  PENDING: 'Processing at Stripe',
+  SUCCEEDED: 'Refunded',
+  FAILED: 'Failed',
+  CANCELED: 'Canceled',
+};
+
+const REFUND_KIND_LABEL: Record<AdminMatchFeeRefund['kind'], string> = {
+  CANCELLATION: 'Cancellation',
+  NO_REPLACEMENT: 'No replacement',
+  POST_COMPLETION: 'Post-completion',
+  DUPLICATE_PAYMENT: 'Extra payment',
+};
+
 type RefundConfirmState = {
   invoice: AdminMatchFeeInvoice;
-  mode: 'policy' | 'discretionary' | 'no_replacement';
+  mode: 'policy' | 'discretionary' | 'no_replacement' | 'duplicate';
   amountCents?: number;
+  attempt?: AdminMatchFeePaymentAttempt;
 };
 
 export default function AdminPaymentsPage() {
@@ -95,20 +135,19 @@ export default function AdminPaymentsPage() {
     setError(null);
     try {
       if (mode === 'policy') {
-        await adminResolveMatchFeeRefund(invoice.id, params.notes || undefined);
+        await adminResolveMatchFeeRefund(invoice.id, params.notes);
       } else if (mode === 'no_replacement') {
-        await adminSetMatchFeeReplacementStatus(
-          invoice.id,
-          'NOT_FOUND',
-          params.notes || undefined,
-        );
+        await adminSetMatchFeeReplacementStatus(invoice.id, 'NOT_FOUND', params.notes);
+      } else if (mode === 'duplicate') {
+        if (!refundConfirm.attempt) return;
+        await adminRefundDuplicatePayment(refundConfirm.attempt.id, params.notes);
       } else {
         const amount = (params.amountCents ?? refundConfirm.amountCents) as
           | 12500
           | 25000;
         await adminDiscretionaryMatchFeeRefund(invoice.id, {
           amountCents: amount,
-          adminNotes: params.notes || undefined,
+          adminNotes: params.notes,
         });
       }
       setRefundConfirm(null);
@@ -148,7 +187,9 @@ export default function AdminPaymentsPage() {
         <h1 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700 }}>Match Fees</h1>
         <p style={{ margin: '0 0 16px', color: '#6B7280', fontSize: 14 }}>
           Policy due dates, payment timeline, reminders, and collection status.
-          {!summary?.stripeEnabled ? ' Mock pay only until Stripe is configured on the API.' : null}
+          {summary && !summary.stripeEnabled
+            ? ' Stripe is not configured on the API, so hosts cannot pay right now.'
+            : null}
         </p>
 
         {summary ? (
@@ -330,11 +371,107 @@ export default function AdminPaymentsPage() {
                           : ''}
                       </div>
                     ) : null}
-                    {invoice.mockPaymentRef ? (
-                      <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
-                        Mock ref: {invoice.mockPaymentRef}
+                    {invoice.paymentAttempts?.length ? (
+                      <details style={{ marginTop: 6, fontSize: 12, color: '#6B7280' }}>
+                        <summary style={{ cursor: 'pointer' }}>
+                          Payment attempts ({invoice.paymentAttempts.length})
+                        </summary>
+                        <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                          {invoice.paymentAttempts.map((a) => (
+                            <li key={a.id} style={{ marginBottom: 4 }}>
+                              <span
+                                style={{
+                                  fontWeight: 600,
+                                  color: ATTEMPT_STATUS_COLOR[a.status] ?? '#374151',
+                                }}
+                              >
+                                {ATTEMPT_STATUS_LABEL[a.status] ?? a.status}
+                              </span>
+                              {' - '}
+                              {new Date(a.createdAt).toLocaleString('en-CA')}
+                              {a.stripeCheckoutSessionId
+                                ? ` - ${a.stripeCheckoutSessionId.slice(0, 24)}…`
+                                : ''}
+                              {' - '}
+                              {formatCents(a.amountCents)}
+                              {a.failureReason ? (
+                                <div style={{ color: '#B91C1C' }}>{a.failureReason}</div>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    ) : null}
+                    {invoice.refunds?.length ? (
+                      <details style={{ marginTop: 6, fontSize: 12, color: '#6B7280' }}>
+                        <summary style={{ cursor: 'pointer' }}>
+                          Refunds ({invoice.refunds.length})
+                        </summary>
+                        <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                          {invoice.refunds.map((r) => (
+                            <li key={r.id} style={{ marginBottom: 4 }}>
+                              <span
+                                style={{
+                                  fontWeight: 600,
+                                  color:
+                                    r.status === 'SUCCEEDED'
+                                      ? '#047857'
+                                      : r.status === 'FAILED' || r.status === 'CANCELED'
+                                        ? '#B91C1C'
+                                        : '#B45309',
+                                }}
+                              >
+                                {REFUND_STATUS_LABEL[r.status] ?? r.status}
+                              </span>
+                              {` - ${REFUND_KIND_LABEL[r.kind] ?? r.kind} - ${formatCents(r.amountCents)}`}
+                              {r.taxCents > 0 ? ` (incl. ${formatCents(r.taxCents)} HST)` : ''}
+                              {` - ${new Date(r.createdAt).toLocaleString('en-CA')}`}
+                              {r.requestedByAdminEmail ? ` - by ${r.requestedByAdminEmail}` : ''}
+                              {r.reason ? <div>{r.reason}</div> : null}
+                              {r.failureReason && r.status !== 'SUCCEEDED' ? (
+                                <div style={{ color: '#B91C1C' }}>{r.failureReason}</div>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    ) : null}
+                    {invoice.refundPendingReview ? (
+                      <div style={{ marginTop: 8, fontSize: 13, color: '#B91C1C', fontWeight: 600 }}>
+                        Refund due - review and approve with &quot;Refund to payment method&quot;.
                       </div>
                     ) : null}
+                    {invoice.paymentAttempts
+                      ?.filter((a) => a.status === 'DUPLICATE')
+                      .map((a) => (
+                        <div
+                          key={a.id}
+                          style={{
+                            marginTop: 8,
+                            fontSize: 13,
+                            color: '#B91C1C',
+                            display: 'flex',
+                            gap: 8,
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <span style={{ fontWeight: 600 }}>
+                            Extra payment of {formatCents(a.amountCents)} received on{' '}
+                            {new Date(a.createdAt).toLocaleDateString('en-CA')}.
+                          </span>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={busyId === invoice.id}
+                            onClick={() =>
+                              setRefundConfirm({ invoice, mode: 'duplicate', attempt: a })
+                            }
+                          >
+                            Refund extra payment
+                          </button>
+                        </div>
+                      ))}
                     {invoice.matchFeeReviewRequired ? (
                       <div style={{ marginTop: 6, fontSize: 12, color: '#B45309', fontWeight: 600 }}>
                         Host flagged for review
@@ -347,7 +484,17 @@ export default function AdminPaymentsPage() {
                     ) : null}
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 700 }}>${(invoice.amountCents / 100).toFixed(0)}</div>
+                    <div style={{ fontWeight: 700 }}>{formatCents(invoice.totalCents)}</div>
+                    {invoice.taxCents > 0 ? (
+                      <div style={{ fontSize: 12, color: '#6B7280' }}>
+                        incl. {formatCents(invoice.taxCents)} HST
+                      </div>
+                    ) : null}
+                    {(invoice.refundedCents ?? 0) > 0 ? (
+                      <div style={{ fontSize: 12, color: '#B45309' }}>
+                        {formatCents(invoice.refundedCents ?? 0)} refunded
+                      </div>
+                    ) : null}
                     <span
                       style={{
                         display: 'inline-block',
@@ -420,7 +567,10 @@ export default function AdminPaymentsPage() {
                     (() => {
                       const eligibility = adminMatchFeeRefundEligibility(invoice);
                       const remaining =
-                        invoice.amountCents - (invoice.refundedCents ?? 0);
+                        invoice.totalCents - (invoice.refundedCents ?? 0);
+                      const withHst = (feeCents: number) =>
+                        feeCents + hstFor(feeCents, invoice.taxRateBps);
+                      const hstSuffix = invoice.taxRateBps > 0 ? ' + HST' : '';
                       const postCompletion =
                         invoice.postingCompleted === true && remaining > 0;
                       return (
@@ -439,12 +589,12 @@ export default function AdminPaymentsPage() {
                           </button>
                           {postCompletion ? (
                             <>
-                              {remaining >= 12500 ? (
+                              {remaining >= withHst(12500) ? (
                                 <button
                                   type="button"
                                   className="btn btn-secondary"
                                   disabled={disabled}
-                                  title="Post-completion refund ($125) - requires confirmation"
+                                  title={`Post-completion refund (${formatCents(withHst(12500))}) - requires confirmation`}
                                   onClick={() =>
                                     setRefundConfirm({
                                       invoice,
@@ -453,15 +603,15 @@ export default function AdminPaymentsPage() {
                                     })
                                   }
                                 >
-                                  Refund $125
+                                  Refund $125{hstSuffix}
                                 </button>
                               ) : null}
-                              {remaining >= 25000 ? (
+                              {remaining >= withHst(25000) ? (
                                 <button
                                   type="button"
                                   className="btn btn-secondary"
                                   disabled={disabled}
-                                  title="Post-completion refund ($250) - requires confirmation"
+                                  title={`Post-completion refund (${formatCents(withHst(25000))}) - requires confirmation`}
                                   onClick={() =>
                                     setRefundConfirm({
                                       invoice,
@@ -470,7 +620,7 @@ export default function AdminPaymentsPage() {
                                     })
                                   }
                                 >
-                                  Refund $250
+                                  Refund $250{hstSuffix}
                                 </button>
                               ) : null}
                             </>
@@ -514,6 +664,7 @@ export default function AdminPaymentsPage() {
         busy={busyId === refundConfirm?.invoice.id}
         mode={refundConfirm?.mode ?? 'policy'}
         amountCents={refundConfirm?.amountCents}
+        attempt={refundConfirm?.attempt ?? null}
         onClose={() => {
           if (busyId !== refundConfirm?.invoice.id) setRefundConfirm(null);
         }}

@@ -39,7 +39,7 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
     label: 'Paid',
     summary: 'Match fee collected.',
     hostObligation:
-      'Nothing to do. The fee is refunded to the original payment method only if the posting or match is cancelled more than 14 days before the shift starts (see policy).',
+      'Nothing to do. If the posting or match is cancelled more than 14 days before the shift starts, the invoice stays Paid with a refund due until an admin approves it (see policy).',
   },
   {
     status: 'PENDING_REPLACEMENT',

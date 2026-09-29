@@ -18,7 +18,7 @@ export type MatchFeePolicyContent = {
   dueRule: string;
   clinicalPayNote: string;
   cancellationRules: Array<{ id: string; summary: string }>;
-  paymentMethods?: { enabled: boolean; mockEnabled: boolean };
+  paymentMethods?: { enabled: boolean };
 };
 
 type MatchFeePolicyBodyProps = {
@@ -194,6 +194,20 @@ export default function MatchFeePolicy({
 
 const HOST_REFUND_MIN_DAYS_BEFORE_START = 15; // policy: more than 14 days before start
 
+/** "$285" for whole dollars, "$142.50" otherwise. */
+export function formatCents(cents: number): string {
+  const dollars = cents / 100;
+  return `$${Number.isInteger(dollars) ? dollars.toFixed(0) : dollars.toFixed(2)}`;
+}
+
+export function hstFor(feeCents: number, taxRateBps: number): number {
+  return Math.round((feeCents * taxRateBps) / 10_000);
+}
+
+export function formatTaxRate(taxRateBps: number): string {
+  return `${taxRateBps / 100}%`;
+}
+
 /** Host may cancel match and receive a fee refund (paid invoice, outside late window). */
 export function hostMatchFeeRefundEligible(invoice: {
   paidAt: string | null;
@@ -218,8 +232,16 @@ export function adminMatchFeeRefundEligibility(invoice: {
   daysUntilStart: number | null;
   cancelledBy?: string | null;
   cancellationReason?: string | null;
+  refundPendingReview?: boolean;
   events?: Array<{ eventType: string }> | null;
 }): { allowed: boolean; reason: string } {
+  if (invoice.refundPendingReview) {
+    return {
+      allowed: true,
+      reason:
+        'The cancellation qualifies for a refund under the policy. Review and approve it to refund the fee and HST.',
+    };
+  }
   if (invoice.status === 'PENDING_REPLACEMENT') {
     return {
       allowed: false,

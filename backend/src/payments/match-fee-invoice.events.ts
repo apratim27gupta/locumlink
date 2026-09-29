@@ -6,6 +6,14 @@ import type {
   MatchFeeInvoiceEventType,
 } from '../prisma/prisma-client.js';
 
+export function paymentProviderLabel(
+  provider: MatchFeeInvoice['paymentProvider'],
+): string {
+  if (provider === 'STRIPE') return 'Stripe';
+  if (provider === 'MOCK') return 'Test payment';
+  return 'Recorded by LocumLink';
+}
+
 export type MatchFeeInvoiceEventDto = {
   id: string;
   eventType: MatchFeeInvoiceEventType;
@@ -25,6 +33,8 @@ const EVENT_LABELS: Record<MatchFeeInvoiceEventType, string> = {
   REPLACEMENT_FOUND: 'Replacement locum confirmed',
   REPLACEMENT_NOT_FOUND: 'No replacement found',
   REFUNDED: 'Refund issued',
+  REFUND_PENDING_REVIEW: 'Refund pending review',
+  REFUND_FAILED: 'Refund failed',
   ESCALATED: 'Escalated for admin review',
   ADMIN_NOTE: 'Admin update',
   POSTING_REMOVED: 'Job posting removed',
@@ -100,9 +110,13 @@ export function synthesizeMatchFeeEvents(
   push('INVOICED', invoice.createdAt);
 
   if (invoice.paidAt) {
-    const provider =
-      invoice.paymentProvider === 'STRIPE' ? 'Stripe' : 'Test payment';
-    push('PAID', invoice.paidAt, `Paid via ${provider}.`);
+    push(
+      'PAID',
+      invoice.paidAt,
+      invoice.paymentProvider
+        ? `Paid via ${paymentProviderLabel(invoice.paymentProvider)}.`
+        : 'Payment recorded by LocumLink.',
+    );
   }
 
   if (invoice.lastReminderAt) {

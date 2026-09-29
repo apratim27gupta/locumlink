@@ -125,6 +125,16 @@ class EnvironmentVariables {
   @IsOptional()
   STRIPE_WEBHOOK_SECRET?: string;
 
+  /** Minutes before an unpaid Stripe Checkout session expires (Stripe allows 30 to 1440). Default 60. */
+  @IsString()
+  @IsOptional()
+  STRIPE_CHECKOUT_EXPIRY_MINUTES?: string;
+
+  /** LocumLink HST/GST registration number, printed on match fee receipts when set. */
+  @IsString()
+  @IsOptional()
+  HST_REGISTRATION_NUMBER?: string;
+
   /** Host-facing frontend URL for Stripe Checkout return links */
   @IsUrl({ require_tld: false })
   @IsOptional()

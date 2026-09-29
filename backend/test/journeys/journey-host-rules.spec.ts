@@ -15,6 +15,7 @@ import {
   futureCalendarDate,
 } from '../factories/job.factory';
 import { createApplication } from '../factories/application.factory';
+import { payInvoiceViaWebhook } from '../helpers/stripe';
 
 describe('Journey - Host posting rules and linked CPSNS', () => {
   let ctx: TestAppContext;
@@ -91,7 +92,8 @@ describe('Journey - Host posting rules and linked CPSNS', () => {
       .patch(`/api/host/jobs/${draft.body.job.id}`, { status: 'ACTIVE' })
       .expect(403);
 
-    await http.post(`/api/host/match-fees/${invoice.id}/pay-mock`).expect(200);
+    const { res: paid } = await payInvoiceViaWebhook(ctx.agent, invoice);
+    expect(paid.status).toBe(200);
 
     const locumPaidNotice = await getTestDb().notificationEvent.findFirst({
       where: {
@@ -103,7 +105,7 @@ describe('Journey - Host posting rules and linked CPSNS', () => {
     const hostPaidNotice = await getTestDb().notificationEvent.findFirst({
       where: { recipientId: host.user.id, eventType: 'H_017_MATCH_FEE_PAID' },
     });
-    expect(JSON.stringify(hostPaidNotice?.payload)).toContain('$250');
+    expect(JSON.stringify(hostPaidNotice?.payload)).toContain('$285 (including $35 HST)');
 
     await http
       .patch(`/api/host/jobs/${draft.body.job.id}`, { status: 'ACTIVE' })

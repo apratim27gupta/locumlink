@@ -9,6 +9,7 @@ import { authedAgent } from '../helpers/http';
 import { createHostUser, createLocumUser } from '../factories/user.factory';
 import { createJobPosting, futureCalendarDate } from '../factories/job.factory';
 import { createApplication } from '../factories/application.factory';
+import { payInvoiceViaWebhook } from '../helpers/stripe';
 import { ApplicationStatus, PostingStatus } from '@prisma/client';
 
 describe('Journey — Match fee invoices', () => {
@@ -56,7 +57,7 @@ describe('Journey — Match fee invoices', () => {
       .expect(200);
   }
 
-  it('creates a tiered invoice when locum accepts and allows mock payment', async () => {
+  it('creates a tiered invoice when locum accepts and is paid through Stripe', async () => {
     const host = await createHostUser();
     const locum = await createLocumUser();
     const job = await createJobPosting(host.hostProfileId, {
@@ -97,17 +98,18 @@ describe('Journey — Match fee invoices', () => {
     const list = await hostHttp.get('/api/host/match-fees').expect(200);
     expect(list.body.items).toHaveLength(1);
 
-    const pay = await hostHttp
-      .post(`/api/host/match-fees/${invoice!.id}/pay-mock`)
-      .expect(200);
-    expect(pay.body.invoice.status).toBe('PAID');
-    expect(pay.body.invoice.mockPaymentRef).toMatch(/^mock_/);
+    await hostHttp.post(`/api/host/match-fees/${invoice!.id}/pay-mock`).expect(404);
+
+    const { res, session } = await payInvoiceViaWebhook(ctx.agent, invoice!);
+    expect(res.status).toBe(200);
 
     const paid = await db.matchFeeInvoice.findUnique({
       where: { id: invoice!.id },
     });
     expect(paid?.status).toBe('PAID');
     expect(paid?.paidAt).not.toBeNull();
+    expect(paid?.paymentProvider).toBe('STRIPE');
+    expect(paid?.stripePaymentIntentId).toBe(session.payment_intent);
   });
 
   it('invoices $125 for a single half-day SLOTS claim and $250 for a second locum on the same posting', async () => {

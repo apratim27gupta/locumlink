@@ -231,6 +231,21 @@ export class SchedulerService {
     }
   }
 
+  /** Catch payments whose Stripe webhook never arrived, and close expired Checkout sessions. */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async reconcileStripeCheckouts() {
+    try {
+      await this.paymentsService.reconcileOpenCheckoutSessions();
+    } catch (err) {
+      this.logger.error('Stripe reconciliation cron failed', err);
+    }
+    try {
+      await this.paymentsService.reconcileRefunds();
+    } catch (err) {
+      this.logger.error('Stripe refund reconciliation cron failed', err);
+    }
+  }
+
   /** Mark ACTIVE postings whose shift start (date + time) has passed as EXPIRED. */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async expirePostingsWithPassedStartDate() {

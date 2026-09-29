@@ -10,7 +10,11 @@ import type { BrowseJob } from '@/lib/api';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 import { formatHostDoctorDisplayName } from '@/lib/hostDisplayName';
 import { groupKeyResponsibilitiesForDisplay } from '@/lib/hostJobPostingForm';
-import { jobPostedAtIso, relativeHoursOrDaysAgo, toLocalDateTime } from '@/lib/relativeTime';
+import {
+  jobPostedAtIso,
+  relativeHoursOrDaysAgo,
+  toLocalDateTime,
+} from '@/lib/relativeTime';
 
 const LOGO_TEAL = '#309BB7';
 const LOGO_TEAL_BG = 'rgba(48, 155, 183, 0.14)';
@@ -114,6 +118,20 @@ export function LocumBrowseJobDetail({
   );
   const scheduleMode = getJobScheduleMode(job);
   const perDayTimesVary = hasVaryingShiftTimes(job);
+  const clinicName = job.hostProfile.practiceName?.trim() || '';
+  const rawAddress = job.hostProfile.address?.trim() || '';
+  const clinicAddress = rawAddress === 'Address pending' ? '' : rawAddress;
+  const showClinicNameLine = !revealHostDetails || Boolean(clinicName);
+  const hp = job.hostProfile;
+  const showAboutClinic =
+    !revealHostDetails ||
+    Boolean(
+      clinicAddress ||
+      hp.practiceType ||
+      hp.numPhysicians ||
+      hp.emr ||
+      hp.patientVol,
+    );
 
   return (
     <div
@@ -184,22 +202,24 @@ export function LocumBrowseJobDetail({
         {banner}
 
         <div style={{ marginBottom: 6 }}>
-          <div
-            style={{
-              fontFamily: 'Inter, sans-serif',
-              fontWeight: 'var(--font-weight-bold)',
-              fontSize: '1.125rem',
-              lineHeight: '120%',
-              color: '#0f1523',
-              marginBottom: hostDoctorName ? 4 : 0,
-            }}
-          >
-            {revealHostDetails && job.hostProfile.practiceName ? (
-              job.hostProfile.practiceName
-            ) : (
-              <LockedUntilSignIn>Clinic name</LockedUntilSignIn>
-            )}
-          </div>
+          {showClinicNameLine ? (
+            <div
+              style={{
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 'var(--font-weight-bold)',
+                fontSize: '1.125rem',
+                lineHeight: '120%',
+                color: '#0f1523',
+                marginBottom: hostDoctorName ? 4 : 0,
+              }}
+            >
+              {revealHostDetails ? (
+                clinicName
+              ) : (
+                <LockedUntilSignIn>Clinic name</LockedUntilSignIn>
+              )}
+            </div>
+          ) : null}
           {revealHostDetails && hostDoctorName ? (
             <NameWithVerifiedShield
               verified={hostCpsnsVerified}
@@ -274,8 +294,8 @@ export function LocumBrowseJobDetail({
         >
           {(() => {
             const location = [job.hostProfile.city, job.hostProfile.province]
-              .map((s) => s?.trim())
-              .filter(Boolean)
+              .map((s) => s?.trim() ?? '')
+              .filter((s) => /[\p{L}\p{N}]/u.test(s))
               .join(', ');
             const postedIso = jobPostedAtIso(job);
             const postedAgo = relativeHoursOrDaysAgo(postedIso);
@@ -627,104 +647,108 @@ export function LocumBrowseJobDetail({
             })()
           : null}
 
-        <h4
-          style={{
-            fontSize: 'var(--font-heading)',
-            fontWeight: 'var(--font-weight-bold)',
-            color: '#0f1523',
-            marginBottom: 8,
-          }}
-        >
-          About{' '}
-          {revealHostDetails && job.hostProfile.practiceName ? (
-            job.hostProfile.practiceName
-          ) : (
-            <LockedUntilSignIn>Clinic</LockedUntilSignIn>
-          )}
-        </h4>
-        <div
-          style={{
-            fontSize: 'var(--font-body)',
-            color: '#5a6478',
-            lineHeight: 1.8,
-            marginBottom: 12,
-          }}
-        >
-          {(!revealHostDetails || job.hostProfile.address) && (
-            <>
-              <strong
-                style={{
-                  color: '#374151',
-                  fontWeight: 'var(--font-weight-bold)',
-                }}
-              >
-                Location:
-              </strong>{' '}
-              {revealHostDetails && job.hostProfile.address ? (
-                job.hostProfile.address
+        {showAboutClinic ? (
+          <>
+            <h4
+              style={{
+                fontSize: 'var(--font-heading)',
+                fontWeight: 'var(--font-weight-bold)',
+                color: '#0f1523',
+                marginBottom: 8,
+              }}
+            >
+              About{' '}
+              {!revealHostDetails ? (
+                <LockedUntilSignIn>Clinic</LockedUntilSignIn>
               ) : (
-                <LockedUntilSignIn>Street address</LockedUntilSignIn>
+                clinicName || 'the clinic'
               )}
-              <br />
-            </>
-          )}
-          {job.hostProfile.practiceType ? (
-            <>
-              <strong
-                style={{
-                  color: '#374151',
-                  fontWeight: 'var(--font-weight-bold)',
-                }}
-              >
-                Practice Type:
-              </strong>{' '}
-              {job.hostProfile.practiceType}
-              <br />
-            </>
-          ) : null}
-          {job.hostProfile.numPhysicians ? (
-            <>
-              <strong
-                style={{
-                  color: '#374151',
-                  fontWeight: 'var(--font-weight-bold)',
-                }}
-              >
-                No. Of Physicians:
-              </strong>{' '}
-              {job.hostProfile.numPhysicians}
-              <br />
-            </>
-          ) : null}
-          {job.hostProfile.emr ? (
-            <>
-              <strong
-                style={{
-                  color: '#374151',
-                  fontWeight: 'var(--font-weight-bold)',
-                }}
-              >
-                EMR System:
-              </strong>{' '}
-              {job.hostProfile.emr}
-              <br />
-            </>
-          ) : null}
-          {job.hostProfile.patientVol ? (
-            <>
-              <strong
-                style={{
-                  color: '#374151',
-                  fontWeight: 'var(--font-weight-bold)',
-                }}
-              >
-                Patient Volume Per Day:
-              </strong>{' '}
-              {job.hostProfile.patientVol}
-              <br />
-            </>
-          ) : null}
-        </div>
+            </h4>
+            <div
+              style={{
+                fontSize: 'var(--font-body)',
+                color: '#5a6478',
+                lineHeight: 1.8,
+                marginBottom: 12,
+              }}
+            >
+              {(!revealHostDetails || clinicAddress) && (
+                <>
+                  <strong
+                    style={{
+                      color: '#374151',
+                      fontWeight: 'var(--font-weight-bold)',
+                    }}
+                  >
+                    Location:
+                  </strong>{' '}
+                  {revealHostDetails ? (
+                    clinicAddress
+                  ) : (
+                    <LockedUntilSignIn>Street address</LockedUntilSignIn>
+                  )}
+                  <br />
+                </>
+              )}
+              {job.hostProfile.practiceType ? (
+                <>
+                  <strong
+                    style={{
+                      color: '#374151',
+                      fontWeight: 'var(--font-weight-bold)',
+                    }}
+                  >
+                    Practice Type:
+                  </strong>{' '}
+                  {job.hostProfile.practiceType}
+                  <br />
+                </>
+              ) : null}
+              {job.hostProfile.numPhysicians ? (
+                <>
+                  <strong
+                    style={{
+                      color: '#374151',
+                      fontWeight: 'var(--font-weight-bold)',
+                    }}
+                  >
+                    No. Of Physicians:
+                  </strong>{' '}
+                  {job.hostProfile.numPhysicians}
+                  <br />
+                </>
+              ) : null}
+              {job.hostProfile.emr ? (
+                <>
+                  <strong
+                    style={{
+                      color: '#374151',
+                      fontWeight: 'var(--font-weight-bold)',
+                    }}
+                  >
+                    EMR System:
+                  </strong>{' '}
+                  {job.hostProfile.emr}
+                  <br />
+                </>
+              ) : null}
+              {job.hostProfile.patientVol ? (
+                <>
+                  <strong
+                    style={{
+                      color: '#374151',
+                      fontWeight: 'var(--font-weight-bold)',
+                    }}
+                  >
+                    Patient Volume Per Day:
+                  </strong>{' '}
+                  {job.hostProfile.patientVol}
+                  <br />
+                </>
+              ) : null}
+            </div>
+          </>
+        ) : null}
 
         {job.hostProfile.highlights?.trim() ? (
           <>

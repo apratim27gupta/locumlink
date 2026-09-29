@@ -51,6 +51,7 @@ import {
   parseJobDates,
   parseJobShifts,
   parseJobShiftsSlots,
+  postingSlotCoverage,
   postingStatusAfterLocumAccept,
   slotHoursFromShiftType,
   type ParsedJobShift,
@@ -987,8 +988,14 @@ export class HostService {
               { locumAcceptedAt: { not: null } },
             ],
           },
-          select: { id: true },
-          take: 1,
+          select: {
+            id: true,
+            status: true,
+            availabilityKind: true,
+            availableDates: true,
+            requestedShiftIds: true,
+            shiftClaims: { select: { shiftId: true } },
+          },
         },
       },
     );
@@ -1018,11 +1025,13 @@ export class HostService {
     return {
       items: sortedItems.map((j) => {
         const { _count, applications: acceptedApps, ...rest } = j;
+        const activeAccepted = acceptedApps.filter((a) => a.status === 'CONFIRMED');
         return {
           ...mapJobPostingForApi(rest),
           status: j.status,
           applicationsCount: _count.applications,
           hasAcceptedLocum: acceptedApps.length > 0,
+          slotCoverage: postingSlotCoverage(j, activeAccepted),
           payPerDay: j.payPerDay != null ? Number(j.payPerDay) : null,
         };
       }),

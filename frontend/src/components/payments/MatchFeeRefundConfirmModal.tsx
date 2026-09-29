@@ -77,8 +77,9 @@ export function MatchFeeRefundConfirmModal({
           Request refund?
         </h2>
         <p style={{ margin: '0 0 8px', fontSize: 14, color: '#374151', lineHeight: 1.55 }}>
-          Your match fee for <strong>{invoice.jobTitle}</strong> will be refunded to your original
-          payment method. This cancels the confirmed match for this posting.
+          This cancels the confirmed match for <strong>{invoice.jobTitle}</strong>. LocumLink will
+          review the request and refund the match fee and HST to your original payment method once
+          approved.
         </p>
         <p style={{ margin: '0 0 18px', fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
           This option is available because your shift starts more than 14 days from now, per our

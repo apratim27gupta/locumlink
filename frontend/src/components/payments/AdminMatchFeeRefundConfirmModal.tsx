@@ -1,20 +1,28 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
-import type { AdminMatchFeeInvoice } from '@/lib/adminApi';
-import { adminMatchFeeRefundEligibility } from '@/components/payments/MatchFeePolicy';
+import type { AdminMatchFeeInvoice, AdminMatchFeePaymentAttempt } from '@/lib/adminApi';
+import {
+  adminMatchFeeRefundEligibility,
+  formatCents,
+  hstFor,
+} from '@/components/payments/MatchFeePolicy';
 
 export const REFUND_CONFIRM_WORD = 'Refund';
 
-type RefundConfirmMode = 'policy' | 'discretionary' | 'no_replacement';
+type RefundConfirmMode = 'policy' | 'discretionary' | 'no_replacement' | 'duplicate';
+
+const MIN_NOTE_LENGTH = 3;
 
 type AdminMatchFeeRefundConfirmModalProps = {
   invoice: AdminMatchFeeInvoice | null;
   open: boolean;
   busy: boolean;
   mode: RefundConfirmMode;
-  /** Required for discretionary mode ($125 or $250). */
+  /** Required for discretionary mode: the fee portion ($125 or $250); HST is added on top. */
   amountCents?: number;
+  /** Required for duplicate mode: the extra payment to refund. */
+  attempt?: AdminMatchFeePaymentAttempt | null;
   onClose: () => void;
   onConfirm: (params: { notes: string; amountCents?: number }) => void;
 };
@@ -47,6 +55,7 @@ export function AdminMatchFeeRefundConfirmModal({
   busy,
   mode,
   amountCents,
+  attempt,
   onClose,
   onConfirm,
 }: AdminMatchFeeRefundConfirmModalProps) {
@@ -65,36 +74,63 @@ export function AdminMatchFeeRefundConfirmModal({
   const eligibility =
     mode === 'policy' ? adminMatchFeeRefundEligibility(invoice) : { allowed: true, reason: '' };
 
-  const refundCents =
-    mode === 'discretionary'
-      ? (amountCents ?? invoice.amountCents)
-      : invoice.amountCents;
-  const amountLabel = `$${(refundCents / 100).toFixed(0)} ${invoice.currency}`;
+  const remainingCents = Math.max(0, invoice.totalCents - (invoice.refundedCents ?? 0));
+  let refundCents: number;
+  let taxCents: number;
+  if (mode === 'discretionary') {
+    const feeCents = amountCents ?? invoice.amountCents;
+    taxCents = hstFor(feeCents, invoice.taxRateBps);
+    refundCents = feeCents + taxCents;
+  } else if (mode === 'duplicate') {
+    refundCents = attempt?.amountCents ?? 0;
+    taxCents = refundCents === invoice.totalCents ? invoice.taxCents : 0;
+  } else {
+    refundCents = remainingCents;
+    taxCents =
+      invoice.totalCents > 0
+        ? Math.round((remainingCents * invoice.taxCents) / invoice.totalCents)
+        : 0;
+  }
+  const amountLabel = `${formatCents(refundCents)} ${invoice.currency}`;
+  const taxLabel = taxCents > 0 ? ` (includes ${formatCents(taxCents)} HST)` : '';
   const typedOk = typed.trim() === REFUND_CONFIRM_WORD;
+  const notesOk = notes.trim().length >= MIN_NOTE_LENGTH;
   const canSubmit =
     !busy &&
     typedOk &&
+    notesOk &&
+    refundCents > 0 &&
     (mode !== 'policy' || eligibility.allowed) &&
-    (mode !== 'discretionary' || (amountCents === 12500 || amountCents === 25000));
+    (mode !== 'discretionary' || (amountCents === 12500 || amountCents === 25000)) &&
+    (mode !== 'duplicate' || attempt?.status === 'DUPLICATE');
 
   const title =
     mode === 'no_replacement'
       ? 'Confirm no replacement - refund host?'
-      : mode === 'discretionary'
-        ? `Confirm refund of ${amountLabel}?`
-        : 'Confirm refund?';
+      : mode === 'duplicate'
+        ? 'Refund extra payment?'
+        : mode === 'discretionary'
+          ? `Confirm refund of ${amountLabel}?`
+          : 'Confirm refund?';
 
   const body =
-    mode === 'no_replacement' ? (
+    mode === 'duplicate' ? (
+      <>
+        {invoice.hostPracticeName} paid <strong>{invoice.jobTitle}</strong> more than once. Refund
+        the extra payment of <strong>{amountLabel}</strong>
+        {taxLabel} to the card it came from. The invoice stays paid.
+      </>
+    ) : mode === 'no_replacement' ? (
       <>
         Locum cancelled within 14 days of start for <strong>{invoice.jobTitle}</strong>. If no
-        replacement is found, refund <strong>{amountLabel}</strong> to{' '}
-        <strong>{invoice.hostPracticeName}</strong>.
+        replacement is found, refund <strong>{amountLabel}</strong>
+        {taxLabel} to <strong>{invoice.hostPracticeName}</strong>.
       </>
     ) : (
       <>
-        Refund <strong>{amountLabel}</strong> for <strong>{invoice.jobTitle}</strong> (
-        {invoice.hostPracticeName}) to the original payment method.
+        Refund <strong>{amountLabel}</strong>
+        {taxLabel} for <strong>{invoice.jobTitle}</strong> ({invoice.hostPracticeName}) to the
+        original payment method.
       </>
     );
 
@@ -171,7 +207,7 @@ export function AdminMatchFeeRefundConfirmModal({
             marginBottom: 6,
           }}
         >
-          Notes (optional, saved on invoice history)
+          Reason (required, saved on invoice history with your name)
         </label>
         <textarea
           value={notes}

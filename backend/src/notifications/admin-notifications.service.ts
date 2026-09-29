@@ -225,9 +225,12 @@ export class AdminNotificationsService {
     invoiceId: string;
     hostPracticeName: string;
     jobTitle: string;
+    /** Total including HST. */
     amountCents: number;
+    taxCents?: number;
   }): Promise<void> {
-    const amount = (params.amountCents / 100).toFixed(0);
+    const dollars = params.amountCents / 100;
+    const amount = Number.isInteger(dollars) ? dollars.toFixed(0) : dollars.toFixed(2);
     await this.notifyAllAdmins({
       eventType: 'A_006_MATCH_FEE_OVERDUE',
       title: 'Overdue match fee needs review',
@@ -250,7 +253,11 @@ export class AdminNotificationsService {
       | 'INVOICE_VOIDED'
       | 'REFUND_ISSUED'
       | 'FEE_NON_REFUNDABLE'
-      | 'REPLACEMENT_SEARCHING';
+      | 'REPLACEMENT_SEARCHING'
+      | 'PAYMENT_REJECTED'
+      | 'DUPLICATE_PAYMENT_RECEIVED'
+      | 'REFUND_DUE'
+      | 'REFUND_FAILED';
     detail: string;
   }): Promise<void> {
     const titles: Record<typeof params.outcome, string> = {
@@ -258,13 +265,26 @@ export class AdminNotificationsService {
       REFUND_ISSUED: 'Match fee refunded',
       FEE_NON_REFUNDABLE: 'Match fee held (no refund)',
       REPLACEMENT_SEARCHING: 'Match fee: replacement search',
+      PAYMENT_REJECTED: 'Match fee payment needs review',
+      DUPLICATE_PAYMENT_RECEIVED: 'Extra match fee payment needs a refund',
+      REFUND_DUE: 'Match fee refund needs approval',
+      REFUND_FAILED: 'Match fee refund failed',
     };
+    const highPriority = (
+      [
+        'FEE_NON_REFUNDABLE',
+        'PAYMENT_REJECTED',
+        'DUPLICATE_PAYMENT_RECEIVED',
+        'REFUND_DUE',
+        'REFUND_FAILED',
+      ] as const
+    ).includes(params.outcome as never);
     await this.notifyAllAdmins({
       eventType: 'A_007_MATCH_FEE_OUTCOME',
       title: titles[params.outcome],
       body: `${params.hostPracticeName} · ${params.jobTitle}. ${params.detail}`,
       href: '/admin/payments',
-      priority: params.outcome === 'FEE_NON_REFUNDABLE' ? 'HIGH' : 'MEDIUM',
+      priority: highPriority ? 'HIGH' : 'MEDIUM',
       actionLabel: 'View match fees',
       referenceId: params.invoiceId,
       referenceType: 'MatchFeeInvoice',

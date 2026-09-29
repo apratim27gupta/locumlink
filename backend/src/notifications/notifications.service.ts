@@ -142,8 +142,25 @@ export type NotificationItem = {
   eventType?: string;
 };
 
-function formatMatchFee(amountCents: number): string {
-  return `$${(amountCents / 100).toFixed(0)}`;
+/** Absolute link for plain-text emails; follows the same frontend URL as Stripe return links. */
+function appUrl(path: string): string {
+  const base = (
+    process.env.HOST_FRONTEND_URL?.trim() ||
+    process.env.ALLOWED_ORIGINS?.split(',')[0]?.trim() ||
+    'https://locumlink.ca'
+  ).replace(/\/$/, '');
+  return `${base}${path}`;
+}
+
+function formatCents(cents: number): string {
+  const dollars = cents / 100;
+  return `$${Number.isInteger(dollars) ? dollars.toFixed(0) : dollars.toFixed(2)}`;
+}
+
+/** `amountCents` is the total the host pays; `taxCents` is the HST included in it. */
+function formatMatchFee(amountCents: number, taxCents?: number): string {
+  const total = formatCents(amountCents);
+  return taxCents ? `${total} (including ${formatCents(taxCents)} HST)` : total;
 }
 
 function eventTypeToCategory(eventType: string): NotificationItem['type'] {
@@ -1280,9 +1297,10 @@ export class NotificationsService {
     invoiceId: string;
     applicationId: string;
     amountCents: number;
+    taxCents?: number;
   }): Promise<void> {
     const dueStr = params.dueAt.toLocaleDateString('en-CA');
-    const fee = formatMatchFee(params.amountCents);
+    const fee = formatMatchFee(params.amountCents, params.taxCents);
     await this.create({
       recipientId: params.recipientId,
       eventType: 'H_014_MATCH_FEE_INVOICED',
@@ -1305,8 +1323,9 @@ export class NotificationsService {
     jobTitle: string;
     invoiceId: string;
     amountCents: number;
+    taxCents?: number;
   }): Promise<void> {
-    const fee = formatMatchFee(params.amountCents);
+    const fee = formatMatchFee(params.amountCents, params.taxCents);
     await this.create({
       recipientId: params.recipientId,
       eventType: 'H_016_MATCH_FEE_OVERDUE',
@@ -1329,8 +1348,9 @@ export class NotificationsService {
     jobTitle: string;
     invoiceId: string;
     amountCents: number;
+    taxCents?: number;
   }): Promise<void> {
-    const fee = formatMatchFee(params.amountCents);
+    const fee = formatMatchFee(params.amountCents, params.taxCents);
     await this.create({
       recipientId: params.recipientId,
       eventType: 'H_017_MATCH_FEE_PAID',
@@ -1351,23 +1371,34 @@ export class NotificationsService {
     recipientId: string;
     recipientEmail: string;
     jobTitle: string;
+    jobPostingId: string;
     dueAt: Date;
     invoiceId: string;
     amountCents: number;
+    taxCents?: number;
     status: 'PENDING' | 'OVERDUE';
     sendEmail: boolean;
     sendNotification: boolean;
   }): Promise<void> {
     const dueStr = params.dueAt.toLocaleDateString('en-CA');
-    const fee = formatMatchFee(params.amountCents);
+    const fee = formatMatchFee(params.amountCents, params.taxCents);
     const overdue = params.status === 'OVERDUE';
     const title = overdue ? 'Match fee overdue reminder' : 'Match fee payment reminder';
     const body = overdue
       ? `Your ${fee} match fee for ${params.jobTitle} was due by ${dueStr}. Please pay from Match Fees.`
       : `Reminder: your ${fee} match fee for ${params.jobTitle} is due by ${dueStr}.`;
     const eventType = overdue ? 'H_016_MATCH_FEE_OVERDUE' : 'H_015_MATCH_FEE_DUE_SOON';
+    const invoiceHref = `/host/invoices?invoiceId=${encodeURIComponent(params.invoiceId)}`;
+    const jobHref = `/host/applicants/${encodeURIComponent(params.jobPostingId)}`;
     const emailSubject = `${title}: ${params.jobTitle}`;
-    const emailBody = `${body}\n\nSign in to LocumLink and open Match Fees to pay.`;
+    const emailBody = [
+      body,
+      '',
+      `View and pay the invoice: ${appUrl(invoiceHref)}`,
+      `View the job: ${appUrl(jobHref)}`,
+      '',
+      'You will be asked to sign in if you are not already.',
+    ].join('\n');
 
     if (params.sendNotification) {
       await this.create({
@@ -1375,7 +1406,7 @@ export class NotificationsService {
         eventType,
         title,
         body,
-        href: '/host/invoices',
+        href: invoiceHref,
         priority: overdue ? 'CRITICAL' : 'HIGH',
         actionLabel: 'Pay Match Fee',
         referenceId: params.invoiceId,

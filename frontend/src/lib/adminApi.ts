@@ -207,6 +207,46 @@ export type AdminMatchFeeTimeline = {
   canSendReminder: boolean;
 };
 
+export type AdminMatchFeePaymentAttempt = {
+  id: string;
+  status:
+    | 'OPEN'
+    | 'PAID'
+    | 'EXPIRED'
+    | 'FAILED'
+    | 'SUPERSEDED'
+    | 'REJECTED'
+    | 'DUPLICATE'
+    | 'DUPLICATE_REFUNDED';
+  /** Total charged, including HST. */
+  amountCents: number;
+  currency: string;
+  stripeCheckoutSessionId: string | null;
+  stripePaymentIntentId: string | null;
+  expiresAt: string | null;
+  completedAt: string | null;
+  lastEventType: string | null;
+  failureReason: string | null;
+  createdAt: string;
+};
+
+export type AdminMatchFeeRefund = {
+  id: string;
+  kind: 'CANCELLATION' | 'NO_REPLACEMENT' | 'POST_COMPLETION' | 'DUPLICATE_PAYMENT';
+  status: 'REQUESTED' | 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CANCELED';
+  /** Total refunded, including HST. */
+  amountCents: number;
+  taxCents: number;
+  currency: string;
+  paymentAttemptId: string | null;
+  stripeRefundId: string | null;
+  reason: string | null;
+  requestedByAdminEmail: string | null;
+  failureReason: string | null;
+  completedAt: string | null;
+  createdAt: string;
+};
+
 export type AdminMatchFeeInvoice = {
   id: string;
   hostProfileId: string;
@@ -214,15 +254,22 @@ export type AdminMatchFeeInvoice = {
   hostEmail: string | null;
   applicationId: string;
   jobPostingId: string;
+  /** Match fee before HST. */
   amountCents: number;
+  taxRateBps: number;
+  taxCents: number;
+  totalCents: number;
   currency: string;
   status: string;
+  refundResolution?: string;
+  refundPendingReview?: boolean;
+  refunds?: AdminMatchFeeRefund[];
   dueAt: string;
   paidAt: string | null;
-  mockPaymentRef: string | null;
   paymentProvider: string | null;
   stripeCheckoutSessionId: string | null;
   stripePaymentIntentId: string | null;
+  paymentAttempts?: AdminMatchFeePaymentAttempt[];
   lastReminderAt: string | null;
   escalatedAt: string | null;
   createdAt: string;
@@ -318,6 +365,19 @@ export async function adminResolveMatchFeeRefund(
   });
 }
 
+export async function adminRefundDuplicatePayment(
+  attemptId: string,
+  adminNotes: string,
+): Promise<{ success: boolean }> {
+  return adminFetchJson(
+    `/api/admin/match-fees/payment-attempts/${encodeURIComponent(attemptId)}/refund-duplicate`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ adminNotes }),
+    },
+  );
+}
+
 export async function adminDiscretionaryMatchFeeRefund(
   invoiceId: string,
   params: { amountCents: 12500 | 25000; adminNotes?: string; ticketId?: string },
@@ -362,6 +422,9 @@ export type AdminSupportTicket = {
   invoice: {
     id: string;
     amountCents: number;
+    taxCents: number;
+    taxRateBps: number;
+    totalCents: number;
     refundedCents: number;
     status: string;
     currency: string;

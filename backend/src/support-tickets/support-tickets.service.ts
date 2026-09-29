@@ -162,7 +162,7 @@ export class SupportTicketsService {
       include: {
         jobPosting: { select: { id: true, title: true } },
         matchFeeInvoice: {
-          select: { id: true, amountCents: true, status: true },
+          select: { id: true, amountCents: true, taxCents: true, status: true },
         },
       },
     });
@@ -177,7 +177,9 @@ export class SupportTicketsService {
         jobPostingId: row.jobPostingId,
         jobTitle: row.jobPosting.title,
         matchFeeInvoiceId: row.matchFeeInvoiceId,
-        invoiceAmountCents: row.matchFeeInvoice?.amountCents ?? null,
+        invoiceAmountCents: row.matchFeeInvoice
+          ? row.matchFeeInvoice.amountCents + row.matchFeeInvoice.taxCents
+          : null,
         invoiceStatus: row.matchFeeInvoice?.status ?? null,
       })),
     };
@@ -210,6 +212,8 @@ export class SupportTicketsService {
           select: {
             id: true,
             amountCents: true,
+            taxCents: true,
+            taxRateBps: true,
             refundedCents: true,
             status: true,
             currency: true,
@@ -270,6 +274,10 @@ export class SupportTicketsService {
             ? {
                 id: row.matchFeeInvoice.id,
                 amountCents: row.matchFeeInvoice.amountCents,
+                taxCents: row.matchFeeInvoice.taxCents,
+                taxRateBps: row.matchFeeInvoice.taxRateBps,
+                totalCents:
+                  row.matchFeeInvoice.amountCents + row.matchFeeInvoice.taxCents,
                 refundedCents: row.matchFeeInvoice.refundedCents,
                 status: row.matchFeeInvoice.status,
                 currency: row.matchFeeInvoice.currency,
@@ -293,7 +301,8 @@ export class SupportTicketsService {
                   : null,
                 remainingRefundableCents: Math.max(
                   0,
-                  row.matchFeeInvoice.amountCents -
+                  row.matchFeeInvoice.amountCents +
+                    row.matchFeeInvoice.taxCents -
                     row.matchFeeInvoice.refundedCents,
                 ),
                 events: row.matchFeeInvoice.events.map((e) => ({

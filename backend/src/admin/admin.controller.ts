@@ -43,6 +43,10 @@ import {
   AdminWriteOffDto,
 } from '../payments/payments.dto.js';
 
+function refundAdmin(admin: AdminJwtPayload) {
+  return { id: admin.sub, email: admin.email };
+}
+
 @Public()
 @UseGuards(AdminJwtAuthGuard)
 @Controller('admin')
@@ -388,8 +392,9 @@ export class AdminController {
   async resolveMatchFeeRefund(
     @Param('id') id: string,
     @Body() dto: AdminResolveRefundDto,
+    @CurrentAdmin() admin: AdminJwtPayload,
   ) {
-    return this.payments.resolveRefund(id, dto.adminNotes);
+    return this.payments.resolveRefund(id, refundAdmin(admin), dto.adminNotes);
   }
 
   @Post('match-fees/:id/discretionary-refund')
@@ -397,12 +402,27 @@ export class AdminController {
   async discretionaryMatchFeeRefund(
     @Param('id') id: string,
     @Body() dto: AdminDiscretionaryRefundDto,
+    @CurrentAdmin() admin: AdminJwtPayload,
   ) {
-    return this.payments.discretionaryRefund(id, {
+    return this.payments.discretionaryRefund(id, refundAdmin(admin), {
       amountCents: dto.amountCents,
       adminNotes: dto.adminNotes,
       ticketId: dto.ticketId,
     });
+  }
+
+  @Post('match-fees/payment-attempts/:attemptId/refund-duplicate')
+  @HttpCode(HttpStatus.OK)
+  async refundDuplicateMatchFeePayment(
+    @Param('attemptId') attemptId: string,
+    @Body() dto: AdminResolveRefundDto,
+    @CurrentAdmin() admin: AdminJwtPayload,
+  ) {
+    return this.payments.refundDuplicatePayment(
+      attemptId,
+      refundAdmin(admin),
+      dto.adminNotes ?? '',
+    );
   }
 
   @Post('match-fees/:id/admin-note')
@@ -422,10 +442,12 @@ export class AdminController {
   async setMatchFeeReplacementStatus(
     @Param('id') id: string,
     @Body() dto: AdminReplacementStatusDto,
+    @CurrentAdmin() admin: AdminJwtPayload,
   ) {
     return this.payments.setReplacementStatus(
       id,
       dto.replacementStatus,
+      refundAdmin(admin),
       dto.adminNotes,
     );
   }

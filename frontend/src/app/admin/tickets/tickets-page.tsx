@@ -10,6 +10,7 @@ import {
   type AdminSupportTicket,
 } from '@/lib/adminApi';
 import { MatchFeeEventTimeline } from '@/components/payments/MatchFeeEventTimeline';
+import { formatCents, hstFor } from '@/components/payments/MatchFeePolicy';
 import { AdminMatchFeeRefundConfirmModal } from '@/components/payments/AdminMatchFeeRefundConfirmModal';
 
 function fmtDate(iso: string): string {
@@ -85,7 +86,7 @@ export default function AdminTicketsPage() {
       await adminDiscretionaryMatchFeeRefund(ticket.invoice!.id, {
         amountCents: (params.amountCents ?? amountCents) as 12500 | 25000,
         ticketId: ticket.id,
-        adminNotes: params.notes || undefined,
+        adminNotes: params.notes,
       });
       setRefundConfirm(null);
       await load();
@@ -105,11 +106,13 @@ export default function AdminTicketsPage() {
         applicationId: '',
         jobPostingId: refundConfirm.ticket.jobPostingId,
         amountCents: refundConfirm.ticket.invoice.amountCents,
+        taxCents: refundConfirm.ticket.invoice.taxCents,
+        taxRateBps: refundConfirm.ticket.invoice.taxRateBps,
+        totalCents: refundConfirm.ticket.invoice.totalCents,
         currency: refundConfirm.ticket.invoice.currency,
         status: refundConfirm.ticket.invoice.status,
         dueAt: '',
         paidAt: null,
-        mockPaymentRef: null,
         paymentProvider: null,
         stripeCheckoutSessionId: null,
         stripePaymentIntentId: null,
@@ -174,8 +177,11 @@ export default function AdminTicketsPage() {
           {items.map((ticket) => {
             const busy = busyId === ticket.id;
             const remaining = ticket.invoice?.remainingRefundableCents ?? 0;
-            const can125 = remaining >= 12500 && ticket.invoice?.status === 'PAID';
-            const can250 = remaining >= 25000 && ticket.invoice?.status === 'PAID';
+            const taxRateBps = ticket.invoice?.taxRateBps ?? 0;
+            const withHst = (feeCents: number) => feeCents + hstFor(feeCents, taxRateBps);
+            const hstSuffix = taxRateBps > 0 ? ' + HST' : '';
+            const can125 = remaining >= withHst(12500) && ticket.invoice?.status === 'PAID';
+            const can250 = remaining >= withHst(25000) && ticket.invoice?.status === 'PAID';
             const timelineEvents = (ticket.invoice?.events ?? []).map((e) => ({
               id: e.id,
               eventType: e.eventType,
@@ -228,10 +234,13 @@ export default function AdminTicketsPage() {
                 </p>
                 {ticket.invoice ? (
                   <div style={{ marginTop: 8, fontSize: 13, color: '#374151' }}>
-                    Invoice ${(ticket.invoice.amountCents / 100).toFixed(0)} ·{' '}
-                    {ticket.invoice.status}
+                    Invoice {formatCents(ticket.invoice.totalCents)}
+                    {ticket.invoice.taxCents > 0
+                      ? ` (incl. ${formatCents(ticket.invoice.taxCents)} HST)`
+                      : ''}{' '}
+                    · {ticket.invoice.status}
                     {ticket.invoice.refundedCents > 0
-                      ? ` · already refunded $${(ticket.invoice.refundedCents / 100).toFixed(0)}`
+                      ? ` · already refunded ${formatCents(ticket.invoice.refundedCents)}`
                       : ''}
                   </div>
                 ) : (
@@ -253,7 +262,7 @@ export default function AdminTicketsPage() {
                         disabled={busy}
                         onClick={() => setRefundConfirm({ ticket, amountCents: 12500 })}
                       >
-                        Refund $125
+                        Refund $125{hstSuffix}
                       </button>
                     ) : null}
                     {can250 ? (
@@ -263,7 +272,7 @@ export default function AdminTicketsPage() {
                         disabled={busy}
                         onClick={() => setRefundConfirm({ ticket, amountCents: 25000 })}
                       >
-                        Refund $250
+                        Refund $250{hstSuffix}
                       </button>
                     ) : null}
                     <button

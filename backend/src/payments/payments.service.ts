@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { randomBytes } from 'node:crypto';
 import {
   MatchFeeCancelledBy,
   MatchFeeInvoiceEventActor,
   MatchFeeInvoiceEventType,
   MatchFeeInvoiceStatus,
+  MatchFeeRefundKind,
   MatchFeeRefundResolution,
   MatchFeeReplacementStatus,
   Prisma,
@@ -14,6 +14,10 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
 import {
   MATCH_FEE_CURRENCY,
+  MATCH_FEE_HST_RATE_BPS,
+  computeMatchFeeTaxCents,
+  formatTaxRate,
+  matchFeeTotalCents,
   MATCH_FEE_POLICY,
   MATCH_FEE_CANCELLATION_WINDOW_DAYS,
   MATCH_FEE_HALF_CENTS,
@@ -37,11 +41,12 @@ import {
 import {
   cancellationActorToEventActor,
   mergeMatchFeeEvents,
+  paymentProviderLabel,
   type MatchFeeInvoiceEventDto,
 } from './match-fee-invoice.events.js';
 import { buildMatchFeeReceiptPdf } from './match-fee-receipt.pdf.js';
 import { StripeService } from './stripe.service.js';
-import type Stripe from 'stripe';
+import Stripe from 'stripe';
 import {
   computeApplicationClaimedHours,
   getPostingRequiredDates,
@@ -50,8 +55,49 @@ import {
 } from '../host/job-schedule.util.js';
 import {
   BadRequestException,
+  ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+
+const PAYABLE_INVOICE_STATUSES: MatchFeeInvoiceStatus[] = ['PENDING', 'OVERDUE'];
+/** An open Checkout session is handed out again only if it has at least this long left. */
+const CHECKOUT_REUSE_MIN_REMAINING_MS = 5 * 60_000;
+/** Give the webhook a head start before reconciliation asks Stripe directly. */
+const RECONCILE_MIN_AGE_MS = 2 * 60_000;
+const ORPHAN_ATTEMPT_AGE_MS = 15 * 60_000;
+/** A webhook delivery stuck in PROCESSING this long (crash mid-handler) may be retried. */
+const WEBHOOK_PROCESSING_STALE_MS = 5 * 60_000;
+/** Stripe keeps idempotency keys for 24h; after that a refund is only re-created if Stripe has no record of it. */
+const REFUND_RETRY_WINDOW_MS = 23 * 60 * 60_000;
+
+type RefundAdmin = { id: string; email: string };
+
+function requireRefundReason(reason: string | null | undefined): string {
+  const trimmed = reason?.trim() ?? '';
+  if (trimmed.length < 3) {
+    throw new BadRequestException('Add a note explaining why this refund is being issued.');
+  }
+  return trimmed.slice(0, 1000);
+}
+
+function isRetryableStripeError(err: unknown): boolean {
+  return (
+    err instanceof Stripe.errors.StripeConnectionError ||
+    err instanceof Stripe.errors.StripeAPIError ||
+    err instanceof Stripe.errors.StripeRateLimitError
+  );
+}
+
+type CheckoutOutcome =
+  | 'paid'
+  | 'already-paid'
+  | 'processing'
+  | 'open'
+  | 'expired'
+  | 'rejected'
+  | 'duplicate'
+  | 'unknown';
 
 const invoiceInclude = {
   application: {
@@ -133,14 +179,20 @@ export type MatchFeeInvoiceDto = {
   id: string;
   applicationId: string;
   jobPostingId: string;
+  /** Match fee before HST. */
   amountCents: number;
+  taxRateBps: number;
+  taxCents: number;
+  /** What the host pays: amountCents + taxCents. */
+  totalCents: number;
   claimedHours: number | null;
   matchFeeTier: string | null;
   currency: string;
   status: MatchFeeInvoiceStatus;
+  /** Cancellation qualified for a refund; waiting for an admin to approve it. */
+  refundPendingReview: boolean;
   dueAt: string;
   paidAt: string | null;
-  mockPaymentRef: string | null;
   cancelledAt: string | null;
   cancelledBy: MatchFeeCancelledBy | null;
   cancellationReason: string | null;
@@ -165,6 +217,18 @@ export type MatchFeeInvoiceDto = {
   events: MatchFeeInvoiceEventDto[];
 };
 
+function isRefundPendingReview(row: {
+  status: MatchFeeInvoiceStatus;
+  refundResolution: MatchFeeRefundResolution;
+}): boolean {
+  return row.status === 'PAID' && row.refundResolution === 'PENDING';
+}
+
+function formatCad(cents: number): string {
+  const dollars = cents / 100;
+  return `$${Number.isInteger(dollars) ? dollars.toFixed(0) : dollars.toFixed(2)}`;
+}
+
 function formatLocumName(
   firstName?: string | null,
   lastName?: string | null,
@@ -188,14 +252,17 @@ function mapInvoice(
     applicationId: row.applicationId,
     jobPostingId: row.jobPostingId,
     amountCents: row.amountCents,
+    taxRateBps: row.taxRateBps,
+    taxCents: row.taxCents,
+    totalCents: matchFeeTotalCents(row),
     claimedHours:
       row.claimedHours != null ? Number(row.claimedHours) : null,
     matchFeeTier: row.matchFeeTier ?? null,
     currency: row.currency,
     status: row.status,
+    refundPendingReview: isRefundPendingReview(row),
     dueAt: row.dueAt.toISOString(),
     paidAt: row.paidAt?.toISOString() ?? null,
-    mockPaymentRef: row.mockPaymentRef,
     cancelledAt: row.cancelledAt?.toISOString() ?? null,
     cancelledBy: row.cancelledBy,
     cancellationReason: row.cancellationReason,
@@ -227,19 +294,56 @@ function mapInvoice(
   };
 }
 
+const adminInvoiceInclude = {
+  ...invoiceIncludeWithEvents,
+  hostProfile: {
+    select: {
+      id: true,
+      practiceName: true,
+      matchFeeReviewRequired: true,
+      user: { select: { id: true, email: true } },
+    },
+  },
+  paymentAttempts: {
+    orderBy: { createdAt: 'desc' as const },
+    take: 20,
+    select: {
+      id: true,
+      status: true,
+      amountCents: true,
+      currency: true,
+      stripeCheckoutSessionId: true,
+      stripePaymentIntentId: true,
+      expiresAt: true,
+      completedAt: true,
+      lastEventType: true,
+      failureReason: true,
+      createdAt: true,
+    },
+  },
+  refunds: {
+    orderBy: { createdAt: 'desc' as const },
+    take: 20,
+    select: {
+      id: true,
+      kind: true,
+      status: true,
+      amountCents: true,
+      taxCents: true,
+      currency: true,
+      paymentAttemptId: true,
+      stripeRefundId: true,
+      reason: true,
+      requestedByAdminEmail: true,
+      failureReason: true,
+      completedAt: true,
+      createdAt: true,
+    },
+  },
+} satisfies Prisma.MatchFeeInvoiceInclude;
+
 function mapAdminInvoice(
-  row: Prisma.MatchFeeInvoiceGetPayload<{
-    include: typeof invoiceIncludeWithEvents & {
-      hostProfile: {
-        select: {
-          id: true;
-          practiceName: true;
-          matchFeeReviewRequired: true;
-          user: { select: { id: true; email: true } };
-        };
-      };
-    };
-  }>,
+  row: Prisma.MatchFeeInvoiceGetPayload<{ include: typeof adminInvoiceInclude }>,
 ) {
   const base = mapInvoice(row);
   const statusGuide = MATCH_FEE_STATUS_ADMIN_GUIDE.find(
@@ -264,6 +368,17 @@ function mapAdminInvoice(
     paymentProvider: row.paymentProvider,
     stripeCheckoutSessionId: row.stripeCheckoutSessionId,
     stripePaymentIntentId: row.stripePaymentIntentId,
+    paymentAttempts: row.paymentAttempts.map((a) => ({
+      ...a,
+      expiresAt: a.expiresAt?.toISOString() ?? null,
+      completedAt: a.completedAt?.toISOString() ?? null,
+      createdAt: a.createdAt.toISOString(),
+    })),
+    refunds: row.refunds.map((r) => ({
+      ...r,
+      completedAt: r.completedAt?.toISOString() ?? null,
+      createdAt: r.createdAt.toISOString(),
+    })),
     lastReminderAt: row.lastReminderAt?.toISOString() ?? null,
     statusGuide: statusGuide ?? null,
     timeline,
@@ -315,102 +430,477 @@ export class PaymentsService {
     });
   }
 
+  /**
+   * Refunds part or all of a paid invoice to the original card. Only admin actions call this.
+   * The amount is reserved on the invoice under a row lock before Stripe is called, so a double
+   * click or two admins at once cannot refund more than was paid.
+   */
   private async processRefund(params: {
     invoiceId: string;
-    reason?: string | null;
+    kind: Exclude<MatchFeeRefundKind, 'DUPLICATE_PAYMENT'>;
+    admin: RefundAdmin;
+    reason: string;
     cancelledBy?: MatchFeeCancelledBy;
     adminNotes?: string | null;
     notifyHost?: boolean;
-    /** Defaults to full remaining balance. */
-    amountCents?: number;
+    /** Match fee portion to refund, before HST (HST is added at the invoice rate). Defaults to everything left. */
+    feeCents?: number;
   }): Promise<void> {
-    const invoice = await this.prisma.matchFeeInvoice.findUnique({
-      where: { id: params.invoiceId },
-      include: {
-        jobPosting: { select: { title: true, hostProfileId: true } },
-        hostProfile: {
-          select: { userId: true, user: { select: { email: true } } },
-        },
-      },
-    });
-    if (!invoice) throw new NotFoundException('Invoice not found');
-    if (invoice.status === 'REFUNDED') return;
-
-    const alreadyRefunded = invoice.refundedCents ?? 0;
-    const remaining = Math.max(0, invoice.amountCents - alreadyRefunded);
-    if (remaining <= 0) {
-      await this.prisma.matchFeeInvoice.update({
-        where: { id: invoice.id },
-        data: { status: 'REFUNDED', refundResolution: 'REFUND' },
+    const reservation = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM match_fee_invoices WHERE id = ${params.invoiceId} FOR UPDATE`;
+      const invoice = await tx.matchFeeInvoice.findUnique({
+        where: { id: params.invoiceId },
       });
-      return;
-    }
+      if (!invoice) throw new NotFoundException('Invoice not found');
 
-    const refundAmount = params.amountCents ?? remaining;
-    if (refundAmount <= 0 || refundAmount > remaining) {
-      throw new BadRequestException(
-        `Refund amount must be between $1 and $${(remaining / 100).toFixed(0)}.`,
-      );
-    }
+      const inFlight = await tx.matchFeeRefund.count({
+        where: {
+          invoiceId: invoice.id,
+          status: 'REQUESTED',
+          kind: { not: 'DUPLICATE_PAYMENT' },
+        },
+      });
+      if (inFlight > 0) {
+        throw new ConflictException('A refund for this invoice is already being processed.');
+      }
 
-    const wasCollected =
-      invoice.paidAt != null ||
-      invoice.status === 'PAID' ||
-      invoice.status === 'PENDING_REPLACEMENT';
+      const total = matchFeeTotalCents(invoice);
+      const remaining = Math.max(0, total - invoice.refundedCents);
+      if (remaining <= 0) {
+        await tx.matchFeeInvoice.update({
+          where: { id: invoice.id },
+          data: { status: 'REFUNDED', refundResolution: 'REFUND' },
+        });
+        return null;
+      }
 
-    let stripeRefundId = invoice.stripeRefundId;
-    if (
-      wasCollected &&
-      invoice.paymentProvider === 'STRIPE' &&
-      invoice.stripePaymentIntentId
-    ) {
-      stripeRefundId = await this.stripeService.refundMatchFeePayment({
-        paymentIntentId: invoice.stripePaymentIntentId,
-        amountCents: refundAmount,
+      const wasCollected =
+        invoice.paidAt != null ||
+        invoice.status === 'PAID' ||
+        invoice.status === 'PENDING_REPLACEMENT';
+      if (!wasCollected) {
+        throw new BadRequestException('This invoice was not paid, so there is nothing to refund.');
+      }
+
+      const taxCents =
+        params.feeCents != null
+          ? computeMatchFeeTaxCents(params.feeCents, invoice.taxRateBps)
+          : total > 0
+            ? Math.round((remaining * invoice.taxCents) / total)
+            : 0;
+      const amountCents =
+        params.feeCents != null ? params.feeCents + taxCents : remaining;
+      if (amountCents <= 0 || amountCents > remaining) {
+        throw new BadRequestException(
+          `Only ${formatCad(remaining)} ${invoice.currency} remains refundable on this invoice.`,
+        );
+      }
+
+      const paymentIntentId =
+        invoice.paymentProvider === 'STRIPE' ? invoice.stripePaymentIntentId : null;
+      const refund = await tx.matchFeeRefund.create({
+        data: {
+          invoiceId: invoice.id,
+          kind: params.kind,
+          amountCents,
+          taxCents,
+          currency: invoice.currency,
+          stripePaymentIntentId: paymentIntentId,
+          reason: params.reason,
+          requestedByAdminId: params.admin.id,
+          requestedByAdminEmail: params.admin.email,
+          ...(paymentIntentId
+            ? {}
+            : {
+                status: 'SUCCEEDED' as const,
+                completedAt: new Date(),
+                failureReason:
+                  'No Stripe payment on this invoice; recorded as refunded without calling Stripe.',
+              }),
+        },
+      });
+      await tx.matchFeeInvoice.update({
+        where: { id: invoice.id },
+        data: { refundedCents: { increment: amountCents } },
+      });
+      return { refund, invoice, total, paymentIntentId };
+    });
+
+    if (!reservation) return;
+    const { refund, invoice, total, paymentIntentId } = reservation;
+
+    let stripeRefund: Stripe.Refund | null = null;
+    if (paymentIntentId) {
+      stripeRefund = await this.createStripeRefund(refund.id, {
+        paymentIntentId,
+        amountCents: refund.amountCents,
         invoiceId: invoice.id,
       });
     }
 
-    const newRefundedCents = alreadyRefunded + refundAmount;
-    const fullyRefunded = newRefundedCents >= invoice.amountCents;
+    const current = await this.prisma.matchFeeInvoice.findUniqueOrThrow({
+      where: { id: invoice.id },
+      include: {
+        jobPosting: { select: { title: true, hostProfileId: true } },
+        hostProfile: { select: { userId: true, user: { select: { email: true } } } },
+      },
+    });
+    const fullyRefunded = current.refundedCents >= total;
 
     await this.prisma.matchFeeInvoice.update({
       where: { id: invoice.id },
       data: {
-        status: fullyRefunded ? 'REFUNDED' : invoice.status,
+        status: fullyRefunded ? 'REFUNDED' : undefined,
         refundResolution: 'REFUND',
-        refundedCents: newRefundedCents,
-        stripeRefundId,
-        cancelledAt: fullyRefunded ? new Date() : invoice.cancelledAt,
+        stripeRefundId: stripeRefund?.id ?? undefined,
+        cancelledAt: fullyRefunded ? new Date() : undefined,
         cancelledBy: params.cancelledBy ?? 'ADMIN',
-        cancellationReason: params.reason ?? invoice.cancellationReason,
-        adminNotes: params.adminNotes ?? invoice.adminNotes,
+        cancellationReason: params.reason,
+        adminNotes: params.adminNotes ?? undefined,
       },
     });
 
+    const taxNote =
+      refund.taxCents > 0 ? ` (includes ${formatCad(refund.taxCents)} HST)` : '';
+    const stripeNote = stripeRefund
+      ? ` to the original payment method (Stripe ${stripeRefund.id}${stripeRefund.status === 'succeeded' ? '' : ', processing'})`
+      : '';
     await this.recordMatchFeeEvent(invoice.id, 'REFUNDED', {
-      detail: stripeRefundId
-        ? `Refunded $${(refundAmount / 100).toFixed(0)} CAD to original payment method (Stripe ${stripeRefundId}).`
-        : `Refunded $${(refundAmount / 100).toFixed(0)} CAD${fullyRefunded ? '' : ' (partial)'}.`,
+      detail: `Refunded ${formatCad(refund.amountCents)} ${refund.currency}${taxNote}${stripeNote}${fullyRefunded ? '' : ' (partial)'}. Approved by ${params.admin.email}.`,
       actor: cancellationActorToEventActor(params.cancelledBy ?? 'ADMIN'),
     });
 
-    const host = invoice.hostProfile;
-    if (
-      params.notifyHost !== false &&
-      wasCollected &&
-      host?.userId &&
-      host.user?.email
-    ) {
-      await this.notifications.notifyHostMatchFeeRefund({
-        recipientId: host.userId,
-        recipientEmail: host.user.email,
-        jobTitle: invoice.jobPosting.title,
-        invoiceId: invoice.id,
-      });
+    const host = current.hostProfile;
+    if (params.notifyHost !== false && host?.userId && host.user?.email) {
+      await this.notifications
+        .notifyHostMatchFeeRefund({
+          recipientId: host.userId,
+          recipientEmail: host.user.email,
+          jobTitle: current.jobPosting.title,
+          invoiceId: invoice.id,
+        })
+        .catch((err: unknown) =>
+          this.logger.warn(
+            `Refund notification failed for invoice ${invoice.id}: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
     }
 
-    await this.syncHostReviewFlag(invoice.jobPosting.hostProfileId);
+    await this.syncHostReviewFlag(current.jobPosting.hostProfileId);
+  }
+
+  /** Admin action: refund a payment that arrived after the invoice was already settled. */
+  async refundDuplicatePayment(attemptId: string, admin: RefundAdmin, reason: string) {
+    const trimmedReason = requireRefundReason(reason);
+    const { attempt, refund } = await this.prisma.$transaction(async (tx) => {
+      const attempt = await tx.matchFeePaymentAttempt.findUnique({
+        where: { id: attemptId },
+        include: {
+          invoice: { select: { amountCents: true, taxCents: true } },
+        },
+      });
+      if (!attempt) throw new NotFoundException('Payment attempt not found');
+      if (attempt.status !== 'DUPLICATE' || !attempt.stripePaymentIntentId) {
+        throw new BadRequestException('This payment is not an extra payment awaiting refund.');
+      }
+      const claimed = await tx.matchFeePaymentAttempt.updateMany({
+        where: { id: attempt.id, status: 'DUPLICATE' },
+        data: { status: 'DUPLICATE_REFUNDED' },
+      });
+      if (claimed.count === 0) {
+        throw new ConflictException('This payment is already being refunded.');
+      }
+      const taxCents =
+        attempt.amountCents === matchFeeTotalCents(attempt.invoice)
+          ? attempt.invoice.taxCents
+          : 0;
+      const refund = await tx.matchFeeRefund.create({
+        data: {
+          invoiceId: attempt.invoiceId,
+          paymentAttemptId: attempt.id,
+          kind: 'DUPLICATE_PAYMENT',
+          amountCents: attempt.amountCents,
+          taxCents,
+          currency: attempt.currency,
+          stripePaymentIntentId: attempt.stripePaymentIntentId,
+          reason: trimmedReason,
+          requestedByAdminId: admin.id,
+          requestedByAdminEmail: admin.email,
+        },
+      });
+      return { attempt, refund };
+    });
+
+    const stripeRefund = await this.createStripeRefund(refund.id, {
+      paymentIntentId: attempt.stripePaymentIntentId!,
+      amountCents: refund.amountCents,
+      invoiceId: attempt.invoiceId,
+    });
+
+    await this.updateAttempt(attempt.id, {
+      completedAt: new Date(),
+      failureReason: `Extra payment refunded by ${admin.email} (Stripe ${stripeRefund.id}).`,
+    });
+    await this.recordMatchFeeEvent(attempt.invoiceId, 'REFUNDED', {
+      detail: `Extra payment of ${formatCad(refund.amountCents)} ${refund.currency} refunded (Stripe ${stripeRefund.id}). Approved by ${admin.email}.`,
+      actor: 'ADMIN',
+    });
+    return { success: true };
+  }
+
+  /**
+   * Calls Stripe for a reserved refund row. Definitive Stripe errors release the reservation;
+   * network or Stripe outages leave the row REQUESTED so reconciliation retries it safely.
+   */
+  private async createStripeRefund(
+    refundId: string,
+    params: { paymentIntentId: string; amountCents: number; invoiceId: string },
+  ): Promise<Stripe.Refund> {
+    let stripeRefund: Stripe.Refund;
+    try {
+      stripeRefund = await this.stripeService.refundMatchFeePayment({
+        refundId,
+        ...params,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isRetryableStripeError(err)) {
+        this.logger.error(`Stripe refund ${refundId} not confirmed, will retry: ${message}`);
+        throw new ServiceUnavailableException(
+          'Stripe did not respond. The refund is recorded and will be retried automatically.',
+        );
+      }
+      await this.failRefund(refundId, `Stripe rejected the refund: ${message}`);
+      throw new BadRequestException(`Stripe could not process the refund: ${message}`);
+    }
+
+    const outcome = await this.applyStripeRefund(stripeRefund);
+    if (outcome === 'failed') {
+      throw new BadRequestException(
+        `Stripe declined the refund${stripeRefund.failure_reason ? `: ${stripeRefund.failure_reason}` : '.'}`,
+      );
+    }
+    return stripeRefund;
+  }
+
+  /** Applies Stripe's refund state (from the API, a webhook or reconciliation) to our refund row. */
+  private async applyStripeRefund(
+    refund: Stripe.Refund,
+  ): Promise<'succeeded' | 'pending' | 'failed' | 'unknown'> {
+    const refundRowId = refund.metadata?.matchFeeRefundId;
+    const row = await this.prisma.matchFeeRefund.findFirst({
+      where: {
+        OR: [
+          { stripeRefundId: refund.id },
+          ...(refundRowId ? [{ id: refundRowId }] : []),
+        ],
+      },
+    });
+    if (!row) return 'unknown';
+
+    if (refund.status === 'failed' || refund.status === 'canceled') {
+      await this.failRefund(
+        row.id,
+        refund.failure_reason
+          ? `Stripe refund ${refund.status}: ${refund.failure_reason}`
+          : `Stripe refund ${refund.status}.`,
+        { stripeRefundId: refund.id, status: refund.status === 'failed' ? 'FAILED' : 'CANCELED' },
+      );
+      return 'failed';
+    }
+
+    const succeeded = refund.status === 'succeeded';
+    await this.prisma.matchFeeRefund.updateMany({
+      where: { id: row.id, status: { in: ['REQUESTED', 'PENDING', 'SUCCEEDED'] } },
+      data: {
+        stripeRefundId: refund.id,
+        status: succeeded ? 'SUCCEEDED' : 'PENDING',
+        completedAt: succeeded ? (row.completedAt ?? new Date()) : null,
+      },
+    });
+    return succeeded ? 'succeeded' : 'pending';
+  }
+
+  /** Marks a refund failed once and gives the reserved amount back to the invoice. */
+  private async failRefund(
+    refundId: string,
+    reason: string,
+    extra?: { stripeRefundId?: string; status?: 'FAILED' | 'CANCELED' },
+  ): Promise<void> {
+    const released = await this.prisma.matchFeeRefund.updateMany({
+      where: { id: refundId, status: { notIn: ['FAILED', 'CANCELED'] } },
+      data: {
+        status: extra?.status ?? 'FAILED',
+        failureReason: reason.slice(0, 2000),
+        ...(extra?.stripeRefundId ? { stripeRefundId: extra.stripeRefundId } : {}),
+      },
+    });
+    if (released.count === 0) return;
+
+    const row = await this.prisma.matchFeeRefund.findUniqueOrThrow({
+      where: { id: refundId },
+      include: {
+        invoice: {
+          select: {
+            amountCents: true,
+            taxCents: true,
+            hostProfile: { select: { practiceName: true } },
+            jobPosting: { select: { title: true } },
+          },
+        },
+      },
+    });
+
+    if (row.kind === 'DUPLICATE_PAYMENT') {
+      if (row.paymentAttemptId) {
+        await this.prisma.matchFeePaymentAttempt.updateMany({
+          where: { id: row.paymentAttemptId, status: 'DUPLICATE_REFUNDED' },
+          data: { status: 'DUPLICATE' },
+        });
+      }
+    } else {
+      const updated = await this.prisma.matchFeeInvoice.update({
+        where: { id: row.invoiceId },
+        data: { refundedCents: { decrement: row.amountCents } },
+      });
+      if (
+        updated.status === 'REFUNDED' &&
+        updated.refundedCents < matchFeeTotalCents(updated)
+      ) {
+        // Back to "refund due" so an admin can retry; post-completion refunds are re-issued by hand.
+        await this.prisma.matchFeeInvoice.update({
+          where: { id: row.invoiceId },
+          data: {
+            status: 'PAID',
+            ...(row.kind === 'POST_COMPLETION' ? {} : { refundResolution: 'PENDING' as const }),
+          },
+        });
+      }
+    }
+
+    await this.recordMatchFeeEvent(row.invoiceId, 'REFUND_FAILED', {
+      detail: `Refund of ${formatCad(row.amountCents)} ${row.currency} did not go through. ${reason}`,
+    });
+    this.logger.error(`Match fee refund ${refundId} failed: ${reason}`);
+    await this.adminNotifications
+      .notifyMatchFeeOutcome({
+        invoiceId: row.invoiceId,
+        hostPracticeName: row.invoice.hostProfile.practiceName,
+        jobTitle: row.invoice.jobPosting.title,
+        outcome: 'REFUND_FAILED',
+        detail: `Refund of ${formatCad(row.amountCents)} ${row.currency} failed. ${reason}`,
+      })
+      .catch(() => undefined);
+  }
+
+  /** Finishes the invoice side of a refund whose Stripe call timed out during the admin action. */
+  private async completeReconciledRefund(refundId: string): Promise<void> {
+    const row = await this.prisma.matchFeeRefund.findUniqueOrThrow({
+      where: { id: refundId },
+      include: {
+        invoice: {
+          include: {
+            jobPosting: { select: { title: true } },
+            hostProfile: { select: { userId: true, user: { select: { email: true } } } },
+          },
+        },
+      },
+    });
+    const approvedBy = row.requestedByAdminEmail ?? 'an admin';
+    if (row.kind === 'DUPLICATE_PAYMENT') {
+      await this.recordMatchFeeEvent(row.invoiceId, 'REFUNDED', {
+        detail: `Extra payment of ${formatCad(row.amountCents)} ${row.currency} refunded (Stripe ${row.stripeRefundId}). Approved by ${approvedBy}.`,
+        actor: 'ADMIN',
+      });
+      return;
+    }
+
+    const invoice = row.invoice;
+    const fullyRefunded = invoice.refundedCents >= matchFeeTotalCents(invoice);
+    await this.prisma.matchFeeInvoice.update({
+      where: { id: invoice.id },
+      data: {
+        status: fullyRefunded ? 'REFUNDED' : undefined,
+        refundResolution: 'REFUND',
+        stripeRefundId: row.stripeRefundId ?? undefined,
+        cancelledAt: fullyRefunded ? new Date() : undefined,
+      },
+    });
+    const taxNote = row.taxCents > 0 ? ` (includes ${formatCad(row.taxCents)} HST)` : '';
+    await this.recordMatchFeeEvent(invoice.id, 'REFUNDED', {
+      detail: `Refunded ${formatCad(row.amountCents)} ${row.currency}${taxNote} to the original payment method (Stripe ${row.stripeRefundId})${fullyRefunded ? '' : ' (partial)'}. Approved by ${approvedBy}.`,
+      actor: 'ADMIN',
+    });
+    const host = invoice.hostProfile;
+    if (host?.userId && host.user?.email) {
+      await this.notifications
+        .notifyHostMatchFeeRefund({
+          recipientId: host.userId,
+          recipientEmail: host.user.email,
+          jobTitle: invoice.jobPosting.title,
+          invoiceId: invoice.id,
+        })
+        .catch(() => undefined);
+    }
+    await this.syncHostReviewFlag(invoice.hostProfileId);
+  }
+
+  /** Safety net for refunds whose Stripe result we never recorded (timeouts, missed webhooks). */
+  async reconcileRefunds(now = new Date()) {
+    const result = { checked: 0, succeeded: 0, failed: 0 };
+    if (!this.stripeService.isEnabled()) return result;
+
+    const rows = await this.prisma.matchFeeRefund.findMany({
+      where: {
+        status: { in: ['REQUESTED', 'PENDING'] },
+        stripePaymentIntentId: { not: null },
+        updatedAt: { lt: new Date(now.getTime() - RECONCILE_MIN_AGE_MS) },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    });
+
+    for (const row of rows) {
+      result.checked += 1;
+      const wasRequested = row.status === 'REQUESTED';
+      try {
+        let refund: Stripe.Refund | null = row.stripeRefundId
+          ? await this.stripeService.retrieveRefund(row.stripeRefundId)
+          : await this.stripeService.findRefundForRow(row.stripePaymentIntentId!, row.id);
+        if (!refund) {
+          if (now.getTime() - row.createdAt.getTime() > REFUND_RETRY_WINDOW_MS) {
+            await this.failRefund(row.id, 'Stripe never created this refund.');
+            result.failed += 1;
+            continue;
+          }
+          refund = await this.stripeService.refundMatchFeePayment({
+            refundId: row.id,
+            paymentIntentId: row.stripePaymentIntentId!,
+            amountCents: row.amountCents,
+            invoiceId: row.invoiceId,
+          });
+        }
+        const outcome = await this.applyStripeRefund(refund);
+        if (outcome === 'succeeded') result.succeeded += 1;
+        if (outcome === 'failed') result.failed += 1;
+        if (wasRequested && (outcome === 'succeeded' || outcome === 'pending')) {
+          await this.completeReconciledRefund(row.id);
+        }
+      } catch (err) {
+        if (!isRetryableStripeError(err) && !row.stripeRefundId) {
+          await this.failRefund(
+            row.id,
+            `Stripe rejected the refund: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          result.failed += 1;
+          continue;
+        }
+        this.logger.warn(
+          `Refund reconcile failed for ${row.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    return result;
   }
 
   async createMatchFeeInvoice(applicationId: string): Promise<void> {
@@ -515,6 +1005,8 @@ export class PaymentsService {
       shiftClaims: app.shiftClaims,
     });
     const amountCents = computeMatchFeeAmountCents(claimedHours);
+    const taxRateBps = MATCH_FEE_HST_RATE_BPS;
+    const taxCents = computeMatchFeeTaxCents(amountCents, taxRateBps);
     const matchFeeTier = matchFeeTierFromHours(claimedHours);
 
     const createdAt = new Date();
@@ -525,13 +1017,15 @@ export class PaymentsService {
       hostProfileId: app.jobPosting.hostProfileId,
       jobPostingId: app.jobPostingId,
       amountCents,
+      taxRateBps,
+      taxCents,
+      refundedCents: 0,
       claimedHours,
       matchFeeTier,
       currency: MATCH_FEE_CURRENCY,
       dueAt,
       status: 'PENDING' as const,
       paidAt: null,
-      mockPaymentRef: null,
       cancelledAt: null,
       cancelledBy: null,
       cancellationReason: null,
@@ -539,7 +1033,7 @@ export class PaymentsService {
       replacementStatus: 'NONE' as const,
       replacementApplicationId: null,
       escalatedAt: null,
-      paymentProvider: 'MOCK' as const,
+      paymentProvider: null,
       stripeCheckoutSessionId: null,
       stripePaymentIntentId: null,
       stripeRefundId: null,
@@ -569,15 +1063,17 @@ export class PaymentsService {
         dueAt,
         invoiceId: invoice.id,
         applicationId,
-        amountCents,
+        amountCents: amountCents + taxCents,
+        taxCents,
       });
     }
 
     const tierLabel = matchFeeTier === 'HALF' ? 'Half' : 'Full';
+    const priceText = `${tierLabel} tier, ${formatCad(amountCents)} + ${formatCad(taxCents)} HST = ${formatCad(amountCents + taxCents)} ${MATCH_FEE_CURRENCY}`;
     await this.recordMatchFeeEvent(invoice.id, 'INVOICED', {
       detail: existingByApp
-        ? `Re-invoiced after prior cycle closed - ${app.jobPosting.title} - ${claimedHours}h (${tierLabel} tier, $${(amountCents / 100).toFixed(0)} CAD)`
-        : `${app.jobPosting.title} - ${claimedHours}h (${tierLabel} tier, $${(amountCents / 100).toFixed(0)} CAD)`,
+        ? `Re-invoiced after prior cycle closed - ${app.jobPosting.title} - ${claimedHours}h (${priceText})`
+        : `${app.jobPosting.title} - ${claimedHours}h (${priceText})`,
     });
   }
 
@@ -807,35 +1303,6 @@ export class PaymentsService {
     return mapInvoice(row);
   }
 
-  async payMock(userId: string, invoiceId: string) {
-    const hostProfile = await this.prisma.hostProfile.findUnique({
-      where: { userId },
-      select: { id: true, userId: true, user: { select: { email: true } } },
-    });
-    if (!hostProfile) throw new NotFoundException('Host profile not found');
-
-    const invoice = await this.prisma.matchFeeInvoice.findFirst({
-      where: { id: invoiceId, hostProfileId: hostProfile.id },
-      include: {
-        jobPosting: { select: { title: true } },
-      },
-    });
-    if (!invoice) throw new NotFoundException('Invoice not found');
-    if (!['PENDING', 'OVERDUE'].includes(invoice.status)) {
-      throw new BadRequestException('This invoice cannot be paid in its current state.');
-    }
-
-    const mockPaymentRef = `mock_${randomBytes(8).toString('hex')}`;
-    const updated = await this.markInvoicePaid({
-      invoiceId,
-      paymentProvider: 'MOCK',
-      mockPaymentRef,
-    });
-    if (!updated) throw new NotFoundException('Invoice not found');
-
-    return { success: true, invoice: mapInvoice(updated) };
-  }
-
   async handleCancellation(params: {
     applicationId: string;
     cancelledBy: CancellationActor;
@@ -877,6 +1344,7 @@ export class PaymentsService {
       orderBy: { createdAt: 'desc' },
     });
     if (!invoice) return;
+    if (isRefundPendingReview(invoice) && invoice.cancelledAt) return;
     const cancelledByReplacement = invoice.replacementApplicationId === app.id;
 
     if (['PAID', 'CANCELLED', 'REFUNDED', 'CREDITED'].includes(invoice.status)) {
@@ -914,10 +1382,18 @@ export class PaymentsService {
     );
 
     if (nextStatus === 'REFUNDED' && wasPaid) {
-      await this.processRefund({
-        invoiceId: invoice.id,
-        reason: policy.reason,
-        cancelledBy: params.cancelledBy as MatchFeeCancelledBy,
+      // Refunds are never automatic: the invoice stays PAID and waits for an admin to approve it.
+      await this.prisma.matchFeeInvoice.update({
+        where: { id: invoice.id },
+        data: {
+          status: 'PAID',
+          cancelledAt: new Date(),
+          cancelledBy: params.cancelledBy as MatchFeeCancelledBy,
+          cancellationReason: policy.reason,
+          refundResolution: 'PENDING',
+          replacementStatus: 'NONE',
+          ...(cancelledByReplacement ? { replacementApplicationId: null } : {}),
+        },
       });
       if (jobRemoved) {
         await this.recordMatchFeeEvent(invoice.id, 'POSTING_REMOVED', {
@@ -925,13 +1401,27 @@ export class PaymentsService {
           actor: 'HOST',
         });
       }
+      const refundable = Math.max(0, matchFeeTotalCents(invoice) - invoice.refundedCents);
+      await this.recordMatchFeeEvent(invoice.id, 'REFUND_PENDING_REVIEW', {
+        detail: `${policy.reason} LocumLink will review and refund ${formatCad(refundable)} ${invoice.currency}.`,
+        actor,
+      });
       await this.adminNotifications.notifyMatchFeeOutcome({
         invoiceId: invoice.id,
         hostPracticeName: host?.practiceName ?? 'Host',
         jobTitle: app.jobPosting.title,
-        outcome: 'REFUND_ISSUED',
-        detail: policy.reason,
+        outcome: 'REFUND_DUE',
+        detail: `${policy.reason} Approve the ${formatCad(refundable)} refund in admin Match Fees.`,
       });
+      if (host?.userId && host.user?.email) {
+        await this.notifications.notifyHostMatchFeeCancelled({
+          recipientId: host.userId,
+          recipientEmail: host.user.email,
+          jobTitle: app.jobPosting.title,
+          reason: `${policy.reason} Your refund is being reviewed by LocumLink and will go back to your original payment method once approved.`,
+          invoiceId: invoice.id,
+        });
+      }
       return;
     }
 
@@ -1075,7 +1565,8 @@ export class PaymentsService {
           recipientEmail: host.user.email,
           jobTitle: invoice.jobPosting.title,
           invoiceId: invoice.id,
-          amountCents: invoice.amountCents,
+          amountCents: matchFeeTotalCents(invoice),
+          taxCents: invoice.taxCents,
         });
       }
       await this.syncHostReviewFlag(invoice.hostProfileId);
@@ -1118,7 +1609,8 @@ export class PaymentsService {
         invoiceId: invoice.id,
         hostPracticeName: invoice.hostProfile.practiceName,
         jobTitle: invoice.jobPosting.title,
-        amountCents: invoice.amountCents,
+        amountCents: matchFeeTotalCents(invoice),
+        taxCents: invoice.taxCents,
       });
     }
   }
@@ -1148,17 +1640,7 @@ export class PaymentsService {
 
     const rows = await this.prisma.matchFeeInvoice.findMany({
       where,
-      include: {
-        ...invoiceIncludeWithEvents,
-        hostProfile: {
-          select: {
-            id: true,
-            practiceName: true,
-            matchFeeReviewRequired: true,
-            user: { select: { id: true, email: true } },
-          },
-        },
-      },
+      include: adminInvoiceInclude,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
@@ -1217,7 +1699,7 @@ export class PaymentsService {
       this.prisma.matchFeeInvoice.count({ where: paidWhere }),
       this.prisma.matchFeeInvoice.aggregate({
         where: paidWhere,
-        _sum: { amountCents: true },
+        _sum: { amountCents: true, taxCents: true },
       }),
     ]);
 
@@ -1229,7 +1711,8 @@ export class PaymentsService {
       received: {
         days,
         count: receivedCount,
-        amountCents: receivedSum._sum.amountCents ?? 0,
+        amountCents:
+          (receivedSum._sum.amountCents ?? 0) + (receivedSum._sum.taxCents ?? 0),
       },
     };
   }
@@ -1272,9 +1755,11 @@ export class PaymentsService {
         recipientId: host.userId,
         recipientEmail: host.user.email,
         jobTitle: invoice.jobPosting.title,
+        jobPostingId: invoice.jobPostingId,
         dueAt: invoice.dueAt,
         invoiceId: invoice.id,
-        amountCents: invoice.amountCents,
+        amountCents: matchFeeTotalCents(invoice),
+        taxCents: invoice.taxCents,
         status: reminderStatus,
         sendEmail: options.sendEmail,
         sendNotification: options.sendNotification,
@@ -1301,7 +1786,9 @@ export class PaymentsService {
 
   async createStripeCheckoutForHost(userId: string, invoiceId: string) {
     if (!this.stripeService.isEnabled()) {
-      throw new BadRequestException('Stripe payments are not configured.');
+      throw new BadRequestException(
+        'Online payments are not available right now. Please try again later.',
+      );
     }
 
     const hostProfile = await this.prisma.hostProfile.findUnique({
@@ -1315,73 +1802,570 @@ export class PaymentsService {
       include: { jobPosting: { select: { title: true } } },
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
-    if (!['PENDING', 'OVERDUE'].includes(invoice.status)) {
+    if (!PAYABLE_INVOICE_STATUSES.includes(invoice.status)) {
       throw new BadRequestException('This invoice cannot be paid in its current state.');
     }
 
-    const { url, sessionId } =
-      await this.stripeService.createMatchFeeCheckoutSession({
-        invoiceId: invoice.id,
-        hostProfileId: invoice.hostProfileId,
-        amountCents: invoice.amountCents,
-        currency: invoice.currency,
-        jobTitle: invoice.jobPosting.title,
-      });
-
-    await this.prisma.matchFeeInvoice.update({
-      where: { id: invoiceId },
-      data: { stripeCheckoutSessionId: sessionId },
+    const totalCents = matchFeeTotalCents(invoice);
+    const now = Date.now();
+    const openAttempts = await this.prisma.matchFeePaymentAttempt.findMany({
+      where: { invoiceId: invoice.id, status: 'OPEN' },
+      orderBy: { createdAt: 'desc' },
     });
 
-    return { success: true, url };
+    const reusable = openAttempts.find(
+      (a) =>
+        a.checkoutUrl &&
+        a.stripeCheckoutSessionId &&
+        a.expiresAt &&
+        a.expiresAt.getTime() - now > CHECKOUT_REUSE_MIN_REMAINING_MS &&
+        a.amountCents === totalCents &&
+        a.currency === invoice.currency,
+    );
+    if (reusable?.checkoutUrl) {
+      return { success: true, url: reusable.checkoutUrl };
+    }
+
+    for (const stale of openAttempts) {
+      if (!stale.stripeCheckoutSessionId) {
+        await this.updateAttempt(stale.id, {
+          status: 'FAILED',
+          failureReason: 'Checkout session was never created.',
+        });
+        continue;
+      }
+      const session = await this.stripeService.expireCheckoutSession(
+        stale.stripeCheckoutSessionId,
+      );
+      if (session.status === 'complete') {
+        const outcome = await this.applyCheckoutSession(session, 'checkout.supersede');
+        if (outcome === 'processing') {
+          throw new BadRequestException(
+            'A payment for this invoice is still processing. Please check back shortly.',
+          );
+        }
+        if (outcome === 'paid' || outcome === 'already-paid') {
+          throw new BadRequestException('This invoice has already been paid.');
+        }
+        continue;
+      }
+      await this.updateAttempt(stale.id, {
+        status: session.status === 'expired' ? 'SUPERSEDED' : 'OPEN',
+        lastEventType: 'checkout.supersede',
+      });
+    }
+
+    const expiresAt = new Date(
+      now + this.stripeService.getCheckoutExpiryMinutes() * 60_000,
+    );
+    const attempt = await this.prisma.matchFeePaymentAttempt.create({
+      data: {
+        invoiceId: invoice.id,
+        hostProfileId: invoice.hostProfileId,
+        amountCents: totalCents,
+        currency: invoice.currency,
+        expiresAt,
+      },
+    });
+
+    let checkout: { url: string; sessionId: string; expiresAt: Date };
+    try {
+      checkout = await this.stripeService.createMatchFeeCheckoutSession({
+        attemptId: attempt.id,
+        invoiceId: invoice.id,
+        hostProfileId: invoice.hostProfileId,
+        feeCents: invoice.amountCents,
+        taxCents: invoice.taxCents,
+        taxLabel: `HST (${formatTaxRate(invoice.taxRateBps)})`,
+        currency: invoice.currency,
+        jobTitle: invoice.jobPosting.title,
+        expiresAt,
+      });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      await this.updateAttempt(attempt.id, {
+        status: 'FAILED',
+        failureReason: reason.slice(0, 2000),
+      });
+      this.logger.error(
+        `Stripe checkout creation failed for invoice ${invoice.id}: ${reason}`,
+      );
+      throw new BadRequestException('Could not start checkout. Please try again.');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.matchFeePaymentAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          stripeCheckoutSessionId: checkout.sessionId,
+          checkoutUrl: checkout.url,
+          expiresAt: checkout.expiresAt,
+          lastEventType: 'checkout.session.created',
+        },
+      }),
+      this.prisma.matchFeeInvoice.update({
+        where: { id: invoice.id },
+        data: { stripeCheckoutSessionId: checkout.sessionId },
+      }),
+    ]);
+
+    return { success: true, url: checkout.url };
+  }
+
+  /** Host returned from Checkout: confirm with Stripe directly instead of waiting for the webhook. */
+  async syncHostInvoicePayment(userId: string, invoiceId: string) {
+    const hostProfile = await this.prisma.hostProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!hostProfile) throw new NotFoundException('Host profile not found');
+    const invoice = await this.prisma.matchFeeInvoice.findFirst({
+      where: { id: invoiceId, hostProfileId: hostProfile.id },
+      select: { id: true },
+    });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+
+    if (this.stripeService.isEnabled()) {
+      const attempts = await this.prisma.matchFeePaymentAttempt.findMany({
+        where: {
+          invoiceId: invoice.id,
+          status: 'OPEN',
+          stripeCheckoutSessionId: { not: null },
+        },
+        select: { stripeCheckoutSessionId: true },
+      });
+      for (const a of attempts) {
+        try {
+          const session = await this.stripeService.retrieveCheckoutSession(
+            a.stripeCheckoutSessionId!,
+          );
+          await this.applyCheckoutSession(session, 'host.return');
+        } catch (err) {
+          this.logger.warn(
+            `Payment sync failed for session ${a.stripeCheckoutSessionId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+    }
+
+    return this.getHostInvoice(userId, invoiceId);
+  }
+
+  /**
+   * Safety net for missed webhooks: asks Stripe for the state of every open Checkout session
+   * and applies it (paid, expired). Also closes attempts whose session was never created.
+   */
+  async reconcileOpenCheckoutSessions(now = new Date()) {
+    const result = { checked: 0, paid: 0, expired: 0, orphaned: 0 };
+    if (!this.stripeService.isEnabled()) return result;
+
+    const orphans = await this.prisma.matchFeePaymentAttempt.updateMany({
+      where: {
+        status: 'OPEN',
+        stripeCheckoutSessionId: null,
+        createdAt: { lt: new Date(now.getTime() - ORPHAN_ATTEMPT_AGE_MS) },
+      },
+      data: {
+        status: 'FAILED',
+        failureReason: 'Checkout session was never created.',
+      },
+    });
+    result.orphaned = orphans.count;
+
+    const attempts = await this.prisma.matchFeePaymentAttempt.findMany({
+      where: {
+        status: 'OPEN',
+        stripeCheckoutSessionId: { not: null },
+        createdAt: { lt: new Date(now.getTime() - RECONCILE_MIN_AGE_MS) },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+      select: { stripeCheckoutSessionId: true },
+    });
+
+    for (const a of attempts) {
+      result.checked += 1;
+      try {
+        const session = await this.stripeService.retrieveCheckoutSession(
+          a.stripeCheckoutSessionId!,
+        );
+        const outcome = await this.applyCheckoutSession(session, 'reconcile');
+        if (outcome === 'paid') result.paid += 1;
+        if (outcome === 'expired') result.expired += 1;
+      } catch (err) {
+        this.logger.warn(
+          `Reconcile failed for session ${a.stripeCheckoutSessionId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    if (result.paid > 0) {
+      this.logger.warn(
+        `Stripe reconciliation confirmed ${result.paid} payment(s) that no webhook had confirmed.`,
+      );
+    }
+    return result;
   }
 
   async handleStripeWebhookEvent(event: Stripe.Event): Promise<void> {
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const invoiceId = session.metadata?.matchFeeInvoiceId;
-      if (!invoiceId) return;
+    const objectId = (event.data.object as { id?: string }).id ?? null;
 
-      const paymentIntentId =
-        typeof session.payment_intent === 'string'
-          ? session.payment_intent
-          : session.payment_intent?.id;
-
-      await this.markInvoicePaid({
-        invoiceId,
-        paymentProvider: 'STRIPE',
-        stripeCheckoutSessionId: session.id,
-        stripePaymentIntentId: paymentIntentId ?? null,
-        externalRef: paymentIntentId ?? session.id,
+    if (event.livemode !== this.stripeService.isLiveMode()) {
+      this.logger.error(
+        `Ignoring Stripe event ${event.id}: livemode=${event.livemode} does not match the configured Stripe key.`,
+      );
+      await this.prisma.stripeWebhookEvent.upsert({
+        where: { id: event.id },
+        create: {
+          id: event.id,
+          type: event.type,
+          livemode: event.livemode,
+          objectId,
+          status: 'IGNORED',
+          error: 'Stripe mode mismatch',
+          processedAt: new Date(),
+        },
+        update: {},
       });
       return;
     }
 
-    if (event.type === 'payment_intent.payment_failed') {
-      const intent = event.data.object as Stripe.PaymentIntent;
-      const invoiceId = intent.metadata?.matchFeeInvoiceId;
-      if (!invoiceId) return;
-      this.logger.warn(
-        `Stripe payment failed for match fee invoice ${invoiceId}`,
-      );
+    if (!(await this.claimWebhookEvent(event, objectId))) return;
+
+    try {
+      const handled = await this.dispatchStripeEvent(event);
+      await this.prisma.stripeWebhookEvent.update({
+        where: { id: event.id },
+        data: {
+          status: handled ? 'PROCESSED' : 'IGNORED',
+          processedAt: new Date(),
+          error: null,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await this.prisma.stripeWebhookEvent
+        .update({
+          where: { id: event.id },
+          data: { status: 'FAILED', error: message.slice(0, 2000) },
+        })
+        .catch(() => undefined);
+      throw err;
     }
   }
 
+  /** Records the event id; returns false when this delivery was already processed. */
+  private async claimWebhookEvent(
+    event: Stripe.Event,
+    objectId: string | null,
+  ): Promise<boolean> {
+    try {
+      await this.prisma.stripeWebhookEvent.create({
+        data: {
+          id: event.id,
+          type: event.type,
+          livemode: event.livemode,
+          objectId,
+        },
+      });
+      return true;
+    } catch (err) {
+      if (
+        !(err instanceof Prisma.PrismaClientKnownRequestError) ||
+        err.code !== 'P2002'
+      ) {
+        throw err;
+      }
+    }
+
+    const reclaimed = await this.prisma.stripeWebhookEvent.updateMany({
+      where: {
+        id: event.id,
+        OR: [
+          { status: 'FAILED' },
+          {
+            status: 'PROCESSING',
+            receivedAt: { lt: new Date(Date.now() - WEBHOOK_PROCESSING_STALE_MS) },
+          },
+        ],
+      },
+      data: { status: 'PROCESSING', attempts: { increment: 1 }, error: null },
+    });
+    if (reclaimed.count > 0) return true;
+
+    const existing = await this.prisma.stripeWebhookEvent.findUnique({
+      where: { id: event.id },
+      select: { status: true },
+    });
+    if (existing?.status === 'PROCESSING') {
+      throw new ConflictException('This Stripe event is already being processed.');
+    }
+    return false;
+  }
+
+  /** Returns true when the event changed something we track. */
+  private async dispatchStripeEvent(event: Stripe.Event): Promise<boolean> {
+    switch (event.type) {
+      case 'checkout.session.completed':
+      case 'checkout.session.async_payment_succeeded':
+      case 'checkout.session.expired': {
+        const outcome = await this.applyCheckoutSession(event.data.object, event.type);
+        return outcome !== 'unknown';
+      }
+      case 'checkout.session.async_payment_failed': {
+        const updated = await this.prisma.matchFeePaymentAttempt.updateMany({
+          where: { stripeCheckoutSessionId: event.data.object.id, status: 'OPEN' },
+          data: {
+            status: 'FAILED',
+            failureReason: 'The payment could not be completed.',
+            lastEventType: event.type,
+          },
+        });
+        return updated.count > 0;
+      }
+      case 'payment_intent.payment_failed': {
+        const intent = event.data.object;
+        const attemptId = intent.metadata?.paymentAttemptId;
+        if (!attemptId) return false;
+        const updated = await this.prisma.matchFeePaymentAttempt.updateMany({
+          where: { id: attemptId, status: 'OPEN' },
+          data: {
+            stripePaymentIntentId: intent.id,
+            failureReason: (
+              intent.last_payment_error?.message ?? 'Payment failed.'
+            ).slice(0, 2000),
+            lastEventType: event.type,
+          },
+        });
+        return updated.count > 0;
+      }
+      case 'refund.created':
+      case 'refund.updated':
+      case 'refund.failed': {
+        const outcome = await this.applyStripeRefund(event.data.object);
+        return outcome !== 'unknown';
+      }
+      default:
+        return false;
+    }
+  }
+
+  private async updateAttempt(
+    id: string,
+    data: Prisma.MatchFeePaymentAttemptUpdateInput,
+  ): Promise<void> {
+    await this.prisma.matchFeePaymentAttempt.update({ where: { id }, data });
+  }
+
+  private async findAttemptForSession(session: Stripe.Checkout.Session) {
+    const bySession = await this.prisma.matchFeePaymentAttempt.findUnique({
+      where: { stripeCheckoutSessionId: session.id },
+    });
+    if (bySession) return bySession;
+
+    const attemptId = session.metadata?.paymentAttemptId;
+    if (!attemptId) return null;
+    const byId = await this.prisma.matchFeePaymentAttempt.findUnique({
+      where: { id: attemptId },
+    });
+    if (
+      !byId ||
+      byId.stripeCheckoutSessionId ||
+      byId.invoiceId !== session.metadata?.matchFeeInvoiceId
+    ) {
+      return null;
+    }
+    return this.prisma.matchFeePaymentAttempt.update({
+      where: { id: byId.id },
+      data: { stripeCheckoutSessionId: session.id },
+    });
+  }
+
+  /**
+   * Applies a Checkout session's state (from a signed webhook or fetched from Stripe) to its
+   * payment attempt and invoice. The invoice is only marked paid when Stripe reports it paid and
+   * the amount, currency, invoice and customer all match what we issued.
+   */
+  private async applyCheckoutSession(
+    session: Stripe.Checkout.Session,
+    source: string,
+  ): Promise<CheckoutOutcome> {
+    const attempt = await this.findAttemptForSession(session);
+    if (!attempt) {
+      this.logger.warn(
+        `Stripe session ${session.id} (${source}) does not match any payment attempt.`,
+      );
+      return 'unknown';
+    }
+
+    if (session.status === 'expired') {
+      if (attempt.status === 'OPEN' || attempt.status === 'SUPERSEDED') {
+        await this.updateAttempt(attempt.id, { status: 'EXPIRED', lastEventType: source });
+      }
+      return 'expired';
+    }
+    if (session.status !== 'complete') return 'open';
+    if (session.payment_status !== 'paid') {
+      await this.updateAttempt(attempt.id, { lastEventType: source });
+      return 'processing';
+    }
+    if (attempt.status === 'PAID') return 'already-paid';
+    if (attempt.status === 'REJECTED') return 'rejected';
+    if (attempt.status === 'DUPLICATE' || attempt.status === 'DUPLICATE_REFUNDED') {
+      return 'duplicate';
+    }
+
+    const invoice = await this.prisma.matchFeeInvoice.findUnique({
+      where: { id: attempt.invoiceId },
+      select: {
+        id: true,
+        status: true,
+        amountCents: true,
+        taxCents: true,
+        currency: true,
+        hostProfile: { select: { practiceName: true, stripeCustomerId: true } },
+        jobPosting: { select: { title: true } },
+      },
+    });
+    if (!invoice) return 'unknown';
+
+    const paymentIntentId =
+      typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : (session.payment_intent?.id ?? null);
+    const customerId =
+      typeof session.customer === 'string'
+        ? session.customer
+        : (session.customer?.id ?? null);
+
+    const problems: string[] = [];
+    if (session.mode !== 'payment') problems.push(`mode is ${session.mode}`);
+    if (session.metadata?.matchFeeInvoiceId !== invoice.id) {
+      problems.push('invoice id in metadata does not match');
+    }
+    const invoiceTotalCents = matchFeeTotalCents(invoice);
+    if (
+      session.amount_total !== attempt.amountCents ||
+      attempt.amountCents !== invoiceTotalCents
+    ) {
+      problems.push(
+        `amount paid ${session.amount_total} does not match invoice total ${invoiceTotalCents}`,
+      );
+    }
+    if ((session.currency ?? '').toLowerCase() !== invoice.currency.toLowerCase()) {
+      problems.push(`currency ${session.currency} does not match ${invoice.currency}`);
+    }
+    if (
+      invoice.hostProfile.stripeCustomerId &&
+      customerId !== invoice.hostProfile.stripeCustomerId
+    ) {
+      problems.push('Stripe customer does not match the host');
+    }
+    if (!paymentIntentId) problems.push('no payment intent on session');
+
+    if (problems.length > 0 || !paymentIntentId) {
+      const reason = `Verification failed: ${problems.join('; ')}.`;
+      await this.updateAttempt(attempt.id, {
+        status: 'REJECTED',
+        failureReason: reason,
+        stripePaymentIntentId: paymentIntentId,
+        lastEventType: source,
+      });
+      this.logger.error(
+        `Stripe session ${session.id} for invoice ${invoice.id} rejected. ${reason}`,
+      );
+      await this.adminNotifications
+        .notifyMatchFeeOutcome({
+          invoiceId: invoice.id,
+          hostPracticeName: invoice.hostProfile.practiceName,
+          jobTitle: invoice.jobPosting.title,
+          outcome: 'PAYMENT_REJECTED',
+          detail: `A Stripe payment was not applied to the invoice. ${reason} Check Stripe session ${session.id}.`,
+        })
+        .catch(() => undefined);
+      return 'rejected';
+    }
+
+    const markPaid = {
+      status: 'PAID' as const,
+      completedAt: new Date(),
+      stripePaymentIntentId: paymentIntentId,
+      failureReason: null,
+      lastEventType: source,
+    };
+
+    if (
+      await this.markInvoicePaid({
+        invoiceId: invoice.id,
+        stripeCheckoutSessionId: session.id,
+        stripePaymentIntentId: paymentIntentId,
+      })
+    ) {
+      await this.updateAttempt(attempt.id, markPaid);
+      return 'paid';
+    }
+
+    const current = await this.prisma.matchFeeInvoice.findUnique({
+      where: { id: invoice.id },
+      select: { status: true, stripePaymentIntentId: true },
+    });
+    if (current?.stripePaymentIntentId === paymentIntentId) {
+      await this.updateAttempt(attempt.id, markPaid);
+      return 'already-paid';
+    }
+
+    // Money was collected for an invoice that is already settled or no longer payable.
+    // It is held for an admin to refund; nothing is refunded automatically.
+    const extraCents = session.amount_total ?? attempt.amountCents;
+    const detail = `Invoice was ${current?.status ?? 'unavailable'} when this payment of ${formatCad(extraCents)} ${invoice.currency} completed. An admin needs to refund it (Stripe payment ${paymentIntentId}).`;
+    const flagged = await this.prisma.matchFeePaymentAttempt.updateMany({
+      where: { id: attempt.id, status: { notIn: ['DUPLICATE', 'DUPLICATE_REFUNDED'] } },
+      data: {
+        status: 'DUPLICATE',
+        stripePaymentIntentId: paymentIntentId,
+        failureReason: detail,
+        lastEventType: source,
+      },
+    });
+    if (flagged.count === 0) return 'duplicate';
+    this.logger.warn(`Stripe session ${session.id}: ${detail}`);
+    await this.adminNotifications
+      .notifyMatchFeeOutcome({
+        invoiceId: invoice.id,
+        hostPracticeName: invoice.hostProfile.practiceName,
+        jobTitle: invoice.jobPosting.title,
+        outcome: 'DUPLICATE_PAYMENT_RECEIVED',
+        detail,
+      })
+      .catch(() => undefined);
+    return 'duplicate';
+  }
+
+  /** Marks a payable invoice PAID. Returns false if it was not payable (already paid, cancelled...). */
   private async markInvoicePaid(params: {
     invoiceId: string;
-    paymentProvider: 'MOCK' | 'STRIPE';
-    mockPaymentRef?: string;
-    stripeCheckoutSessionId?: string;
-    stripePaymentIntentId?: string | null;
-    externalRef?: string;
-  }) {
-    const invoice = await this.prisma.matchFeeInvoice.findUnique({
+    stripeCheckoutSessionId: string;
+    stripePaymentIntentId: string;
+  }): Promise<boolean> {
+    const paidAt = new Date();
+    const result = await this.prisma.matchFeeInvoice.updateMany({
+      where: { id: params.invoiceId, status: { in: PAYABLE_INVOICE_STATUSES } },
+      data: {
+        status: 'PAID',
+        paidAt,
+        paymentProvider: 'STRIPE',
+        stripeCheckoutSessionId: params.stripeCheckoutSessionId,
+        stripePaymentIntentId: params.stripePaymentIntentId,
+      },
+    });
+    if (result.count === 0) return false;
+
+    const invoice = await this.prisma.matchFeeInvoice.findUniqueOrThrow({
       where: { id: params.invoiceId },
       include: {
-        jobPosting: { select: { title: true, hostProfileId: true } },
+        jobPosting: { select: { title: true } },
         hostProfile: {
           select: {
-            id: true,
             userId: true,
             practiceName: true,
             user: { select: { email: true } },
@@ -1401,43 +2385,29 @@ export class PaymentsService {
         },
       },
     });
-    if (!invoice) return;
-    if (invoice.status === 'PAID') return;
-
-    const paidAt = new Date();
-    const updated = await this.prisma.matchFeeInvoice.update({
-      where: { id: params.invoiceId },
-      data: {
-        status: 'PAID',
-        paidAt,
-        paymentProvider: params.paymentProvider,
-        mockPaymentRef:
-          params.paymentProvider === 'MOCK' ? params.mockPaymentRef : null,
-        stripeCheckoutSessionId: params.stripeCheckoutSessionId ?? undefined,
-        stripePaymentIntentId: params.stripePaymentIntentId ?? undefined,
-      },
-      include: invoiceIncludeWithEvents,
-    });
 
     await this.syncHostReviewFlag(invoice.hostProfileId);
-
     await this.recordMatchFeeEvent(params.invoiceId, 'PAID', {
-      detail:
-        params.paymentProvider === 'STRIPE'
-          ? 'Paid via Stripe.'
-          : `Mock payment ${params.mockPaymentRef ?? ''}`.trim(),
+      detail: 'Paid via Stripe.',
       occurredAt: paidAt,
     });
 
     const host = invoice.hostProfile;
     if (host?.userId && host.user?.email) {
-      await this.notifications.notifyHostMatchFeePaid({
-        recipientId: host.userId,
-        recipientEmail: host.user.email,
-        jobTitle: invoice.jobPosting.title,
-        invoiceId: params.invoiceId,
-        amountCents: invoice.amountCents,
-      });
+      try {
+        await this.notifications.notifyHostMatchFeePaid({
+          recipientId: host.userId,
+          recipientEmail: host.user.email,
+          jobTitle: invoice.jobPosting.title,
+          invoiceId: params.invoiceId,
+          amountCents: matchFeeTotalCents(invoice),
+          taxCents: invoice.taxCents,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Host payment confirmation failed for invoice ${params.invoiceId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
     const locum = invoice.application?.locumProfile;
@@ -1449,7 +2419,7 @@ export class PaymentsService {
           firstName: locum.firstName,
           lastName: locum.lastName,
           jobTitle: invoice.jobPosting.title,
-          clinicName: invoice.hostProfile?.practiceName ?? '',
+          clinicName: host?.practiceName ?? '',
           invoiceId: params.invoiceId,
         });
       } catch (err) {
@@ -1459,10 +2429,11 @@ export class PaymentsService {
       }
     }
 
-    return updated;
+    return true;
   }
 
-  async resolveRefund(invoiceId: string, adminNotes?: string) {
+  async resolveRefund(invoiceId: string, admin: RefundAdmin, adminNotes?: string) {
+    const notes = requireRefundReason(adminNotes);
     const invoice = await this.prisma.matchFeeInvoice.findUnique({
       where: { id: invoiceId },
       include: {
@@ -1479,6 +2450,18 @@ export class PaymentsService {
       },
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
+    if (isRefundPendingReview(invoice)) {
+      // The cancellation policy already qualified this invoice for a refund.
+      await this.processRefund({
+        invoiceId,
+        kind: 'CANCELLATION',
+        admin,
+        adminNotes: notes,
+        cancelledBy: invoice.cancelledBy ?? 'ADMIN',
+        reason: invoice.cancellationReason ?? notes,
+      });
+      return { success: true };
+    }
     if (invoice.status === 'PENDING_REPLACEMENT') {
       throw new BadRequestException(
         'Locum cancelled within 14 days of start. Per policy, use "No replacement" after searching - that issues the host refund if none is found.',
@@ -1531,13 +2514,13 @@ export class PaymentsService {
 
     await this.processRefund({
       invoiceId,
-      adminNotes,
+      kind: 'CANCELLATION',
+      admin,
+      adminNotes: notes,
       cancelledBy: 'ADMIN',
-      reason:
-        adminNotes ??
-        (locumWithdrew
-          ? 'Admin refund after locum withdraw - more than 14 days before start.'
-          : 'Admin refund after host deleted posting - more than 14 days before start.'),
+      reason: locumWithdrew
+        ? `Admin refund after locum withdraw - more than 14 days before start. ${notes}`
+        : `Admin refund after host deleted posting - more than 14 days before start. ${notes}`,
     });
     return { success: true };
   }
@@ -1548,12 +2531,15 @@ export class PaymentsService {
    */
   async discretionaryRefund(
     invoiceId: string,
+    admin: RefundAdmin,
     params: {
+      /** Match fee portion before HST; the matching HST is refunded with it. */
       amountCents: number;
       adminNotes?: string;
       ticketId?: string;
     },
   ) {
+    const notes = requireRefundReason(params.adminNotes);
     if (
       params.amountCents !== MATCH_FEE_HALF_CENTS &&
       params.amountCents !== MATCH_FEE_FULL_CENTS
@@ -1587,16 +2573,6 @@ export class PaymentsService {
       );
     }
 
-    const remaining = Math.max(
-      0,
-      invoice.amountCents - (invoice.refundedCents ?? 0),
-    );
-    if (params.amountCents > remaining) {
-      throw new BadRequestException(
-        `Only $${(remaining / 100).toFixed(0)} remains refundable on this invoice.`,
-      );
-    }
-
     if (params.ticketId) {
       const ticket = await this.prisma.supportTicket.findFirst({
         where: {
@@ -1615,33 +2591,28 @@ export class PaymentsService {
 
     await this.processRefund({
       invoiceId,
-      amountCents: params.amountCents,
-      adminNotes: params.adminNotes,
+      kind: 'POST_COMPLETION',
+      admin,
+      feeCents: params.amountCents,
+      adminNotes: notes,
       cancelledBy: 'ADMIN',
-      reason:
-        params.adminNotes ??
-        `Post-completion refund of $${(params.amountCents / 100).toFixed(0)} CAD after host ticket review.`,
+      reason: notes,
     });
 
+    const refundTotal =
+      params.amountCents + computeMatchFeeTaxCents(params.amountCents, invoice.taxRateBps);
     if (params.ticketId) {
       await this.prisma.supportTicket.update({
         where: { id: params.ticketId },
         data: {
           status: 'RESOLVED',
           resolvedAt: new Date(),
-          adminNotes:
-            params.adminNotes ??
-            `Refunded $${(params.amountCents / 100).toFixed(0)} CAD.`,
+          adminNotes: notes,
           matchFeeInvoiceId: invoiceId,
         },
       });
       await this.recordMatchFeeEvent(invoiceId, 'TICKET_RESOLVED', {
-        detail: [
-          `Ticket resolved with $${(params.amountCents / 100).toFixed(0)} CAD refund`,
-          params.adminNotes ? `Notes: ${params.adminNotes}` : null,
-        ]
-          .filter(Boolean)
-          .join(' - '),
+        detail: `Ticket resolved with ${formatCad(refundTotal)} ${invoice.currency} refund - Notes: ${notes}`,
         actor: 'ADMIN',
       });
     }
@@ -1652,6 +2623,7 @@ export class PaymentsService {
   async setReplacementStatus(
     invoiceId: string,
     replacementStatus: MatchFeeReplacementStatus,
+    admin: RefundAdmin,
     adminNotes?: string,
   ) {
     const invoice = await this.prisma.matchFeeInvoice.findUnique({
@@ -1683,24 +2655,22 @@ export class PaymentsService {
         actor: 'ADMIN',
       });
     } else if (replacementStatus === 'NOT_FOUND') {
-      await this.prisma.matchFeeInvoice.update({
-        where: { id: invoiceId },
-        data: {
-          replacementStatus: 'NOT_FOUND',
-          adminNotes: adminNotes ?? invoice.adminNotes,
-        },
-      });
-      await this.recordMatchFeeEvent(invoiceId, 'REPLACEMENT_NOT_FOUND', {
-        detail: adminNotes,
-        actor: 'ADMIN',
-      });
+      const notes = requireRefundReason(adminNotes);
       await this.processRefund({
         invoiceId,
-        reason:
-          adminNotes ??
-          'No replacement locum found; refund to original payment method.',
+        kind: 'NO_REPLACEMENT',
+        admin,
+        reason: `No replacement locum found; refund to original payment method. ${notes}`,
         cancelledBy: 'ADMIN',
-        adminNotes,
+        adminNotes: notes,
+      });
+      await this.prisma.matchFeeInvoice.update({
+        where: { id: invoiceId },
+        data: { replacementStatus: 'NOT_FOUND' },
+      });
+      await this.recordMatchFeeEvent(invoiceId, 'REPLACEMENT_NOT_FOUND', {
+        detail: notes,
+        actor: 'ADMIN',
       });
     }
 
@@ -1837,7 +2807,7 @@ export class PaymentsService {
     const paymentReference =
       row.paymentProvider === 'STRIPE'
         ? (row.stripePaymentIntentId ?? row.stripeCheckoutSessionId)
-        : row.mockPaymentRef;
+        : null;
 
     return buildMatchFeeReceiptPdf({
       invoiceId: row.id,
@@ -1846,6 +2816,10 @@ export class PaymentsService {
       paidAt: row.paidAt,
       dueAt: row.dueAt,
       amountCents: row.amountCents,
+      taxCents: row.taxCents,
+      taxRateLabel: formatTaxRate(row.taxRateBps),
+      refundedCents: row.refundedCents,
+      hstRegistrationNumber: process.env.HST_REGISTRATION_NUMBER?.trim() || null,
       currency: row.currency,
       status: row.status,
       jobTitle: mapped.jobTitle,
@@ -1855,8 +2829,7 @@ export class PaymentsService {
       replacedByLocumName: mapped.replacedByLocumName,
       practiceName: hostProfile.practiceName,
       hostEmail: hostProfile.user.email,
-      paymentProvider:
-        row.paymentProvider === 'STRIPE' ? 'Stripe (card)' : 'Test payment',
+      paymentProvider: paymentProviderLabel(row.paymentProvider),
       paymentReference,
     });
   }
