@@ -289,7 +289,10 @@ export default function HostInvoicesPage() {
                       >
                         {invoice.jobTitle}
                       </div>
-                      <MatchFeeStatusChip status={invoice.status} />
+                      <MatchFeeStatusChip
+                        status={invoice.status}
+                        refundPendingReview={invoice.refundPendingReview}
+                      />
                     </div>
                     <div style={{ fontSize: 14, color: '#111827', marginTop: 6, fontWeight: 600 }}>
                       Locum: {invoice.locumName}
@@ -351,7 +354,7 @@ export default function HostInvoicesPage() {
                         marginTop: 10,
                       }}
                     >
-                      Refund under review. LocumLink will refund{' '}
+                      Refund in progress. LocumLink will refund{' '}
                       {formatCents(invoice.totalCents - (invoice.refundedCents ?? 0))}{' '}
                       {invoice.currency} to your original payment method once approved.
                     </div>

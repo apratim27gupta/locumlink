@@ -86,17 +86,17 @@ export const MATCH_FEE_POLICY = {
     {
       id: 'early_cancel',
       summary:
-        'More than 14 days before start - either party may cancel. If the fee was paid, LocumLink reviews the cancellation and refunds the fee and HST to the original payment method.',
+        '14 days or more before start - either party may cancel. If the fee was paid, LocumLink reviews the cancellation and refunds the fee and HST to the original payment method.',
     },
     {
       id: 'host_late_cancel',
       summary:
-        'Host cancels within 14 days of start - the match fee is non-refundable.',
+        'Host cancels fewer than 14 days before start - the match fee is non-refundable.',
     },
     {
       id: 'locum_late_cancel',
       summary:
-        'Locum cancels within 14 days of start - LocumLink will try to find a replacement. If none is found, LocumLink refunds the fee and HST to the original payment method.',
+        'Locum cancels fewer than 14 days before start - LocumLink will try to find a replacement. If none is found, LocumLink refunds the fee and HST to the original payment method.',
     },
     {
       id: 'locum_late_cancel_replacement_fee',

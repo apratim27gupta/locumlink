@@ -8,7 +8,7 @@ import { formatCalendarDateForApi } from '../host/job-schedule.util.js';
 
 export type MatchFeeStatusAdminGuide = {
   /** Invoice status when applicable; flag keys like ESCALATED for non-status chips. */
-  status: MatchFeeInvoiceStatus | 'ESCALATED' | 'HOSTS_UNDER_REVIEW';
+  status: MatchFeeInvoiceStatus | 'ESCALATED' | 'HOSTS_UNDER_REVIEW' | 'REFUND_IN_PROGRESS';
   label: string;
   summary: string;
   hostObligation: string;
@@ -39,12 +39,20 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
     label: 'Paid',
     summary: 'Match fee collected.',
     hostObligation:
-      'Nothing to do. If the posting or match is cancelled more than 14 days before the shift starts, the invoice stays Paid with a refund due until an admin approves it (see policy).',
+      'Nothing to do. If the posting or match is cancelled 14 days or more before the shift starts, the invoice stays Paid with a refund due until an admin approves it (see policy).',
+  },
+  {
+    status: 'REFUND_IN_PROGRESS',
+    label: 'Refund in progress',
+    summary:
+      'The match was cancelled 14 days or more before start after the fee was paid. Approve the refund to return the fee and HST to the original payment method.',
+    hostObligation:
+      'Nothing to do. LocumLink will refund to the original payment method once an admin approves.',
   },
   {
     status: 'PENDING_REPLACEMENT',
     label: 'Replacement pending',
-    summary: 'Locum cancelled within 14 days of start after fee was paid; LocumLink seeks a replacement.',
+    summary: 'Locum cancelled fewer than 14 days before start after fee was paid; LocumLink seeks a replacement.',
     hostObligation:
       'Nothing to do for now. LocumLink is looking for a replacement locum. If none accepts, an admin refunds the fee.',
   },

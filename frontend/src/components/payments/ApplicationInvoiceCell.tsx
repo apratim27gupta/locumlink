@@ -14,6 +14,7 @@ import {
   formatCents,
   matchFeeStatusColor,
   matchFeeStatusLabel,
+  matchFeeVisualStatus,
 } from '@/components/payments/MatchFeePolicy';
 
 export type ApplicationInvoiceLink = {
@@ -137,7 +138,8 @@ export function ApplicationInvoiceCell({
       </div>
     );
   }
-  const colors = matchFeeStatusColor(invoice.status);
+  const visual = matchFeeVisualStatus(invoice.status, invoice.refundPendingReview);
+  const colors = matchFeeStatusColor(visual);
   return (
     <div style={{ minWidth: 0 }}>
       <Link
@@ -155,7 +157,7 @@ export function ApplicationInvoiceCell({
           whiteSpace: 'nowrap',
         }}
       >
-        {matchFeeStatusLabel(invoice.status)}
+        {matchFeeStatusLabel(visual)}
       </Link>
       {invoice.replacedByLocumName ? (
         <div

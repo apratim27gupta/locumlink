@@ -1532,6 +1532,24 @@ export class LocumService {
     const wasAccepted =
       app.locumResponse === 'ACCEPTED' || app.locumAcceptedAt != null;
 
+    // Run fee policy before clearing accept/claims so earliest-shift dates stay accurate.
+    if (wasAccepted) {
+      try {
+        await this.paymentsService.handleCancellation({
+          applicationId,
+          cancelledBy: 'LOCUM',
+          context: 'LOCUM_WITHDRAW',
+        });
+      } catch (err) {
+        this.logger.error(
+          `Match fee cancellation after locum withdraw failed for ${applicationId}: ${
+            err instanceof Error ? err.message : err
+          }`,
+          err instanceof Error ? err.stack : undefined,
+        );
+      }
+    }
+
     await this.prisma.application.update({
       where: { id: applicationId },
       data: {
@@ -1550,16 +1568,6 @@ export class LocumService {
 
     // Soft-reopen posting when accepted coverage is no longer complete.
     await this.applyCoverageStatus(app.jobPostingId);
-
-    if (wasAccepted) {
-      try {
-        await this.paymentsService.handleCancellation({
-          applicationId,
-          cancelledBy: 'LOCUM',
-          context: 'LOCUM_WITHDRAW',
-        });
-      } catch {}
-    }
 
     await this.notifyHostOfWithdrawal({
       userId,

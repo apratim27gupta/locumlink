@@ -7,6 +7,7 @@ import {
   applicationClaimedDates,
   formatCalendarDateForApi,
   getPostingRequiredDates,
+  platformCalendarDateToday,
 } from '../host/job-schedule.util.js';
 
 export type CancellationActor = 'HOST' | 'LOCUM' | 'ADMIN' | 'SYSTEM';
@@ -54,11 +55,8 @@ export function daysUntilCalendarDate(
   if (!targetDate) return null;
   const [y, m, d] = targetDate.split('-').map(Number);
   const target = Date.UTC(y, m - 1, d);
-  const today = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-  );
+  const [ty, tm, td] = platformCalendarDateToday(now).split('-').map(Number);
+  const today = Date.UTC(ty, tm - 1, td);
   return Math.floor((target - today) / (24 * 60 * 60 * 1000));
 }
 
@@ -98,9 +96,10 @@ export function evaluateCancellationPolicy(params: {
   reason?: string;
 }): CancellationPolicyResult {
   const { cancelledBy, wasPaid, daysUntilStart } = params;
+  // Late window is fewer than 14 days before start. 14 days' notice still qualifies.
   const withinLateWindow =
     daysUntilStart != null &&
-    daysUntilStart <= MATCH_FEE_CANCELLATION_WINDOW_DAYS;
+    daysUntilStart < MATCH_FEE_CANCELLATION_WINDOW_DAYS;
 
   if (cancelledBy === 'HOST') {
     if (withinLateWindow) {
@@ -112,7 +111,7 @@ export function evaluateCancellationPolicy(params: {
         replacementStatus: 'NONE',
         nonRefundable: wasPaid,
         reason:
-          'Host cancelled within 14 days of start. The match fee is non-refundable.',
+          'Host cancelled fewer than 14 days before start. The match fee is non-refundable.',
       };
     }
     return {
@@ -123,7 +122,7 @@ export function evaluateCancellationPolicy(params: {
       replacementStatus: 'NONE',
       nonRefundable: false,
       reason:
-        'Host cancelled more than 14 days before start. Refund to original payment method if the fee was paid.',
+        'Host cancelled 14 days or more before start. Refund to original payment method if the fee was paid.',
     };
   }
 
@@ -137,7 +136,7 @@ export function evaluateCancellationPolicy(params: {
         replacementStatus: wasPaid ? 'SEARCHING' : 'NONE',
         nonRefundable: wasPaid,
         reason:
-          'Locum cancelled within 14 days of start. LocumLink will seek a replacement before issuing a refund.',
+          'Locum cancelled fewer than 14 days before start. LocumLink will seek a replacement before issuing a refund.',
       };
     }
     return {
@@ -148,7 +147,7 @@ export function evaluateCancellationPolicy(params: {
       replacementStatus: 'NONE',
       nonRefundable: false,
       reason:
-        'Locum cancelled more than 14 days before start. Refund to original payment method if the fee was paid.',
+        'Locum cancelled 14 days or more before start. Refund to original payment method if the fee was paid.',
     };
   }
 

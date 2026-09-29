@@ -82,7 +82,7 @@ export function MatchFeeRefundConfirmModal({
           approved.
         </p>
         <p style={{ margin: '0 0 18px', fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
-          This option is available because your shift starts more than 14 days from now, per our
+          This option is available because your shift starts in 14 days or more, per our
           cancellation policy.
         </p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>

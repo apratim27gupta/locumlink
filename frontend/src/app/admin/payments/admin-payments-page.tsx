@@ -24,6 +24,8 @@ import {
   hstFor,
   matchFeeStatusColor,
   matchFeeStatusLabel,
+  matchFeeVisualStatus,
+  matchFeeRefundDueReason,
   adminMatchFeeRefundEligibility,
 } from '@/components/payments/MatchFeePolicy';
 import { MatchFeeEventTimeline } from '@/components/payments/MatchFeeEventTimeline';
@@ -296,10 +298,15 @@ export default function AdminPaymentsPage() {
 
         <div style={{ display: 'grid', gap: 12 }}>
           {items.map((invoice) => {
-            const colors = matchFeeStatusColor(invoice.status);
+            const visual = matchFeeVisualStatus(
+              invoice.status,
+              invoice.refundPendingReview,
+            );
+            const colors = matchFeeStatusColor(visual);
             const disabled = busyId === invoice.id;
             const guide = invoice.statusGuide;
             const tl = invoice.timeline;
+            const refundWhy = matchFeeRefundDueReason(invoice);
             return (
               <div
                 key={invoice.id}
@@ -330,7 +337,7 @@ export default function AdminPaymentsPage() {
                         Seeking replacement for {invoice.locumName}
                       </div>
                     ) : null}
-                    {guide ? (
+                    {guide && !invoice.refundPendingReview ? (
                       <div style={{ fontSize: 13, color: '#374151', marginTop: 8, lineHeight: 1.45 }}>
                         <strong>{guide.label}.</strong> {guide.summary}
                       </div>
@@ -436,9 +443,39 @@ export default function AdminPaymentsPage() {
                         </ul>
                       </details>
                     ) : null}
-                    {invoice.refundPendingReview ? (
-                      <div style={{ marginTop: 8, fontSize: 13, color: '#B91C1C', fontWeight: 600 }}>
-                        Refund due - review and approve with &quot;Refund to payment method&quot;.
+                    {refundWhy ? (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          padding: '10px 12px',
+                          background: '#FFF7ED',
+                          border: '1px solid #FDBA74',
+                          borderRadius: 8,
+                        }}
+                      >
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#9A3412' }}>
+                          Why this refund is due
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontSize: 13,
+                            color: '#7C2D12',
+                            lineHeight: 1.45,
+                          }}
+                        >
+                          {refundWhy}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 6,
+                            fontSize: 13,
+                            color: '#B91C1C',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Review and approve with &quot;Refund to payment method&quot;.
+                        </div>
                       </div>
                     ) : null}
                     {invoice.paymentAttempts
@@ -507,7 +544,7 @@ export default function AdminPaymentsPage() {
                         color: colors.text,
                       }}
                     >
-                      {matchFeeStatusLabel(invoice.status)}
+                      {matchFeeStatusLabel(visual)}
                     </span>
                   </div>
                 </div>

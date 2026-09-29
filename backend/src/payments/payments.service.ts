@@ -342,13 +342,26 @@ const adminInvoiceInclude = {
   },
 } satisfies Prisma.MatchFeeInvoiceInclude;
 
+function refundInProgressGuide(cancellationReason: string | null) {
+  const fallback = MATCH_FEE_STATUS_ADMIN_GUIDE.find(
+    (g) => g.status === 'REFUND_IN_PROGRESS',
+  )!;
+  const reason = cancellationReason?.trim();
+  return {
+    ...fallback,
+    summary: reason
+      ? `${reason} Approve the refund to return the fee and HST.`
+      : fallback.summary,
+  };
+}
+
 function mapAdminInvoice(
   row: Prisma.MatchFeeInvoiceGetPayload<{ include: typeof adminInvoiceInclude }>,
 ) {
   const base = mapInvoice(row);
-  const statusGuide = MATCH_FEE_STATUS_ADMIN_GUIDE.find(
-    (g) => g.status === row.status,
-  );
+  const statusGuide = isRefundPendingReview(row)
+    ? refundInProgressGuide(row.cancellationReason)
+    : MATCH_FEE_STATUS_ADMIN_GUIDE.find((g) => g.status === row.status);
   const timeline = buildMatchFeeInvoiceTimeline({
     status: row.status,
     createdAt: row.createdAt,
@@ -2464,7 +2477,7 @@ export class PaymentsService {
     }
     if (invoice.status === 'PENDING_REPLACEMENT') {
       throw new BadRequestException(
-        'Locum cancelled within 14 days of start. Per policy, use "No replacement" after searching - that issues the host refund if none is found.',
+        'Locum cancelled fewer than 14 days before start. Per policy, use "No replacement" after searching - that issues the host refund if none is found.',
       );
     }
     if (invoice.status !== 'PAID') {
@@ -2488,11 +2501,11 @@ export class PaymentsService {
     const locumWithdrew = invoice.cancelledBy === 'LOCUM';
     if (!locumWithdrew && !hostDeletedPost) {
       throw new BadRequestException(
-        'Refund is only available after a locum withdraws or the host deletes the posting (and more than 14 days before start).',
+        'Refund is only available after a locum withdraws or the host deletes the posting (and 14 days or more before start).',
       );
     }
 
-    // Early cancel only: more than 14 days before start → refund allowed.
+    // Early cancel: 14 days or more before start → refund allowed.
     const earliest = computeEarliestShiftDate(
       invoice.jobPosting,
       invoice.application,
@@ -2500,15 +2513,15 @@ export class PaymentsService {
     const daysUntilStart = daysUntilCalendarDate(earliest);
     if (
       daysUntilStart == null ||
-      daysUntilStart <= MATCH_FEE_CANCELLATION_WINDOW_DAYS
+      daysUntilStart < MATCH_FEE_CANCELLATION_WINDOW_DAYS
     ) {
       if (locumWithdrew) {
         throw new BadRequestException(
-          'Locum cancelled within 14 days of start. Use the replacement flow; refund only if no replacement is found.',
+          'Locum cancelled fewer than 14 days before start. Use the replacement flow; refund only if no replacement is found.',
         );
       }
       throw new BadRequestException(
-        'Host cancelled within 14 days of start - the match fee is non-refundable.',
+        'Host cancelled fewer than 14 days before start - the match fee is non-refundable.',
       );
     }
 
@@ -2519,8 +2532,8 @@ export class PaymentsService {
       adminNotes: notes,
       cancelledBy: 'ADMIN',
       reason: locumWithdrew
-        ? `Admin refund after locum withdraw - more than 14 days before start. ${notes}`
-        : `Admin refund after host deleted posting - more than 14 days before start. ${notes}`,
+        ? `Admin refund after locum withdraw - 14 days or more before start. ${notes}`
+        : `Admin refund after host deleted posting - 14 days or more before start. ${notes}`,
     });
     return { success: true };
   }

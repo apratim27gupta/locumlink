@@ -122,7 +122,7 @@ export function AdminMatchFeeRefundConfirmModal({
       </>
     ) : mode === 'no_replacement' ? (
       <>
-        Locum cancelled within 14 days of start for <strong>{invoice.jobTitle}</strong>. If no
+        Locum cancelled fewer than 14 days before start for <strong>{invoice.jobTitle}</strong>. If no
         replacement is found, refund <strong>{amountLabel}</strong>
         {taxLabel} to <strong>{invoice.hostPracticeName}</strong>.
       </>

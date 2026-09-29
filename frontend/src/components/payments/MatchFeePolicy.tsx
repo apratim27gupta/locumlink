@@ -192,7 +192,7 @@ export default function MatchFeePolicy({
   );
 }
 
-const HOST_REFUND_MIN_DAYS_BEFORE_START = 15; // policy: more than 14 days before start
+const HOST_REFUND_MIN_DAYS_BEFORE_START = 14; // policy: 14 days or more before start
 
 /** "$285" for whole dollars, "$142.50" otherwise. */
 export function formatCents(cents: number): string {
@@ -224,7 +224,7 @@ export function hostMatchFeeRefundEligible(invoice: {
  * Admin "Refund to payment method" is only for early-cancel leftovers after:
  * - locum withdraws, or
  * - host deletes the posting
- * and only when more than 14 days before start.
+ * and only when 14 days or more before start.
  * Late locum cancel → use "No replacement". Host late cancel → non-refundable.
  */
 export function adminMatchFeeRefundEligibility(invoice: {
@@ -246,7 +246,7 @@ export function adminMatchFeeRefundEligibility(invoice: {
     return {
       allowed: false,
       reason:
-        'Locum cancelled within 14 days of start. Per policy, try to find a replacement first. Use "No replacement" to refund the host if none is found.',
+        'Locum cancelled fewer than 14 days before start. Per policy, try to find a replacement first. Use "No replacement" to refund the host if none is found.',
     };
   }
   if (invoice.status !== 'PAID') {
@@ -272,7 +272,7 @@ export function adminMatchFeeRefundEligibility(invoice: {
     return {
       allowed: false,
       reason:
-        'Refund is only available after a locum withdraws or the host deletes the posting (and more than 14 days before start).',
+        'Refund is only available after a locum withdraws or the host deletes the posting (and 14 days or more before start).',
     };
   }
 
@@ -284,22 +284,47 @@ export function adminMatchFeeRefundEligibility(invoice: {
       return {
         allowed: false,
         reason:
-          'Locum cancelled within 14 days of start. Use the replacement search flow; refund only if no replacement is found.',
+          'Locum cancelled fewer than 14 days before start. Use the replacement search flow; refund only if no replacement is found.',
       };
     }
     return {
       allowed: false,
       reason:
-        'Host cancelled within 14 days of start - the match fee is non-refundable.',
+        'Host cancelled fewer than 14 days before start - the match fee is non-refundable.',
     };
   }
 
   return {
     allowed: true,
     reason: locumWithdrew
-      ? 'Locum withdrew more than 14 days before start - a paid match fee may be refunded.'
-      : 'Host deleted the posting more than 14 days before start - a paid match fee may be refunded.',
+      ? 'Locum withdrew 14 days or more before start - a paid match fee may be refunded.'
+      : 'Host deleted the posting 14 days or more before start - a paid match fee may be refunded.',
   };
+}
+
+export function matchFeeVisualStatus(
+  status: string,
+  refundPendingReview?: boolean,
+): string {
+  return refundPendingReview ? 'REFUND_IN_PROGRESS' : status;
+}
+
+/** Why a paid invoice is waiting on an admin refund, if it is. */
+export function matchFeeRefundDueReason(invoice: {
+  refundPendingReview?: boolean;
+  cancellationReason?: string | null;
+  cancelledBy?: string | null;
+}): string | null {
+  if (!invoice.refundPendingReview) return null;
+  const reason = invoice.cancellationReason?.trim();
+  if (reason) return reason;
+  if (invoice.cancelledBy === 'LOCUM') {
+    return 'The locum withdrew 14 days or more before start, so the paid match fee should be refunded.';
+  }
+  if (invoice.cancelledBy === 'HOST') {
+    return 'The host cancelled 14 days or more before start, so the paid match fee should be refunded.';
+  }
+  return 'This cancellation qualifies for a refund under the match fee policy.';
 }
 
 export function matchFeeStatusLabel(status: string): string {
@@ -318,6 +343,8 @@ export function matchFeeStatusLabel(status: string): string {
       return 'Legacy credit';
     case 'PENDING_REPLACEMENT':
       return 'Replacement pending';
+    case 'REFUND_IN_PROGRESS':
+      return 'Refund in progress';
     default:
       return status;
   }
@@ -335,9 +362,16 @@ const MOUTH_PATH = {
   sad: 'M8 16.5c1-1.3 2.4-2 4-2s3 .7 4 2',
 } as const;
 
-export function MatchFeeStatusChip({ status }: { status: string }) {
-  const colors = matchFeeStatusColor(status);
-  const mood = matchFeeStatusMood(status);
+export function MatchFeeStatusChip({
+  status,
+  refundPendingReview,
+}: {
+  status: string;
+  refundPendingReview?: boolean;
+}) {
+  const visual = matchFeeVisualStatus(status, refundPendingReview);
+  const colors = matchFeeStatusColor(visual);
+  const mood = matchFeeStatusMood(visual);
   return (
     <span
       style={{
@@ -368,7 +402,7 @@ export function MatchFeeStatusChip({ status }: { status: string }) {
         <circle cx="15" cy="10" r="0.6" fill="currentColor" />
         <path d={MOUTH_PATH[mood]} />
       </svg>
-      {matchFeeStatusLabel(status)}
+      {matchFeeStatusLabel(visual)}
     </span>
   );
 }
@@ -381,6 +415,8 @@ export function matchFeeStatusColor(status: string): { bg: string; text: string 
       return { bg: '#FEE2E2', text: '#991B1B' };
     case 'PENDING':
       return { bg: '#FEF3C7', text: '#92400E' };
+    case 'REFUND_IN_PROGRESS':
+      return { bg: '#FFEDD5', text: '#9A3412' };
     case 'PENDING_REPLACEMENT':
       return { bg: '#E0E7FF', text: '#3730A3' };
     case 'REFUNDED':

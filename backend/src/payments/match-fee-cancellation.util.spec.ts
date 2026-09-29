@@ -24,6 +24,12 @@ describe('match-fee-cancellation.util', () => {
     expect(daysUntilCalendarDate('2026-05-20', now)).toBe(-12);
   });
 
+  it('counts days on the Halifax calendar, not UTC', () => {
+    // 02:30 UTC on June 1 is still May 31 evening in America/Halifax (ADT, UTC-3).
+    const lateEveningAtlantic = new Date('2026-06-01T02:30:00.000Z');
+    expect(daysUntilCalendarDate('2026-06-15', lateEveningAtlantic)).toBe(15);
+  });
+
   it('host late cancel keeps paid fee non-refundable', () => {
     const result = evaluateCancellationPolicy({
       cancelledBy: 'HOST',
@@ -54,19 +60,36 @@ describe('match-fee-cancellation.util', () => {
     expect(result.replacementStatus).toBe('SEARCHING');
   });
 
-  it('host early cancel boundary is more than 14 days', () => {
+  it('host early cancel boundary is 14 days or more', () => {
     const late = evaluateCancellationPolicy({
+      cancelledBy: 'HOST',
+      wasPaid: true,
+      daysUntilStart: 13,
+    });
+    expect(late.nonRefundable).toBe(true);
+    const onTheDay = evaluateCancellationPolicy({
       cancelledBy: 'HOST',
       wasPaid: true,
       daysUntilStart: 14,
     });
-    expect(late.nonRefundable).toBe(true);
+    expect(onTheDay.refundResolution).toBe('REFUND');
     const early = evaluateCancellationPolicy({
       cancelledBy: 'HOST',
       wasPaid: true,
       daysUntilStart: 15,
     });
     expect(early.refundResolution).toBe('REFUND');
+  });
+
+  it('locum withdraw 14 days before start qualifies for a refund', () => {
+    const result = evaluateCancellationPolicy({
+      cancelledBy: 'LOCUM',
+      wasPaid: true,
+      daysUntilStart: 14,
+    });
+    expect(result.invoiceStatus).toBe('REFUNDED');
+    expect(result.refundResolution).toBe('REFUND');
+    expect(result.withinLateWindow).toBe(false);
   });
 
   it('detects escalation threshold thirty days after due date', () => {
