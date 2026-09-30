@@ -24,10 +24,11 @@ coverage
 !.env.example
 !**/.env.example
 
-# Frontend (not needed for backend image)
-frontend
-
 # Local artifacts
+mobile
+admin
+
+# Keep frontend/ for frontend/Dockerfile and backend package.json workspace layout
 *.zip
 *.log
 npm-debug.log*

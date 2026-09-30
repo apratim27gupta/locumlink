@@ -24,6 +24,25 @@ function looksLikeEmail(address: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address);
 }
 
+const TEAM_SIGNOFF = 'Team LocumLink';
+
+function withTeamSignoff(text: string, html?: string): { text: string; html: string } {
+  const trimmed = text.trimEnd();
+  const signedText = /Team LocumLink\s*$/i.test(trimmed)
+    ? trimmed
+    : `${trimmed}\n\n${TEAM_SIGNOFF}`;
+  if (html) {
+    const signedHtml = /Team LocumLink/i.test(html)
+      ? html
+      : `${html}\n<p style="margin:24px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#1f2937">${TEAM_SIGNOFF}</p>`;
+    return { text: signedText, html: signedHtml };
+  }
+  return {
+    text: signedText,
+    html: `<p>${signedText.replace(/\n/g, '<br>')}</p>`,
+  };
+}
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -72,6 +91,7 @@ export class EmailService {
 
     const fromName =
       this.config.get<string>('MAIL_FROM_NAME')?.trim() || 'Locum Link';
+    const { text, html } = withTeamSignoff(params.text, params.html);
 
     const credentials = Buffer.from(`${sid}:${secret}`).toString('base64');
     const res = await fetch('https://comms.twilio.com/v1/Emails', {
@@ -86,8 +106,8 @@ export class EmailService {
         to: [{ address: to }],
         content: {
           subject: params.subject,
-          html: params.html ?? `<p>${params.text.replace(/\n/g, '<br>')}</p>`,
-          text: params.text,
+          html,
+          text,
         },
       }),
     });

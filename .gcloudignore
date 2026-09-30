@@ -1,0 +1,28 @@
+# Used by `gcloud builds submit` (falls back to .dockerignore if missing).
+# Keep Dockerfiles in the upload context.
+
+node_modules
+**/node_modules
+dist
+**/dist
+.next
+**/.next
+coverage
+**/coverage
+.git
+.cursor
+.vscode
+mobile
+admin
+backend/test
+**/*.spec.ts
+**/*.e2e-spec.ts
+*.zip
+*.log
+.env
+.env.*
+!.env.example
+!**/.env.example
+iPhone*.png
+background-image.jpeg
+frontend.zip
