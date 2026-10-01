@@ -7,8 +7,6 @@ import {
 import { PushService } from './push.service.js';
 import { EmailService } from './email.service.js';
 import { allowsEmailForEvent } from './email-prefs.js';
-import { isDigestEventType } from './email-digest.js';
-import { EmailDigestService } from './email-digest.service.js';
 import { getPlatformTimezone } from '../host/job-schedule.util.js';
 import {
   buildL001NewOpportunity,
@@ -163,7 +161,6 @@ export class NotificationsService {
     private readonly prisma: PrismaService,
     private readonly push: PushService,
     private readonly email: EmailService,
-    private readonly emailDigest: EmailDigestService,
   ) {}
 
   async create(params: {
@@ -208,32 +205,24 @@ export class NotificationsService {
     });
 
     if (params.emailTo && params.emailSubject && params.emailBody) {
-      if (isDigestEventType(params.eventType)) {
-        await this.emailDigest.afterDigestibleEvent({
-          recipientId: params.recipientId,
-          eventType: params.eventType,
-          emailTo: params.emailTo,
-        });
+      const user = await this.prisma.user.findUnique({
+        where: { id: params.recipientId },
+        select: { emailPrefs: true },
+      });
+      if (!allowsEmailForEvent(user?.emailPrefs, params.eventType)) {
+        this.logger.log(
+          `Skipping email for ${params.emailTo} (${params.eventType}): user opted out`,
+        );
       } else {
-        const user = await this.prisma.user.findUnique({
-          where: { id: params.recipientId },
-          select: { emailPrefs: true },
+        const emailResult = await this.email.send({
+          to: params.emailTo,
+          subject: params.emailSubject,
+          text: params.emailBody,
         });
-        if (!allowsEmailForEvent(user?.emailPrefs, params.eventType)) {
-          this.logger.log(
-            `Skipping email for ${params.emailTo} (${params.eventType}): user opted out`,
+        if (!emailResult.ok) {
+          this.logger.error(
+            `Notification email failed for ${params.emailTo} (${params.eventType}): ${emailResult.error}`,
           );
-        } else {
-          const emailResult = await this.email.send({
-            to: params.emailTo,
-            subject: params.emailSubject,
-            text: params.emailBody,
-          });
-          if (!emailResult.ok) {
-            this.logger.error(
-              `Notification email failed for ${params.emailTo} (${params.eventType}): ${emailResult.error}`,
-            );
-          }
         }
       }
     }

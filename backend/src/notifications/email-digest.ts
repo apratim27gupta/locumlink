@@ -7,16 +7,16 @@ export const DIGEST_EMAIL_LIST_LIMIT = 10;
 export const DIGEST_CATEGORIES = ['applications', 'messages'] as const;
 export type DigestCategory = (typeof DIGEST_CATEGORIES)[number];
 
-export type DigestEventType =
-  | 'L_008_NEW_MESSAGE'
-  | 'H_004_NEW_MESSAGE';
+/**
+ * Event types that queue into a digest email instead of sending immediately.
+ * Message emails (H_004 / L_008) are sent instantly — this set stays empty.
+ * Cron still flushes any historically queued message digests.
+ */
+export type DigestEventType = never;
 
-export const DIGEST_EVENT_TYPES = new Set<DigestEventType>([
-  'L_008_NEW_MESSAGE',
-  'H_004_NEW_MESSAGE',
-]);
+export const DIGEST_EVENT_TYPES = new Set<string>();
 
-/** Includes legacy L_001 so any pre-instant queued opportunity digests still flush. */
+/** Includes legacy L_001 / message digests so any pre-instant queued items still flush. */
 const CATEGORY_EVENT_TYPES: Record<DigestCategory, string[]> = {
   applications: ['L_001_NEW_OPPORTUNITY'],
   messages: ['L_008_NEW_MESSAGE', 'H_004_NEW_MESSAGE'],
@@ -31,16 +31,13 @@ export type EmailDigestState = Partial<
   Record<DigestCategory, CategoryDigestState>
 >;
 
-export function isDigestEventType(eventType: string): eventType is DigestEventType {
-  return DIGEST_EVENT_TYPES.has(eventType as DigestEventType);
+export function isDigestEventType(eventType: string): boolean {
+  return DIGEST_EVENT_TYPES.has(eventType);
 }
 
 export function digestCategoryForEventType(
-  eventType: string,
+  _eventType: string,
 ): DigestCategory | null {
-  if (eventType === 'L_008_NEW_MESSAGE' || eventType === 'H_004_NEW_MESSAGE') {
-    return 'messages';
-  }
   return null;
 }
 
