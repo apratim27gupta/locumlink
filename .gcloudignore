@@ -13,7 +13,7 @@ coverage
 .cursor
 .vscode
 mobile
-admin
+# Do not use bare "admin" — it excludes backend/src/admin from Cloud Build context
 backend/test
 **/*.spec.ts
 **/*.e2e-spec.ts
