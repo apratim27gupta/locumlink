@@ -26,8 +26,7 @@ coverage
 
 # Local artifacts
 mobile
-# Root-only: do not use bare "admin" — that also excludes backend/src/admin
-/admin
+# Do not ignore "admin" — Nest lives at backend/src/admin
 
 # Keep frontend/ for frontend/Dockerfile and backend package.json workspace layout
 *.zip
