@@ -227,6 +227,18 @@ export function hostMatchFeeRefundEligible(invoice: {
  * and only when 14 days or more before start.
  * Late locum cancel → use "No replacement". Host late cancel → non-refundable.
  */
+export function adminMatchFeeRefundInFlight(invoice: {
+  refunds?: Array<{ status: string; kind: string }> | null;
+}): boolean {
+  return (
+    invoice.refunds?.some(
+      (r) =>
+        r.kind !== 'DUPLICATE_PAYMENT' &&
+        (r.status === 'REQUESTED' || r.status === 'PENDING'),
+    ) ?? false
+  );
+}
+
 export function adminMatchFeeRefundEligibility(invoice: {
   status: string;
   daysUntilStart: number | null;
@@ -302,11 +314,26 @@ export function adminMatchFeeRefundEligibility(invoice: {
   };
 }
 
+export function matchFeeRefundInProgress(invoice: {
+  refundPendingReview?: boolean;
+  stripeRefundProcessing?: boolean;
+}): boolean {
+  return Boolean(invoice.refundPendingReview || invoice.stripeRefundProcessing);
+}
+
 export function matchFeeVisualStatus(
   status: string,
   refundPendingReview?: boolean,
+  opts?: { stripeRefundProcessing?: boolean; feeRetained?: boolean },
 ): string {
-  return refundPendingReview ? 'REFUND_IN_PROGRESS' : status;
+  if (matchFeeRefundInProgress({
+    refundPendingReview,
+    stripeRefundProcessing: opts?.stripeRefundProcessing,
+  })) {
+    return 'REFUND_IN_PROGRESS';
+  }
+  if (opts?.feeRetained && status === 'PAID') return 'FEE_RETAINED';
+  return status;
 }
 
 /** Why a paid invoice is waiting on an admin refund, if it is. */
@@ -345,6 +372,8 @@ export function matchFeeStatusLabel(status: string): string {
       return 'Replacement pending';
     case 'REFUND_IN_PROGRESS':
       return 'Refund in progress';
+    case 'FEE_RETAINED':
+      return 'Fee retained';
     default:
       return status;
   }
@@ -352,6 +381,7 @@ export function matchFeeStatusLabel(status: string): string {
 
 function matchFeeStatusMood(status: string): 'happy' | 'neutral' | 'sad' {
   if (status === 'PAID' || status === 'REFUNDED' || status === 'CREDITED') return 'happy';
+  if (status === 'FEE_RETAINED') return 'neutral';
   if (status === 'OVERDUE') return 'sad';
   return 'neutral';
 }
@@ -365,11 +395,18 @@ const MOUTH_PATH = {
 export function MatchFeeStatusChip({
   status,
   refundPendingReview,
+  stripeRefundProcessing,
+  feeRetained,
 }: {
   status: string;
   refundPendingReview?: boolean;
+  stripeRefundProcessing?: boolean;
+  feeRetained?: boolean;
 }) {
-  const visual = matchFeeVisualStatus(status, refundPendingReview);
+  const visual = matchFeeVisualStatus(status, refundPendingReview, {
+    stripeRefundProcessing,
+    feeRetained,
+  });
   const colors = matchFeeStatusColor(visual);
   const mood = matchFeeStatusMood(visual);
   return (
@@ -417,6 +454,8 @@ export function matchFeeStatusColor(status: string): { bg: string; text: string 
       return { bg: '#FEF3C7', text: '#92400E' };
     case 'REFUND_IN_PROGRESS':
       return { bg: '#FFEDD5', text: '#9A3412' };
+    case 'FEE_RETAINED':
+      return { bg: '#F3F4F6', text: '#4B5563' };
     case 'PENDING_REPLACEMENT':
       return { bg: '#E0E7FF', text: '#3730A3' };
     case 'REFUNDED':

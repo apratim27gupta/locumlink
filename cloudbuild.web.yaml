@@ -10,6 +10,7 @@ substitutions:
   _SERVICE: l2-web-staging
   _TAG: latest
   _PUBLIC_ORIGIN: https://staging.locumlink.ca
+  _API_INTERNAL_URL: ""
   _NEXT_PUBLIC_SUPABASE_URL: ""
   _NEXT_PUBLIC_SUPABASE_ANON_KEY: ""
 
@@ -28,6 +29,8 @@ steps:
       - NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}
       - --build-arg
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - --build-arg
+      - API_INTERNAL_URL=${_API_INTERNAL_URL}
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_TAG}
       - -t

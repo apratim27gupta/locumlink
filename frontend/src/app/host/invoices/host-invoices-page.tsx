@@ -292,6 +292,8 @@ export default function HostInvoicesPage() {
                       <MatchFeeStatusChip
                         status={invoice.status}
                         refundPendingReview={invoice.refundPendingReview}
+                        stripeRefundProcessing={invoice.stripeRefundProcessing}
+                        feeRetained={invoice.feeRetained}
                       />
                     </div>
                     <div style={{ fontSize: 14, color: '#111827', marginTop: 6, fontWeight: 600 }}>
@@ -301,10 +303,19 @@ export default function HostInvoicesPage() {
                       <div style={{ fontSize: 13, color: '#374151', marginTop: 4 }}>
                         {invoice.replacedByLocumName} replaced {invoice.locumName}
                       </div>
-                    ) : invoice.replacementStatus === 'SEARCHING' ||
-                      invoice.status === 'PENDING_REPLACEMENT' ? (
+                    ) : !invoice.stripeRefundProcessing &&
+                      (invoice.replacementStatus === 'SEARCHING' ||
+                        invoice.status === 'PENDING_REPLACEMENT') ? (
                       <div style={{ fontSize: 13, color: '#B45309', marginTop: 4 }}>
                         Seeking replacement for {invoice.locumName}
+                      </div>
+                    ) : invoice.stripeRefundProcessing ? (
+                      <div style={{ fontSize: 13, color: '#9A3412', marginTop: 4 }}>
+                        Refund processing at Stripe — usually 5–10 business days to your card.
+                      </div>
+                    ) : invoice.feeRetained ? (
+                      <div style={{ fontSize: 13, color: '#4B5563', marginTop: 4 }}>
+                        Match fee retained per cancellation policy (late host cancel).
                       </div>
                     ) : null}
                     {invoice.postingScheduleLabel ? (

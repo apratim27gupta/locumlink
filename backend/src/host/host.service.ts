@@ -1840,14 +1840,12 @@ export class HostService {
       );
     }
 
-    try {
-      await this.paymentsService.handleCancellation({
-        applicationId,
-        cancelledBy: 'HOST',
-        reason,
-        context: 'MATCH_CANCEL',
-      });
-    } catch {}
+    await this.paymentsService.handleCancellation({
+      applicationId,
+      cancelledBy: 'HOST',
+      reason,
+      context: 'MATCH_CANCEL',
+    });
 
     await this.prisma.application.update({
       where: { id: applicationId },

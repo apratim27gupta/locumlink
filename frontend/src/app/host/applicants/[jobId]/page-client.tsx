@@ -1,12 +1,21 @@
 'use client';
-import { showAlert } from '@/components/ui/AppDialog';
+import { showAlert, showConfirm } from '@/components/ui/AppDialog';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import DashLayout from '@/components/DashLayout';
-import { hostApi, messageApi, normalizeHostJob, type ApplicationRecord, type Job } from '@/lib/api';
+import {
+  hostApi,
+  messageApi,
+  normalizeHostJob,
+  type ApplicationRecord,
+  type Job,
+  type MatchFeeInvoice,
+} from '@/lib/api';
 import { ApplicationInvoiceCell, usePostingInvoices } from '@/components/payments/ApplicationInvoiceCell';
+import { MatchFeeRefundConfirmModal } from '@/components/payments/MatchFeeRefundConfirmModal';
+import { hostMatchFeeRefundEligible } from '@/components/payments/MatchFeePolicy';
 import { getToken } from '@/lib/auth';
 import { useAuth } from '@/providers/AuthProvider';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
@@ -408,6 +417,8 @@ export default function HostApplicantsPage(props: {
     const [composeSending, setComposeSending] = useState(false);
     const [composeError, setComposeError] = useState<string | null>(null);
     const [composeSent, setComposeSent] = useState(false);
+    const [cancelMatchInvoice, setCancelMatchInvoice] = useState<MatchFeeInvoice | null>(null);
+    const [cancelMatchAppId, setCancelMatchAppId] = useState<string | null>(null);
     const [quickPanelPos, setQuickPanelPos] = useState<{
         left: number;
         top: number;
@@ -548,6 +559,68 @@ export default function HostApplicantsPage(props: {
         return groups;
     }, [apps]);
     const invoiceByApplication = usePostingInvoices(jobId);
+
+    async function finishCancelMatch(applicationId: string) {
+        setActioning((prev) => new Set(prev).add(applicationId));
+        try {
+            await hostApi.cancelAcceptedMatch(applicationId);
+            setApps((prev) =>
+                prev.map((x) =>
+                    x.id === applicationId ? { ...x, status: 'WITHDRAWN', locumResponse: 'REJECTED' } : x,
+                ),
+            );
+            setSelected((prev) =>
+                prev?.id === applicationId
+                    ? { ...prev, status: 'WITHDRAWN', locumResponse: 'REJECTED' }
+                    : prev,
+            );
+            setCancelMatchInvoice(null);
+            setCancelMatchAppId(null);
+        } catch (e) {
+            await showAlert(e instanceof Error ? e.message : 'Could not cancel match.', {
+                title: 'Cancel failed',
+            });
+        } finally {
+            setActioning((prev) => {
+                const next = new Set(prev);
+                next.delete(applicationId);
+                return next;
+            });
+        }
+    }
+
+    async function beginCancelMatch(app: ApplicationRecord) {
+        const link = invoiceByApplication.get(app.id);
+        const inv = link?.role === 'own' ? link.invoice : undefined;
+        if (
+            inv &&
+            hostMatchFeeRefundEligible({
+                paidAt: inv.paidAt,
+                status: inv.status,
+                daysUntilStart: inv.daysUntilStart,
+            })
+        ) {
+            setCancelMatchInvoice(inv);
+            setCancelMatchAppId(app.id);
+            return;
+        }
+        const latePaid =
+            Boolean(inv?.paidAt) &&
+            inv!.daysUntilStart != null &&
+            inv!.daysUntilStart < 14;
+        const ok = await showConfirm({
+            title: 'Cancel this match?',
+            message: latePaid
+                ? 'The match fee is non-refundable because the shift starts in fewer than 14 days. The invoice will stay paid.'
+                : inv?.paidAt
+                  ? 'LocumLink will review a refund if policy allows. Continue?'
+                  : 'This cancels the confirmed match. An unpaid invoice is voided.',
+            confirmLabel: 'Cancel match',
+            cancelLabel: 'Keep match',
+        });
+        if (!ok) return;
+        await finishCancelMatch(app.id);
+    }
     const postingDays = useMemo(() => getPostingDays(job ?? undefined), [job]);
     const coverageApplicants = useMemo(
         () =>
@@ -1204,6 +1277,47 @@ export default function HostApplicantsPage(props: {
                     </span>
                   </button>
 
+                  {selected.locumResponse === 'ACCEPTED' &&
+                  selected.status !== 'WITHDRAWN' &&
+                  (() => {
+                      const inv = invoiceByApplication.get(selected.id)?.invoice;
+                      const terminal =
+                          inv &&
+                          ['CANCELLED', 'REFUNDED', 'CREDITED'].includes(inv.status);
+                      if (terminal) return null;
+                      return (
+                          <button
+                              type="button"
+                              disabled={!jobId || actioning.has(selected.id)}
+                              onClick={() => void beginCancelMatch(selected)}
+                              style={{
+                                  all: 'unset',
+                                  cursor:
+                                      jobId && !actioning.has(selected.id) ? 'pointer' : 'default',
+                                  boxSizing: 'border-box',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: '10px 12px',
+                                  height: 44,
+                                  border: '1px solid #FCA5A5',
+                                  borderRadius: 8,
+                              }}
+                          >
+                              <span
+                                  style={{
+                                      fontFamily: 'Inter, sans-serif',
+                                      fontWeight: 600,
+                                      fontSize: 14,
+                                      color: '#B91C1C',
+                                  }}
+                              >
+                                  {actioning.has(selected.id) ? 'Cancelling…' : 'Cancel match'}
+                              </span>
+                          </button>
+                      );
+                  })()}
+
                   {selected.status === 'SHORTLISTED' && (<button type="button" disabled={!jobId || actioning.has(selected.id)} onClick={async () => {
                         if (!jobId)
                             return;
@@ -1404,5 +1518,19 @@ export default function HostApplicantsPage(props: {
           </div>
         </>)}
       {quickMessagePortal}
+      <MatchFeeRefundConfirmModal
+        invoice={cancelMatchInvoice}
+        open={cancelMatchInvoice != null && cancelMatchAppId != null}
+        busy={cancelMatchAppId != null && actioning.has(cancelMatchAppId)}
+        onClose={() => {
+          if (cancelMatchAppId && actioning.has(cancelMatchAppId)) return;
+          setCancelMatchInvoice(null);
+          setCancelMatchAppId(null);
+        }}
+        onConfirm={() => {
+          if (!cancelMatchAppId) return;
+          void finishCancelMatch(cancelMatchAppId);
+        }}
+      />
     </DashLayout>);
 }

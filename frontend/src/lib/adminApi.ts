@@ -494,7 +494,7 @@ export async function adminClearMatchFeeReview(
 
 export async function adminOverrideMatchFee(
   invoiceId: string,
-  status: AdminMatchFeeInvoice['status'],
+  status: 'PENDING' | 'OVERDUE' | 'CANCELLED' | 'CREDITED' | 'PENDING_REPLACEMENT',
   adminNotes: string,
 ): Promise<{ success: boolean }> {
   return adminFetchJson(`/api/admin/match-fees/${encodeURIComponent(invoiceId)}/override`, {

@@ -9,10 +9,12 @@ import {
   adminDiscretionaryMatchFeeRefund,
   adminListMatchFees,
   adminMatchFeeSummary,
+  adminOverrideMatchFee,
   adminRefundDuplicatePayment,
   adminResolveMatchFeeRefund,
   adminSendMatchFeeReminder,
   adminSetMatchFeeReplacementStatus,
+  adminWriteOffMatchFee,
   type AdminMatchFeeInvoice,
   type AdminMatchFeePaymentAttempt,
   type AdminMatchFeeRefund,
@@ -27,6 +29,7 @@ import {
   matchFeeVisualStatus,
   matchFeeRefundDueReason,
   adminMatchFeeRefundEligibility,
+  adminMatchFeeRefundInFlight,
 } from '@/components/payments/MatchFeePolicy';
 import { MatchFeeEventTimeline } from '@/components/payments/MatchFeeEventTimeline';
 import { AdminMatchFeeRefundConfirmModal } from '@/components/payments/AdminMatchFeeRefundConfirmModal';
@@ -175,6 +178,61 @@ export default function AdminPaymentsPage() {
     await runAction(invoice.id, () => adminAddMatchFeeNote(invoice.id, trimmed));
   }
 
+  async function writeOff(invoice: AdminMatchFeeInvoice) {
+    const notes = await showPrompt({
+      title: 'Write off invoice',
+      message:
+        'Cancel this unpaid invoice as a write-off. The host will not be charged. Add a short reason for the audit trail.',
+      placeholder: 'Reason for write-off',
+      confirmLabel: 'Write off',
+      multiline: true,
+    });
+    if (notes == null) return;
+    const trimmed = notes.trim();
+    if (trimmed.length < 3) {
+      setError('Add a short reason (at least 3 characters) before writing off.');
+      return;
+    }
+    await runAction(invoice.id, () => adminWriteOffMatchFee(invoice.id, trimmed));
+  }
+
+  async function correctStatus(invoice: AdminMatchFeeInvoice) {
+    const statusRaw = await showPrompt({
+      title: 'Correct status',
+      message:
+        'Enter a non-money status: PENDING, OVERDUE, CANCELLED, CREDITED, or PENDING_REPLACEMENT. Paid and refunded must go through Stripe actions.',
+      placeholder: 'e.g. CANCELLED',
+      confirmLabel: 'Continue',
+      defaultValue: invoice.status === 'PAID' || invoice.status === 'REFUNDED' ? 'CANCELLED' : invoice.status,
+    });
+    if (statusRaw == null) return;
+    const status = statusRaw.trim().toUpperCase() as
+      | 'PENDING'
+      | 'OVERDUE'
+      | 'CANCELLED'
+      | 'CREDITED'
+      | 'PENDING_REPLACEMENT';
+    const allowed = ['PENDING', 'OVERDUE', 'CANCELLED', 'CREDITED', 'PENDING_REPLACEMENT'] as const;
+    if (!allowed.includes(status)) {
+      setError('Status must be PENDING, OVERDUE, CANCELLED, CREDITED, or PENDING_REPLACEMENT.');
+      return;
+    }
+    const notes = await showPrompt({
+      title: 'Reason for status correction',
+      message: `Change ${invoice.status} → ${status}. This is recorded on the invoice timeline.`,
+      placeholder: 'Why is this correction needed?',
+      confirmLabel: 'Update status',
+      multiline: true,
+    });
+    if (notes == null) return;
+    const trimmed = notes.trim();
+    if (trimmed.length < 3) {
+      setError('Add a short reason (at least 3 characters) before correcting status.');
+      return;
+    }
+    await runAction(invoice.id, () => adminOverrideMatchFee(invoice.id, status, trimmed));
+  }
+
   const cardStyle: CSSProperties = {
     border: '1px solid #E5E7EB',
     borderRadius: 10,
@@ -298,9 +356,11 @@ export default function AdminPaymentsPage() {
 
         <div style={{ display: 'grid', gap: 12 }}>
           {items.map((invoice) => {
+            const refundInFlight = adminMatchFeeRefundInFlight(invoice);
             const visual = matchFeeVisualStatus(
               invoice.status,
               invoice.refundPendingReview,
+              { stripeRefundProcessing: refundInFlight },
             );
             const colors = matchFeeStatusColor(visual);
             const disabled = busyId === invoice.id;
@@ -576,7 +636,12 @@ export default function AdminPaymentsPage() {
                       <button
                         type="button"
                         className="btn btn-success"
-                        disabled={disabled}
+                        disabled={disabled || refundInFlight}
+                        title={
+                          refundInFlight
+                            ? 'Wait for the in-flight Stripe refund to finish.'
+                            : undefined
+                        }
                         onClick={() =>
                           void runAction(invoice.id, () =>
                             adminSetMatchFeeReplacementStatus(invoice.id, 'FOUND'),
@@ -588,7 +653,12 @@ export default function AdminPaymentsPage() {
                       <button
                         type="button"
                         className="btn btn-secondary"
-                        disabled={disabled}
+                        disabled={disabled || refundInFlight}
+                        title={
+                          refundInFlight
+                            ? 'A refund is already processing at Stripe.'
+                            : undefined
+                        }
                         onClick={() =>
                           setRefundConfirm({
                             invoice,
@@ -673,6 +743,25 @@ export default function AdminPaymentsPage() {
                     onClick={() => void addNote(invoice)}
                   >
                     Add note
+                  </button>
+                  {invoice.status === 'PENDING' || invoice.status === 'OVERDUE' ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={disabled}
+                      onClick={() => void writeOff(invoice)}
+                    >
+                      Write off
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={disabled}
+                    title="Correct non-money status (not for paid/refunded)"
+                    onClick={() => void correctStatus(invoice)}
+                  >
+                    Correct status
                   </button>
                   {invoice.matchFeeReviewRequired ? (
                     <button

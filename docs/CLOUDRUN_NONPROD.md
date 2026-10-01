@@ -147,17 +147,41 @@ Flags: `SKIP_WEB=1` or `SKIP_API=1` for partial deploys.
 
 ## Custom domains
 
-Map hostnames to the **web** services (Next proxies API):
+Direct Cloud Run domain mapping is **not available** in `northamerica-northeast1`. Staging/demo use the existing global HTTPS load balancer:
 
-```bash
-gcloud beta run domain-mappings create --service=l2-web-staging \
-  --domain=staging.locumlink.ca --region=northamerica-northeast1
+| Host | Backend | LB IP |
+|------|---------|-------|
+| `staging.locumlink.ca` | `l2-web-staging` (serverless NEG) | `8.232.192.13` (`locumlink-lb-ip`) |
+| `demo.locumlink.ca` | `l2-web-demo` (serverless NEG) | same |
+| `locumlink.ca` / `www` | prod VM instance group | same |
 
-gcloud beta run domain-mappings create --service=l2-web-demo \
-  --domain=demo.locumlink.ca --region=northamerica-northeast1
+SSL: Google-managed cert `locumlink-nonprod-ssl-cert` (plus existing `locumlink-ssl-cert` for prod).
+
+**DNS cutover** (wherever `locumlink.ca` is hosted): change **A records**:
+
+```text
+staging.locumlink.ca  →  8.232.192.13   (was staging-vm 34.47.59.251)
+demo.locumlink.ca     →  8.232.192.13   (was demo-vm 34.95.6.106)
 ```
 
-Update DNS as instructed. Keep Supabase OAuth redirect URLs on those hostnames.
+Leave TTL low if possible. Cert status stays `PROVISIONING` until DNS points at the LB, then becomes `ACTIVE`.
+
+Check cert:
+
+```bash
+gcloud compute ssl-certificates describe locumlink-nonprod-ssl-cert --global \
+  --format='yaml(managed)'
+```
+
+Then:
+
+```bash
+curl -sI https://staging.locumlink.ca | head -5
+curl -s https://staging.locumlink.ca/api/health
+curl -sI https://demo.locumlink.ca | head -5
+```
+
+Map hostnames to the **web** services only (Next proxies `/api/*` to the API `*.run.app` URLs).
 
 ## Cutover checklist
 

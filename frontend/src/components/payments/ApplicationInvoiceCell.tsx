@@ -138,7 +138,10 @@ export function ApplicationInvoiceCell({
       </div>
     );
   }
-  const visual = matchFeeVisualStatus(invoice.status, invoice.refundPendingReview);
+  const visual = matchFeeVisualStatus(invoice.status, invoice.refundPendingReview, {
+    stripeRefundProcessing: invoice.stripeRefundProcessing,
+    feeRetained: invoice.feeRetained,
+  });
   const colors = matchFeeStatusColor(visual);
   return (
     <div style={{ minWidth: 0 }}>

@@ -20,6 +20,102 @@ function roleForPath(path: string): Role | null {
     return null;
 }
 
+function readBrowserCookie(name: string): string | null {
+    if (typeof document === 'undefined')
+        return null;
+    const parts = document.cookie.split(';');
+    for (const part of parts) {
+        const idx = part.indexOf('=');
+        if (idx === -1)
+            continue;
+        const key = part.slice(0, idx).trim();
+        if (key !== name)
+            continue;
+        try {
+            return decodeURIComponent(part.slice(idx + 1).trim());
+        }
+        catch {
+            return part.slice(idx + 1).trim();
+        }
+    }
+    return null;
+}
+
+function asFrontendRole(value: string | null | undefined): Role | null {
+    if (value === 'clinic' || value === 'locum')
+        return value;
+    if (value === 'HOST' || value === 'host')
+        return 'clinic';
+    if (value === 'LOCUM')
+        return 'locum';
+    return null;
+}
+
+/** Map Nest JWT `role` claim (HOST/LOCUM) to frontend Role. */
+export function roleFromNestJwt(token: string | null | undefined): Role | null {
+    if (!token || typeof window === 'undefined')
+        return null;
+    try {
+        const payload = token.split('.')[1];
+        if (!payload)
+            return null;
+        const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+        const normalized = base64.padEnd(
+            base64.length + ((4 - (base64.length % 4)) % 4),
+            '=',
+        );
+        const decoded = JSON.parse(window.atob(normalized)) as { role?: unknown };
+        return asFrontendRole(
+            typeof decoded.role === 'string' ? decoded.role : null,
+        );
+    }
+    catch {
+        return null;
+    }
+}
+
+/**
+ * Resolve the active host/locum role without silently inventing "locum".
+ * On /host|/locum routes the path wins (middleware already gated the cookie).
+ * Otherwise: localStorage ↔ role cookie (cookie wins on conflict) → Nest JWT → lone role token.
+ */
+export function inferSessionRole(pathname?: string | null): Role | null {
+    if (typeof window === 'undefined')
+        return null;
+    const path =
+        pathname
+        ?? (typeof window !== 'undefined' ? window.location.pathname : null);
+    const pathRole = path ? roleForPath(path) : null;
+    if (pathRole)
+        return pathRole;
+
+    const fromLs = asFrontendRole(localStorage.getItem(ROLE_KEY));
+    const fromCookie = asFrontendRole(readBrowserCookie(ROLE_KEY));
+    if (fromLs && fromCookie && fromLs !== fromCookie)
+        return fromCookie;
+    if (fromLs)
+        return fromLs;
+    if (fromCookie)
+        return fromCookie;
+
+    const fromAccessCookie = roleFromNestJwt(readBrowserCookie('ll_access'));
+    if (fromAccessCookie)
+        return fromAccessCookie;
+    const clinicTok = localStorage.getItem(TOKEN_KEY_CLINIC);
+    const locumTok = localStorage.getItem(TOKEN_KEY_LOCUM);
+    if (clinicTok && !locumTok)
+        return 'clinic';
+    if (locumTok && !clinicTok)
+        return 'locum';
+    const clinicRole = roleFromNestJwt(clinicTok);
+    if (clinicRole)
+        return clinicRole;
+    const locumRole = roleFromNestJwt(locumTok);
+    if (locumRole)
+        return locumRole;
+    return roleFromNestJwt(localStorage.getItem(TOKEN_KEY_LEGACY));
+}
+
 /** Host/locum deep links only — never auth, home, or admin. */
 function isStorableLastPath(path: string): boolean {
     if (!path || path === '/' || path.startsWith('//'))
@@ -105,6 +201,17 @@ export function getToken(): string | null {
             localStorage.setItem(key, legacy);
         return legacy;
     }
+    // Heal from cookie when localStorage role tokens were cleared but session cookie remains.
+    const fromCookie = readBrowserCookie('ll_access');
+    if (fromCookie) {
+        const cookieRole = roleFromNestJwt(fromCookie) ?? role;
+        if (cookieRole) {
+            const key =
+                cookieRole === 'clinic' ? TOKEN_KEY_CLINIC : TOKEN_KEY_LOCUM;
+            localStorage.setItem(key, fromCookie);
+        }
+        return fromCookie;
+    }
     return null;
 }
 export function saveRole(role: Role): void {
@@ -116,7 +223,20 @@ export function saveRole(role: Role): void {
 export function getRole(): Role | null {
     if (typeof window === 'undefined')
         return null;
-    return localStorage.getItem(ROLE_KEY) as Role | null;
+    const fromLs = asFrontendRole(localStorage.getItem(ROLE_KEY));
+    const fromCookie = asFrontendRole(readBrowserCookie(ROLE_KEY));
+    // Middleware reads cookies — if LS drifted, heal toward the cookie.
+    if (fromLs && fromCookie && fromLs !== fromCookie) {
+        localStorage.setItem(ROLE_KEY, fromCookie);
+        return fromCookie;
+    }
+    if (fromLs)
+        return fromLs;
+    if (fromCookie) {
+        localStorage.setItem(ROLE_KEY, fromCookie);
+        return fromCookie;
+    }
+    return null;
 }
 export function saveEmail(email: string): void {
     if (typeof window === 'undefined')

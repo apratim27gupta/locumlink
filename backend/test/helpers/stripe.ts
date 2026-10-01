@@ -24,6 +24,16 @@ export function invoiceTotal(invoice: TestInvoice): number {
 /** Simulates a Checkout session the API created: an OPEN attempt row with a session id. */
 export async function createOpenAttempt(invoice: TestInvoice, overrides?: { expiresAt?: Date }) {
   const sessionId = randomId('cs_test');
+  const host = await getTestDb().hostProfile.findUniqueOrThrow({
+    where: { id: invoice.hostProfileId },
+    select: { stripeCustomerId: true },
+  });
+  if (!host.stripeCustomerId) {
+    await getTestDb().hostProfile.update({
+      where: { id: invoice.hostProfileId },
+      data: { stripeCustomerId: 'cus_test_host' },
+    });
+  }
   const attempt = await getTestDb().matchFeePaymentAttempt.create({
     data: {
       invoiceId: invoice.id,
@@ -50,7 +60,7 @@ export function checkoutSessionFor(
     payment_status: 'paid',
     amount_total: attempt.amountCents,
     currency: attempt.currency.toLowerCase(),
-    customer: null,
+    customer: 'cus_test_host',
     payment_intent: randomId('pi_test'),
     client_reference_id: attempt.invoiceId,
     metadata: {

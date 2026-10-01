@@ -24,7 +24,7 @@ import {
     startOfLocalCalendarDay,
 } from '@/lib/localDateTime';
 import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
-import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, applicationCoveredShiftIds, applicationPartialAvailabilityBadge, formatApplicationSlotLabels, formatSpecificDate, getJobScheduleModel, getPostingDays } from '@/lib/jobSchedule';
+import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, applicationCoveredShiftIds, formatApplicationSlotLabels, formatSpecificDate, getJobScheduleModel, getPostingDays } from '@/lib/jobSchedule';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { CountBadge } from '@/components/CountBadge';
 import { canMutateApplicationBeforeOngoing } from '@/lib/locumApplicationActions';
@@ -968,19 +968,6 @@ export default function LocumDashboard(props: {
                     <Image src="/clock.svg" alt="" width={14} height={14} style={{ flexShrink: 0, objectFit: 'contain' }}/>
                     {fmtTime(jp.startTime)} - {fmtTime(jp.endTime)}
                   </span>)}
-                {(() => {
-                    const label = applicationPartialAvailabilityBadge(app, jp);
-                    if (!label) return null;
-                    return (
-                      <span style={{
-                        display: 'flex', alignItems: 'center', gap: 5,
-                        background: '#FFFBEB', border: '1px solid #FDE68A', color: '#B45309',
-                        padding: '4px 10px', borderRadius: 5, fontSize: 12, fontWeight: 700,
-                      }}>
-                        {label}
-                      </span>
-                    );
-                })()}
                 <span style={{ fontSize: 12, color: '#8892a4', marginLeft: 'auto' }}>
                   {relativeHoursOrDaysAgo(app.appliedAt)}
                 </span>
@@ -1003,6 +990,33 @@ export default function LocumDashboard(props: {
                 >
                   View shift details
                 </button>
+                {app.status === 'CONFIRMED' && !postingRemoved && jp.hostProfile.userId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const q = new URLSearchParams({
+                        partnerId: jp.hostProfile.userId,
+                        jobPostingId: jp.id,
+                      });
+                      const href = `/locum/messages?${q.toString()}`;
+                      beforeClientNavigation(href);
+                      router.push(href);
+                    }}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: 8,
+                      border: '1px solid #3B4FD8',
+                      background: '#fff',
+                      color: '#3B4FD8',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      fontFamily: 'inherit',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Message host
+                  </button>
+                ) : null}
                 {canMutateApplicationBeforeOngoing(app) ? (
                   <>
                     <button
@@ -1602,7 +1616,7 @@ export default function LocumDashboard(props: {
               </h3>
               <p style={{ margin: '0 0 12px', fontSize: 14, color: '#6B7280', lineHeight: 1.5 }}>
                 The host will be notified. {wasAccepted
-                  ? 'Because you already accepted, cancellation policy applies to the host match fee.'
+                  ? 'Because you already accepted: if the shift starts in 14 days or more and the host paid, LocumLink reviews a refund; if fewer than 14 days remain and the host paid, we search for a replacement before any refund.'
                   : 'Your application will be withdrawn.'}
               </p>
               <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>

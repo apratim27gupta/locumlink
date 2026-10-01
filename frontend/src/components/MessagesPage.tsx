@@ -2,13 +2,13 @@
 import { showAlert } from '@/components/ui/AppDialog';
 import { HOST_DASH_NAV } from '@/lib/hostNav';
 import EmojiPicker from 'emoji-picker-react';
-import { useEffect, useState, useRef, useCallback, useMemo, Suspense, type MouseEvent as ReactMouseEvent, } from 'react';
+import { useEffect, useState, useRef, useCallback, Suspense, type MouseEvent as ReactMouseEvent, } from 'react';
 import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
 import { onPwaRefresh } from '@/lib/pwaEvents';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
-import { fetchAllPaginated, hostApi, locumApi, messageApi, uploadFile, type ApplicationRecord, type BlockStatus, type Conversation, type ConversationPartner, type MessagingPermission, type MyApplication, type ReportReason, type ThreadMessage, type ThreadPartner, } from '@/lib/api';
+import { hostApi, locumApi, messageApi, uploadFile, type ApplicationRecord, type BlockStatus, type Conversation, type ConversationPartner, type MessagingPermission, type ReportReason, type ThreadMessage, type ThreadPartner, } from '@/lib/api';
 import { getEmail, getToken } from '@/lib/auth';
 import { subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { dispatchMessagesUpdated } from '@/lib/messagesUpdatedEvent';
@@ -624,7 +624,6 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const [blockBusy, setBlockBusy] = useState(false);
     const [reportMode, setReportMode] = useState<'report' | 'block-and-report' | null>(null);
     const [reportBusy, setReportBusy] = useState(false);
-    const [myApplications, setMyApplications] = useState<MyApplication[]>([]);
     const [myListPreviewName, setMyListPreviewName] = useState<string | null>(null);
     const [myCpsnsVerified, setMyCpsnsVerified] = useState(false);
     const [listPanelWidth, setListPanelWidth] = useState(readStoredMessagesListWidth);
@@ -728,22 +727,6 @@ function MessagesPageInner({ role }: MessagesPageProps) {
         const t = window.setTimeout(() => setDebouncedSearchQuery(search.trim()), 280);
         return () => window.clearTimeout(t);
     }, [search]);
-    const loadMyApplications = useCallback(async () => {
-        if (authLoading || role !== 'locum' || !getToken())
-            return;
-        try {
-            const applications = await fetchAllPaginated((cursor) =>
-                locumApi.getMyApplications({ cursor, limit: 100 }),
-            );
-            setMyApplications(applications);
-        }
-        catch {
-            setMyApplications([]);
-        }
-    }, [authLoading, role]);
-    useEffect(() => {
-        void loadMyApplications();
-    }, [loadMyApplications, pathname]);
     const loadConversations = useCallback(async (opts?: {
         skipTopLoader?: boolean;
     }) => {
@@ -816,14 +799,12 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     useEffect(() => {
         return subscribeProfileUpdated(() => {
             void refreshMyListPreviewName();
-            void loadMyApplications();
             void loadConversations({ skipTopLoader: true });
             if (selectedPartnerId)
                 void loadThread(selectedPartnerId);
         });
     }, [
         refreshMyListPreviewName,
-        loadMyApplications,
         loadConversations,
         loadThread,
         selectedPartnerId,
@@ -1156,63 +1137,6 @@ function MessagesPageInner({ role }: MessagesPageProps) {
             setBlockBusy(false);
         }
     }
-    const hostIdsWithConvs = useMemo(() => new Set(conversations.map((c) => c.partnerId)), [conversations]);
-    const locumApplicationSidebarRows = useMemo(() => {
-        if (role !== 'locum')
-            return [];
-        const rows = myApplications.filter((a) => a.status === 'CONFIRMED' &&
-            !hostIdsWithConvs.has(a.jobPosting.hostProfile.userId));
-        return [...rows].sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
-    }, [role, myApplications, hostIdsWithConvs]);
-    const filteredLocumAppRows = useMemo(() => {
-        if (!debouncedSearchQuery)
-            return locumApplicationSidebarRows;
-        const q = debouncedSearchQuery.toLowerCase();
-        return locumApplicationSidebarRows.filter((a) => {
-            const jp = a.jobPosting;
-            const hp = jp.hostProfile;
-            const title = jp.title.toLowerCase();
-            const practice = hp.practiceName.toLowerCase();
-            const city = (hp.city ?? '').toLowerCase();
-            const province = (hp.province ?? '').toLowerCase();
-            const desc = (jp.description ?? '').toLowerCase();
-            const cover = (a.coverNote ?? '').toLowerCase();
-            return (title.includes(q) ||
-                practice.includes(q) ||
-                city.includes(q) ||
-                province.includes(q) ||
-                desc.includes(q) ||
-                cover.includes(q));
-        });
-    }, [locumApplicationSidebarRows, debouncedSearchQuery]);
-    useEffect(() => {
-        if (authLoading || role !== 'locum')
-            return;
-        if (urlPartnerId)
-            return;
-        if (selectedPartnerId)
-            return;
-        if (loadingConvs)
-            return;
-        if (conversations.length > 0)
-            return;
-        if (locumApplicationSidebarRows.length === 0)
-            return;
-        if (window.innerWidth > 768 && !userClearedRef.current) {
-            const first = locumApplicationSidebarRows[0];
-            setSelectedPartnerId(first.jobPosting.hostProfile.userId);
-            setComposeJobPostingId(first.jobPosting.id);
-        }
-    }, [
-        authLoading,
-        role,
-        urlPartnerId,
-        selectedPartnerId,
-        loadingConvs,
-        conversations.length,
-        locumApplicationSidebarRows,
-    ]);
-    // Mobile: when back button clears selectedPartnerId, don't re-select
     const specializations = getSpecializations(partner);
     const location = getLocation(partner);
     const partnerName = partner ? getDisplayName(partner as AnyUser) : '';
@@ -1494,115 +1418,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                     </div>
                   </div>);
             })}
-                {role === 'locum' &&
-                filteredLocumAppRows.map((app) => {
-                    const hostId = app.jobPosting.hostProfile.userId;
-                    const isSelected = selectedPartnerId === hostId;
-                    const practice = app.jobPosting.hostProfile.practiceName;
-                    const jobTitle = app.jobPosting.title;
-                    return (<div key={app.id} onClick={() => {
-                            setSelectedPartnerId(hostId);
-                            setComposeJobPostingId(app.jobPosting.id);
-                        }} style={{
-                            padding: '14px',
-                            borderBottom: '1px solid #F3F4F6',
-                            cursor: 'pointer',
-                            background: isSelected ? '#EEF0FB' : '#fff',
-                            borderLeft: isSelected
-                                ? '3px solid #3B4FD8'
-                                : '3px solid transparent',
-                            transition: 'background 0.1s',
-                        }}>
-                        <div style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: 10,
-                        }}>
-                          <div style={{
-                            width: AVATAR_GLYPH_PX,
-                            height: AVATAR_GLYPH_PX,
-                            borderRadius: '50%',
-                            background: '#309BB7',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                            overflow: 'hidden',
-                            padding: 0,
-                            boxSizing: 'border-box',
-                        }}>
-                            <AvatarGlyph variant="clinic"/>
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: 2,
-                            gap: 8,
-                        }}>
-                              <span style={{
-                            fontSize: 13,
-                            fontWeight: 600,
-                            color: '#0f1523',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            minWidth: 0,
-                        }}>
-                                {practice}
-                              </span>
-                              <span style={{
-                            fontSize: 10,
-                            fontWeight: 600,
-                            color: '#059669',
-                            background: '#ECFDF5',
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            flexShrink: 0,
-                        }}>
-                                Confirmed
-                              </span>
-                            </div>
-                            <div style={{
-                            fontSize: 12,
-                            color: '#6B7280',
-                            marginBottom: 6,
-                        }}>
-                              Tap to message about this job
-                            </div>
-                            <div style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            background: '#F3F4F6',
-                            border: '1px solid #E5E7EB',
-                            borderRadius: 6,
-                            padding: '3px 8px',
-                            maxWidth: '100%',
-                            overflow: 'hidden',
-                        }}>
-                              <Image src="/brief-case.svg" alt="" width={12} height={12} style={{
-                            flexShrink: 0,
-                            display: 'block',
-                        }}/>
-                              <span style={{
-                            fontSize: 11,
-                            color: '#374151',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            minWidth: 0,
-                        }}>
-                                {jobTitle}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>);
-                })}
-                {conversations.length === 0 &&
-                filteredLocumAppRows.length === 0 && (<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
+                {conversations.length === 0 && (<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                       {urlPartnerId ? (<>
                           <div style={{
                         fontSize: 14,
@@ -1627,20 +1443,6 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                           <div style={{ fontSize: 12, color: '#9CA3AF' }}>
                             Try a name, practice, job title, or a word from any message
                           </div>
-                        </>) : role === 'locum' &&
-                    locumApplicationSidebarRows.length === 0 &&
-                    myApplications.length > 0 ? (<>
-                          <div style={{
-                        fontSize: 14,
-                        fontWeight: 600,
-                        color: '#374151',
-                        marginBottom: 6,
-                    }}>
-                            No messages yet
-                          </div>
-                          <div style={{ fontSize: 12, color: '#9CA3AF' }}>
-                            You can message a host once they confirm you for a shift, or reply after they message you
-                          </div>
                         </>) : role === 'locum' ? (<>
                           <div style={{
                         fontSize: 14,
@@ -1650,8 +1452,8 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                     }}>
                             No messages yet
                           </div>
-                          <div style={{ fontSize: 12, color: '#9CA3AF' }}>
-                            
+                          <div style={{ fontSize: 12, color: '#9CA3AF', maxWidth: 220, margin: '0 auto' }}>
+                            Conversations appear when a host messages you. After they confirm a shift, you can also message them from My Applications.
                           </div>
                         </>) : (<>
                           <div style={{

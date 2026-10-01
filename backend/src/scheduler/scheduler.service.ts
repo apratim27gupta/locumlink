@@ -344,11 +344,12 @@ export class SchedulerService {
     }
   }
 
-  /** Mark pending match-fee invoices overdue and escalate long-overdue accounts. */
+  /** Mark pending match-fee invoices overdue, send recurring reminders, escalate long-overdue accounts. */
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async handleMatchFeeInvoiceLifecycle(): Promise<void> {
     try {
       await this.paymentsService.markOverdueInvoices();
+      await this.paymentsService.sendRecurringOverdueReminders();
       await this.paymentsService.escalateLongOverdueInvoices();
     } catch (err) {
       this.logger.error('Match fee invoice lifecycle cron failed', err);

@@ -54,7 +54,7 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
       {
         question: 'Do I have to pay?',
         answer:
-          'Registration is currently free.\nCommercial pricing will be announced after the pilot.',
+          'LocumLink is free for locums.\nHosts pay a platform match fee ($125 or $250 CAD plus HST) after a locum accepts a confirmed placement — not to register or post jobs.',
       },
       {
         question: 'How long does verification take?',
@@ -133,7 +133,7 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
         id: FAQ_AFTER_APPLYING_ID,
         question: 'My application says Applied. What happens next?',
         answer:
-          'Applied means your application was sent and the host can review it.\n\nFrom there, the host may:\n• shortlist you while they consider applicants\n• confirm you for the shift, after which you can accept or decline\n• decide to go with another physician\n\nHosts review applications on their own timeline, and not every application is shortlisted or confirmed. You will get an in-app notification and an email if your status changes.\n\nYou can message the host once they message you or confirm you for the shift.',
+          'Applied means your application was sent and the host can review it.\n\nFrom there, the host may:\n• shortlist you while they consider applicants\n• confirm you for the shift, after which you can accept or decline\n• decide to go with another physician\n\nHosts review applications on their own timeline, and not every application is shortlisted or confirmed. You will get an in-app notification and an email if your status changes.\n\nYou can message the host from My Applications once they confirm you, or reply in Messages after they message you first.',
       },
       {
         question: 'What if I can’t find a locum?',

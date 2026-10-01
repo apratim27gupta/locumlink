@@ -28,6 +28,8 @@ export function formatTaxRate(taxRateBps: number): string {
 }
 export const MATCH_FEE_DUE_DAYS = 7;
 export const MATCH_FEE_CANCELLATION_WINDOW_DAYS = 14;
+/** Min days between automated overdue payment reminders (email + in-app). */
+export const MATCH_FEE_OVERDUE_REMINDER_INTERVAL_DAYS = 7;
 export const MATCH_FEE_ESCALATION_DAYS_AFTER_DUE = 30;
 
 export type MatchFeeTier = 'HALF' | 'FULL';

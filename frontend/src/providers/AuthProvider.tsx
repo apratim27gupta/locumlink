@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState, ReactNode, } from 'reac
 import { authApi } from '@/lib/api';
 import { getSupabase } from '@/lib/supabaseClient';
 import { toUserFacingError } from '@/lib/userFacingError';
-import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, popLastPath, peekLastPath, clearLastPath, activateRole, type Role, } from '@/lib/auth';
+import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, popLastPath, peekLastPath, clearLastPath, activateRole, inferSessionRole, roleFromNestJwt, type Role, } from '@/lib/auth';
 import { checkProfileExistsOnServer, ensureProfileMarkedCompleteFromServer, } from '@/lib/profileCompleteSync';
 import { getOAuthCallbackRedirect, isNativeShell, requestNativeOAuth } from '@/lib/nativeShell';
 interface AuthCtx {
@@ -53,15 +53,43 @@ function getJwtSubject(token: string | null): string | null {
     }
 }
 
+function resolveSyncRole(): Role {
+    return (
+        inferSessionRole(
+            typeof window !== 'undefined' ? window.location.pathname : null,
+        ) ?? 'locum'
+    );
+}
+
 /** Exchange Supabase access token for Nest JWT — never store Supabase token as ll_access. */
-async function syncNestAccessToken(supabaseAccessToken: string): Promise<boolean> {
+async function syncNestAccessToken(
+    supabaseAccessToken: string,
+    options?: { force?: boolean },
+): Promise<boolean> {
     if (syncNestInFlight) return syncNestInFlight;
     syncNestInFlight = (async () => {
-        const role = getRole() ?? 'locum';
+        const role = resolveSyncRole();
+        // Persist inferred role before writing tokens so saveToken hits the right key.
+        if (getRole() !== role)
+            saveRole(role);
+
+        const existing = getToken();
+        if (
+            !options?.force
+            && existing
+            && roleFromNestJwt(existing) === role
+        ) {
+            syncCookies();
+            return true;
+        }
+
         try {
             const out = await authApi.syncFromSupabase(role, supabaseAccessToken);
-            saveToken(out.accessToken);
-            syncCookies();
+            // Drop the result if the user switched roles while this sync was in flight.
+            const roleNow = resolveSyncRole();
+            if (roleNow !== role)
+                return Boolean(getToken());
+            activateRole(role, out.accessToken);
             return true;
         }
         catch {
@@ -85,10 +113,19 @@ export function AuthProvider({ children }: {
         return isProfileComplete();
     });
     useEffect(() => {
+        const inferred = inferSessionRole(
+            typeof window !== 'undefined' ? window.location.pathname : null,
+        );
+        if (inferred) {
+            saveRole(inferred);
+            setRoleState(inferred);
+        }
+        else {
+            const storedRole = getRole();
+            if (storedRole)
+                setRoleState(storedRole);
+        }
         syncCookies();
-        const storedRole = getRole();
-        if (storedRole)
-            setRoleState(storedRole);
         const complete = isProfileComplete();
         setProfileComplete(complete);
         syncProfileCompleteCookies();
@@ -106,11 +143,13 @@ export function AuthProvider({ children }: {
                 .then(async ({ data: { session } }) => {
                 try {
                     if (session?.access_token) {
-                        if (!getRole())
-                            saveRole('locum');
+                        const role = inferSessionRole(window.location.pathname);
+                        if (role)
+                            saveRole(role);
                         const synced = await syncNestAccessToken(session.access_token);
                         if (synced || getToken()) {
                             setUserId(session.user.id);
+                            setRoleState(getRole());
                             syncCookies();
                             syncProfileCompleteCookies();
                         }
@@ -132,19 +171,25 @@ export function AuthProvider({ children }: {
             });
             const { data: { subscription: sub }, } = supabase.auth.onAuthStateChange((event, session) => {
                 if (session?.access_token) {
-                    if (!getRole())
-                        saveRole('locum');
-                    if (
-                        event === 'SIGNED_IN'
-                        || event === 'INITIAL_SESSION'
-                        || event === 'TOKEN_REFRESHED'
-                    ) {
+                    const role = inferSessionRole(window.location.pathname);
+                    if (role)
+                        saveRole(role);
+                    // Supabase token refresh must NOT re-mint the Nest JWT as locum/host —
+                    // that race is what flips dashboards mid-session / on navigation.
+                    if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
                         void (async () => {
-                            await syncNestAccessToken(session.access_token);
+                            await syncNestAccessToken(session.access_token, {
+                                force: event === 'SIGNED_IN',
+                            });
                             setUserId(session.user.id);
+                            setRoleState(getRole());
                             syncCookies();
                             syncProfileCompleteCookies();
                         })();
+                    }
+                    else if (event === 'TOKEN_REFRESHED') {
+                        // Keep Nest cookies aligned; do not call sync-supabase.
+                        syncCookies();
                     }
                 }
                 else if (!session) {
@@ -265,10 +310,12 @@ export function AuthProvider({ children }: {
         if (error) throw new Error(error.message);
         if (!session?.access_token) throw new Error('No session found after OAuth redirect.');
         syncCookies();
-        const synced = await syncNestAccessToken(session.access_token);
+        const synced = await syncNestAccessToken(session.access_token, {
+            force: true,
+        });
         if (!synced) throw new Error('Could not sync session with app API.');
         setUserId(session.user.id);
-        const savedRole = (getRole() ?? 'locum') as Role;
+        const savedRole = (getRole() ?? inferSessionRole() ?? 'locum') as Role;
         const nestToken = getToken();
         if (!nestToken) throw new Error('Could not sync session with app API.');
         const profileExists = await checkProfileExistsOnServer(savedRole, nestToken);

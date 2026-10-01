@@ -16,14 +16,17 @@ RUN npm install --workspace=frontend --include-workspace-root
 COPY frontend ./frontend
 
 # Public URLs are baked into the client bundle at build time.
+# API_INTERNAL_URL is baked into Next rewrites at build time (runtime env is ignored for rewrites).
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_APP_URL
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG API_INTERNAL_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
     NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
     NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
+    API_INTERNAL_URL=$API_INTERNAL_URL \
     NEXT_TELEMETRY_DISABLED=1
 
 RUN npx prisma generate --schema=database/prisma/schema.prisma \

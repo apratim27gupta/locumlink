@@ -161,6 +161,12 @@ export function validate(config: Record<string, unknown>) {
         'ALLOWED_ORIGINS must be set in production (comma-separated frontend URLs).',
       );
     }
+    if (!validatedConfig.STRIPE_SECRET_KEY?.trim()) {
+      throw new Error('STRIPE_SECRET_KEY must be set in production.');
+    }
+    if (!validatedConfig.STRIPE_WEBHOOK_SECRET?.trim()) {
+      throw new Error('STRIPE_WEBHOOK_SECRET must be set in production.');
+    }
   }
   return validatedConfig;
 }

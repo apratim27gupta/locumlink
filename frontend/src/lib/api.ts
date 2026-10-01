@@ -1332,6 +1332,10 @@ export type MatchFeeInvoice = {
     status: MatchFeeInvoiceStatus;
     /** Cancellation qualified for a refund; LocumLink has not approved it yet. */
     refundPendingReview: boolean;
+    /** Card refund submitted to Stripe and not yet succeeded. */
+    stripeRefundProcessing?: boolean;
+    /** Paid fee kept after host late cancel (within 14 days of start). */
+    feeRetained?: boolean;
     dueAt: string;
     paidAt: string | null;
     cancelledAt: string | null;

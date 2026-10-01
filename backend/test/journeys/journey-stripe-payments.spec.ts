@@ -187,10 +187,11 @@ describe('Journey - Stripe match fee payments', () => {
 
   it('does not mark paid when the amount, currency or customer does not match', async () => {
     const { host, invoice } = await createPendingInvoice();
-    const cases = [
+    const cases: Partial<Stripe.Checkout.Session>[] = [
       { amount_total: invoice.amountCents - 100 },
       { currency: 'usd' },
       { customer: 'cus_someone_else' },
+      { customer: null },
     ];
     await db().hostProfile.update({
       where: { id: host.hostProfileId },
@@ -379,6 +380,21 @@ describe('Journey - Stripe match fee payments', () => {
     expect(stored.refundedCents).toBe(invoiceTotal(invoice));
   });
 
+  it('blocks a second admin refund while Stripe still has the first refund pending', async () => {
+    const payments = app.get(PaymentsService);
+    mockStripeRefunds({ status: 'pending' });
+    const { invoice } = await createRefundDueInvoice();
+    await payments.resolveRefund(invoice.id, admin, 'Locum withdrew early');
+
+    await expect(
+      payments.resolveRefund(invoice.id, admin, 'Clicked again while pending'),
+    ).rejects.toThrow(/already being processed|still settling/i);
+
+    const stored = await db().matchFeeInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(stored.status).toBe('PAID');
+    expect(stored.refundedCents).toBeGreaterThan(0);
+  });
+
   it('gives the amount back to the invoice when Stripe later reports the refund failed', async () => {
     const payments = app.get(PaymentsService);
     const refundSpy = mockStripeRefunds({ status: 'pending' });
@@ -388,6 +404,15 @@ describe('Journey - Stripe match fee payments', () => {
     const [call] = refundSpy.mock.calls[0];
     let refund = await db().matchFeeRefund.findUniqueOrThrow({ where: { id: call.refundId } });
     expect(refund.status).toBe('PENDING');
+    // Invoice stays paid until Stripe confirms the refund succeeded.
+    expect(
+      (await db().matchFeeInvoice.findUniqueOrThrow({ where: { id: invoice.id } })).status,
+    ).toBe('PAID');
+    expect(
+      await db().matchFeeInvoiceEvent.count({
+        where: { invoiceId: invoice.id, eventType: 'REFUNDED' },
+      }),
+    ).toBe(0);
 
     const failed = stripeRefundFor(refund.id, {
       id: refund.stripeRefundId!,

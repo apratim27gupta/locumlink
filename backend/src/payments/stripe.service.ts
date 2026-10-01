@@ -41,7 +41,8 @@ export class StripeService {
       : CHECKOUT_EXPIRY_DEFAULT_MINUTES;
 
     if (secretKey) {
-      this.stripe = new Stripe(secretKey);
+      // Pin the API version so account default changes cannot silently alter Checkout/refund shapes.
+      this.stripe = new Stripe(secretKey, { apiVersion: '2025-02-24.acacia' });
       if (!this.webhookSecret) {
         this.logger.error(
           'STRIPE_WEBHOOK_SECRET is not set: payments will only be confirmed by reconciliation.',

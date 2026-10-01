@@ -33,13 +33,14 @@ export class AdminWriteOffDto {
 }
 
 export class AdminOverrideDto {
+  /** Money statuses (PAID / REFUNDED) are not allowed — use checkout or refund actions. */
   @IsString()
+  @IsIn(['PENDING', 'OVERDUE', 'CANCELLED', 'CREDITED', 'PENDING_REPLACEMENT'])
   status!:
     | 'PENDING'
-    | 'PAID'
     | 'OVERDUE'
     | 'CANCELLED'
-    | 'REFUNDED'
+    | 'CREDITED'
     | 'PENDING_REPLACEMENT';
 
   @IsString()
