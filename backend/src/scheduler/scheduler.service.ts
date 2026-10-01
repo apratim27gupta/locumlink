@@ -221,7 +221,7 @@ export class SchedulerService {
     }
   }
 
-  /** Flush rolling email digests (messages; legacy opportunity digests still flushed). */
+  /** Flush legacy queued digests (message emails are instant; flush clears backlog). */
   @Cron(CronExpression.EVERY_HOUR)
   async handleEmailDigests() {
     try {

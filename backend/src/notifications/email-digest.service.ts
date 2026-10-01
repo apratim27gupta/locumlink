@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EmailService } from './email.service.js';
 import { allowsEmailForEvent } from './email-prefs.js';
-import type { DigestEventType } from './email-digest.js';
 import {
   DIGEST_FLUSH_COUNT,
   DIGEST_FLUSH_DELAY_MS,
@@ -26,10 +25,10 @@ export class EmailDigestService {
     private readonly email: EmailService,
   ) {}
 
-  /** Queue a digest-eligible event; flush immediately when count threshold is hit. */
+  /** Queue a digest-eligible event; no-op while DIGEST_EVENT_TYPES is empty. */
   async afterDigestibleEvent(params: {
     recipientId: string;
-    eventType: DigestEventType;
+    eventType: string;
     emailTo?: string;
   }): Promise<void> {
     const category = digestCategoryForEventType(params.eventType);
