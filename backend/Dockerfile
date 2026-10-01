@@ -14,7 +14,9 @@ RUN npm install --workspace=backend --include-workspace-root
 COPY database/prisma ./database/prisma
 COPY backend ./backend
 
-RUN npm run build -w backend
+RUN npm run build -w backend \
+  && test -f backend/dist/admin/admin.module.js \
+  && test -f backend/dist/payments/payments.module.js
 
 # ── Stage 2: production ───────────────────────────────────────────────────────
 FROM node:22-alpine AS production
