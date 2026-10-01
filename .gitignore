@@ -39,3 +39,6 @@ backend/.ops-renewal-alerts-state.json
 backend/.ops-billing-alerts-state.json
 locumlink-490817-*.json
 .staging-tmp/
+
+scripts/.staging-env.deploy.yaml
+scripts/_export_staging_env.py

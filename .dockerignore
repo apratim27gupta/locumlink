@@ -26,7 +26,8 @@ coverage
 
 # Local artifacts
 mobile
-admin
+# Root-only: do not use bare "admin" — that also excludes backend/src/admin
+/admin
 
 # Keep frontend/ for frontend/Dockerfile and backend package.json workspace layout
 *.zip

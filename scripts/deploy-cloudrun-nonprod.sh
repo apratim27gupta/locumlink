@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Deploy staging or demo (API + web) to Cloud Run via Cloud Build (no local Docker).
 #
 # Prerequisites: see docs/CLOUDRUN_NONPROD.md
@@ -84,11 +84,14 @@ if [[ "${SKIP_API:-0}" != "1" ]]; then
     --cpu=1
     --no-allow-unauthenticated
     --add-cloudsql-instances="${CLOUD_SQL_CONNECTION}"
-    --set-env-vars="NODE_ENV=staging,FIXED_OTP_CODE=000000,ALLOWED_ORIGINS=${PUBLIC_ORIGIN},ADMIN_FRONTEND_REDIRECT_URL=${PUBLIC_ORIGIN}/admin,MAIL_FROM_NAME=Locum Link ${ENV_NAME}"
   )
   if [[ "${USE_SECRETS}" == "1" ]]; then
-    DEPLOY_ARGS+=(--set-secrets="DATABASE_URL=${SECRET_PREFIX}_DATABASE_URL:latest,JWT_SECRET=${SECRET_PREFIX}_JWT_SECRET:latest,ADMIN_JWT_SECRET=${SECRET_PREFIX}_ADMIN_JWT_SECRET:latest,SUPABASE_URL=${SECRET_PREFIX}_SUPABASE_URL:latest,SUPABASE_ANON_KEY=${SECRET_PREFIX}_SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=${SECRET_PREFIX}_SUPABASE_SERVICE_ROLE_KEY:latest,GCS_BUCKET_NAME=${SECRET_PREFIX}_GCS_BUCKET_NAME:latest,GCS_PROJECT_ID=${SECRET_PREFIX}_GCS_PROJECT_ID:latest,GCS_CREDENTIALS_JSON=${SECRET_PREFIX}_GCS_CREDENTIALS_JSON:latest,VAPID_PUBLIC_KEY=${SECRET_PREFIX}_VAPID_PUBLIC_KEY:latest,VAPID_PRIVATE_KEY=${SECRET_PREFIX}_VAPID_PRIVATE_KEY:latest,VAPID_EMAIL=${SECRET_PREFIX}_VAPID_EMAIL:latest,MAIL_FROM_ADDRESS=${SECRET_PREFIX}_MAIL_FROM_ADDRESS:latest")
+    DEPLOY_ARGS+=(
+      --set-env-vars="NODE_ENV=staging,FIXED_OTP_CODE=000000,ALLOWED_ORIGINS=${PUBLIC_ORIGIN},ADMIN_FRONTEND_REDIRECT_URL=${PUBLIC_ORIGIN}/admin,MAIL_FROM_NAME=Locum Link ${ENV_NAME}"
+      --set-secrets="DATABASE_URL=${SECRET_PREFIX}_DATABASE_URL:latest,JWT_SECRET=${SECRET_PREFIX}_JWT_SECRET:latest,ADMIN_JWT_SECRET=${SECRET_PREFIX}_ADMIN_JWT_SECRET:latest,SUPABASE_URL=${SECRET_PREFIX}_SUPABASE_URL:latest,SUPABASE_ANON_KEY=${SECRET_PREFIX}_SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=${SECRET_PREFIX}_SUPABASE_SERVICE_ROLE_KEY:latest,GCS_BUCKET_NAME=${SECRET_PREFIX}_GCS_BUCKET_NAME:latest,GCS_PROJECT_ID=${SECRET_PREFIX}_GCS_PROJECT_ID:latest,GCS_CREDENTIALS_JSON=${SECRET_PREFIX}_GCS_CREDENTIALS_JSON:latest,VAPID_PUBLIC_KEY=${SECRET_PREFIX}_VAPID_PUBLIC_KEY:latest,VAPID_PRIVATE_KEY=${SECRET_PREFIX}_VAPID_PRIVATE_KEY:latest,VAPID_EMAIL=${SECRET_PREFIX}_VAPID_EMAIL:latest,MAIL_FROM_ADDRESS=${SECRET_PREFIX}_MAIL_FROM_ADDRESS:latest"
+    )
   else
+    # Env file must be exclusive of --set-env-vars / --set-secrets (gcloud allows only one env mode).
     DEPLOY_ARGS+=(--env-vars-file="${ENV_FILE}" --clear-secrets)
   fi
   gcloud "${DEPLOY_ARGS[@]}"
@@ -167,5 +170,5 @@ if [[ "${SKIP_WEB:-0}" != "1" ]]; then
   echo "==> Web: ${WEB_URL}"
 fi
 
-echo "==> Done. Map custom domain ${PUBLIC_ORIGIN} → ${WEB_SERVICE}, then retire the VM."
+echo "==> Done. Map custom domain ${PUBLIC_ORIGIN} â†’ ${WEB_SERVICE}, then retire the VM."
 echo "==> Owner must grant allUsers run.invoker for public access (see docs/CLOUDRUN_NONPROD.md)."
