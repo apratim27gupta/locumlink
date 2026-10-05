@@ -2,7 +2,7 @@ export const HALF_SLOT_HOURS = 3.5;
 export const FULL_SLOT_HOURS = 7;
 export const MAX_HOURS_PER_DAY = 7;
 /** Host may stretch a half-day window up to this many hours; longer requires full-day. */
-export const MAX_HALF_SLOT_HOURS = 5;
+export const MAX_HALF_SLOT_HOURS = 7;
 
 /** Match fee: <= half-day total claimed hours. TEMP staging live QA: $5 (was $125). */
 export const MATCH_FEE_HALF_CENTS = 500;

@@ -40,7 +40,7 @@ export type JobScheduleLike = {
 export const HALF_SLOT_HOURS = 3.5;
 export const FULL_SLOT_HOURS = 7;
 /** Host may stretch a half-day window up to this many hours; longer requires full-day. */
-export const MAX_HALF_SLOT_HOURS = 5;
+export const MAX_HALF_SLOT_HOURS = 7;
 
 /** Preview end time from start HH:mm + hours (mirrors backend addClockHours). */
 export function addClockHours(startHm: string, hours: number): string | null {
