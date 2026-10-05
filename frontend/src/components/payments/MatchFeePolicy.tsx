@@ -194,10 +194,9 @@ export default function MatchFeePolicy({
 
 const HOST_REFUND_MIN_DAYS_BEFORE_START = 14; // policy: 14 days or more before start
 
-/** "$285" for whole dollars, "$142.50" otherwise. */
+/** Always two decimals: "$10.00", "$11.40". Pair with currency as `$11.40 CAD`. */
 export function formatCents(cents: number): string {
-  const dollars = cents / 100;
-  return `$${Number.isInteger(dollars) ? dollars.toFixed(0) : dollars.toFixed(2)}`;
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 export function hstFor(feeCents: number, taxRateBps: number): number {

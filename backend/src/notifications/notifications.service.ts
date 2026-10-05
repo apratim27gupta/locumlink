@@ -151,8 +151,7 @@ function appUrl(path: string): string {
 }
 
 function formatCents(cents: number): string {
-  const dollars = cents / 100;
-  return `$${Number.isInteger(dollars) ? dollars.toFixed(0) : dollars.toFixed(2)}`;
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 /** `amountCents` is the total the host pays; `taxCents` is the HST included in it. */

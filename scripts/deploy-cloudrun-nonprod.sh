@@ -82,7 +82,7 @@ if [[ "${SKIP_API:-0}" != "1" ]]; then
     --max-instances=3
     --memory=512Mi
     --cpu=1
-    --no-allow-unauthenticated
+    --allow-unauthenticated
     --add-cloudsql-instances="${CLOUD_SQL_CONNECTION}"
   )
   if [[ "${USE_SECRETS}" == "1" ]]; then
@@ -131,7 +131,7 @@ if [[ "${SKIP_WEB:-0}" != "1" ]]; then
       --max-instances=3 \
       --memory=1Gi \
       --cpu=1 \
-      --no-allow-unauthenticated \
+      --allow-unauthenticated \
       --add-cloudsql-instances="${CLOUD_SQL_CONNECTION}" \
       --set-secrets="DATABASE_URL=${SECRET_PREFIX}_DATABASE_URL:latest,JWT_SECRET=${SECRET_PREFIX}_JWT_SECRET:latest,SUPABASE_URL=${SECRET_PREFIX}_SUPABASE_URL:latest,SUPABASE_ANON_KEY=${SECRET_PREFIX}_SUPABASE_ANON_KEY:latest" \
       --set-env-vars="NODE_ENV=production,API_INTERNAL_URL=${API_URL},NEXT_PUBLIC_API_URL=${PUBLIC_ORIGIN},NEXT_PUBLIC_APP_URL=${PUBLIC_ORIGIN}"
@@ -156,7 +156,7 @@ if [[ "${SKIP_WEB:-0}" != "1" ]]; then
       --max-instances=3 \
       --memory=1Gi \
       --cpu=1 \
-      --no-allow-unauthenticated \
+      --allow-unauthenticated \
       --add-cloudsql-instances="${CLOUD_SQL_CONNECTION}" \
       --env-vars-file="${WEB_ENV}" \
       --clear-secrets
@@ -170,5 +170,20 @@ if [[ "${SKIP_WEB:-0}" != "1" ]]; then
   echo "==> Web: ${WEB_URL}"
 fi
 
-echo "==> Done. Map custom domain ${PUBLIC_ORIGIN} â†’ ${WEB_SERVICE}, then retire the VM."
-echo "==> Owner must grant allUsers run.invoker for public access (see docs/CLOUDRUN_NONPROD.md)."
+# Belt-and-suspenders: --allow-unauthenticated should set this, but prior deploys
+# used --no-allow-unauthenticated and left staging intermittently Forbidden.
+echo "==> Ensuring allUsers run.invoker on ${API_SERVICE} + ${WEB_SERVICE}"
+gcloud run services add-iam-policy-binding "${API_SERVICE}" \
+  --project="${GCP_PROJECT}" \
+  --region="${GCP_REGION}" \
+  --member=allUsers \
+  --role=roles/run.invoker \
+  --quiet >/dev/null
+gcloud run services add-iam-policy-binding "${WEB_SERVICE}" \
+  --project="${GCP_PROJECT}" \
+  --region="${GCP_REGION}" \
+  --member=allUsers \
+  --role=roles/run.invoker \
+  --quiet >/dev/null
+
+echo "==> Done. Map custom domain ${PUBLIC_ORIGIN} → ${WEB_SERVICE}, then retire the VM."

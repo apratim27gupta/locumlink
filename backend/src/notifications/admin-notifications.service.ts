@@ -229,8 +229,7 @@ export class AdminNotificationsService {
     amountCents: number;
     taxCents?: number;
   }): Promise<void> {
-    const dollars = params.amountCents / 100;
-    const amount = Number.isInteger(dollars) ? dollars.toFixed(0) : dollars.toFixed(2);
+    const amount = (params.amountCents / 100).toFixed(2);
     await this.notifyAllAdmins({
       eventType: 'A_006_MATCH_FEE_OVERDUE',
       title: 'Overdue match fee needs review',

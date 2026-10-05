@@ -237,7 +237,7 @@ export function DayConfigEditor({
         >
           <div>Half day</div>
           <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.8, marginTop: 2 }}>
-            {HALF_SLOT_HOURS} hours default · max 6h 59m · up to two slots
+            under 7 hrs · up to 2 slots per day
           </div>
         </button>
       </div>

@@ -97,7 +97,7 @@ for svc in l2-api-staging l2-web-staging l2-api-demo l2-web-demo; do
 done
 ```
 
-Until then, deploys can use `--env-vars-file` instead of `--set-secrets`, and services stay private (call with `gcloud auth print-identity-token`).
+Until Secret Manager IAM is granted, deploys can use `--env-vars-file` instead of `--set-secrets`. Staging/demo web+API must stay publicly invokable (`--allow-unauthenticated` / `allUsers` `run.invoker`); without that, the LB shows Forbidden and login breaks.
 
 Copy values from each VM’s `backend/.env` + `backend/.env.staging` (do not commit).
 

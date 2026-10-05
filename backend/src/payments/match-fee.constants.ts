@@ -74,14 +74,14 @@ export const MATCH_FEE_POLICY = {
   /** Discrete bullets shown under "Match fee". */
   matchFeePoints: [
     'When a locum confirms a match on your posting, LocumLink invoices a platform match fee per locum.',
-    '$5 CAD when the locum claims up to 3.5 hours total.',
-    '$10 CAD when the locum claims more than 3.5 hours total.',
+    `$${MATCH_FEE_HALF_CENTS / 100} CAD when the locum claims up to 3.5 hours total.`,
+    `$${MATCH_FEE_FULL_CENTS / 100} CAD when the locum claims more than 3.5 hours total.`,
     '14% HST is added to each match fee invoice.',
-    'If claimed hours rise from half-day to full-day by the time the placement ends, LocumLink invoices the extra amount (plus HST).',
+    `If the locum increases availability from 1 half-day slot to more after the $${MATCH_FEE_HALF_CENTS / 100} invoice was created, an additional $${MATCH_FEE_HALF_CENTS / 100} invoice will be created after the shifts are completed.`,
   ],
   /** @deprecated Prefer matchFeePoints; kept for older clients. */
   matchFeeDescription:
-    'When a locum confirms a match on your posting, a platform match fee is invoiced per locum: $5 CAD for up to 3.5 hours total claimed, or $10 CAD when the locum claims more than 3.5 hours. 14% HST is added to each invoice.',
+    `When a locum confirms a match on your posting, a platform match fee is invoiced per locum: $${MATCH_FEE_HALF_CENTS / 100} CAD for up to 3.5 hours total claimed, or $${MATCH_FEE_FULL_CENTS / 100} CAD when the locum claims more than 3.5 hours. 14% HST is added to each invoice.`,
   perLocumFeeRule:
     'Each matched locum generates a separate invoice. Another locum on the same posting means another match fee at the same rates.',
   dueRule:
@@ -112,7 +112,7 @@ export const MATCH_FEE_POLICY = {
     {
       id: 'post_completion_tier_top_up',
       summary:
-        'If claimed hours rise from half-day to full-day by the time the placement ends, LocumLink issues a separate top-up invoice for the fee difference (plus HST). That top-up follows the same payment and cancellation rules as the original match fee.',
+        `If the locum increases availability from 1 half-day slot to more after the $${MATCH_FEE_HALF_CENTS / 100} invoice was created, an additional $${MATCH_FEE_HALF_CENTS / 100} invoice will be created after the shifts are completed. That top-up follows the same payment and cancellation rules as the original match fee.`,
     },
     {
       id: 'post_completion_tickets',
