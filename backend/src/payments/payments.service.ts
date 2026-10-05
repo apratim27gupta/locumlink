@@ -1981,8 +1981,17 @@ export class PaymentsService {
           a.amountCents === totalCents &&
           a.currency === invoice.currency,
       );
-      if (reusable?.checkoutUrl) {
-        return { kind: 'reuse' as const, url: reusable.checkoutUrl };
+      if (reusable?.checkoutUrl && reusable.stripeCheckoutSessionId) {
+        return {
+          kind: 'reuse' as const,
+          url: reusable.checkoutUrl,
+          attemptId: reusable.id,
+          sessionId: reusable.stripeCheckoutSessionId,
+          invoice,
+          totalCents,
+          now,
+          openAttempts,
+        };
       }
 
       const creating = openAttempts.find(
@@ -2005,11 +2014,51 @@ export class PaymentsService {
       };
     });
 
+    // Never reuse a Checkout URL from the other Stripe mode (e.g. sk_test → rk_live switch).
     if (claim.kind === 'reuse') {
-      return { success: true, url: claim.url };
+      try {
+        const session = await this.stripeService.retrieveCheckoutSession(
+          claim.sessionId,
+        );
+        if (
+          Boolean(session.livemode) === this.stripeService.isLiveMode() &&
+          session.status === 'open'
+        ) {
+          return { success: true, url: session.url ?? claim.url };
+        }
+        await this.updateAttempt(claim.attemptId, {
+          status: 'SUPERSEDED',
+          lastEventType: 'checkout.mode_mismatch',
+          failureReason:
+            Boolean(session.livemode) !== this.stripeService.isLiveMode()
+              ? 'Prior checkout was created in a different Stripe mode.'
+              : 'Prior checkout is no longer open.',
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Discarding reusable checkout ${claim.sessionId} (mode switch or invalid session)`,
+          err,
+        );
+        await this.updateAttempt(claim.attemptId, {
+          status: 'SUPERSEDED',
+          lastEventType: 'checkout.mode_mismatch',
+          failureReason:
+            'Prior checkout could not be verified after a Stripe key/mode change.',
+        });
+      }
     }
 
-    const { invoice, totalCents, now, openAttempts } = claim;
+    const { invoice, totalCents, now, openAttempts } =
+      claim.kind === 'reuse'
+        ? {
+            invoice: claim.invoice,
+            totalCents: claim.totalCents,
+            now: claim.now,
+            openAttempts: claim.openAttempts.filter(
+              (a) => a.id !== claim.attemptId,
+            ),
+          }
+        : claim;
 
     for (const stale of openAttempts) {
       if (!stale.stripeCheckoutSessionId) {
@@ -2019,25 +2068,40 @@ export class PaymentsService {
         });
         continue;
       }
-      const session = await this.stripeService.expireCheckoutSession(
-        stale.stripeCheckoutSessionId,
-      );
-      if (session.status === 'complete') {
-        const outcome = await this.applyCheckoutSession(session, 'checkout.supersede');
-        if (outcome === 'processing') {
-          throw new BadRequestException(
-            'A payment for this invoice is still processing. Please check back shortly.',
-          );
+      try {
+        const session = await this.stripeService.expireCheckoutSession(
+          stale.stripeCheckoutSessionId,
+        );
+        if (session.status === 'complete') {
+          const outcome = await this.applyCheckoutSession(session, 'checkout.supersede');
+          if (outcome === 'processing') {
+            throw new BadRequestException(
+              'A payment for this invoice is still processing. Please check back shortly.',
+            );
+          }
+          if (outcome === 'paid' || outcome === 'already-paid') {
+            throw new BadRequestException('This invoice has already been paid.');
+          }
+          continue;
         }
-        if (outcome === 'paid' || outcome === 'already-paid') {
-          throw new BadRequestException('This invoice has already been paid.');
-        }
-        continue;
+        await this.updateAttempt(stale.id, {
+          status: session.status === 'expired' ? 'SUPERSEDED' : 'OPEN',
+          lastEventType: 'checkout.supersede',
+        });
+      } catch (err) {
+        if (err instanceof BadRequestException) throw err;
+        // Live key cannot expire/retrieve a test-mode session (and vice versa).
+        this.logger.warn(
+          `Could not expire checkout ${stale.stripeCheckoutSessionId}; superseding locally`,
+          err,
+        );
+        await this.updateAttempt(stale.id, {
+          status: 'SUPERSEDED',
+          lastEventType: 'checkout.supersede',
+          failureReason:
+            'Prior checkout could not be expired (Stripe mode mismatch).',
+        });
       }
-      await this.updateAttempt(stale.id, {
-        status: session.status === 'expired' ? 'SUPERSEDED' : 'OPEN',
-        lastEventType: 'checkout.supersede',
-      });
     }
 
     // Re-lock briefly to create the attempt row so a concurrent request sees in-flight state.
