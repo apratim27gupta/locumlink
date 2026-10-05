@@ -39,8 +39,9 @@ export type JobScheduleLike = {
 
 export const HALF_SLOT_HOURS = 3.5;
 export const FULL_SLOT_HOURS = 7;
-/** Host may stretch a half-day window up to this many hours; longer requires full-day. */
-export const MAX_HALF_SLOT_HOURS = 7;
+/** Half-day custom end may be at most 6h59m; 7h+ must use full-day. */
+export const MAX_HALF_SLOT_MINUTES = 6 * 60 + 59;
+export const MAX_HALF_SLOT_HOURS = MAX_HALF_SLOT_MINUTES / 60;
 
 /** Preview end time from start HH:mm + hours (mirrors backend addClockHours). */
 export function addClockHours(startHm: string, hours: number): string | null {
@@ -102,8 +103,9 @@ export function slotEndValidationError(
   }
   if (opts?.slotKind === 'HALF') {
     const hours = (e - s) / 60;
-    if (hours > MAX_HALF_SLOT_HOURS + 1e-9) {
-      return `Half-day slots can be at most ${MAX_HALF_SLOT_HOURS} hours. Switch to full-day for longer shifts.`;
+    const mins = Math.round(hours * 60);
+    if (mins > MAX_HALF_SLOT_MINUTES) {
+      return 'Half-day slots can be at most 6 hours 59 minutes. Switch to full-day for longer shifts.';
     }
   }
   return null;

@@ -161,19 +161,19 @@ describe('job-schedule.util', () => {
       expect(iso(result.startDate)).toBe('2999-06-18');
     });
 
-    it('allows a half-day custom end up to 7 hours and rejects longer', () => {
+    it('allows a half-day custom end up to 6h59m and rejects 7h+', () => {
       const ok = parseJobShiftsSlots(
         [
           {
             date: '2999-06-18',
             startTime: '08:00',
             slotKind: 'HALF',
-            endTime: '15:00',
+            endTime: '14:59',
           },
         ],
         { allowPast: true },
       );
-      expect(ok.shifts[0].endTime).toBe('15:00');
+      expect(ok.shifts[0].endTime).toBe('14:59');
       expect(() =>
         parseJobShiftsSlots(
           [
@@ -181,12 +181,12 @@ describe('job-schedule.util', () => {
               date: '2999-06-18',
               startTime: '08:00',
               slotKind: 'HALF',
-              endTime: '15:01',
+              endTime: '15:00',
             },
           ],
           { allowPast: true },
         ),
-      ).toThrow(/at most 7 hours/i);
+      ).toThrow(/at most 6 hours 59 minutes/i);
     });
 
     it('allows two half slots on one day and rejects full+half mix', () => {

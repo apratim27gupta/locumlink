@@ -1,8 +1,9 @@
 export const HALF_SLOT_HOURS = 3.5;
 export const FULL_SLOT_HOURS = 7;
 export const MAX_HOURS_PER_DAY = 7;
-/** Host may stretch a half-day window up to this many hours; longer requires full-day. */
-export const MAX_HALF_SLOT_HOURS = 7;
+/** Half-day custom end may be at most 6h59m; 7h+ must use full-day. */
+export const MAX_HALF_SLOT_MINUTES = 6 * 60 + 59;
+export const MAX_HALF_SLOT_HOURS = MAX_HALF_SLOT_MINUTES / 60;
 
 /** Match fee: <= half-day total claimed hours. TEMP staging live QA: $5 (was $125). */
 export const MATCH_FEE_HALF_CENTS = 500;
@@ -76,7 +77,7 @@ export const MATCH_FEE_POLICY = {
     '$5 CAD when the locum claims up to 3.5 hours total.',
     '$10 CAD when the locum claims more than 3.5 hours total.',
     '14% HST is added to each match fee invoice.',
-    'If claimed hours rise from half-day to full-day by the time the placement ends, LocumLink invoices the extra tier amount (plus HST).',
+    'If claimed hours rise from half-day to full-day by the time the placement ends, LocumLink invoices the extra amount (plus HST).',
   ],
   /** @deprecated Prefer matchFeePoints; kept for older clients. */
   matchFeeDescription:

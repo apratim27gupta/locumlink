@@ -5,6 +5,7 @@ import {
   FULL_SLOT_HOURS,
   MAX_HOURS_PER_DAY,
   MAX_HALF_SLOT_HOURS,
+  MAX_HALF_SLOT_MINUTES,
   computeMatchFeeAmountCents,
   matchFeeTierFromHours,
 } from '../payments/match-fee.constants.js';
@@ -14,6 +15,7 @@ export {
   FULL_SLOT_HOURS,
   MAX_HOURS_PER_DAY,
   MAX_HALF_SLOT_HOURS,
+  MAX_HALF_SLOT_MINUTES,
   computeMatchFeeAmountCents,
   matchFeeTierFromHours,
 };
@@ -473,14 +475,13 @@ export function parseJobShiftsSlots(
       endTime = addClockHours(startTime, hours);
     }
     const durationHrs = hoursBetweenClockTimes(startTime, endTime);
-    if (
-      slotKind === 'HALF' &&
-      durationHrs != null &&
-      durationHrs > MAX_HALF_SLOT_HOURS + 1e-9
-    ) {
-      throw new BadRequestException(
-        `Day ${cal}: half-day slots can be at most ${MAX_HALF_SLOT_HOURS} hours. Switch to full-day for longer shifts.`,
-      );
+    if (slotKind === 'HALF' && durationHrs != null) {
+      const durationMins = Math.round(durationHrs * 60);
+      if (durationMins > MAX_HALF_SLOT_MINUTES) {
+        throw new BadRequestException(
+          `Day ${cal}: half-day slots can be at most 6 hours 59 minutes. Switch to full-day for longer shifts.`,
+        );
+      }
     }
     const entry: DaySlot = {
       cal,

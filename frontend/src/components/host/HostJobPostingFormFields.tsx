@@ -125,7 +125,11 @@ export function DdMmYyyyDateField({ value, onChange, inputStyle, minIso = todayI
             paddingRight: 40,
             width: '100%',
             boxSizing: 'border-box',
-        }} value={value} onChange={(e) => commitFormatted(formatDdMmYyyyInput(e.target.value))}/>
+            cursor: 'pointer',
+        }} value={value} onChange={(e) => commitFormatted(formatDdMmYyyyInput(e.target.value))} onClick={openCalendar} onFocus={(e) => {
+            // Select existing text so typing replaces; calendar still opens from click.
+            e.currentTarget.select();
+        }}/>
       <button type="button" className="host-job-date-trigger" aria-label="Open calendar" onClick={openCalendar} style={{
             position: 'absolute',
             right: 2,

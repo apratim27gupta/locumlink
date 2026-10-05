@@ -24,7 +24,7 @@ export class JobShiftDto {
   @IsOptional()
   endTime?: string;
 
-  /** SLOTS only: HALF (≤7h window, default 3.5h) or FULL (7h) billing unit. */
+  /** SLOTS only: HALF (≤6h59m window, default 3.5h) or FULL (7h+) billing unit. */
   @IsOptional()
   @IsIn(['HALF', 'FULL'])
   slotKind?: 'HALF' | 'FULL';

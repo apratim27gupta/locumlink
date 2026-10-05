@@ -5,7 +5,6 @@ import {
   addClockHours,
   HALF_SLOT_HOURS,
   FULL_SLOT_HOURS,
-  MAX_HALF_SLOT_HOURS,
   halfSlotsOverlap,
   slotEndValidationError,
 } from '@/lib/jobSchedule';
@@ -101,7 +100,7 @@ function EndTimeField({
             </button>
           </>
         ) : slotKind === 'HALF' ? (
-          `Defaults to ${HALF_SLOT_HOURS} hours; half-day can be at most ${MAX_HALF_SLOT_HOURS} hours.`
+          `Defaults to ${HALF_SLOT_HOURS} hours; half-day can be at most 6 hours 59 minutes.`
         ) : (
           'Defaults from start time; change if your clinic hours differ.'
         )}
@@ -228,7 +227,7 @@ export function DayConfigEditor({
         >
           <div>Full day</div>
           <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.8, marginTop: 2 }}>
-            7 hours · one slot
+            7hrs or more · one slot
           </div>
         </button>
         <button
@@ -238,7 +237,7 @@ export function DayConfigEditor({
         >
           <div>Half day</div>
           <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.8, marginTop: 2 }}>
-            {HALF_SLOT_HOURS} hours default · max {MAX_HALF_SLOT_HOURS} hrs · up to two slots
+            {HALF_SLOT_HOURS} hours default · max 6h 59m · up to two slots
           </div>
         </button>
       </div>
