@@ -194,7 +194,7 @@ export default function MatchFeePolicy({
 
 const HOST_REFUND_MIN_DAYS_BEFORE_START = 14; // policy: 14 days or more before start
 
-/** Always two decimals: "$10.00", "$11.40". Pair with currency as `$11.40 CAD`. */
+/** Always two decimals with `$` only: "$10.00", "$11.40". Do not append CAD. */
 export function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }

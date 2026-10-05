@@ -102,7 +102,7 @@ export default function HostInvoicesPage() {
           setPaymentNotice({
             tone: 'success',
             title: 'Payment received',
-            message: `Your ${formatCents(invoice.totalCents)} ${invoice.currency} match fee for ${invoice.jobTitle} is paid. You can download the receipt from this page.`,
+            message: `Your ${formatCents(invoice.totalCents)} match fee for ${invoice.jobTitle} is paid. You can download the receipt from this page.`,
           });
           await load();
           return;
@@ -354,7 +354,7 @@ export default function HostInvoicesPage() {
                     }}
                   >
                     <span style={{ fontWeight: 700, fontSize: 16, color: '#111827' }}>
-                      {formatCents(invoice.totalCents)} {invoice.currency}
+                      {formatCents(invoice.totalCents)}
                     </span>
                     {invoice.taxCents > 0 ? (
                       <span style={{ fontSize: 13, color: '#6B7280' }}>
@@ -381,8 +381,8 @@ export default function HostInvoicesPage() {
                       }}
                     >
                       Refund in progress. LocumLink will refund{' '}
-                      {formatCents(invoice.totalCents - (invoice.refundedCents ?? 0))}{' '}
-                      {invoice.currency} to your original payment method once approved.
+                      {formatCents(invoice.totalCents - (invoice.refundedCents ?? 0))} to your
+                      original payment method once approved.
                     </div>
                   ) : null}
 

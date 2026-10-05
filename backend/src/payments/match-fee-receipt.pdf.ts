@@ -28,8 +28,8 @@ export type MatchFeeReceiptData = {
   paymentReference: string | null;
 };
 
-function formatMoney(amountCents: number, currency: string): string {
-  return `$${(amountCents / 100).toFixed(2)} ${currency}`;
+function formatMoney(amountCents: number, _currency: string): string {
+  return `$${(amountCents / 100).toFixed(2)}`;
 }
 
 function formatDate(d: Date): string {

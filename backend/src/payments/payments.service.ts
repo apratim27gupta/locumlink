@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import {
   MatchFeeCancelledBy,
   MatchFeeInvoiceEventActor,
@@ -457,7 +457,7 @@ export class PaymentsService {
       paymentMethods,
       emphasis:
         role === 'LOCUM'
-          ? 'LocumLink is free for locums. The host pays a match fee ($5 or $10 CAD) after you accept a confirmed placement, based on total hours claimed.'
+          ? 'LocumLink is free for locums. The host pays a match fee ($5 or $10) after you accept a confirmed placement, based on total hours claimed.'
           : 'Free to post. Pay $5 or $10 per matched locum when they accept your confirmed match. Fees stay as invoiced, during the placement. After the last shift on an invoice, you can raise a ticket if you have concerns and LocumLink will follow up.',
     };
   }
@@ -556,7 +556,7 @@ export class PaymentsService {
         params.feeCents != null ? params.feeCents + taxCents : remaining;
       if (amountCents <= 0 || amountCents > remaining) {
         throw new BadRequestException(
-          `Only ${formatCad(remaining)} ${invoice.currency} remains refundable on this invoice.`,
+          `Only ${formatCad(remaining)} remains refundable on this invoice.`,
         );
       }
 
@@ -632,7 +632,7 @@ export class PaymentsService {
     const taxNote =
       refund.taxCents > 0 ? ` (includes ${formatCad(refund.taxCents)} HST)` : '';
     await this.recordMatchFeeEvent(invoice.id, 'ADMIN_NOTE', {
-      detail: `Refund of ${formatCad(refund.amountCents)} ${refund.currency}${taxNote} submitted to Stripe (${stripeRefund?.id ?? 'pending'}); waiting for confirmation. Approved by ${params.admin.email}.`,
+      detail: `Refund of ${formatCad(refund.amountCents)}${taxNote} submitted to Stripe (${stripeRefund?.id ?? 'pending'}); waiting for confirmation. Approved by ${params.admin.email}.`,
       actor: cancellationActorToEventActor(params.cancelledBy ?? 'ADMIN'),
     });
     await this.syncHostReviewFlag(invoice.hostProfileId);
@@ -683,7 +683,7 @@ export class PaymentsService {
         });
       }
       await this.recordMatchFeeEvent(row.invoiceId, 'REFUNDED', {
-        detail: `Extra payment of ${formatCad(row.amountCents)} ${row.currency} refunded (Stripe ${row.stripeRefundId ?? 'n/a'}; refund ${row.id}). Approved by ${approvedBy}.`,
+        detail: `Extra payment of ${formatCad(row.amountCents)} refunded (Stripe ${row.stripeRefundId ?? 'n/a'}; refund ${row.id}). Approved by ${approvedBy}.`,
         actor: 'ADMIN',
       });
       return;
@@ -709,7 +709,7 @@ export class PaymentsService {
       ? ` to the original payment method (Stripe ${row.stripeRefundId})`
       : '';
     await this.recordMatchFeeEvent(invoice.id, 'REFUNDED', {
-      detail: `Refunded ${formatCad(row.amountCents)} ${row.currency}${taxNote}${stripeNote}${fullyRefunded ? '' : ' (partial)'} (refund ${row.id}). Approved by ${approvedBy}.`,
+      detail: `Refunded ${formatCad(row.amountCents)}${taxNote}${stripeNote}${fullyRefunded ? '' : ' (partial)'} (refund ${row.id}). Approved by ${approvedBy}.`,
       actor: cancellationActorToEventActor(cancelledBy),
     });
 
@@ -782,7 +782,7 @@ export class PaymentsService {
 
     if (stripeRefund.status !== 'succeeded') {
       await this.recordMatchFeeEvent(attempt.invoiceId, 'ADMIN_NOTE', {
-        detail: `Extra payment refund of ${formatCad(refund.amountCents)} ${refund.currency} submitted to Stripe (${stripeRefund.id}); waiting for confirmation. Approved by ${admin.email}.`,
+        detail: `Extra payment refund of ${formatCad(refund.amountCents)} submitted to Stripe (${stripeRefund.id}); waiting for confirmation. Approved by ${admin.email}.`,
         actor: 'ADMIN',
       });
     }
@@ -927,7 +927,7 @@ export class PaymentsService {
     }
 
     await this.recordMatchFeeEvent(row.invoiceId, 'REFUND_FAILED', {
-      detail: `Refund of ${formatCad(row.amountCents)} ${row.currency} did not go through. ${reason}`,
+      detail: `Refund of ${formatCad(row.amountCents)} did not go through. ${reason}`,
     });
     this.logger.error(`Match fee refund ${refundId} failed: ${reason}`);
     await this.adminNotifications
@@ -936,7 +936,7 @@ export class PaymentsService {
         hostPracticeName: row.invoice.hostProfile.practiceName,
         jobTitle: row.invoice.jobPosting.title,
         outcome: 'REFUND_FAILED',
-        detail: `Refund of ${formatCad(row.amountCents)} ${row.currency} failed. ${reason}`,
+        detail: `Refund of ${formatCad(row.amountCents)} failed. ${reason}`,
       })
       .catch(() => undefined);
   }
@@ -1681,7 +1681,7 @@ export class PaymentsService {
       }
       const refundable = Math.max(0, matchFeeTotalCents(invoice) - invoice.refundedCents);
       await this.recordMatchFeeEvent(invoice.id, 'REFUND_PENDING_REVIEW', {
-        detail: `${policy.reason} LocumLink will review and refund ${formatCad(refundable)} ${invoice.currency}.`,
+        detail: `${policy.reason} LocumLink will review and refund ${formatCad(refundable)}.`,
         actor,
       });
       await this.adminNotifications.notifyMatchFeeOutcome({
@@ -2792,7 +2792,7 @@ export class PaymentsService {
     // Money was collected for an invoice that is already settled or no longer payable.
     // It is held for an admin to refund; nothing is refunded automatically.
     const extraCents = session.amount_total ?? attempt.amountCents;
-    const detail = `Invoice was ${current?.status ?? 'unavailable'} when this payment of ${formatCad(extraCents)} ${invoice.currency} completed. An admin needs to refund it (Stripe payment ${paymentIntentId}).`;
+    const detail = `Invoice was ${current?.status ?? 'unavailable'} when this payment of ${formatCad(extraCents)} completed. An admin needs to refund it (Stripe payment ${paymentIntentId}).`;
     const flagged = await this.prisma.matchFeePaymentAttempt.updateMany({
       where: { id: attempt.id, status: { notIn: ['DUPLICATE', 'DUPLICATE_REFUNDED'] } },
       data: {
@@ -3105,7 +3105,7 @@ export class PaymentsService {
         },
       });
       await this.recordMatchFeeEvent(invoiceId, 'TICKET_RESOLVED', {
-        detail: `Ticket resolved with ${formatCad(refundTotal)} ${invoice.currency} refund - Notes: ${notes}`,
+        detail: `Ticket resolved with ${formatCad(refundTotal)} refund - Notes: ${notes}`,
         actor: 'ADMIN',
       });
     }

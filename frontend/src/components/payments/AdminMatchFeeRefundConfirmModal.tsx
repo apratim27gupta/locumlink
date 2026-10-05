@@ -91,7 +91,7 @@ export function AdminMatchFeeRefundConfirmModal({
         ? Math.round((remainingCents * invoice.taxCents) / invoice.totalCents)
         : 0;
   }
-  const amountLabel = `${formatCents(refundCents)} ${invoice.currency}`;
+  const amountLabel = formatCents(refundCents);
   const taxLabel = taxCents > 0 ? ` (includes ${formatCents(taxCents)} HST)` : '';
   const typedOk = typed.trim() === REFUND_CONFIRM_WORD;
   const notesOk = notes.trim().length >= MIN_NOTE_LENGTH;

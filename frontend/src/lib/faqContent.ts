@@ -54,7 +54,7 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
       {
         question: 'Do I have to pay?',
         answer:
-          'LocumLink is free for locums.\nHosts pay a platform match fee ($5 or $10 CAD plus HST) after a locum accepts a confirmed placement — not to register or post jobs.',
+          'LocumLink is free for locums.\nHosts pay a platform match fee ($5 or $10 plus HST) after a locum accepts a confirmed placement — not to register or post jobs.',
       },
       {
         question: 'How long does verification take?',
