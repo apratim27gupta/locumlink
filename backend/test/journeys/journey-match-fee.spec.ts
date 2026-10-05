@@ -82,7 +82,7 @@ describe('Journey — Match fee invoices', () => {
 
     const db = getTestDb();
     const invoice = await db.matchFeeInvoice.findUnique({
-      where: { applicationId: application.id },
+      where: { applicationId_kind: { applicationId: application.id, kind: 'PRIMARY' } },
     });
     // Multi-day legacy span at 7h/day → >3.5h → $10.
     expect(invoice).toEqual(
@@ -179,7 +179,7 @@ describe('Journey — Match fee invoices', () => {
     });
 
     const invA = await db.matchFeeInvoice.findUnique({
-      where: { applicationId: appA.id },
+      where: { applicationId_kind: { applicationId: appA.id, kind: 'PRIMARY' } },
     });
     expect(invA?.amountCents).toBe(500);
     expect(invA?.matchFeeTier).toBe('HALF');
@@ -206,7 +206,7 @@ describe('Journey — Match fee invoices', () => {
     });
 
     const invB = await db.matchFeeInvoice.findUnique({
-      where: { applicationId: appB.id },
+      where: { applicationId_kind: { applicationId: appB.id, kind: 'PRIMARY' } },
     });
     expect(invB?.amountCents).toBe(500);
     expect(invB?.id).not.toBe(invA?.id);
@@ -244,7 +244,7 @@ describe('Journey — Match fee invoices', () => {
       .expect(200);
 
     const invoice = await getTestDb().matchFeeInvoice.findUnique({
-      where: { applicationId: application.id },
+      where: { applicationId_kind: { applicationId: application.id, kind: 'PRIMARY' } },
     });
     expect(invoice?.status).toBe('CANCELLED');
   });

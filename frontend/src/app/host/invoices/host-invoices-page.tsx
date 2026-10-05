@@ -288,6 +288,21 @@ export default function HostInvoicesPage() {
                         }}
                       >
                         {invoice.jobTitle}
+                        {invoice.kind === 'TIER_TOP_UP' ? (
+                          <span
+                            style={{
+                              marginLeft: 8,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: '#92400E',
+                              background: '#FEF3C7',
+                              borderRadius: 6,
+                              padding: '2px 8px',
+                            }}
+                          >
+                            Full-day top-up
+                          </span>
+                        ) : null}
                       </div>
                       <MatchFeeStatusChip
                         status={invoice.status}

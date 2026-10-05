@@ -52,9 +52,10 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
   {
     status: 'PENDING_REPLACEMENT',
     label: 'Replacement pending',
-    summary: 'Locum cancelled fewer than 14 days before start after fee was paid; LocumLink seeks a replacement.',
+    summary:
+      'Locum cancelled fewer than 14 days before start after the fee was paid. Seeking a replacement — confirmed only when another locum accepts on the posting. If none accepts, refund the host.',
     hostObligation:
-      'Nothing to do for now. LocumLink is looking for a replacement locum. If none accepts, an admin refunds the fee.',
+      'Nothing to do for now. LocumLink is looking for a replacement. If none accepts, LocumLink refunds the fee.',
   },
   {
     status: 'REFUNDED',

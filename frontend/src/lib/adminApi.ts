@@ -253,6 +253,8 @@ export type AdminMatchFeeInvoice = {
   hostUserId: string | null;
   hostEmail: string | null;
   applicationId: string;
+  /** PRIMARY at accept; TIER_TOP_UP = half→full delta after placement. */
+  kind?: 'PRIMARY' | 'TIER_TOP_UP';
   jobPostingId: string;
   /** Match fee before HST. */
   amountCents: number;
@@ -458,17 +460,6 @@ export async function adminResolveSupportTicket(
   });
 }
 
-export async function adminSetMatchFeeReplacementStatus(
-  invoiceId: string,
-  replacementStatus: 'SEARCHING' | 'FOUND' | 'NOT_FOUND',
-  adminNotes?: string,
-): Promise<{ success: boolean }> {
-  return adminFetchJson(`/api/admin/match-fees/${encodeURIComponent(invoiceId)}/replacement-status`, {
-    method: 'POST',
-    body: JSON.stringify({ replacementStatus, adminNotes }),
-  });
-}
-
 export async function adminWriteOffMatchFee(
   invoiceId: string,
   adminNotes?: string,
@@ -492,13 +483,3 @@ export async function adminClearMatchFeeReview(
   );
 }
 
-export async function adminOverrideMatchFee(
-  invoiceId: string,
-  status: 'PENDING' | 'OVERDUE' | 'CANCELLED' | 'CREDITED' | 'PENDING_REPLACEMENT',
-  adminNotes: string,
-): Promise<{ success: boolean }> {
-  return adminFetchJson(`/api/admin/match-fees/${encodeURIComponent(invoiceId)}/override`, {
-    method: 'POST',
-    body: JSON.stringify({ status, adminNotes }),
-  });
-}

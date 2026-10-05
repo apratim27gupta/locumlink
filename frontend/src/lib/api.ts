@@ -1321,6 +1321,8 @@ export type MatchFeeInvoiceStatus =
 export type MatchFeeInvoice = {
     id: string;
     applicationId: string;
+    /** PRIMARY at accept; TIER_TOP_UP = half→full delta after placement. */
+    kind?: 'PRIMARY' | 'TIER_TOP_UP';
     jobPostingId: string;
     /** Match fee before HST. */
     amountCents: number;

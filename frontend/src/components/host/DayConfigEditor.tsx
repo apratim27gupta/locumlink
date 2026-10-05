@@ -5,8 +5,9 @@ import {
   addClockHours,
   HALF_SLOT_HOURS,
   FULL_SLOT_HOURS,
+  MAX_HALF_SLOT_HOURS,
   halfSlotsOverlap,
-  slotEndInvalid,
+  slotEndValidationError,
 } from '@/lib/jobSchedule';
 import { hostJobFieldInp, hostJobFieldLbl } from '@/lib/hostJobPostingForm';
 
@@ -53,6 +54,7 @@ function EndTimeField({
   onChange,
   fieldInp,
   lbl,
+  slotKind,
 }: {
   start: string;
   defaultEnd: string | null;
@@ -60,9 +62,10 @@ function EndTimeField({
   onChange: (value: string | null) => void;
   fieldInp: React.CSSProperties;
   lbl: React.CSSProperties;
+  slotKind?: SlotKindOrEmpty;
 }) {
   const custom = Boolean(override?.trim());
-  const invalid = slotEndInvalid(start, override);
+  const error = slotEndValidationError(start, override, { slotKind });
   return (
     <div style={{ marginTop: 8 }}>
       <label style={lbl}>End time</label>
@@ -97,13 +100,15 @@ function EndTimeField({
               Reset
             </button>
           </>
+        ) : slotKind === 'HALF' ? (
+          `Defaults to ${HALF_SLOT_HOURS} hours; half-day can be at most ${MAX_HALF_SLOT_HOURS} hours.`
         ) : (
           'Defaults from start time; change if your clinic hours differ.'
         )}
       </div>
-      {invalid ? (
+      {error ? (
         <div style={{ fontSize: 12, color: '#B42318', marginTop: 4, fontWeight: 600 }}>
-          End time must be after start time.
+          {error}
         </div>
       ) : null}
     </div>
@@ -176,6 +181,7 @@ export function DayConfigEditor({
     defaultEnd: string | null,
     override: string | null | undefined,
     onChange: ((value: string | null) => void) | undefined,
+    kind: SlotKindOrEmpty,
   ) =>
     onChange ? (
       <EndTimeField
@@ -185,6 +191,7 @@ export function DayConfigEditor({
         onChange={onChange}
         fieldInp={fieldInp}
         lbl={lbl}
+        slotKind={kind}
       />
     ) : (
       <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
@@ -231,7 +238,7 @@ export function DayConfigEditor({
         >
           <div>Half day</div>
           <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.8, marginTop: 2 }}>
-            3.5 hours · up to two slots
+            {HALF_SLOT_HOURS} hours default · max {MAX_HALF_SLOT_HOURS} hrs · up to two slots
           </div>
         </button>
       </div>
@@ -245,7 +252,7 @@ export function DayConfigEditor({
             value={startTime}
             onChange={(e) => onStartChange(e.target.value)}
           />
-          {endField(startTime, fullEnd, endOverride, onEndChange)}
+          {endField(startTime, fullEnd, endOverride, onEndChange, 'FULL')}
         </div>
       ) : null}
 
@@ -272,7 +279,7 @@ export function DayConfigEditor({
                 value={startTime}
                 onChange={(e) => onStartChange(e.target.value)}
               />
-              {endField(startTime, firstEnd, endOverride, onEndChange)}
+              {endField(startTime, firstEnd, endOverride, onEndChange, 'HALF')}
             </div>
           </div>
 
@@ -306,7 +313,7 @@ export function DayConfigEditor({
                   value={secondHalfStart}
                   onChange={(e) => onSecondChange(e.target.value)}
                 />
-                {endField(secondHalfStart, secondEnd, secondHalfEndOverride, onSecondEndChange)}
+                {endField(secondHalfStart, secondEnd, secondHalfEndOverride, onSecondEndChange, 'HALF')}
                 {overlaps ? (
                   <div
                     style={{

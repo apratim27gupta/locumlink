@@ -1615,9 +1615,9 @@ export default function LocumDashboard(props: {
                 Withdraw from this placement?
               </h3>
               <p style={{ margin: '0 0 12px', fontSize: 14, color: '#6B7280', lineHeight: 1.5 }}>
-                The host will be notified. {wasAccepted
-                  ? 'Because you already accepted: if the shift starts in 14 days or more and the host paid, LocumLink reviews a refund; if fewer than 14 days remain and the host paid, we search for a replacement before any refund.'
-                  : 'Your application will be withdrawn.'}
+                {wasAccepted
+                  ? 'The host will be notified and this placement will end.'
+                  : 'The host will be notified. Your application will be withdrawn.'}
               </p>
               <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
                 <button

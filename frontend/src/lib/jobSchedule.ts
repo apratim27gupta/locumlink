@@ -39,6 +39,8 @@ export type JobScheduleLike = {
 
 export const HALF_SLOT_HOURS = 3.5;
 export const FULL_SLOT_HOURS = 7;
+/** Host may stretch a half-day window up to this many hours; longer requires full-day. */
+export const MAX_HALF_SLOT_HOURS = 5;
 
 /** Preview end time from start HH:mm + hours (mirrors backend addClockHours). */
 export function addClockHours(startHm: string, hours: number): string | null {
@@ -78,11 +80,33 @@ export function effectiveSlotEnd(
 }
 
 /** True when an end override is set but not after its start. */
-export function slotEndInvalid(start: string, endOverride?: string | null): boolean {
-  if (!endOverride?.trim() || !start.trim()) return false;
+export function slotEndInvalid(
+  start: string,
+  endOverride?: string | null,
+  opts?: { slotKind?: 'HALF' | 'FULL' | '' },
+): boolean {
+  return slotEndValidationError(start, endOverride, opts) != null;
+}
+
+/** User-facing reason the end override is invalid, or null if ok. */
+export function slotEndValidationError(
+  start: string,
+  endOverride?: string | null,
+  opts?: { slotKind?: 'HALF' | 'FULL' | '' },
+): string | null {
+  if (!endOverride?.trim() || !start.trim()) return null;
   const s = clockToMinutes(start);
   const e = clockToMinutes(endOverride);
-  return s == null || e == null || e <= s;
+  if (s == null || e == null || e <= s) {
+    return 'End time must be after start time.';
+  }
+  if (opts?.slotKind === 'HALF') {
+    const hours = (e - s) / 60;
+    if (hours > MAX_HALF_SLOT_HOURS + 1e-9) {
+      return `Half-day slots can be at most ${MAX_HALF_SLOT_HOURS} hours. Switch to full-day for longer shifts.`;
+    }
+  }
+  return null;
 }
 
 /** True when two half-day windows overlap; ends default to start + 3.5h. */

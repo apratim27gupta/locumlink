@@ -1629,15 +1629,19 @@ export class LocumService {
     const covered = isPostingFullyCovered(posting, posting.applications);
     if (covered) {
       if (posting.status === 'ACTIVE') {
+        const nextStatus = postingStatusAfterLocumAccept(
+          posting.startDate,
+          posting.endDate,
+        );
         await this.prisma.jobPosting.update({
           where: { id: jobPostingId },
-          data: {
-            status: postingStatusAfterLocumAccept(
-              posting.startDate,
-              posting.endDate,
-            ),
-          },
+          data: { status: nextStatus },
         });
+        if (nextStatus === 'COMPLETED') {
+          await this.paymentsService
+            .reconcileTierTopUpsAfterCompletion([jobPostingId])
+            .catch(() => undefined);
+        }
       }
     } else if (
       posting.status === 'SCHEDULED' ||

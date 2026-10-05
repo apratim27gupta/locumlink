@@ -8,7 +8,7 @@ Scope: **host platform match fee only** ($5 / $10 CAD + 14% HST — TEMP staging
 
 | Table | Purpose |
 |-------|---------|
-| `match_fee_invoices` | One row per application cycle; amount, tax, status, due, Stripe IDs, `refundedCents`, replacement fields |
+| `match_fee_invoices` | One row per application cycle (`PRIMARY`); optional `TIER_TOP_UP` for half→full delta after placement; amount, tax, status, due, Stripe IDs, `refundedCents`, replacement fields |
 | `match_fee_payment_attempts` | One row per Checkout session started |
 | `match_fee_refunds` | Admin-initiated refunds (reservation + Stripe state) |
 | `match_fee_invoice_events` | Audit timeline |
@@ -59,6 +59,8 @@ sequenceDiagram
 **Data written:** `match_fee_invoices` (tier $5/$10 TEMP, `tax_cents`, `due_at` = min(7d, shift start)), `events`.
 
 **Replacement shortcut:** If posting already has `PENDING_REPLACEMENT` and accept is **after** `cancelledAt` → `markReplacementFound` (no second invoice).
+
+**Post-placement tier top-up:** When a posting becomes `COMPLETED` (hourly sync + daily safety net), if a confirmed locum’s live claimed hours are **full-day** but the PRIMARY invoice was **half-day**: unpaid PRIMARY → bump to full-day + notify host; paid PRIMARY → create `TIER_TOP_UP` for the fee delta (+ HST) + notify host (one top-up per application).
 
 ---
 
@@ -166,27 +168,26 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant L as New locum
+  participant Admin
   participant PS as PaymentsService
   participant DB
 
   Note over PS: After late locum cancel: PENDING_REPLACEMENT
 
-  alt Auto
+  alt Another locum accepts
     L->>PS: accept (after cancelledAt)
     PS->>PS: createMatchFeeInvoice → markReplacementFound
     PS->>DB: PAID, FOUND, replacement_application_id
-  else Admin Replacement found
-    Admin->>PS: setReplacementStatus FOUND
-    PS->>DB: find CONFIRMED accept after cancelledAt
-    PS->>PS: markReplacementFound
-  else Admin No replacement
-    Admin->>PS: setReplacementStatus NOT_FOUND
+  else No replacement accepts
+    Admin->>PS: Refund to payment method (resolveRefund)
     PS->>PS: processRefund NO_REPLACEMENT
     PS->>DB: replacement NOT_FOUND, refund when Stripe succeeds
   end
 ```
 
-**Guard:** No replacement status change while non-duplicate refund `REQUESTED`/`PENDING`.
+**Rule:** Replacement **FOUND** is set only when a real application accepts after cancel — not by admin buttons. Admin refunds if none accepts.
+
+**Guard:** No refund while non-duplicate refund `REQUESTED`/`PENDING`.
 
 ---
 
@@ -215,6 +216,8 @@ sequenceDiagram
 
 **Webhook idempotency:** `stripe_webhook_events.id` = Stripe event id; stale `PROCESSING` > 5 min reclaim; concurrent → 409 (Stripe retries).
 
+**Stripe retries:** If the endpoint does not return **2xx** (timeout, connection drop, 5xx, or our **409** while another worker holds the event), Stripe retries with backoff for up to **~3 days** in live mode. Invalid signature → **400** (no processing). Paid state is reconciled via webhooks, host **sync-payment**, and the **10 min** checkout reconcile job—not manual status edits.
+
 **Ignored:** livemode mismatch with API key mode.
 
 ---
@@ -224,7 +227,7 @@ sequenceDiagram
 | Area | Measure |
 |------|---------|
 | Authz | Host JWT + `hostProfileId` on all host invoice routes |
-| Authz | Admin JWT on refund / override / write-off |
+| Authz | Admin JWT on refund / write-off |
 | Amounts | Checkout line items from DB invoice, not client |
 | Pay confirm | Webhook verifies amount, currency, metadata, customer |
 | Double pay | Conditional invoice `updateMany` PENDING/OVERDUE → PAID once; extras DUPLICATE |
@@ -236,7 +239,6 @@ sequenceDiagram
 | Refund idempotency | Stripe key `match-fee-refund-{refundRowId}` |
 | Refund truth | Host REFUNDED + email only after Stripe `succeeded` |
 | Refund failure | `failRefund` decrements reservation, restores PENDING review if needed |
-| Admin override | Cannot set PAID/REFUNDED; requires note + timeline event |
 | Prod config | `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` required |
 | PCI | Stripe Checkout only (SAQ A friendly) |
 | Reconcile | 10 min checkout + refund safety net |
@@ -307,17 +309,14 @@ Use **Stripe test mode** (`sk_test_`, test cards `4242…`). Run backend + front
 | # | Steps | Expected |
 |---|--------|----------|
 | G1 | Late locum cancel → new locum accepts | Auto FOUND; no second invoice; replacement name on invoice |
-| G2 | Admin Replacement found (with confirmed replacement on posting) | PAID + linked application |
-| G3 | Admin Replacement found (no replacement) | Error message |
-| G4 | Admin No replacement | Refund starts; replacement buttons disabled while Stripe pending; Refund in progress on host |
-| G5 | Click Replacement found during pending refund | API conflict |
+| G2 | Late locum cancel → no accept → admin Refund to payment method | Refund starts; PENDING_REPLACEMENT → REFUNDED when Stripe succeeds |
+| G3 | Click refund during pending Stripe refund | API conflict |
 
-### H. Admin status tools
+### H. Admin review tools
 
 | # | Steps | Expected |
 |---|--------|----------|
-| H1 | Correct status (e.g. OVERDUE) with note | Timeline ADMIN_NOTE; cannot PAID/REFUNDED override |
-| H2 | Clear review flag | Host `matchFeeReviewRequired` cleared |
+| H1 | Clear review flag | Host `matchFeeReviewRequired` cleared |
 
 ### I. Regression / ops
 

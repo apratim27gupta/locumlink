@@ -1,6 +1,8 @@
 export const HALF_SLOT_HOURS = 3.5;
 export const FULL_SLOT_HOURS = 7;
 export const MAX_HOURS_PER_DAY = 7;
+/** Host may stretch a half-day window up to this many hours; longer requires full-day. */
+export const MAX_HALF_SLOT_HOURS = 5;
 
 /** Match fee: <= half-day total claimed hours. TEMP staging live QA: $5 (was $125). */
 export const MATCH_FEE_HALF_CENTS = 500;
@@ -74,6 +76,7 @@ export const MATCH_FEE_POLICY = {
     '$5 CAD when the locum claims up to 3.5 hours total.',
     '$10 CAD when the locum claims more than 3.5 hours total.',
     '14% HST is added to each match fee invoice.',
+    'If claimed hours rise from half-day to full-day by the time the placement ends, LocumLink invoices the extra tier amount (plus HST).',
   ],
   /** @deprecated Prefer matchFeePoints; kept for older clients. */
   matchFeeDescription:
@@ -106,9 +109,14 @@ export const MATCH_FEE_POLICY = {
         'When a replacement locum accepts, the original paid match fee stands - no second invoice.',
     },
     {
+      id: 'post_completion_tier_top_up',
+      summary:
+        'If claimed hours rise from half-day to full-day by the time the placement ends, LocumLink invoices the extra tier amount (plus HST).',
+    },
+    {
       id: 'post_completion_tickets',
       summary:
-        'Match fees stay as invoiced, during the placement. After the last shift on that invoice, you can raise a ticket about any concerns and LocumLink will follow up.',
+        'Match fees stay as invoiced during the placement. After the last shift on that invoice, you can raise a ticket about any concerns and LocumLink will follow up.',
     },
     {
       id: 'overdue_escalation',

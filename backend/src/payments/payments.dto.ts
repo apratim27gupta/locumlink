@@ -32,22 +32,6 @@ export class AdminWriteOffDto {
   adminNotes?: string;
 }
 
-export class AdminOverrideDto {
-  /** Money statuses (PAID / REFUNDED) are not allowed — use checkout or refund actions. */
-  @IsString()
-  @IsIn(['PENDING', 'OVERDUE', 'CANCELLED', 'CREDITED', 'PENDING_REPLACEMENT'])
-  status!:
-    | 'PENDING'
-    | 'OVERDUE'
-    | 'CANCELLED'
-    | 'CREDITED'
-    | 'PENDING_REPLACEMENT';
-
-  @IsString()
-  @MaxLength(2000)
-  adminNotes!: string;
-}
-
 export class AdminSendReminderDto {
   @IsBoolean()
   sendEmail!: boolean;

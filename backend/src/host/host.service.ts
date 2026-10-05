@@ -932,6 +932,9 @@ export class HostService {
         where: { id: { in: toComplete } },
         data: { status: 'COMPLETED' },
       });
+      await this.paymentsService
+        .reconcileTierTopUpsAfterCompletion(toComplete)
+        .catch(() => undefined);
     }
     if (toOngoing.length > 0) {
       await this.prisma.jobPosting.updateMany({

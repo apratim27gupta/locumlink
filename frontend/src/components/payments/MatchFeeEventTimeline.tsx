@@ -9,12 +9,6 @@ export type MatchFeeInvoiceEventItem = {
   occurredAt: string;
 };
 
-function formatEventDetail(detail: string): string {
-  return detail.replace(/\b(FULL|HALF) tier\b/g, (_, tier: string) =>
-    tier === 'HALF' ? 'Half tier' : 'Full tier',
-  );
-}
-
 export function MatchFeeEventTimeline({
   events,
   compact,
@@ -57,7 +51,7 @@ export function MatchFeeEventTimeline({
             <div style={{ fontWeight: 600 }}>{ev.label}</div>
             <div style={{ color: '#6B7280', marginTop: 2 }}>
               {new Date(ev.occurredAt).toLocaleString('en-CA')}
-              {ev.detail ? ` · ${formatEventDetail(ev.detail)}` : ''}
+              {ev.detail ? ` · ${ev.detail}` : ''}
             </div>
           </li>
         ))}

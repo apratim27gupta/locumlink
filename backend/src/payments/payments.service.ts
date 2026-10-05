@@ -3,6 +3,7 @@ import {
   MatchFeeCancelledBy,
   MatchFeeInvoiceEventActor,
   MatchFeeInvoiceEventType,
+  MatchFeeInvoiceKind,
   MatchFeeInvoiceStatus,
   MatchFeeRefundKind,
   MatchFeeRefundResolution,
@@ -73,15 +74,6 @@ const ORPHAN_ATTEMPT_AGE_MS = 15 * 60_000;
 const WEBHOOK_PROCESSING_STALE_MS = 5 * 60_000;
 /** Stripe keeps idempotency keys for 24h; after that a refund is only re-created if Stripe has no record of it. */
 const REFUND_RETRY_WINDOW_MS = 23 * 60 * 60_000;
-
-/** Statuses an admin may set via override (never PAID/REFUNDED — those need Stripe). */
-const ADMIN_OVERRIDE_STATUSES: MatchFeeInvoiceStatus[] = [
-  'PENDING',
-  'OVERDUE',
-  'CANCELLED',
-  'CREDITED',
-  'PENDING_REPLACEMENT',
-];
 
 type RefundAdmin = { id: string; email: string };
 
@@ -196,6 +188,8 @@ function formatPostingScheduleLabel(
 export type MatchFeeInvoiceDto = {
   id: string;
   applicationId: string;
+  /** PRIMARY at accept; TIER_TOP_UP = post-placement half→full delta. */
+  kind: MatchFeeInvoiceKind;
   jobPostingId: string;
   /** Match fee before HST. */
   amountCents: number;
@@ -268,8 +262,7 @@ function isFeeRetained(row: {
 }
 
 function formatCad(cents: number): string {
-  const dollars = cents / 100;
-  return `$${Number.isInteger(dollars) ? dollars.toFixed(0) : dollars.toFixed(2)}`;
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 function formatLocumName(
@@ -293,6 +286,7 @@ function mapInvoice(
   return {
     id: row.id,
     applicationId: row.applicationId,
+    kind: row.kind,
     jobPostingId: row.jobPostingId,
     amountCents: row.amountCents,
     taxRateBps: row.taxRateBps,
@@ -1003,7 +997,9 @@ export class PaymentsService {
 
   async createMatchFeeInvoice(applicationId: string): Promise<void> {
     const existingByApp = await this.prisma.matchFeeInvoice.findUnique({
-      where: { applicationId },
+      where: {
+        applicationId_kind: { applicationId, kind: 'PRIMARY' },
+      },
       select: {
         id: true,
         status: true,
@@ -1072,6 +1068,7 @@ export class PaymentsService {
     const seekingReplacement = await this.prisma.matchFeeInvoice.findFirst({
       where: {
         jobPostingId: app.jobPostingId,
+        kind: 'PRIMARY',
         id: existingByApp ? { not: existingByApp.id } : undefined,
         OR: [
           { status: 'PENDING_REPLACEMENT' },
@@ -1147,6 +1144,7 @@ export class PaymentsService {
       : await this.prisma.matchFeeInvoice.create({
           data: {
             applicationId,
+            kind: 'PRIMARY',
             ...invoiceData,
           },
           include: invoiceInclude,
@@ -1166,13 +1164,191 @@ export class PaymentsService {
       });
     }
 
-    const tierLabel = matchFeeTier === 'HALF' ? 'Half' : 'Full';
-    const priceText = `${tierLabel} tier, ${formatCad(amountCents)} + ${formatCad(taxCents)} HST = ${formatCad(amountCents + taxCents)} ${MATCH_FEE_CURRENCY}`;
+    const tierLabel = matchFeeTier === 'HALF' ? 'Half-day' : 'Full-day';
+    const priceText = `${tierLabel} match fee ${formatCad(amountCents)} + ${formatCad(taxCents)} HST = ${formatCad(amountCents + taxCents)}`;
     await this.recordMatchFeeEvent(invoice.id, 'INVOICED', {
       detail: existingByApp
-        ? `Re-invoiced after prior cycle closed - ${app.jobPosting.title} - ${claimedHours}h (${priceText})`
-        : `${app.jobPosting.title} - ${claimedHours}h (${priceText})`,
+        ? `Re-invoiced after prior cycle closed — ${app.jobPosting.title} · ${claimedHours}h · ${priceText}`
+        : `${app.jobPosting.title} · ${claimedHours}h · ${priceText}`,
     });
+  }
+
+  /**
+   * After a placement ends: if the locum's claimed hours rose from half-day to
+   * full-day since the PRIMARY invoice, either bump an unpaid primary or create
+   * a TIER_TOP_UP invoice for the fee delta and notify the host.
+   */
+  async reconcileTierTopUpsAfterCompletion(jobPostingIds?: string[]): Promise<{
+    topUpsCreated: number;
+    primariesUpdated: number;
+  }> {
+    const result = { topUpsCreated: 0, primariesUpdated: 0 };
+    const today = platformCalendarDateToday();
+    const candidates = await this.prisma.matchFeeInvoice.findMany({
+      where: {
+        kind: 'PRIMARY',
+        matchFeeTier: 'HALF',
+        status: { in: ['PENDING', 'OVERDUE', 'PAID'] },
+        ...(jobPostingIds?.length ? { jobPostingId: { in: jobPostingIds } } : {}),
+        application: {
+          status: 'CONFIRMED',
+          locumAcceptedAt: { not: null },
+        },
+      },
+      include: {
+        application: {
+          select: {
+            id: true,
+            availabilityKind: true,
+            availableDates: true,
+            requestedShiftIds: true,
+            shiftClaims: { select: { shiftId: true } },
+          },
+        },
+        jobPosting: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            endDate: true,
+            startDate: true,
+            startTime: true,
+            endTime: true,
+            scheduleModel: true,
+            hostProfileId: true,
+            shifts: {
+              select: {
+                id: true,
+                date: true,
+                shiftType: true,
+                startTime: true,
+                endTime: true,
+              },
+            },
+            hostProfile: {
+              select: {
+                userId: true,
+                practiceName: true,
+                user: { select: { email: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    for (const primary of candidates) {
+      const postingEnded =
+        primary.jobPosting.status === 'COMPLETED' ||
+        (primary.jobPosting.endDate != null &&
+          platformCalendarDateOf(primary.jobPosting.endDate) < today);
+      if (!postingEnded) continue;
+
+      const liveHours = computeApplicationClaimedHours(primary.jobPosting, {
+        availabilityKind: primary.application.availabilityKind,
+        availableDates: primary.application.availableDates,
+        requestedShiftIds: primary.application.requestedShiftIds,
+        shiftClaims: primary.application.shiftClaims,
+      });
+      if (matchFeeTierFromHours(liveHours) !== 'FULL') continue;
+
+      const fullFeeCents = MATCH_FEE_FULL_CENTS;
+      const deltaFeeCents = fullFeeCents - primary.amountCents;
+      if (deltaFeeCents <= 0) continue;
+
+      const taxRateBps =
+        primary.taxRateBps > 0 ? primary.taxRateBps : MATCH_FEE_HST_RATE_BPS;
+
+      if (primary.status === 'PENDING' || primary.status === 'OVERDUE') {
+        const taxCents = computeMatchFeeTaxCents(fullFeeCents, taxRateBps);
+        await this.prisma.matchFeeInvoice.update({
+          where: { id: primary.id },
+          data: {
+            amountCents: fullFeeCents,
+            taxCents,
+            taxRateBps,
+            claimedHours: liveHours,
+            matchFeeTier: 'FULL',
+          },
+        });
+        await this.recordMatchFeeEvent(primary.id, 'INVOICED', {
+          detail: `After placement ended, claimed hours rose to ${liveHours}h (full-day). Invoice updated to ${formatCad(fullFeeCents)} + ${formatCad(taxCents)} HST = ${formatCad(fullFeeCents + taxCents)}.`,
+        });
+        const host = primary.jobPosting.hostProfile;
+        if (host?.userId && host.user?.email) {
+          await this.notifications.notifyHostMatchFeeTierTopUp({
+            recipientId: host.userId,
+            recipientEmail: host.user.email,
+            jobTitle: primary.jobPosting.title,
+            dueAt: primary.dueAt,
+            invoiceId: primary.id,
+            applicationId: primary.applicationId,
+            amountCents: fullFeeCents + taxCents,
+            taxCents,
+            updatedExisting: true,
+          });
+        }
+        result.primariesUpdated += 1;
+        continue;
+      }
+
+      // PAID half-day → separate top-up for the delta.
+      const existingTopUp = await this.prisma.matchFeeInvoice.findUnique({
+        where: {
+          applicationId_kind: {
+            applicationId: primary.applicationId,
+            kind: 'TIER_TOP_UP',
+          },
+        },
+        select: { id: true },
+      });
+      if (existingTopUp) continue;
+
+      const taxCents = computeMatchFeeTaxCents(deltaFeeCents, taxRateBps);
+      const createdAt = new Date();
+      const dueAt = computeDueAt(createdAt, null);
+      const topUp = await this.prisma.matchFeeInvoice.create({
+        data: {
+          applicationId: primary.applicationId,
+          kind: 'TIER_TOP_UP',
+          hostProfileId: primary.hostProfileId,
+          jobPostingId: primary.jobPostingId,
+          amountCents: deltaFeeCents,
+          taxRateBps,
+          taxCents,
+          refundedCents: 0,
+          claimedHours: liveHours,
+          matchFeeTier: 'FULL',
+          currency: MATCH_FEE_CURRENCY,
+          dueAt,
+          status: 'PENDING',
+        },
+      });
+      await this.recordMatchFeeEvent(topUp.id, 'INVOICED', {
+        detail: `Tier top-up after placement ended — claimed hours ${liveHours}h (full-day). Additional match fee ${formatCad(deltaFeeCents)} + ${formatCad(taxCents)} HST = ${formatCad(deltaFeeCents + taxCents)} (original half-day invoice ${primary.id.slice(-8)} already paid).`,
+      });
+      await this.recordMatchFeeEvent(primary.id, 'ADMIN_NOTE', {
+        detail: `Tier top-up invoice ${topUp.id.slice(-8)} issued for ${formatCad(deltaFeeCents + taxCents)} after claimed hours rose to ${liveHours}h.`,
+      });
+
+      const host = primary.jobPosting.hostProfile;
+      if (host?.userId && host.user?.email) {
+        await this.notifications.notifyHostMatchFeeTierTopUp({
+          recipientId: host.userId,
+          recipientEmail: host.user.email,
+          jobTitle: primary.jobPosting.title,
+          dueAt,
+          invoiceId: topUp.id,
+          applicationId: primary.applicationId,
+          amountCents: deltaFeeCents + taxCents,
+          taxCents,
+          updatedExisting: false,
+        });
+      }
+      result.topUpsCreated += 1;
+    }
+
+    return result;
   }
 
   /**
@@ -1257,6 +1433,7 @@ export class PaymentsService {
     const replacementInvoice = await this.prisma.matchFeeInvoice.findFirst({
       where: {
         jobPostingId: app.jobPostingId,
+        kind: 'PRIMARY',
         OR: [
           { status: 'PENDING_REPLACEMENT' },
           {
@@ -1281,7 +1458,7 @@ export class PaymentsService {
   /** Fix invoices left in PENDING_REPLACEMENT after a locum already re-confirmed on the posting. */
   private async syncStuckReplacementInvoices(hostProfileId: string): Promise<void> {
     const stuck = await this.prisma.matchFeeInvoice.findMany({
-      where: { hostProfileId, status: 'PENDING_REPLACEMENT' },
+      where: { hostProfileId, status: 'PENDING_REPLACEMENT', kind: 'PRIMARY' },
       select: {
         id: true,
         jobPostingId: true,
@@ -1427,7 +1604,7 @@ export class PaymentsService {
             },
           },
         },
-        matchFeeInvoice: true,
+        matchFeeInvoices: { where: { kind: 'PRIMARY' }, take: 1 },
       },
     });
     if (!app) return;
@@ -1436,7 +1613,10 @@ export class PaymentsService {
     // original invoice they replaced, so their cancellation reopens that one.
     const invoice = await this.prisma.matchFeeInvoice.findFirst({
       where: {
-        OR: [{ applicationId: app.id }, { replacementApplicationId: app.id }],
+        OR: [
+          { applicationId: app.id, kind: 'PRIMARY' },
+          { replacementApplicationId: app.id },
+        ],
         status: { in: ['PENDING', 'OVERDUE', 'PAID', 'PENDING_REPLACEMENT'] },
       },
       orderBy: { createdAt: 'desc' },
@@ -2758,9 +2938,25 @@ export class PaymentsService {
       return { success: true };
     }
     if (invoice.status === 'PENDING_REPLACEMENT') {
-      throw new BadRequestException(
-        'Locum cancelled fewer than 14 days before start. Per policy, use "No replacement" after searching - that issues the host refund if none is found.',
-      );
+      // Replacement FOUND is set automatically when another locum accepts.
+      // Admin refunds here when no replacement accepted — not a manual "found / not found" decision.
+      await this.processRefund({
+        invoiceId,
+        kind: 'NO_REPLACEMENT',
+        admin,
+        adminNotes: notes,
+        cancelledBy: 'ADMIN',
+        reason: `No replacement locum accepted; refund to original payment method. ${notes}`,
+      });
+      await this.prisma.matchFeeInvoice.update({
+        where: { id: invoiceId },
+        data: { replacementStatus: 'NOT_FOUND' },
+      });
+      await this.recordMatchFeeEvent(invoiceId, 'REPLACEMENT_NOT_FOUND', {
+        detail: notes,
+        actor: 'ADMIN',
+      });
+      return { success: true };
     }
     if (invoice.status !== 'PAID') {
       throw new BadRequestException(
@@ -3074,52 +3270,10 @@ export class PaymentsService {
     return { success: true };
   }
 
-  async adminOverride(
-    invoiceId: string,
-    status: MatchFeeInvoiceStatus,
-    adminNotes: string,
-  ) {
-    const notes = requireRefundReason(adminNotes);
-    if (!ADMIN_OVERRIDE_STATUSES.includes(status)) {
-      throw new BadRequestException(
-        'Cannot mark an invoice paid or refunded via override. Use Stripe checkout or the refund actions so money movement stays in sync.',
-      );
-    }
-
-    const invoice = await this.prisma.matchFeeInvoice.findUnique({
-      where: { id: invoiceId },
-      select: { id: true, hostProfileId: true, status: true, adminNotes: true },
-    });
-    if (!invoice) throw new NotFoundException('Invoice not found');
-    if (invoice.status === status) {
-      throw new BadRequestException(`Invoice is already ${status}.`);
-    }
-
-    const previousStatus = invoice.status;
-    await this.prisma.matchFeeInvoice.update({
-      where: { id: invoiceId },
-      data: {
-        status,
-        adminNotes: invoice.adminNotes ? `${invoice.adminNotes}\n---\n${notes}` : notes,
-        cancelledAt: ['CANCELLED', 'CREDITED'].includes(status) ? new Date() : undefined,
-        cancelledBy: ['CANCELLED', 'CREDITED'].includes(status) ? 'ADMIN' : undefined,
-        cancellationReason: ['CANCELLED', 'CREDITED'].includes(status)
-          ? `Admin status override: ${previousStatus} → ${status}. ${notes}`
-          : undefined,
-      },
-    });
-    await this.recordMatchFeeEvent(invoiceId, 'ADMIN_NOTE', {
-      detail: `Status override: ${previousStatus} → ${status}. ${notes}`,
-      actor: 'ADMIN',
-    });
-    await this.syncHostReviewFlag(invoice.hostProfileId);
-    return { success: true };
-  }
-
   async getInvoiceSummaryForApplications(applicationIds: string[]) {
     if (applicationIds.length === 0) return new Map<string, MatchFeeInvoiceDto>();
     const rows = await this.prisma.matchFeeInvoice.findMany({
-      where: { applicationId: { in: applicationIds } },
+      where: { applicationId: { in: applicationIds }, kind: 'PRIMARY' },
       include: invoiceIncludeWithEvents,
     });
     return new Map(rows.map((row) => [row.applicationId, mapInvoice(row)]));

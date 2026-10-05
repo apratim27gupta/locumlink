@@ -36,7 +36,6 @@ import { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.
 import { PaymentsService } from '../payments/payments.service.js';
 import {
   AdminDiscretionaryRefundDto,
-  AdminOverrideDto,
   AdminReplacementStatusDto,
   AdminResolveRefundDto,
   AdminSendReminderDto,
@@ -459,15 +458,6 @@ export class AdminController {
     @Body() dto: AdminWriteOffDto,
   ) {
     return this.payments.writeOffInvoice(id, dto.adminNotes);
-  }
-
-  @Post('match-fees/:id/override')
-  @HttpCode(HttpStatus.OK)
-  async overrideMatchFee(
-    @Param('id') id: string,
-    @Body() dto: AdminOverrideDto,
-  ) {
-    return this.payments.adminOverride(id, dto.status, dto.adminNotes);
   }
 
   @Post('hosts/:hostProfileId/clear-match-fee-review')

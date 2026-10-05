@@ -225,7 +225,7 @@ export function hostMatchFeeRefundEligible(invoice: {
  * - locum withdraws, or
  * - host deletes the posting
  * and only when 14 days or more before start.
- * Late locum cancel → use "No replacement". Host late cancel → non-refundable.
+ * Late locum cancel → refund when no replacement locum accepts. Host late cancel → non-refundable.
  */
 export function adminMatchFeeRefundInFlight(invoice: {
   refunds?: Array<{ status: string; kind: string }> | null;
@@ -256,9 +256,9 @@ export function adminMatchFeeRefundEligibility(invoice: {
   }
   if (invoice.status === 'PENDING_REPLACEMENT') {
     return {
-      allowed: false,
+      allowed: true,
       reason:
-        'Locum cancelled fewer than 14 days before start. Per policy, try to find a replacement first. Use "No replacement" to refund the host if none is found.',
+        'Locum cancelled fewer than 14 days before start. A replacement is confirmed only when another locum accepts. Refund if none has accepted.',
     };
   }
   if (invoice.status !== 'PAID') {
@@ -296,7 +296,7 @@ export function adminMatchFeeRefundEligibility(invoice: {
       return {
         allowed: false,
         reason:
-          'Locum cancelled fewer than 14 days before start. Use the replacement search flow; refund only if no replacement is found.',
+          'Locum cancelled fewer than 14 days before start. Wait for a replacement accept, or refund if none accepts.',
       };
     }
     return {

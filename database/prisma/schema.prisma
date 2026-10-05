@@ -131,6 +131,12 @@ enum MatchFeeInvoiceStatus {
   PENDING_REPLACEMENT
 }
 
+/** PRIMARY = fee at accept; TIER_TOP_UP = half→full delta after placement ends. */
+enum MatchFeeInvoiceKind {
+  PRIMARY
+  TIER_TOP_UP
+}
+
 enum MatchFeeCancelledBy {
   HOST
   LOCUM
@@ -512,7 +518,7 @@ model Application {
   // Placement timestamp for fill rate + avg time-to-placement (L2-E7.1)
   placedAt        DateTime?         @map("placed_at")
 
-  matchFeeInvoice MatchFeeInvoice?
+  matchFeeInvoices MatchFeeInvoice[]
   /** Invoices where this application was accepted as the replacement locum. */
   matchFeeInvoicesAsReplacement MatchFeeInvoice[] @relation("MatchFeeInvoiceReplacement")
   shiftClaims     ApplicationShiftClaim[]
@@ -799,7 +805,9 @@ model ErrorLog {
 
 model MatchFeeInvoice {
   id                 String                    @id @default(cuid())
-  applicationId      String                    @unique @map("application_id")
+  applicationId      String                    @map("application_id")
+  /** PRIMARY at accept; TIER_TOP_UP for post-placement half→full delta. */
+  kind               MatchFeeInvoiceKind       @default(PRIMARY)
   hostProfileId      String                    @map("host_profile_id")
   jobPostingId       String                    @map("job_posting_id")
   amountCents        Int                       @default(25000) @map("amount_cents")
@@ -843,9 +851,11 @@ model MatchFeeInvoice {
   refunds     MatchFeeRefund[]
   supportTicket SupportTicket?
 
+  @@unique([applicationId, kind])
   @@index([hostProfileId, status])
   @@index([status, dueAt])
   @@index([escalatedAt])
+  @@index([jobPostingId, status])
   @@map("match_fee_invoices")
 }
 

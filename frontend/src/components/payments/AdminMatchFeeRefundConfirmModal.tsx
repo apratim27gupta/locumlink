@@ -10,7 +10,7 @@ import {
 
 export const REFUND_CONFIRM_WORD = 'Refund';
 
-type RefundConfirmMode = 'policy' | 'discretionary' | 'no_replacement' | 'duplicate';
+type RefundConfirmMode = 'policy' | 'discretionary' | 'duplicate';
 
 const MIN_NOTE_LENGTH = 3;
 
@@ -105,13 +105,11 @@ export function AdminMatchFeeRefundConfirmModal({
     (mode !== 'duplicate' || attempt?.status === 'DUPLICATE');
 
   const title =
-    mode === 'no_replacement'
-      ? 'Confirm no replacement - refund host?'
-      : mode === 'duplicate'
-        ? 'Refund extra payment?'
-        : mode === 'discretionary'
-          ? `Confirm refund of ${amountLabel}?`
-          : 'Confirm refund?';
+    mode === 'duplicate'
+      ? 'Refund extra payment?'
+      : mode === 'discretionary'
+        ? `Confirm refund of ${amountLabel}?`
+        : 'Confirm refund?';
 
   const body =
     mode === 'duplicate' ? (
@@ -120,10 +118,11 @@ export function AdminMatchFeeRefundConfirmModal({
         the extra payment of <strong>{amountLabel}</strong>
         {taxLabel} to the card it came from. The invoice stays paid.
       </>
-    ) : mode === 'no_replacement' ? (
+    ) : invoice.status === 'PENDING_REPLACEMENT' ? (
       <>
-        Locum cancelled fewer than 14 days before start for <strong>{invoice.jobTitle}</strong>. If no
-        replacement is found, refund <strong>{amountLabel}</strong>
+        Locum cancelled fewer than 14 days before start for <strong>{invoice.jobTitle}</strong>.
+        Replacement is only confirmed when another locum accepts. If none has, refund{' '}
+        <strong>{amountLabel}</strong>
         {taxLabel} to <strong>{invoice.hostPracticeName}</strong>.
       </>
     ) : (

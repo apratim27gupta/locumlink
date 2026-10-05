@@ -9,11 +9,9 @@ import {
   adminDiscretionaryMatchFeeRefund,
   adminListMatchFees,
   adminMatchFeeSummary,
-  adminOverrideMatchFee,
   adminRefundDuplicatePayment,
   adminResolveMatchFeeRefund,
   adminSendMatchFeeReminder,
-  adminSetMatchFeeReplacementStatus,
   adminWriteOffMatchFee,
   type AdminMatchFeeInvoice,
   type AdminMatchFeePaymentAttempt,
@@ -70,7 +68,7 @@ const REFUND_KIND_LABEL: Record<AdminMatchFeeRefund['kind'], string> = {
 
 type RefundConfirmState = {
   invoice: AdminMatchFeeInvoice;
-  mode: 'policy' | 'discretionary' | 'no_replacement' | 'duplicate';
+  mode: 'policy' | 'discretionary' | 'duplicate';
   amountCents?: number;
   attempt?: AdminMatchFeePaymentAttempt;
 };
@@ -141,8 +139,6 @@ export default function AdminPaymentsPage() {
     try {
       if (mode === 'policy') {
         await adminResolveMatchFeeRefund(invoice.id, params.notes);
-      } else if (mode === 'no_replacement') {
-        await adminSetMatchFeeReplacementStatus(invoice.id, 'NOT_FOUND', params.notes);
       } else if (mode === 'duplicate') {
         if (!refundConfirm.attempt) return;
         await adminRefundDuplicatePayment(refundConfirm.attempt.id, params.notes);
@@ -194,43 +190,6 @@ export default function AdminPaymentsPage() {
       return;
     }
     await runAction(invoice.id, () => adminWriteOffMatchFee(invoice.id, trimmed));
-  }
-
-  async function correctStatus(invoice: AdminMatchFeeInvoice) {
-    const statusRaw = await showPrompt({
-      title: 'Correct status',
-      message:
-        'Enter a non-money status: PENDING, OVERDUE, CANCELLED, CREDITED, or PENDING_REPLACEMENT. Paid and refunded must go through Stripe actions.',
-      placeholder: 'e.g. CANCELLED',
-      confirmLabel: 'Continue',
-      defaultValue: invoice.status === 'PAID' || invoice.status === 'REFUNDED' ? 'CANCELLED' : invoice.status,
-    });
-    if (statusRaw == null) return;
-    const status = statusRaw.trim().toUpperCase() as
-      | 'PENDING'
-      | 'OVERDUE'
-      | 'CANCELLED'
-      | 'CREDITED'
-      | 'PENDING_REPLACEMENT';
-    const allowed = ['PENDING', 'OVERDUE', 'CANCELLED', 'CREDITED', 'PENDING_REPLACEMENT'] as const;
-    if (!allowed.includes(status)) {
-      setError('Status must be PENDING, OVERDUE, CANCELLED, CREDITED, or PENDING_REPLACEMENT.');
-      return;
-    }
-    const notes = await showPrompt({
-      title: 'Reason for status correction',
-      message: `Change ${invoice.status} → ${status}. This is recorded on the invoice timeline.`,
-      placeholder: 'Why is this correction needed?',
-      confirmLabel: 'Update status',
-      multiline: true,
-    });
-    if (notes == null) return;
-    const trimmed = notes.trim();
-    if (trimmed.length < 3) {
-      setError('Add a short reason (at least 3 characters) before correcting status.');
-      return;
-    }
-    await runAction(invoice.id, () => adminOverrideMatchFee(invoice.id, status, trimmed));
   }
 
   const cardStyle: CSSProperties = {
@@ -379,7 +338,24 @@ export default function AdminPaymentsPage() {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                   <div style={{ flex: 1, minWidth: 220 }}>
-                    <div style={{ fontWeight: 700 }}>{invoice.jobTitle}</div>
+                    <div style={{ fontWeight: 700 }}>
+                      {invoice.jobTitle}
+                      {invoice.kind === 'TIER_TOP_UP' ? (
+                        <span
+                          style={{
+                            marginLeft: 8,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: '#92400E',
+                            background: '#FEF3C7',
+                            borderRadius: 6,
+                            padding: '2px 8px',
+                          }}
+                        >
+                          Full-day top-up
+                        </span>
+                      ) : null}
+                    </div>
                     <div style={{ fontSize: 13, color: '#6B7280' }}>
                       {invoice.hostPracticeName}
                       {invoice.hostEmail ? ` · ${invoice.hostEmail}` : ''}
@@ -631,46 +607,7 @@ export default function AdminPaymentsPage() {
                       onSend={(options) => void sendReminder(invoice, options)}
                     />
                   ) : null}
-                  {invoice.status === 'PENDING_REPLACEMENT' ? (
-                    <>
-                      <button
-                        type="button"
-                        className="btn btn-success"
-                        disabled={disabled || refundInFlight}
-                        title={
-                          refundInFlight
-                            ? 'Wait for the in-flight Stripe refund to finish.'
-                            : undefined
-                        }
-                        onClick={() =>
-                          void runAction(invoice.id, () =>
-                            adminSetMatchFeeReplacementStatus(invoice.id, 'FOUND'),
-                          )
-                        }
-                      >
-                        Replacement found
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        disabled={disabled || refundInFlight}
-                        title={
-                          refundInFlight
-                            ? 'A refund is already processing at Stripe.'
-                            : undefined
-                        }
-                        onClick={() =>
-                          setRefundConfirm({
-                            invoice,
-                            mode: 'no_replacement',
-                          })
-                        }
-                      >
-                        No replacement
-                      </button>
-                    </>
-                  ) : null}
-                  {invoice.status === 'PAID' ? (
+                  {invoice.status === 'PENDING_REPLACEMENT' || invoice.status === 'PAID' ? (
                     (() => {
                       const eligibility = adminMatchFeeRefundEligibility(invoice);
                       const remaining =
@@ -679,7 +616,9 @@ export default function AdminPaymentsPage() {
                         feeCents + hstFor(feeCents, invoice.taxRateBps);
                       const hstSuffix = invoice.taxRateBps > 0 ? ' + HST' : '';
                       const postCompletion =
-                        invoice.postingCompleted === true && remaining > 0;
+                        invoice.status === 'PAID' &&
+                        invoice.postingCompleted === true &&
+                        remaining > 0;
                       return (
                         <>
                           <button
@@ -754,15 +693,6 @@ export default function AdminPaymentsPage() {
                       Write off
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    disabled={disabled}
-                    title="Correct non-money status (not for paid/refunded)"
-                    onClick={() => void correctStatus(invoice)}
-                  >
-                    Correct status
-                  </button>
                   {invoice.matchFeeReviewRequired ? (
                     <button
                       type="button"

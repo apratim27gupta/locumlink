@@ -36,6 +36,7 @@ import {
     halfSlotsOverlap,
     effectiveSlotEnd,
     slotEndInvalid,
+    slotEndValidationError,
     type SlotEndOverrides,
     type SlotsDayEditorConfig,
 } from '@/lib/jobSchedule';
@@ -1286,11 +1287,30 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     };
     function slotEndsInvalid(c: {
         start: string;
+        slotKind?: SlotKindOrEmpty;
         secondHalfStart: string | null;
     } & SlotEndOverrides): boolean {
+        const kind = c.slotKind === 'HALF' || c.slotKind === 'FULL' ? c.slotKind : undefined;
         return (
-            slotEndInvalid(c.start, c.endOverride) ||
-            (c.secondHalfStart != null && slotEndInvalid(c.secondHalfStart, c.secondHalfEndOverride))
+            slotEndInvalid(c.start, c.endOverride, { slotKind: kind }) ||
+            (c.secondHalfStart != null &&
+                slotEndInvalid(c.secondHalfStart, c.secondHalfEndOverride, { slotKind: 'HALF' }))
+        );
+    }
+
+    function slotEndsError(c: {
+        start: string;
+        slotKind?: SlotKindOrEmpty;
+        secondHalfStart: string | null;
+    } & SlotEndOverrides): string | null {
+        const kind = c.slotKind === 'HALF' || c.slotKind === 'FULL' ? c.slotKind : undefined;
+        return (
+            slotEndValidationError(c.start, c.endOverride, { slotKind: kind }) ??
+            (c.secondHalfStart != null
+                ? slotEndValidationError(c.secondHalfStart, c.secondHalfEndOverride, {
+                      slotKind: 'HALF',
+                  })
+                : null)
         );
     }
 
@@ -1757,7 +1777,10 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                     return;
                 }
                 if (slotEndsInvalid({ ...r, start: r.startTime })) {
-                    setSubmitError('End time must be after start time.');
+                    setSubmitError(
+                        slotEndsError({ ...r, start: r.startTime }) ??
+                            'End time must be after start time.',
+                    );
                     return;
                 }
             }
@@ -1794,7 +1817,9 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                     return;
                 }
                 if (slotEndsInvalid(sharedDayConfig)) {
-                    setSubmitError('End time must be after start time.');
+                    setSubmitError(
+                        slotEndsError(sharedDayConfig) ?? 'End time must be after start time.',
+                    );
                     return;
                 }
             } else {
@@ -1821,7 +1846,10 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                         return;
                     }
                     if (slotEndsInvalid(o)) {
-                        setSubmitError(`End time must be after start time on ${fmtJobCalendarDate(d)}.`);
+                        setSubmitError(
+                            slotEndsError(o) ??
+                                `End time must be after start time on ${fmtJobCalendarDate(d)}.`,
+                        );
                         return;
                     }
                 }
@@ -1864,7 +1892,9 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
                 return;
             }
             if (slotEndsInvalid(sharedDayConfig)) {
-                setSubmitError('End time must be after start time.');
+                setSubmitError(
+                    slotEndsError(sharedDayConfig) ?? 'End time must be after start time.',
+                );
                 return;
             }
             const scheduleCheck = validateJobPostingSchedule({

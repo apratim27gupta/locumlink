@@ -321,6 +321,18 @@ export class SchedulerService {
           where: { id: { in: toComplete } },
           data: { status: 'COMPLETED' },
         });
+        try {
+          const topUps = await this.paymentsService.reconcileTierTopUpsAfterCompletion(
+            toComplete,
+          );
+          if (topUps.topUpsCreated + topUps.primariesUpdated > 0) {
+            this.logger.log(
+              `Match fee tier top-ups after completion: ${topUps.topUpsCreated} new, ${topUps.primariesUpdated} updated`,
+            );
+          }
+        } catch (err) {
+          this.logger.error('Match fee tier top-up reconcile after completion failed', err);
+        }
       }
       if (toOngoing.length > 0) {
         await this.prisma.jobPosting.updateMany({
@@ -348,6 +360,7 @@ export class SchedulerService {
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async handleMatchFeeInvoiceLifecycle(): Promise<void> {
     try {
+      await this.paymentsService.reconcileTierTopUpsAfterCompletion();
       await this.paymentsService.markOverdueInvoices();
       await this.paymentsService.sendRecurringOverdueReminders();
       await this.paymentsService.escalateLongOverdueInvoices();

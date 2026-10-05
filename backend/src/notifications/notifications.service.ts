@@ -1306,6 +1306,42 @@ export class NotificationsService {
     });
   }
 
+  /** Half→full after placement: new top-up invoice or bumped unpaid primary. */
+  async notifyHostMatchFeeTierTopUp(params: {
+    recipientId: string;
+    recipientEmail: string;
+    jobTitle: string;
+    dueAt: Date;
+    invoiceId: string;
+    applicationId: string;
+    amountCents: number;
+    taxCents?: number;
+    updatedExisting: boolean;
+  }): Promise<void> {
+    const dueStr = params.dueAt.toLocaleDateString('en-CA');
+    const fee = formatMatchFee(params.amountCents, params.taxCents);
+    const title = params.updatedExisting
+      ? 'Match fee updated to full-day tier'
+      : 'Additional match fee due';
+    const body = params.updatedExisting
+      ? `After the placement ended, claimed hours reached the full-day tier. Your match fee for ${params.jobTitle} is now ${fee}, due by ${dueStr}.`
+      : `After the placement ended, claimed hours reached the full-day tier. An additional ${fee} LocumLink match fee is due for ${params.jobTitle} by ${dueStr}.`;
+    await this.create({
+      recipientId: params.recipientId,
+      eventType: 'H_014_MATCH_FEE_INVOICED',
+      title,
+      body,
+      href: '/host/invoices',
+      priority: 'HIGH',
+      actionLabel: 'View Invoice',
+      referenceId: params.invoiceId,
+      referenceType: 'MatchFeeInvoice',
+      emailTo: params.recipientEmail,
+      emailSubject: `${title}: ${params.jobTitle}`,
+      emailBody: `${body} Sign in to pay from Match Fees.`,
+    });
+  }
+
   async notifyHostMatchFeeOverdue(params: {
     recipientId: string;
     recipientEmail: string;

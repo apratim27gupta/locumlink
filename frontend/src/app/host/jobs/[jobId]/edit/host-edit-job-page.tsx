@@ -58,6 +58,7 @@ import {
   halfSlotsOverlap,
   effectiveSlotEnd,
   slotEndInvalid,
+  slotEndValidationError,
   type JobScheduleLike,
   type SlotEndOverrides,
   type SlotsDayEditorConfig,
@@ -241,11 +242,30 @@ export default function HostEditJobPage(props: {
   };
   function slotEndsInvalid(c: {
     start: string;
+    slotKind?: SlotKindOrEmpty;
     secondHalfStart: string | null;
   } & SlotEndOverrides): boolean {
+    const kind = c.slotKind === 'HALF' || c.slotKind === 'FULL' ? c.slotKind : undefined;
     return (
-      slotEndInvalid(c.start, c.endOverride) ||
-      (c.secondHalfStart != null && slotEndInvalid(c.secondHalfStart, c.secondHalfEndOverride))
+      slotEndInvalid(c.start, c.endOverride, { slotKind: kind }) ||
+      (c.secondHalfStart != null &&
+        slotEndInvalid(c.secondHalfStart, c.secondHalfEndOverride, { slotKind: 'HALF' }))
+    );
+  }
+
+  function slotEndsError(c: {
+    start: string;
+    slotKind?: SlotKindOrEmpty;
+    secondHalfStart: string | null;
+  } & SlotEndOverrides): string | null {
+    const kind = c.slotKind === 'HALF' || c.slotKind === 'FULL' ? c.slotKind : undefined;
+    return (
+      slotEndValidationError(c.start, c.endOverride, { slotKind: kind }) ??
+      (c.secondHalfStart != null
+        ? slotEndValidationError(c.secondHalfStart, c.secondHalfEndOverride, {
+            slotKind: 'HALF',
+          })
+        : null)
     );
   }
 
@@ -293,7 +313,7 @@ export default function HostEditJobPage(props: {
     ) {
       return false;
     }
-    if (slotEndsInvalid({ start: startTime, secondHalfStart, endOverride, secondHalfEndOverride }))
+    if (slotEndsInvalid({ start: startTime, slotKind, secondHalfStart, endOverride, secondHalfEndOverride }))
       return false;
     return true;
   }
@@ -1235,7 +1255,10 @@ export default function HostEditJobPage(props: {
             throw new Error('validation');
           }
           if (slotEndsInvalid({ ...r, start: r.startTime })) {
-            setErr('End time must be after start time.');
+            setErr(
+              slotEndsError({ ...r, start: r.startTime }) ??
+                'End time must be after start time.',
+            );
             throw new Error('validation');
           }
         }
@@ -1276,7 +1299,9 @@ export default function HostEditJobPage(props: {
             throw new Error('validation');
           }
           if (slotEndsInvalid(sharedDayConfig)) {
-            setErr('End time must be after start time.');
+            setErr(
+              slotEndsError(sharedDayConfig) ?? 'End time must be after start time.',
+            );
             throw new Error('validation');
           }
         } else {
@@ -1305,7 +1330,10 @@ export default function HostEditJobPage(props: {
               throw new Error('validation');
             }
             if (slotEndsInvalid(o)) {
-              setErr(`End time must be after start time on ${fmtJobCalendarDate(d)}.`);
+              setErr(
+                slotEndsError(o) ??
+                  `End time must be after start time on ${fmtJobCalendarDate(d)}.`,
+              );
               throw new Error('validation');
             }
           }
@@ -1347,7 +1375,9 @@ export default function HostEditJobPage(props: {
           throw new Error('validation');
         }
         if (slotEndsInvalid(sharedDayConfig)) {
-          setErr('End time must be after start time.');
+          setErr(
+            slotEndsError(sharedDayConfig) ?? 'End time must be after start time.',
+          );
           throw new Error('validation');
         }
         const scheduleCheck = validateJobPostingSchedule({

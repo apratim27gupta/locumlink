@@ -12,6 +12,7 @@ export {
   MatchFeeCancelledBy,
   MatchFeeInvoiceEventActor,
   MatchFeeInvoiceEventType,
+  MatchFeeInvoiceKind,
   MatchFeeInvoiceStatus,
   MatchFeeRefundResolution,
   MatchFeeReplacementStatus,

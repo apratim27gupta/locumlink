@@ -68,7 +68,7 @@ describe('Journey - Stripe match fee payments', () => {
       .patch(`/api/locum/applications/${application.id}/respond`, { response: 'accept' })
       .expect(200);
     const invoice = await getTestDb().matchFeeInvoice.findUniqueOrThrow({
-      where: { applicationId: application.id },
+      where: { applicationId_kind: { applicationId: application.id, kind: 'PRIMARY' } },
     });
     return { host, hostHttp, locum, application, invoice };
   }
