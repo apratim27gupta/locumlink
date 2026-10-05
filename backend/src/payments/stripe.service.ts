@@ -28,7 +28,9 @@ export class StripeService {
       this.config.get<string>('ALLOWED_ORIGINS')?.split(',')[0]?.trim() ??
       'http://localhost:3001'
     ).replace(/\/$/, '');
-    this.liveMode = Boolean(secretKey?.startsWith('sk_live_'));
+    this.liveMode = Boolean(
+      secretKey?.startsWith('sk_live_') || secretKey?.startsWith('rk_live_'),
+    );
 
     const configuredExpiry = Number(
       this.config.get<string>('STRIPE_CHECKOUT_EXPIRY_MINUTES'),
