@@ -146,6 +146,12 @@ if [[ "${SKIP_WEB:-0}" != "1" ]]; then
       # Reuse DB/JWT/Supabase from the API env file if keys exist
       grep -E '^(DATABASE_URL|JWT_SECRET|SUPABASE_URL|SUPABASE_ANON_KEY):' "${ENV_FILE}" || true
     } > "${WEB_ENV}"
+    # Clear secret-typed vars first; gcloud rejects literal JWT_SECRET if it was a secret.
+    gcloud run services update "${WEB_SERVICE}" \
+      --project="${GCP_PROJECT}" \
+      --region="${GCP_REGION}" \
+      --clear-secrets \
+      --quiet || true
     gcloud run deploy "${WEB_SERVICE}" \
       --project="${GCP_PROJECT}" \
       --region="${GCP_REGION}" \
