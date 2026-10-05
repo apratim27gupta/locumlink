@@ -1,6 +1,6 @@
 # Match fee + HST — flows, data, Stripe, safety, manual tests
 
-Scope: **host platform match fee only** ($125 / $250 CAD + 14% HST). Not locum clinical pay or Stripe Connect.
+Scope: **host platform match fee only** ($5 / $10 CAD + 14% HST — TEMP staging live QA; production rates were $125 / $250). Not locum clinical pay or Stripe Connect.
 
 ---
 
@@ -56,7 +56,7 @@ sequenceDiagram
   PS->>N: H_014 host invoice due
 ```
 
-**Data written:** `match_fee_invoices` (tier $125/$250, `tax_cents`, `due_at` = min(7d, shift start)), `events`.
+**Data written:** `match_fee_invoices` (tier $5/$10 TEMP, `tax_cents`, `due_at` = min(7d, shift start)), `events`.
 
 **Replacement shortcut:** If posting already has `PENDING_REPLACEMENT` and accept is **after** `cancelledAt` → `markReplacementFound` (no second invoice).
 
@@ -253,7 +253,7 @@ Use **Stripe test mode** (`sk_test_`, test cards `4242…`). Run backend + front
 | # | Steps | Expected |
 |---|--------|----------|
 | A1 | Locum accepts confirmed match | Host gets invoice PENDING; event INVOICED; due date shown |
-| A2 | Half-day vs full-day hours | $125 vs $250 + HST on invoice |
+| A2 | Half-day vs full-day hours | $5 vs $10 + HST on invoice |
 | A3 | Open Match Fees policy modal | Copy matches API policy |
 
 ### B. Pay
@@ -299,7 +299,7 @@ Use **Stripe test mode** (`sk_test_`, test cards `4242…`). Run backend + front
 | F2 | Double-click approve | Second request conflict |
 | F3 | Approve while Stripe pending (test card delay) | Second approve blocked; invoice stays PAID |
 | F4 | Stripe refund failed webhook | REFUND_FAILED; cents released; PAID + pending review restored |
-| F5 | Discretionary $125/$250 post-completion | Partial/full per remaining |
+| F5 | Discretionary $5/$10 post-completion | Partial/full per remaining |
 | F6 | Duplicate payment row | Refund extra payment only |
 
 ### G. Replacement

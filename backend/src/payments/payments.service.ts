@@ -463,8 +463,8 @@ export class PaymentsService {
       paymentMethods,
       emphasis:
         role === 'LOCUM'
-          ? 'LocumLink is free for locums. The host pays a match fee ($125 or $250 CAD) after you accept a confirmed placement, based on total hours claimed.'
-          : 'Free to post. Pay $125 or $250 per matched locum when they accept your confirmed match. Fees stay as invoiced, during the placement. After the last shift on an invoice, you can raise a ticket if you have concerns and LocumLink will follow up.',
+          ? 'LocumLink is free for locums. The host pays a match fee ($5 or $10 CAD) after you accept a confirmed placement, based on total hours claimed.'
+          : 'Free to post. Pay $5 or $10 per matched locum when they accept your confirmed match. Fees stay as invoiced, during the placement. After the last shift on an invoice, you can raise a ticket if you have concerns and LocumLink will follow up.',
     };
   }
 
@@ -2757,7 +2757,7 @@ export class PaymentsService {
   }
 
   /**
-   * Post-completion discretionary refund ($125 or $250). Host tickets surface
+   * Post-completion discretionary refund (half or full match-fee tier). Host tickets surface
    * the issue; admin chooses the amount. Invoice must be PAID and posting ended.
    */
   async discretionaryRefund(
@@ -2775,7 +2775,9 @@ export class PaymentsService {
       params.amountCents !== MATCH_FEE_HALF_CENTS &&
       params.amountCents !== MATCH_FEE_FULL_CENTS
     ) {
-      throw new BadRequestException('Refund amount must be $125 or $250.');
+      throw new BadRequestException(
+        `Refund amount must be $${MATCH_FEE_HALF_CENTS / 100} or $${MATCH_FEE_FULL_CENTS / 100}.`,
+      );
     }
 
     const invoice = await this.prisma.matchFeeInvoice.findUnique({

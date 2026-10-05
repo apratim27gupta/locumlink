@@ -19,7 +19,7 @@ type AdminMatchFeeRefundConfirmModalProps = {
   open: boolean;
   busy: boolean;
   mode: RefundConfirmMode;
-  /** Required for discretionary mode: the fee portion ($125 or $250); HST is added on top. */
+  /** Required for discretionary mode: the fee portion ($5 or $10); HST is added on top. */
   amountCents?: number;
   /** Required for duplicate mode: the extra payment to refund. */
   attempt?: AdminMatchFeePaymentAttempt | null;
@@ -101,7 +101,7 @@ export function AdminMatchFeeRefundConfirmModal({
     notesOk &&
     refundCents > 0 &&
     (mode !== 'policy' || eligibility.allowed) &&
-    (mode !== 'discretionary' || (amountCents === 12500 || amountCents === 25000)) &&
+    (mode !== 'discretionary' || (amountCents === 500 || amountCents === 1000)) &&
     (mode !== 'duplicate' || attempt?.status === 'DUPLICATE');
 
   const title =

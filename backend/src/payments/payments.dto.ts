@@ -56,7 +56,7 @@ export class AdminSendReminderDto {
   sendNotification!: boolean;
 }
 
-/** Post-completion discretionary refund: $125 or $250 (cents). */
+/** Post-completion discretionary refund: half or full match fee (cents). */
 export class AdminDiscretionaryRefundDto {
   @IsInt()
   @IsIn([MATCH_FEE_HALF_CENTS, MATCH_FEE_FULL_CENTS])

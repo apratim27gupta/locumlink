@@ -380,7 +380,7 @@ export async function adminRefundDuplicatePayment(
 
 export async function adminDiscretionaryMatchFeeRefund(
   invoiceId: string,
-  params: { amountCents: 12500 | 25000; adminNotes?: string; ticketId?: string },
+  params: { amountCents: 500 | 1000; adminNotes?: string; ticketId?: string },
 ): Promise<{ success: boolean }> {
   return adminFetchJson(
     `/api/admin/match-fees/${encodeURIComponent(invoiceId)}/discretionary-refund`,

@@ -25,7 +25,7 @@ function fmtDate(iso: string): string {
 
 type RefundConfirmState = {
   ticket: AdminSupportTicket;
-  amountCents: 12500 | 25000;
+  amountCents: 500 | 1000;
 };
 
 export default function AdminTicketsPage() {
@@ -84,7 +84,7 @@ export default function AdminTicketsPage() {
     setError('');
     try {
       await adminDiscretionaryMatchFeeRefund(ticket.invoice!.id, {
-        amountCents: (params.amountCents ?? amountCents) as 12500 | 25000,
+        amountCents: (params.amountCents ?? amountCents) as 500 | 1000,
         ticketId: ticket.id,
         adminNotes: params.notes,
       });
@@ -180,8 +180,8 @@ export default function AdminTicketsPage() {
             const taxRateBps = ticket.invoice?.taxRateBps ?? 0;
             const withHst = (feeCents: number) => feeCents + hstFor(feeCents, taxRateBps);
             const hstSuffix = taxRateBps > 0 ? ' + HST' : '';
-            const can125 = remaining >= withHst(12500) && ticket.invoice?.status === 'PAID';
-            const can250 = remaining >= withHst(25000) && ticket.invoice?.status === 'PAID';
+            const can5 = remaining >= withHst(500) && ticket.invoice?.status === 'PAID';
+            const can10 = remaining >= withHst(1000) && ticket.invoice?.status === 'PAID';
             const timelineEvents = (ticket.invoice?.events ?? []).map((e) => ({
               id: e.id,
               eventType: e.eventType,
@@ -255,24 +255,24 @@ export default function AdminTicketsPage() {
 
                 {ticket.status === 'OPEN' ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
-                    {can125 ? (
+                    {can5 ? (
                       <button
                         type="button"
                         className="btn btn-secondary"
                         disabled={busy}
-                        onClick={() => setRefundConfirm({ ticket, amountCents: 12500 })}
+                        onClick={() => setRefundConfirm({ ticket, amountCents: 500 })}
                       >
-                        Refund $125{hstSuffix}
+                        Refund $5{hstSuffix}
                       </button>
                     ) : null}
-                    {can250 ? (
+                    {can10 ? (
                       <button
                         type="button"
                         className="btn btn-secondary"
                         disabled={busy}
-                        onClick={() => setRefundConfirm({ ticket, amountCents: 25000 })}
+                        onClick={() => setRefundConfirm({ ticket, amountCents: 1000 })}
                       >
-                        Refund $250{hstSuffix}
+                        Refund $10{hstSuffix}
                       </button>
                     ) : null}
                     <button

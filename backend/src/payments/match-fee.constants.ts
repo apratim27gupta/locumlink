@@ -2,10 +2,10 @@ export const HALF_SLOT_HOURS = 3.5;
 export const FULL_SLOT_HOURS = 7;
 export const MAX_HOURS_PER_DAY = 7;
 
-/** Match fee: <= half-day total claimed hours. */
-export const MATCH_FEE_HALF_CENTS = 12500;
-/** Match fee: more than half-day total claimed hours (2 halves, 1 full, or multi-day). */
-export const MATCH_FEE_FULL_CENTS = 25000;
+/** Match fee: <= half-day total claimed hours. TEMP staging live QA: $5 (was $125). */
+export const MATCH_FEE_HALF_CENTS = 500;
+/** Match fee: more than half-day total claimed hours. TEMP staging live QA: $10 (was $250). */
+export const MATCH_FEE_FULL_CENTS = 1000;
 /** @deprecated Prefer MATCH_FEE_FULL_CENTS / computeMatchFeeAmountCents. */
 export const MATCH_FEE_AMOUNT_CENTS = MATCH_FEE_FULL_CENTS;
 
@@ -48,7 +48,7 @@ export function isPostingGrandfatheredFromMatchFee(
   return postingCreatedDay < start;
 }
 
-/** $125 if total claimed hours <= 3.5, else $250. */
+/** $5 if total claimed hours <= 3.5, else $10 (TEMP staging live QA amounts). */
 export function computeMatchFeeAmountCents(totalHours: number): number {
   if (!Number.isFinite(totalHours) || totalHours <= HALF_SLOT_HOURS) {
     return MATCH_FEE_HALF_CENTS;
@@ -65,19 +65,19 @@ export function matchFeeTierFromHours(totalHours: number): MatchFeeTier {
 export const MATCH_FEE_POLICY = {
   locumFee: 'Free',
   hostPostingFee: 'Free to post',
-  matchFeeHalfCad: 125,
-  matchFeeFullCad: 250,
-  matchFeeAmountCad: 250,
+  matchFeeHalfCad: 5,
+  matchFeeFullCad: 10,
+  matchFeeAmountCad: 10,
   /** Discrete bullets shown under "Match fee". */
   matchFeePoints: [
     'When a locum confirms a match on your posting, LocumLink invoices a platform match fee per locum.',
-    '$125 CAD when the locum claims up to 3.5 hours total.',
-    '$250 CAD when the locum claims more than 3.5 hours total.',
+    '$5 CAD when the locum claims up to 3.5 hours total.',
+    '$10 CAD when the locum claims more than 3.5 hours total.',
     '14% HST is added to each match fee invoice.',
   ],
   /** @deprecated Prefer matchFeePoints; kept for older clients. */
   matchFeeDescription:
-    'When a locum confirms a match on your posting, a platform match fee is invoiced per locum: $125 CAD for up to 3.5 hours total claimed, or $250 CAD when the locum claims more than 3.5 hours. 14% HST is added to each invoice.',
+    'When a locum confirms a match on your posting, a platform match fee is invoiced per locum: $5 CAD for up to 3.5 hours total claimed, or $10 CAD when the locum claims more than 3.5 hours. 14% HST is added to each invoice.',
   perLocumFeeRule:
     'Each matched locum generates a separate invoice. Another locum on the same posting means another match fee at the same rates.',
   dueRule:

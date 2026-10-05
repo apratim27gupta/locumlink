@@ -360,8 +360,8 @@ function AppliedStatusInfo({ align = 'right' }: { align?: 'left' | 'right' }) {
             padding: 0,
             border: 'none',
             borderRadius: '50%',
-            background: open ? '#EEF0FB' : 'transparent',
-            color: '#3B4FD8',
+            background: open ? '#FEE2E2' : 'transparent',
+            color: '#DC2626',
             cursor: 'pointer',
         }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
