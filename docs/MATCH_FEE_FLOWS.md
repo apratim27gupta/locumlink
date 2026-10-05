@@ -106,7 +106,9 @@ sequenceDiagram
 | Actor | ≥14 days before start | &lt;14 days before start |
 |-------|----------------------|---------------------------|
 | Host | Paid → `PAID` + `refundResolution PENDING` + admin review | Paid → stay `PAID`, `FEE_NON_REFUNDABLE` |
-| Locum | Same refund review | Paid → `PENDING_REPLACEMENT` + `SEARCHING` |
+| Locum | Same refund review | Paid → `PENDING_REPLACEMENT` + `SEARCHING` (fee refundable if no replacement accepts) |
+
+**Tier top-up:** Post-placement `TIER_TOP_UP` invoices follow the same pay / cancel / refund rules as the primary match fee.
 | Either | Unpaid → `CANCELLED` | Unpaid → `CANCELLED` |
 
 **Triggers:** locum withdraw, host cancel match (applicants UI), job delete, admin.

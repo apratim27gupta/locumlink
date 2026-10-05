@@ -602,15 +602,15 @@ export function expandCalendarDateRange(
 }
 
 export type PostingDaysSource = {
-  startDate?: Date | null;
-  endDate?: Date | null;
+  startDate?: Date | string | null;
+  endDate?: Date | string | null;
   startTime?: string | null;
   endTime?: string | null;
   scheduleModel?: string | null;
   shifts?:
     | {
         id?: string;
-        date: Date;
+        date: Date | string;
         shiftType?: string | null;
         startTime?: Date | string | null;
         endTime?: Date | string | null;

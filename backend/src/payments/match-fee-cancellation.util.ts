@@ -28,9 +28,10 @@ export type CancellationPolicyResult = {
 };
 
 type PostingForDates = {
-  startDate: Date | string | null;
-  endDate: Date | string | null;
-  shifts?: { date: Date | string }[];
+  startDate?: Date | string | null;
+  endDate?: Date | string | null;
+  scheduleModel?: string | null;
+  shifts?: { date: Date | string; id?: string }[] | null;
 };
 
 type ApplicationForDates = {
@@ -134,7 +135,7 @@ export function evaluateCancellationPolicy(params: {
         invoiceStatus: wasPaid ? 'PENDING_REPLACEMENT' : 'CANCELLED',
         refundResolution: wasPaid ? 'PENDING' : 'NONE',
         replacementStatus: wasPaid ? 'SEARCHING' : 'NONE',
-        nonRefundable: wasPaid,
+        nonRefundable: false,
         reason:
           'Locum cancelled fewer than 14 days before start. LocumLink will seek a replacement before issuing a refund.',
       };

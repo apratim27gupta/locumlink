@@ -111,7 +111,7 @@ export const MATCH_FEE_POLICY = {
     {
       id: 'post_completion_tier_top_up',
       summary:
-        'If claimed hours rise from half-day to full-day by the time the placement ends, LocumLink invoices the extra tier amount (plus HST).',
+        'If claimed hours rise from half-day to full-day by the time the placement ends, LocumLink issues a separate top-up invoice for the fee difference (plus HST). That top-up follows the same payment and cancellation rules as the original match fee.',
     },
     {
       id: 'post_completion_tickets',

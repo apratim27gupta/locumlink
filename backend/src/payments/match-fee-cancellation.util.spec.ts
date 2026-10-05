@@ -58,6 +58,7 @@ describe('match-fee-cancellation.util', () => {
     });
     expect(result.invoiceStatus).toBe('PENDING_REPLACEMENT');
     expect(result.replacementStatus).toBe('SEARCHING');
+    expect(result.nonRefundable).toBe(false);
   });
 
   it('host early cancel boundary is 14 days or more', () => {
