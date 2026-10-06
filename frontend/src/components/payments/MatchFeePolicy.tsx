@@ -245,6 +245,8 @@ export function adminMatchFeeRefundEligibility(invoice: {
   cancellationReason?: string | null;
   refundPendingReview?: boolean;
   events?: Array<{ eventType: string }> | null;
+  /** TEMP testing flag from API when MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT is on. */
+  testingSkipLocumReplacement?: boolean;
 }): { allowed: boolean; reason: string } {
   if (invoice.refundPendingReview) {
     return {
@@ -292,6 +294,13 @@ export function adminMatchFeeRefundEligibility(invoice: {
     invoice.daysUntilStart < HOST_REFUND_MIN_DAYS_BEFORE_START
   ) {
     if (locumWithdrew) {
+      if (invoice.testingSkipLocumReplacement) {
+        return {
+          allowed: true,
+          reason:
+            'TESTING: Locum late cancel — replacement skipped; you may refund now.',
+        };
+      }
       return {
         allowed: false,
         reason:

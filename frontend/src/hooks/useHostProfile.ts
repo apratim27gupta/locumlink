@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import type { HostProfile } from '@/types';
 import { hostApi } from '@/lib/api';
 import { getToken } from '@/lib/auth';
-import { dispatchProfileUpdated } from '@/lib/profileUpdatedEvent';
+import { dispatchProfileUpdated, subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { useAuth } from '@/providers/AuthProvider';
 export function useHostProfile() {
     const { isLoading: authLoading, userId } = useAuth();
@@ -10,6 +10,27 @@ export function useHostProfile() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const refreshProfile = useCallback(async () => {
+        const token = getToken();
+        if (!token) {
+            setProfile(null);
+            setError(null);
+            setLoading(false);
+            return;
+        }
+        try {
+            const data = await hostApi.getProfile();
+            setProfile(data ?? null);
+            setError(null);
+        }
+        catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Failed to fetch profile';
+            setError(msg);
+            setProfile(null);
+        }
+    }, []);
+
     useEffect(() => {
         if (authLoading)
             return;
@@ -22,27 +43,21 @@ export function useHostProfile() {
         }
         let cancelled = false;
         setLoading(true);
-        hostApi
-            .getProfile()
-            .then((data) => {
-            if (!cancelled)
-                setProfile(data ?? null);
-        })
-            .catch((err) => {
-            if (!cancelled) {
-                const msg = typeof err?.message === 'string' ? err.message : 'Failed to fetch profile';
-                setError(msg);
-                setProfile(null);
-            }
-        })
-            .finally(() => {
+        void refreshProfile().finally(() => {
             if (!cancelled)
                 setLoading(false);
         });
         return () => {
             cancelled = true;
         };
-    }, [authLoading, userId]);
+    }, [authLoading, userId, refreshProfile]);
+
+    useEffect(() => {
+        return subscribeProfileUpdated(() => {
+            void refreshProfile();
+        });
+    }, [refreshProfile]);
+
     const saveProfile = useCallback(async (data: HostProfile) => {
         setSaving(true);
         setError(null);

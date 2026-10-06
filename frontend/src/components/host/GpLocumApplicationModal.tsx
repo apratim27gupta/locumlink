@@ -1,10 +1,29 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   hostApi,
   type GpLocumApplicationFields,
 } from '@/lib/api';
+import { subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
+
+/** Keep in sync with backend GP_LOCUM_APPLICATION_PROFILE_KEYS. */
+const PROFILE_FIELD_KEYS = [
+  'locumName',
+  'locumCpsns',
+  'locumMsiProviderNumber',
+  'locumMailingAddress',
+  'locumPracticeAddress',
+  'locumPhone',
+  'locumFax',
+  'locumEmail',
+  'hostName',
+  'hostMsiProviderNumber',
+  'hostPracticeAddress',
+  'hostPhone',
+  'hostFax',
+  'hostEmail',
+] as const satisfies ReadonlyArray<keyof GpLocumApplicationFields>;
 
 const overlay: CSSProperties = {
   position: 'fixed',
@@ -50,9 +69,9 @@ const input: CSSProperties = {
   padding: '8px 10px',
   borderRadius: 8,
   border: '1px solid #D1D5DB',
-  fontSize: 14,
+  fontSize: 13,
   fontFamily: 'inherit',
-  color: '#111827',
+  color: '#0f1523',
   background: '#fff',
 };
 
@@ -127,6 +146,8 @@ export function GpLocumApplicationModal({ applicationId, open, onClose }: Props)
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
 
   useEffect(() => {
     if (!open || !applicationId) return;
@@ -153,6 +174,30 @@ export function GpLocumApplicationModal({ applicationId, open, onClose }: Props)
     return () => {
       cancelled = true;
     };
+  }, [open, applicationId]);
+
+  // Live profile → form: refresh profile-sourced fields when host/locum profile is saved.
+  useEffect(() => {
+    if (!open || !applicationId) return;
+    return subscribeProfileUpdated(() => {
+      void (async () => {
+        try {
+          const res = await hostApi.getGpLocumApplication(applicationId);
+          setFilename(res.filename);
+          setSavedAt(res.savedAt);
+          setFields((prev) => {
+            if (!prev || !dirtyRef.current) return res.fields;
+            const next = { ...prev };
+            for (const key of PROFILE_FIELD_KEYS) {
+              next[key] = res.fields[key] as never;
+            }
+            return next;
+          });
+        } catch {
+          // Keep current form if refresh fails.
+        }
+      })();
+    });
   }, [open, applicationId]);
 
   if (!open || !applicationId) return null;
@@ -290,12 +335,6 @@ export function GpLocumApplicationModal({ applicationId, open, onClose }: Props)
                   lbl="Practice address"
                   value={fields.hostPracticeAddress}
                   onChange={(v) => set('hostPracticeAddress', v)}
-                  full
-                />
-                <Field
-                  lbl="Overhead payee (if different)"
-                  value={fields.overheadPayee}
-                  onChange={(v) => set('overheadPayee', v)}
                   full
                 />
               </div>

@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts, type PDFForm } from 'pdf-lib';
 
 /** Editable GP Locum Application values for one accepted match. */
 export type GpLocumApplicationFields = {
@@ -69,15 +69,23 @@ function templatePath(): string {
   return join(process.cwd(), 'assets', 'gp-locum-application-form.pdf');
 }
 
-function setText(form: ReturnType<PDFDocument['getForm']>, name: string, value: string) {
+/** Match template Physician Name field (`Text Field0`: 10pt). Size 0 = auto-fit and looks inconsistent. */
+const GP_LOCUM_APPLICATION_FONT_SIZE = 10;
+const GP_LOCUM_APPLICATION_DA = `/Helv ${GP_LOCUM_APPLICATION_FONT_SIZE} Tf 0 g`;
+
+function setText(form: PDFForm, name: string, value: string) {
   try {
-    form.getTextField(name).setText(value ?? '');
+    const field = form.getTextField(name);
+    // Template mixes /Arial 10 and Helv 0 (auto). pdf-lib setFontSize() throws on /Arial
+    // and previously aborted before setText — leaving the PDF blank. Normalize DA first.
+    field.acroField.setDefaultAppearance(GP_LOCUM_APPLICATION_DA);
+    field.setText(value ?? '');
   } catch {
     // Field missing on template variant — ignore.
   }
 }
 
-function checkBox(form: ReturnType<PDFDocument['getForm']>, name: string, on: boolean) {
+function checkBox(form: PDFForm, name: string, on: boolean) {
   try {
     const box = form.getCheckBox(name);
     if (on) box.check();
@@ -131,16 +139,47 @@ export function formatPostalAddress(parts: {
   return joined || fallback;
 }
 
+/**
+ * Fields always taken from live locum/host profile (and match) defaults.
+ * Saved drafts must not freeze these — profile edits should refresh every open/download.
+ */
+export const GP_LOCUM_APPLICATION_PROFILE_KEYS = [
+  'locumName',
+  'locumCpsns',
+  'locumMsiProviderNumber',
+  'locumMailingAddress',
+  'locumPracticeAddress',
+  'locumPhone',
+  'locumFax',
+  'locumEmail',
+  'hostName',
+  'hostMsiProviderNumber',
+  'hostPracticeAddress',
+  'hostPhone',
+  'hostFax',
+  'hostEmail',
+] as const satisfies ReadonlyArray<keyof GpLocumApplicationFields>;
+
+const GP_LOCUM_APPLICATION_PROFILE_KEY_SET = new Set<string>(
+  GP_LOCUM_APPLICATION_PROFILE_KEYS,
+);
+
 export function mergeGpLocumApplicationFields(
   base: GpLocumApplicationFields,
   draft: unknown,
+  options?: { applyProfileKeys?: boolean },
 ): GpLocumApplicationFields {
   if (!draft || typeof draft !== 'object' || Array.isArray(draft)) return { ...base };
+  const applyProfileKeys = options?.applyProfileKeys === true;
   const d = draft as Record<string, unknown>;
   const out: GpLocumApplicationFields = { ...base };
   for (const key of Object.keys(EMPTY_GP_LOCUM_APPLICATION_FIELDS) as (keyof GpLocumApplicationFields)[]) {
+    if (!applyProfileKeys && GP_LOCUM_APPLICATION_PROFILE_KEY_SET.has(key)) continue;
     const v = d[key];
-    if (typeof v === 'string') out[key] = v as never;
+    if (typeof v !== 'string') continue;
+    // Keep job-title default when an older draft stored "".
+    if (key === 'additionalInformation' && !v.trim()) continue;
+    out[key] = v as never;
   }
   if (out.serviceType !== 'office' && out.serviceType !== 'nursing_home') {
     out.serviceType = base.serviceType;
@@ -158,6 +197,7 @@ export async function buildGpLocumApplicationPdf(
   const bytes = readFileSync(templatePath());
   const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
   const form = pdf.getForm();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
 
   // Locum physician
   setText(form, 'Text Field0', input.locumName);
@@ -200,6 +240,7 @@ export async function buildGpLocumApplicationPdf(
   checkBox(form, 'Yes', input.previouslyProvided === 'yes');
   setText(form, 'Date', input.hostSignatureDate);
 
-  const out = await pdf.save({ updateFieldAppearances: true });
+  form.updateFieldAppearances(font);
+  const out = await pdf.save({ updateFieldAppearances: false });
   return Buffer.from(out);
 }

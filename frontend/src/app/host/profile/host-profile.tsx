@@ -41,8 +41,10 @@ import { getHostVerificationStatusBadge } from '@/lib/profileVerificationBadge';
 import {
   PROFILE_FORM_CAPITALIZE_CLASS,
   PROFILE_FORM_CAPITALIZE_CSS,
+  profileSectionHeadingStyle,
   profileTextCapitalize,
 } from '@/lib/profileFormTypography';
+import { getEmail } from '@/lib/auth';
 import { useAnchoredDropdownMenu } from '@/hooks/useAnchoredDropdownMenu';
 import { AnchoredDropdownPortal } from '@/components/ui/AnchoredDropdownMenu';
 
@@ -309,7 +311,7 @@ export default function HostProfilePage(props: {
   const [msiProviderNumber, setMsiProviderNumber] = useState('');
   const [hostPhone, setHostPhone] = useState('');
   const [hostFax, setHostFax] = useState('');
-  const [overheadPayee, setOverheadPayee] = useState('');
+  const [contactEmail, setContactEmail] = useState(getEmail() ?? '');
   const [licenseFile, setLicenseFile] = useState<string | null>(null);
   const [licenseLabel, setLicenseLabel] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -360,6 +362,7 @@ export default function HostProfilePage(props: {
   const [activeStep, setActiveStep] = useState(1);
   const [visited, setVisited] = useState<Set<number>>(new Set([1]));
   const stepSectionRefs = useRef<(HTMLDivElement | null)[]>([
+    null,
     null,
     null,
     null,
@@ -432,7 +435,6 @@ export default function HostProfilePage(props: {
     setMsiProviderNumber(profile.msiProviderNumber ?? '');
     setHostPhone(profile.phone ?? '');
     setHostFax(profile.fax ?? '');
-    setOverheadPayee(profile.overheadPayee ?? '');
     setLicenseFile(profile.licenseFile ?? null);
     setLicenseLabel(profile.licenseOriginalName ?? '');
     setSpecialties(
@@ -540,6 +542,7 @@ export default function HostProfilePage(props: {
       hasCpsnsNumber(cpsns) &&
       specialties.length
     ),
+    !!(hostPhone.trim() || hostFax.trim() || contactEmail.trim()),
     !!(clinicName && addr1 && postal && city && province),
     !!(resolvedPracticeType && numPhysicians && emr && patientVol),
     amenities.length > 0,
@@ -577,9 +580,10 @@ export default function HostProfilePage(props: {
 
   const steps = [
     { n: 1, label: 'Basic Information', sub: 'Your personal identity' },
-    { n: 2, label: 'Clinic Information', sub: 'Location & branding' },
-    { n: 3, label: 'Practice Details', sub: 'Patient and EMR info' },
-    { n: 4, label: 'Services offered', sub: 'Procedures & specialties' },
+    { n: 2, label: 'Contact details', sub: 'Phone & email' },
+    { n: 3, label: 'Practice address', sub: 'Clinic location' },
+    { n: 4, label: 'Practice Details', sub: 'Patient and EMR info' },
+    { n: 5, label: 'Services offered', sub: 'Procedures & specialties' },
   ];
 
   async function handleSave() {
@@ -592,7 +596,6 @@ export default function HostProfilePage(props: {
       msiProviderNumber,
       phone: hostPhone,
       fax: hostFax,
-      overheadPayee,
       speciality: specialties.join(', '),
       licenseFile,
       licenseOriginalName: licenseFile ? licenseLabel.trim() || null : null,
@@ -1126,25 +1129,20 @@ export default function HostProfilePage(props: {
                 }}
               >
                 {/* Name */}
-                <div
-                  style={{
-                    width: '100%',
-                    minWidth: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 8,
-                  }}
-                >
-                  <label style={lbl}>Name</label>
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div className="host-profile-form-row-2" style={formRowTwoCol}>
+                  <div style={formFieldCol}>
+                    <label style={lbl}>First Name</label>
                     <input
-                      style={{ ...fieldInput, flex: '1 1 120px', minWidth: 0 }}
+                      style={fieldInput}
                       value={hostFirst}
                       onChange={(e) => setHostFirst(e.target.value)}
                       placeholder="First name"
                     />
+                  </div>
+                  <div style={formFieldCol}>
+                    <label style={lbl}>Last Name</label>
                     <input
-                      style={{ ...fieldInput, flex: '1 1 120px', minWidth: 0 }}
+                      style={fieldInput}
                       value={hostLast}
                       onChange={(e) => setHostLast(e.target.value)}
                       placeholder="Last name"
@@ -1180,37 +1178,6 @@ export default function HostProfilePage(props: {
                     value={msiProviderNumber}
                     onChange={(e) => setMsiProviderNumber(e.target.value)}
                     placeholder="MSI Provider / Group #"
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: '1 1 160px' }}>
-                    <label style={lbl}>Phone</label>
-                    <input
-                      style={fieldInput}
-                      value={hostPhone}
-                      onChange={(e) => setHostPhone(e.target.value)}
-                      placeholder="Phone"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: '1 1 160px' }}>
-                    <label style={lbl}>Fax</label>
-                    <input
-                      style={fieldInput}
-                      value={hostFax}
-                      onChange={(e) => setHostFax(e.target.value)}
-                      placeholder="Fax"
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={lbl}>Overhead payee (if different)</label>
-                  <input
-                    style={fieldInput}
-                    value={overheadPayee}
-                    onChange={(e) => setOverheadPayee(e.target.value)}
-                    placeholder="Overhead payee (if different)"
                   />
                 </div>
 
@@ -1628,7 +1595,7 @@ export default function HostProfilePage(props: {
               </div>
             </div>
 
-            {/* ── Step 2: Clinic Information ── */}
+            {/* ── Step 2: Contact details ── */}
             <div
               id="host-profile-step-2"
               ref={(el) => {
@@ -1639,6 +1606,83 @@ export default function HostProfilePage(props: {
                 scrollMarginTop: 20,
               }}
               onClick={() => goToStep(2)}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  style={{ flexShrink: 0, color: stepSectionIconColor }}
+                  aria-hidden
+                >
+                  <path
+                    d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span className="profile-section-title" style={profileSectionHeadingStyle}>
+                  Contact details
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 16,
+                  width: '100%',
+                }}
+              >
+                <div style={formFieldCol}>
+                  <label style={lbl}>Phone number</label>
+                  <input
+                    style={fieldInput}
+                    value={hostPhone}
+                    onChange={(e) => setHostPhone(e.target.value)}
+                    placeholder="Phone number"
+                    type="tel"
+                    autoComplete="tel"
+                  />
+                </div>
+                <div style={formFieldCol}>
+                  <label style={lbl}>Fax</label>
+                  <input
+                    style={fieldInput}
+                    value={hostFax}
+                    onChange={(e) => setHostFax(e.target.value)}
+                    placeholder="Fax"
+                    type="tel"
+                    autoComplete="off"
+                  />
+                </div>
+                <div style={formFieldCol}>
+                  <label style={lbl}>Email</label>
+                  <input
+                    style={fieldInput}
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    placeholder="Email"
+                    autoComplete="email"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ── Step 3: Practice address ── */}
+            <div
+              id="host-profile-step-3"
+              ref={(el) => {
+                stepSectionRefs.current[2] = el;
+              }}
+              style={{
+                ...sectionCard(activeStep === 3, { gap: 16 }),
+                scrollMarginTop: 20,
+              }}
+              onClick={() => goToStep(3)}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <svg
@@ -1663,7 +1707,9 @@ export default function HostProfilePage(props: {
                     strokeLinejoin="round"
                   />
                 </svg>
-                <span className="profile-section-title" style={cardHeaderTitle}>Clinic Information</span>
+                <span className="profile-section-title" style={profileSectionHeadingStyle}>
+                  Practice address
+                </span>
               </div>
 
               <div
@@ -1843,17 +1889,17 @@ export default function HostProfilePage(props: {
               </div>
             </div>
 
-            {/* ── Step 3: Practice Details ── */}
+            {/* ── Step 4: Practice Details ── */}
             <div
-              id="host-profile-step-3"
+              id="host-profile-step-4"
               ref={(el) => {
-                stepSectionRefs.current[2] = el;
+                stepSectionRefs.current[3] = el;
               }}
               style={{
-                ...sectionCard(activeStep === 3, { gap: 24 }),
+                ...sectionCard(activeStep === 4, { gap: 24 }),
                 scrollMarginTop: 20,
               }}
-              onClick={() => goToStep(3)}
+              onClick={() => goToStep(4)}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <svg
@@ -2200,17 +2246,17 @@ export default function HostProfilePage(props: {
               </div>
             </div>
 
-            {/* ── Step 4: Services Offered ── */}
+            {/* ── Step 5: Services Offered ── */}
             <div
-              id="host-profile-step-4"
+              id="host-profile-step-5"
               ref={(el) => {
-                stepSectionRefs.current[3] = el;
+                stepSectionRefs.current[4] = el;
               }}
               style={{
-                ...sectionCard(activeStep === 4, { gap: 24, borderRadius: 4 }),
+                ...sectionCard(activeStep === 5, { gap: 24, borderRadius: 4 }),
                 scrollMarginTop: 20,
               }}
-              onClick={() => goToStep(4)}
+              onClick={() => goToStep(5)}
             >
               <div
                 style={{

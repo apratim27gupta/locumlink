@@ -3,8 +3,8 @@ import { createContext, useContext, useEffect, useState, ReactNode, } from 'reac
 import { authApi } from '@/lib/api';
 import { getSupabase } from '@/lib/supabaseClient';
 import { toUserFacingError } from '@/lib/userFacingError';
-import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, isProfileComplete, syncProfileCompleteCookies, popLastPath, peekLastPath, clearLastPath, activateRole, inferSessionRole, roleFromNestJwt, type Role, } from '@/lib/auth';
-import { checkProfileExistsOnServer, ensureProfileMarkedCompleteFromServer, } from '@/lib/profileCompleteSync';
+import { saveToken, saveRole, saveEmail, getRole, getToken, clearAuth, syncCookies, markProfileComplete, markProfileCompleteForRole, isProfileComplete, syncProfileCompleteCookies, popLastPath, peekLastPath, clearLastPath, activateRole, inferSessionRole, roleFromNestJwt, type Role, } from '@/lib/auth';
+import { checkProfileExistsOnServer, ensureProfileMarkedCompleteFromServer, syncProfileCompleteFromServerForRole, } from '@/lib/profileCompleteSync';
 import { getOAuthCallbackRedirect, isNativeShell, requestNativeOAuth } from '@/lib/nativeShell';
 interface AuthCtx {
     userId: string | null;
@@ -204,6 +204,27 @@ export function AuthProvider({ children }: {
         }
         return () => subscription?.unsubscribe();
     }, []);
+    useEffect(() => {
+        if (isLoading || !role)
+            return;
+        let cancelled = false;
+        void (async () => {
+            const token = getToken();
+            if (!token)
+                return;
+            const synced = await syncProfileCompleteFromServerForRole(role, token);
+            if (cancelled)
+                return;
+            if (synced) {
+                setProfileComplete(true);
+                return;
+            }
+            setProfileComplete(isProfileComplete());
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [role, isLoading]);
     async function sendOtp(
         email: string,
         chosenRole: Role,
@@ -359,7 +380,7 @@ export function AuthProvider({ children }: {
                 tokens.accessToken,
             );
             if (profileExists) {
-                markProfileComplete();
+                markProfileCompleteForRole(target);
                 syncCookies();
                 syncProfileCompleteCookies();
                 setProfileComplete(true);

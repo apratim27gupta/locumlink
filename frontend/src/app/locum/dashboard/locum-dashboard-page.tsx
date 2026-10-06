@@ -17,6 +17,7 @@ import type { LocumProfile } from '@/types';
 import { NameWithVerifiedShield } from '@/components/NameWithVerifiedShield';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 import { locumProfileCompletionPct } from '@/lib/locumProfileCompletion';
+import { subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
 import {
     formatLocalCalendarDateForDisplay,
     localCalendarDateToIso,
@@ -493,6 +494,19 @@ export default function LocumDashboard(props: {
             cancelled = true;
         };
     }, [authLoading, userId]);
+    useEffect(() => {
+        return subscribeProfileUpdated(() => {
+            void locumApi
+                .getProfile()
+                .then((data) => {
+                    if (data.exists && data.profile)
+                        setProfile(data.profile);
+                    else
+                        setProfile(null);
+                })
+                .catch(() => {});
+        });
+    }, []);
     const displayName = (() => {
         if (!profile)
             return 'Welcome Dr';

@@ -1280,6 +1280,10 @@ export default function LocumProfilePage(props: {
             <span>Location</span>
           </div>
 
+          <div className="locum-section-header" style={{ marginBottom: 12 }}>
+            <span>Mailing address</span>
+          </div>
+
           {/* Address Line 1 + 2 */}
           <div
             className="locum-form-row"
@@ -1461,14 +1465,10 @@ export default function LocumProfilePage(props: {
           </div>
 
           <div
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#6B7280',
-              marginBottom: 12,
-            }}
+            className="locum-section-header"
+            style={{ marginBottom: 12, marginTop: 4 }}
           >
-            Practice address (if different from mailing)
+            <span>Practice address</span>
           </div>
 
           <div

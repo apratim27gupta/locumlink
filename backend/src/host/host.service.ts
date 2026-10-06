@@ -1991,6 +1991,7 @@ export class HostService {
       overheadPayee: host.overheadPayee ?? '',
       datesWorked,
       serviceType: isNursingHome ? 'nursing_home' : 'office',
+      additionalInformation: (app.jobPosting.title ?? '').trim(),
     };
   }
 
@@ -2029,8 +2030,12 @@ export class HostService {
   }> {
     const app = await this.loadAcceptedApplicationForGpForm(userId, applicationId);
     const defaults = this.buildGpLocumApplicationDefaults(app);
+    // Draft may still contain stale profile snapshots; live defaults win for those keys.
     const previous = mergeGpLocumApplicationFields(defaults, app.gpLocumApplicationDraft);
-    const fields = mergeGpLocumApplicationFields(previous, dto);
+    // Explicit save payload may override profile keys for this application only.
+    const fields = mergeGpLocumApplicationFields(previous, dto, {
+      applyProfileKeys: true,
+    });
     const savedAt = new Date();
     await this.prisma.application.update({
       where: { id: applicationId },

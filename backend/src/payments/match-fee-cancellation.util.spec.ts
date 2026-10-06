@@ -61,6 +61,24 @@ describe('match-fee-cancellation.util', () => {
     expect(result.nonRefundable).toBe(false);
   });
 
+  it('testing flag: locum late cancel skips replacement and refunds', () => {
+    const prev = process.env.MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT;
+    process.env.MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT = '1';
+    try {
+      const result = evaluateCancellationPolicy({
+        cancelledBy: 'LOCUM',
+        wasPaid: true,
+        daysUntilStart: 5,
+      });
+      expect(result.invoiceStatus).toBe('REFUNDED');
+      expect(result.refundResolution).toBe('REFUND');
+      expect(result.replacementStatus).toBe('NONE');
+    } finally {
+      if (prev === undefined) delete process.env.MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT;
+      else process.env.MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT = prev;
+    }
+  });
+
   it('host early cancel boundary is 14 days or more', () => {
     const late = evaluateCancellationPolicy({
       cancelledBy: 'HOST',

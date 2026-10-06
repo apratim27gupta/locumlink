@@ -3,7 +3,9 @@ import {
     getToken,
     isProfileComplete,
     markProfileComplete,
+    markProfileCompleteForRole,
     syncProfileCompleteCookies,
+    syncCookies,
     type Role,
 } from '@/lib/auth';
 
@@ -37,6 +39,24 @@ export async function checkProfileExistsOnServer(
     }
 }
 
+/** Sync profile-complete flags for one role when the server already has a profile row. */
+export async function syncProfileCompleteFromServerForRole(
+    role: Role,
+    token?: string | null,
+): Promise<boolean> {
+    if (typeof window === 'undefined')
+        return false;
+    const tok = token ?? getToken();
+    if (!tok)
+        return false;
+    const exists = await checkProfileExistsOnServer(role, tok);
+    if (!exists)
+        return false;
+    markProfileCompleteForRole(role);
+    syncCookies();
+    return true;
+}
+
 /** Sync local profile-complete flags when the server already has a profile row. */
 export async function ensureProfileMarkedCompleteFromServer(): Promise<boolean> {
     if (typeof window === 'undefined')
@@ -49,10 +69,5 @@ export async function ensureProfileMarkedCompleteFromServer(): Promise<boolean> 
     const token = getToken();
     if (!role || !token)
         return false;
-    const exists = await checkProfileExistsOnServer(role, token);
-    if (!exists)
-        return false;
-    markProfileComplete();
-    syncProfileCompleteCookies();
-    return true;
+    return syncProfileCompleteFromServerForRole(role, token);
 }

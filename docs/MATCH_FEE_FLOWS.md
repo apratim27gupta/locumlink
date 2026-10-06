@@ -37,6 +37,8 @@ stateDiagram-v2
 **Virtual UI:** `Refund in progress` = admin review pending **or** Stripe refund `REQUESTED`/`PENDING`.  
 **Virtual UI:** `Fee retained` = `PAID` + `FEE_NON_REFUNDABLE` event (late host cancel).
 
+**TEMP testing override:** `MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT=1` on the API makes locum late cancel skip `PENDING_REPLACEMENT` and go straight to admin refund-pending (same as early cancel). Unset / `0` restores the replacement flow.
+
 ---
 
 ## 3. Flow A — Invoice creation (locum accept)

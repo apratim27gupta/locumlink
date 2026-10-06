@@ -7,6 +7,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import DashLayout, { NavIcon } from '@/components/DashLayout';
 import { getToken } from '@/lib/auth';
 import { ensureProfileMarkedCompleteFromServer } from '@/lib/profileCompleteSync';
+import { subscribeProfileUpdated } from '@/lib/profileUpdatedEvent';
 import { useAuth } from '@/providers/AuthProvider';
 import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
@@ -1469,6 +1470,17 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
             cancelled = true;
         };
     }, [practicePrefillDone]);
+    useEffect(() => {
+        return subscribeProfileUpdated(() => {
+            void hostApi
+                .getProfile()
+                .then((profile) => {
+                    setPractice(jobPracticeFromProfile(profile));
+                    setPracticePrefillDone(true);
+                })
+                .catch(() => {});
+        });
+    }, []);
     function addSpecificDate(iso: string) {
         const cal = calendarDatePartFromInput(iso);
         if (!cal)
@@ -2913,6 +2925,14 @@ export default function HostDashboard(props: {
         }
         void loadDashboardFromApi();
     }, [mounted, authLoading, userId, loadDashboardFromApi, router]);
+    useEffect(() => {
+        return subscribeProfileUpdated(() => {
+            void hostApi
+                .getProfile()
+                .then((p) => setProfile(p))
+                .catch(() => {});
+        });
+    }, []);
     useEffect(() => {
         if (!jobPostConfirmation) return;
         const onKey = (e: KeyboardEvent) => {

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Deploy staging or demo (API + web) to Cloud Run via Cloud Build (no local Docker).
 #
 # Prerequisites: see docs/CLOUDRUN_NONPROD.md
@@ -8,6 +8,13 @@
 #   ./scripts/deploy-cloudrun-nonprod.sh demo
 #   SKIP_WEB=1 ./scripts/deploy-cloudrun-nonprod.sh staging
 #   SKIP_API=1 ./scripts/deploy-cloudrun-nonprod.sh staging
+#
+# Default: **image-only** deploy. Cloud Run env/secrets already on the service
+# (including Console-set STRIPE_*, HST_*, etc.) are left untouched.
+#
+# Full env replace (rare; Editor accounts / bootstrap only):
+#   FORCE_ENV_REPLACE=1 ENV_VARS_FILE=/path/to/env.yaml ./scripts/deploy-cloudrun-nonprod.sh staging
+# Console-owned keys on the live service always win over the YAML file.
 #
 # Web build needs public Supabase values (baked into the Next bundle):
 #   NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... ./scripts/deploy-cloudrun-nonprod.sh staging
@@ -48,6 +55,14 @@ else
   SECRET_PREFIX="DEMO"
 fi
 
+# Keys set in Cloud Console (or prior revisions) must survive deploys.
+CONSOLE_OWNED_ENV_KEYS=(
+  STRIPE_SECRET_KEY
+  STRIPE_WEBHOOK_SECRET
+  HST_REGISTRATION_NUMBER
+  MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT
+)
+
 echo "==> Env:       ${ENV_NAME}"
 echo "==> Project:   ${GCP_PROJECT}"
 echo "==> Region:    ${GCP_REGION}"
@@ -55,13 +70,99 @@ echo "==> Origin:    ${PUBLIC_ORIGIN}"
 echo "==> Cloud SQL: ${CLOUD_SQL_CONNECTION}"
 echo "==> Build:     Cloud Build (no local Docker)"
 
-# Prefer env-vars-file when present (Editor accounts often cannot bind Secret Manager IAM).
 ENV_FILE="${ENV_VARS_FILE:-}"
-USE_SECRETS=1
-if [[ -n "${ENV_FILE}" && -f "${ENV_FILE}" ]]; then
-  USE_SECRETS=0
-  echo "==> Using env file: ${ENV_FILE}"
+FORCE_ENV_REPLACE="${FORCE_ENV_REPLACE:-0}"
+REPLACE_ENV=0
+if [[ "${FORCE_ENV_REPLACE}" == "1" ]]; then
+  if [[ -z "${ENV_FILE}" || ! -f "${ENV_FILE}" ]]; then
+    echo "ERROR: FORCE_ENV_REPLACE=1 requires ENV_VARS_FILE pointing at an existing YAML file." >&2
+    exit 1
+  fi
+  REPLACE_ENV=1
+  echo "==> FORCE_ENV_REPLACE: will apply ${ENV_FILE} (console-owned keys preserved from live service)"
+else
+  echo "==> Image-only deploy (Cloud Run env/secrets unchanged; Console is source of truth)"
+  if [[ -n "${ENV_FILE}" ]]; then
+    echo "==> Note: ENV_VARS_FILE is set but ignored unless FORCE_ENV_REPLACE=1"
+  fi
 fi
+
+merge_console_owned_into_env_file() {
+  local service="$1"
+  local yaml_path="$2"
+  local py
+  py="$(command -v python3 || command -v python || true)"
+  if [[ -z "${py}" ]]; then
+    echo "ERROR: python3/python required to preserve console-owned env keys" >&2
+    exit 1
+  fi
+  "${py}" - "$GCP_PROJECT" "$GCP_REGION" "$service" "$yaml_path" "${CONSOLE_OWNED_ENV_KEYS[@]}" <<'PY'
+import json, subprocess, sys
+from pathlib import Path
+
+project, region, service, yaml_path, *owned = sys.argv[1:]
+raw = subprocess.check_output(
+    [
+        "gcloud",
+        "run",
+        "services",
+        "describe",
+        service,
+        f"--project={project}",
+        f"--region={region}",
+        "--format=json",
+    ],
+    text=True,
+)
+svc = json.loads(raw)
+live = {}
+for e in svc["spec"]["template"]["spec"]["containers"][0].get("env") or []:
+    if e.get("value") is not None and e["name"] in owned:
+        live[e["name"]] = e["value"]
+
+path = Path(yaml_path)
+text = path.read_text(encoding="utf-8-sig")  # strip BOM
+lines_out = []
+seen = set()
+for line in text.splitlines():
+    if not line.strip() or line.lstrip().startswith("#"):
+        lines_out.append(line)
+        continue
+    key = line.split(":", 1)[0].strip()
+    if key in live:
+        esc = (
+            live[key]
+            .replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        )
+        lines_out.append(f'{key}: "{esc}"')
+        seen.add(key)
+        print(f"==> Preserved console-owned {key} from live {service}", file=sys.stderr)
+    else:
+        lines_out.append(line)
+for key, val in live.items():
+    if key in seen:
+        continue
+    esc = (
+        val.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
+    lines_out.append(f'{key}: "{esc}"')
+    print(f"==> Injected console-owned {key} from live {service}", file=sys.stderr)
+path.write_text("\n".join(lines_out) + "\n", encoding="utf-8")
+if not live:
+    print(
+        f"==> Warning: no console-owned keys found on live {service}; YAML values used as-is",
+        file=sys.stderr,
+    )
+PY
+}
 
 if [[ "${SKIP_API:-0}" != "1" ]]; then
   echo "==> Cloud Build: API image ${API_IMAGE}"
@@ -85,16 +186,18 @@ if [[ "${SKIP_API:-0}" != "1" ]]; then
     --allow-unauthenticated
     --add-cloudsql-instances="${CLOUD_SQL_CONNECTION}"
   )
-  if [[ "${USE_SECRETS}" == "1" ]]; then
-    DEPLOY_ARGS+=(
-      --set-env-vars="NODE_ENV=staging,FIXED_OTP_CODE=000000,ALLOWED_ORIGINS=${PUBLIC_ORIGIN},ADMIN_FRONTEND_REDIRECT_URL=${PUBLIC_ORIGIN}/admin,MAIL_FROM_NAME=Locum Link ${ENV_NAME}"
-      --set-secrets="DATABASE_URL=${SECRET_PREFIX}_DATABASE_URL:latest,JWT_SECRET=${SECRET_PREFIX}_JWT_SECRET:latest,ADMIN_JWT_SECRET=${SECRET_PREFIX}_ADMIN_JWT_SECRET:latest,SUPABASE_URL=${SECRET_PREFIX}_SUPABASE_URL:latest,SUPABASE_ANON_KEY=${SECRET_PREFIX}_SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=${SECRET_PREFIX}_SUPABASE_SERVICE_ROLE_KEY:latest,GCS_BUCKET_NAME=${SECRET_PREFIX}_GCS_BUCKET_NAME:latest,GCS_PROJECT_ID=${SECRET_PREFIX}_GCS_PROJECT_ID:latest,GCS_CREDENTIALS_JSON=${SECRET_PREFIX}_GCS_CREDENTIALS_JSON:latest,VAPID_PUBLIC_KEY=${SECRET_PREFIX}_VAPID_PUBLIC_KEY:latest,VAPID_PRIVATE_KEY=${SECRET_PREFIX}_VAPID_PRIVATE_KEY:latest,VAPID_EMAIL=${SECRET_PREFIX}_VAPID_EMAIL:latest,MAIL_FROM_ADDRESS=${SECRET_PREFIX}_MAIL_FROM_ADDRESS:latest"
-    )
+  if [[ "${REPLACE_ENV}" == "1" ]]; then
+    MERGED_ENV="$(mktemp)"
+    cp "${ENV_FILE}" "${MERGED_ENV}"
+    merge_console_owned_into_env_file "${API_SERVICE}" "${MERGED_ENV}"
+    # Env file exclusive of --set-env-vars / --set-secrets.
+    DEPLOY_ARGS+=(--env-vars-file="${MERGED_ENV}" --clear-secrets)
+    gcloud "${DEPLOY_ARGS[@]}"
+    rm -f "${MERGED_ENV}"
   else
-    # Env file must be exclusive of --set-env-vars / --set-secrets (gcloud allows only one env mode).
-    DEPLOY_ARGS+=(--env-vars-file="${ENV_FILE}" --clear-secrets)
+    # Image only — do not pass env/secret flags so Console values stay.
+    gcloud "${DEPLOY_ARGS[@]}"
   fi
-  gcloud "${DEPLOY_ARGS[@]}"
 
   API_URL="$(gcloud run services describe "${API_SERVICE}" \
     --project="${GCP_PROJECT}" \
@@ -119,54 +222,40 @@ if [[ "${SKIP_WEB:-0}" != "1" ]]; then
     --substitutions="_REGION=${GCP_REGION},_REPOSITORY=${ARTIFACT_REPO},_SERVICE=${WEB_SERVICE},_TAG=${COMMIT_SHA},_PUBLIC_ORIGIN=${PUBLIC_ORIGIN},_API_INTERNAL_URL=${API_URL},_NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL},_NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}"
 
   echo "==> Deploying ${WEB_SERVICE}..."
-  # Web needs DATABASE_URL + JWT for server routes; pass via env file or secrets.
-  if [[ "${USE_SECRETS}" == "1" ]]; then
-    gcloud run deploy "${WEB_SERVICE}" \
-      --project="${GCP_PROJECT}" \
-      --region="${GCP_REGION}" \
-      --platform=managed \
-      --image="${WEB_IMAGE}" \
-      --port=8080 \
-      --min-instances=0 \
-      --max-instances=3 \
-      --memory=1Gi \
-      --cpu=1 \
-      --allow-unauthenticated \
-      --add-cloudsql-instances="${CLOUD_SQL_CONNECTION}" \
-      --set-secrets="DATABASE_URL=${SECRET_PREFIX}_DATABASE_URL:latest,JWT_SECRET=${SECRET_PREFIX}_JWT_SECRET:latest,SUPABASE_URL=${SECRET_PREFIX}_SUPABASE_URL:latest,SUPABASE_ANON_KEY=${SECRET_PREFIX}_SUPABASE_ANON_KEY:latest" \
-      --set-env-vars="NODE_ENV=production,API_INTERNAL_URL=${API_URL},NEXT_PUBLIC_API_URL=${PUBLIC_ORIGIN},NEXT_PUBLIC_APP_URL=${PUBLIC_ORIGIN}"
-  else
-    # Merge runtime web vars into a temp env file (API_INTERNAL_URL etc.)
+  WEB_DEPLOY_ARGS=(
+    run deploy "${WEB_SERVICE}"
+    --project="${GCP_PROJECT}"
+    --region="${GCP_REGION}"
+    --platform=managed
+    --image="${WEB_IMAGE}"
+    --port=8080
+    --min-instances=0
+    --max-instances=3
+    --memory=1Gi
+    --cpu=1
+    --allow-unauthenticated
+    --add-cloudsql-instances="${CLOUD_SQL_CONNECTION}"
+  )
+  if [[ "${REPLACE_ENV}" == "1" ]]; then
     WEB_ENV="$(mktemp)"
     {
       echo "NODE_ENV: \"production\""
       echo "API_INTERNAL_URL: \"${API_URL}\""
       echo "NEXT_PUBLIC_API_URL: \"${PUBLIC_ORIGIN}\""
       echo "NEXT_PUBLIC_APP_URL: \"${PUBLIC_ORIGIN}\""
-      # Reuse DB/JWT/Supabase from the API env file if keys exist
       grep -E '^(DATABASE_URL|JWT_SECRET|SUPABASE_URL|SUPABASE_ANON_KEY):' "${ENV_FILE}" || true
     } > "${WEB_ENV}"
-    # Clear secret-typed vars first; gcloud rejects literal JWT_SECRET if it was a secret.
     gcloud run services update "${WEB_SERVICE}" \
       --project="${GCP_PROJECT}" \
       --region="${GCP_REGION}" \
       --clear-secrets \
       --quiet || true
-    gcloud run deploy "${WEB_SERVICE}" \
-      --project="${GCP_PROJECT}" \
-      --region="${GCP_REGION}" \
-      --platform=managed \
-      --image="${WEB_IMAGE}" \
-      --port=8080 \
-      --min-instances=0 \
-      --max-instances=3 \
-      --memory=1Gi \
-      --cpu=1 \
-      --allow-unauthenticated \
-      --add-cloudsql-instances="${CLOUD_SQL_CONNECTION}" \
-      --env-vars-file="${WEB_ENV}" \
-      --clear-secrets
+    gcloud "${WEB_DEPLOY_ARGS[@]}" --env-vars-file="${WEB_ENV}" --clear-secrets
     rm -f "${WEB_ENV}"
+  else
+    # Keep web runtime env; only refresh public URL pointers if the service already exists.
+    gcloud "${WEB_DEPLOY_ARGS[@]}" \
+      --update-env-vars="API_INTERNAL_URL=${API_URL},NEXT_PUBLIC_API_URL=${PUBLIC_ORIGIN},NEXT_PUBLIC_APP_URL=${PUBLIC_ORIGIN}"
   fi
 
   WEB_URL="$(gcloud run services describe "${WEB_SERVICE}" \

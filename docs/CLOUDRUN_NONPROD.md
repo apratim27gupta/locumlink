@@ -123,17 +123,27 @@ Or use Cloud SQL Auth Proxy + `pg_restore` from your laptop.
 
 ## Deploy
 
-Builds run in **Cloud Build** (no local Docker):
+Builds run in **Cloud Build** (no local Docker).
+
+**Env source of truth:** values already on the Cloud Run service (including Console-set
+`STRIPE_*`, `HST_REGISTRATION_NUMBER`, etc.). Deploys are **image-only** by default and
+do **not** rewrite env/secrets.
 
 ```bash
 export NEXT_PUBLIC_SUPABASE_URL=...
 export NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 
-# Optional: Editor accounts that cannot bind Secret Manager IAM
-# export ENV_VARS_FILE=/path/to/staging-env.yaml
-
 ./scripts/deploy-cloudrun-nonprod.sh staging
 ./scripts/deploy-cloudrun-nonprod.sh demo
+```
+
+Rare full env replace (bootstrap / Editor accounts only). Console-owned Stripe/HST keys
+on the **live** service still win over the YAML:
+
+```bash
+export FORCE_ENV_REPLACE=1
+export ENV_VARS_FILE=/path/to/staging-env.yaml
+./scripts/deploy-cloudrun-nonprod.sh staging
 ```
 
 Or build only:

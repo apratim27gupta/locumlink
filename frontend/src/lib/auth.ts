@@ -263,14 +263,20 @@ function migrateLegacyProfileDone(): void {
         localStorage.setItem(PROFILE_DONE_LOCUM, '1');
     localStorage.removeItem(PROFILE_DONE_LEGACY);
 }
+export function markProfileCompleteForRole(role: Role): void {
+    if (typeof window === 'undefined')
+        return;
+    if (role === 'clinic')
+        localStorage.setItem(PROFILE_DONE_CLINIC, '1');
+    else
+        localStorage.setItem(PROFILE_DONE_LOCUM, '1');
+}
 export function markProfileComplete(): void {
     if (typeof window === 'undefined')
         return;
     const role = getRole();
-    if (role === 'clinic')
-        localStorage.setItem(PROFILE_DONE_CLINIC, '1');
-    else if (role === 'locum')
-        localStorage.setItem(PROFILE_DONE_LOCUM, '1');
+    if (role === 'clinic' || role === 'locum')
+        markProfileCompleteForRole(role);
 }
 export function isProfileComplete(): boolean {
     if (typeof window === 'undefined')

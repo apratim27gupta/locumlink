@@ -1,4 +1,4 @@
-﻿import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   MatchFeeCancelledBy,
   MatchFeeInvoiceEventActor,
@@ -26,6 +26,7 @@ import {
   MATCH_FEE_OVERDUE_REMINDER_INTERVAL_DAYS,
   computeMatchFeeAmountCents,
   isPostingGrandfatheredFromMatchFee,
+  isMatchFeeTestingSkipLocumReplacement,
   matchFeeTierFromHours,
 } from './match-fee.constants.js';
 import {
@@ -435,6 +436,8 @@ function mapAdminInvoice(
     statusGuide: statusGuide ?? null,
     timeline,
     events: base.events,
+    /** TEMP: when true, late locum cancel skips replacement (admin may refund). */
+    testingSkipLocumReplacement: isMatchFeeTestingSkipLocumReplacement(),
   };
 }
 
@@ -2993,6 +2996,17 @@ export class PaymentsService {
       daysUntilStart == null ||
       daysUntilStart < MATCH_FEE_CANCELLATION_WINDOW_DAYS
     ) {
+      if (locumWithdrew && isMatchFeeTestingSkipLocumReplacement()) {
+        await this.processRefund({
+          invoiceId,
+          kind: 'CANCELLATION',
+          admin,
+          adminNotes: notes,
+          cancelledBy: 'ADMIN',
+          reason: `TESTING: Admin refund after late locum cancel (replacement skipped). ${notes}`,
+        });
+        return { success: true };
+      }
       if (locumWithdrew) {
         throw new BadRequestException(
           'Locum cancelled fewer than 14 days before start. Use the replacement flow; refund only if no replacement is found.',

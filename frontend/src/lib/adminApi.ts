@@ -285,6 +285,8 @@ export type AdminMatchFeeInvoice = {
   cancelledBy?: string | null;
   cancellationReason?: string | null;
   replacementStatus?: string | null;
+  /** TEMP: API MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT — late locum cancel → admin refund. */
+  testingSkipLocumReplacement?: boolean;
   daysUntilStart: number | null;
   postingCompleted?: boolean;
   refundedCents?: number;

@@ -35,6 +35,20 @@ export const MATCH_FEE_CANCELLATION_WINDOW_DAYS = 14;
 export const MATCH_FEE_OVERDUE_REMINDER_INTERVAL_DAYS = 7;
 export const MATCH_FEE_ESCALATION_DAYS_AFTER_DUE = 30;
 
+/**
+ * TEMP testing override: when true, locum cancel within the 14-day window skips
+ * PENDING_REPLACEMENT / SEARCHING and goes straight to admin refund-pending
+ * (same as early locum cancel). Turn off to restore the replacement flow.
+ *
+ * Set MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT=1 (or true) on the API.
+ */
+export function isMatchFeeTestingSkipLocumReplacement(): boolean {
+  const raw = (process.env.MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT ?? '')
+    .trim()
+    .toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
 export type MatchFeeTier = 'HALF' | 'FULL';
 
 /**
