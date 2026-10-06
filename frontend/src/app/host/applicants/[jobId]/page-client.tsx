@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import { ApplicationInvoiceCell, usePostingInvoices } from '@/components/payments/ApplicationInvoiceCell';
 import { MatchFeeRefundConfirmModal } from '@/components/payments/MatchFeeRefundConfirmModal';
+import { GpLocumApplicationModal } from '@/components/host/GpLocumApplicationModal';
 import { hostMatchFeeRefundEligible } from '@/components/payments/MatchFeePolicy';
 import { getToken } from '@/lib/auth';
 import { useAuth } from '@/providers/AuthProvider';
@@ -91,11 +92,12 @@ const APPLICANT_TABLE_COLUMNS: { label: string; title?: string; track: string }[
     { label: 'Status', track: 'minmax(120px, 0.8fr)' },
     { label: 'Response', title: 'Locum response', track: 'minmax(96px, 0.7fr)' },
     { label: 'Invoice', track: 'minmax(120px, 0.8fr)' },
+    { label: 'Form', title: 'GP Locum Application', track: 'minmax(110px, 0.7fr)' },
 ];
 const APPLICANT_GRID_TEMPLATE = APPLICANT_TABLE_COLUMNS.map((c) => c.track).join(' ');
 const APPLICANT_GRID_GAP = 12;
 /** Sum of column minimums + gaps + horizontal padding; below this the table scrolls. */
-const APPLICANT_TABLE_MIN_WIDTH = 860 + APPLICANT_GRID_GAP * (APPLICANT_TABLE_COLUMNS.length - 1) + 36;
+const APPLICANT_TABLE_MIN_WIDTH = 970 + APPLICANT_GRID_GAP * (APPLICANT_TABLE_COLUMNS.length - 1) + 36;
 function displayName(a: ApplicationRecord): string {
     const f = a.locumProfile.firstName?.trim() || '';
     const l = a.locumProfile.lastName?.trim() || '';
@@ -419,6 +421,7 @@ export default function HostApplicantsPage(props: {
     const [composeSent, setComposeSent] = useState(false);
     const [cancelMatchInvoice, setCancelMatchInvoice] = useState<MatchFeeInvoice | null>(null);
     const [cancelMatchAppId, setCancelMatchAppId] = useState<string | null>(null);
+    const [gpFormApplicationId, setGpFormApplicationId] = useState<string | null>(null);
     const [quickPanelPos, setQuickPanelPos] = useState<{
         left: number;
         top: number;
@@ -1092,6 +1095,26 @@ export default function HostApplicantsPage(props: {
                   <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} style={{ minWidth: 0 }}>
                     <ApplicationInvoiceCell app={a} link={invoiceByApplication.get(a.id)} />
                   </div>
+
+                  <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} style={{ minWidth: 0 }}>
+                    {a.locumResponse === 'ACCEPTED' ? (
+                      <button
+                        type="button"
+                        onClick={() => setGpFormApplicationId(a.id)}
+                        style={{
+                          all: 'unset',
+                          cursor: 'pointer',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: '#1C32D2',
+                        }}
+                      >
+                        Open
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: 12, color: '#9CA3AF' }}>—</span>
+                    )}
+                  </div>
                 </div>);
             })}
           </div>
@@ -1531,6 +1554,11 @@ export default function HostApplicantsPage(props: {
           if (!cancelMatchAppId) return;
           void finishCancelMatch(cancelMatchAppId);
         }}
+      />
+      <GpLocumApplicationModal
+        open={!!gpFormApplicationId}
+        applicationId={gpFormApplicationId}
+        onClose={() => setGpFormApplicationId(null)}
       />
     </DashLayout>);
 }

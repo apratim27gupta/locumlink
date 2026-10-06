@@ -306,6 +306,10 @@ export default function HostProfilePage(props: {
   const [hostFirst, setHostFirst] = useState('');
   const [hostLast, setHostLast] = useState('');
   const [cpsns, setCpsns] = useState('');
+  const [msiProviderNumber, setMsiProviderNumber] = useState('');
+  const [hostPhone, setHostPhone] = useState('');
+  const [hostFax, setHostFax] = useState('');
+  const [overheadPayee, setOverheadPayee] = useState('');
   const [licenseFile, setLicenseFile] = useState<string | null>(null);
   const [licenseLabel, setLicenseLabel] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -425,6 +429,10 @@ export default function HostProfilePage(props: {
     setHostFirst(profile.contactFirstName ?? '');
     setHostLast(profile.contactLastName ?? '');
     setCpsns(profile.cpsnsNumber ?? '');
+    setMsiProviderNumber(profile.msiProviderNumber ?? '');
+    setHostPhone(profile.phone ?? '');
+    setHostFax(profile.fax ?? '');
+    setOverheadPayee(profile.overheadPayee ?? '');
     setLicenseFile(profile.licenseFile ?? null);
     setLicenseLabel(profile.licenseOriginalName ?? '');
     setSpecialties(
@@ -581,6 +589,10 @@ export default function HostProfilePage(props: {
       contactFirstName: derivedContactFirst,
       contactLastName: derivedContactLast,
       cpsnsNumber: cpsns,
+      msiProviderNumber,
+      phone: hostPhone,
+      fax: hostFax,
+      overheadPayee,
       speciality: specialties.join(', '),
       licenseFile,
       licenseOriginalName: licenseFile ? licenseLabel.trim() || null : null,
@@ -1154,6 +1166,51 @@ export default function HostProfilePage(props: {
                       setCpsns(sanitizeCpsnsInput(e.target.value))
                     }
                     placeholder="CPSNS Number"
+                  />
+                </div>
+
+                {/* MSI Provider # — used on GP Locum Application autofill */}
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                >
+                  <label style={lbl}>MSI Provider / Group #</label>
+                  <input
+                    style={fieldInput}
+                    autoComplete="off"
+                    value={msiProviderNumber}
+                    onChange={(e) => setMsiProviderNumber(e.target.value)}
+                    placeholder="MSI Provider / Group #"
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: '1 1 160px' }}>
+                    <label style={lbl}>Phone</label>
+                    <input
+                      style={fieldInput}
+                      value={hostPhone}
+                      onChange={(e) => setHostPhone(e.target.value)}
+                      placeholder="Phone"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: '1 1 160px' }}>
+                    <label style={lbl}>Fax</label>
+                    <input
+                      style={fieldInput}
+                      value={hostFax}
+                      onChange={(e) => setHostFax(e.target.value)}
+                      placeholder="Fax"
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label style={lbl}>Overhead payee (if different)</label>
+                  <input
+                    style={fieldInput}
+                    value={overheadPayee}
+                    onChange={(e) => setOverheadPayee(e.target.value)}
+                    placeholder="Overhead payee (if different)"
                   />
                 </div>
 

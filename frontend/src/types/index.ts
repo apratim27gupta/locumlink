@@ -7,6 +7,7 @@ export interface HostProfile {
     contactFirstName: string;
     contactLastName: string;
     cpsnsNumber: string;
+    msiProviderNumber?: string;
     cpsnsVerificationStatus?: CpsnsVerificationStatus;
     rejectionReason?: string | null;
     rejectedAt?: string | null;
@@ -21,6 +22,9 @@ export interface HostProfile {
     postalCode: string;
     city: string;
     province: string;
+    phone?: string;
+    fax?: string;
+    overheadPayee?: string;
     amenities: string[];
     accommodationProvided: boolean;
     practiceType?: string;
@@ -45,11 +49,18 @@ export interface LocumProfile {
     professionalSummary?: string;
     specialization?: string;
     phone?: string;
+    fax?: string;
+    msiProviderNumber?: string;
     address1?: string;
     address2?: string;
     postalCode?: string;
     city?: string;
     province?: string;
+    practiceAddress1?: string;
+    practiceAddress2?: string;
+    practicePostalCode?: string;
+    practiceCity?: string;
+    practiceProvince?: string;
     licenseFile?: string;
     licenseOriginalName?: string;
     resumeFile?: string;

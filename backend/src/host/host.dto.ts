@@ -66,6 +66,11 @@ export class SaveHostProfileDto {
 
   @IsString()
   @IsOptional()
+  @MaxLength(64)
+  msiProviderNumber?: string;
+
+  @IsString()
+  @IsOptional()
   speciality?: string;
 
   @IsString()
@@ -87,6 +92,21 @@ export class SaveHostProfileDto {
   @IsString()
   @IsOptional()
   province?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  phone?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  fax?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  overheadPayee?: string;
 
   @IsArray()
   @IsString({ each: true })
@@ -437,4 +457,141 @@ export class ReopenJobDto {
   @IsString()
   @IsOptional()
   endDate?: string;
+}
+
+export class SaveGpLocumApplicationDto {
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  locumName?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(64)
+  locumCpsns?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(64)
+  locumMsiProviderNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(500)
+  locumMailingAddress?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(500)
+  locumPracticeAddress?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  locumPhone?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  locumFax?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  locumEmail?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['guaranteed_daily', 'fee_for_service', ''])
+  preferredPayment?: 'guaranteed_daily' | 'fee_for_service' | '';
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  hostName?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(64)
+  hostMsiProviderNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(500)
+  hostPracticeAddress?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  hostPhone?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  hostFax?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  hostEmail?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  overheadPayee?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['fee_for_service', 'contract', 'other', ''])
+  primaryRemuneration?: 'fee_for_service' | 'contract' | 'other' | '';
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  primaryRemunerationOther?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(1000)
+  datesWorked?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['office', 'nursing_home'])
+  serviceType?: 'office' | 'nursing_home';
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  claimsSubmitter?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(64)
+  submitterId?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  billingEmail?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  billingPhone?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['yes', 'no', ''])
+  previouslyProvided?: 'yes' | 'no' | '';
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(4000)
+  additionalInformation?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(64)
+  hostSignatureDate?: string;
 }

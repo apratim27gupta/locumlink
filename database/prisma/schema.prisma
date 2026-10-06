@@ -318,7 +318,14 @@ model LocumProfile {
   postalCode          String?            @map("postal_code")
   city                String?
   province            String?
+  /** Practice address when different from mailing (GP Locum Application). */
+  practiceAddress1    String?            @map("practice_address1")
+  practiceAddress2    String?            @map("practice_address2")
+  practicePostalCode  String?            @map("practice_postal_code")
+  practiceCity        String?            @map("practice_city")
+  practiceProvince    String?            @map("practice_province")
   phone               String?
+  fax                 String?
   specializationText  String?            @map("specialization_text") @db.Text
   licenseFileName     String?            @map("license_file_name")
   licenseOriginalName String?            @map("license_original_name")
@@ -355,6 +362,8 @@ model HostProfile {
   contactFirstName        String?
   contactLastName         String?
   cpsnsNumber             String?
+  /** MSI provider / group number for provincial locum program forms. */
+  msiProviderNumber       String?            @map("msi_provider_number")
   cpsnsVerificationStatus VerificationStatus @default(UNVERIFIED) @map("cpsns_verification_status")
   cpsnsVerifiedAt         DateTime?          @map("cpsns_verified_at")
   credentialSubmittedAt   DateTime?          @map("credential_submitted_at")
@@ -372,6 +381,9 @@ model HostProfile {
 
   address1                String?
   address2                String?
+  fax                     String?
+  /** Overhead payee if different from host physician (GP Locum Application). */
+  overheadPayee           String?            @map("overhead_payee")
   accommodationProvided   Boolean            @default(false)
   practiceType            String?
   numPhysicians           String?
@@ -517,6 +529,10 @@ model Application {
 
   // Placement timestamp for fill rate + avg time-to-placement (L2-E7.1)
   placedAt        DateTime?         @map("placed_at")
+
+  /** Host-edited GP Locum Application field values for this match only (not profile). */
+  gpLocumApplicationDraft   Json?     @map("gp_locum_application_draft")
+  gpLocumApplicationSavedAt DateTime? @map("gp_locum_application_saved_at")
 
   matchFeeInvoices MatchFeeInvoice[]
   /** Invoices where this application was accepted as the replacement locum. */

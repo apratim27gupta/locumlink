@@ -35,6 +35,7 @@ RUN npm install --omit=dev --workspace=backend --include-workspace-root
 
 COPY database/prisma ./database/prisma
 COPY --from=builder /app/backend/dist ./backend/dist
+COPY --from=builder /app/backend/assets ./backend/assets
 
 RUN npx prisma generate --schema=database/prisma/schema.prisma \
   && chown -R nestjs:nodejs /app

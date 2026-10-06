@@ -882,6 +882,36 @@ export type ApplicationRecord = {
         };
     };
 };
+/** Host-edited MSI GP Locum Application values for one accepted match. */
+export type GpLocumApplicationFields = {
+    locumName: string;
+    locumCpsns: string;
+    locumMsiProviderNumber: string;
+    locumMailingAddress: string;
+    locumPracticeAddress: string;
+    locumPhone: string;
+    locumFax: string;
+    locumEmail: string;
+    preferredPayment: 'guaranteed_daily' | 'fee_for_service' | '';
+    hostName: string;
+    hostMsiProviderNumber: string;
+    hostPracticeAddress: string;
+    hostPhone: string;
+    hostFax: string;
+    hostEmail: string;
+    overheadPayee: string;
+    primaryRemuneration: 'fee_for_service' | 'contract' | 'other' | '';
+    primaryRemunerationOther: string;
+    datesWorked: string;
+    serviceType: 'office' | 'nursing_home';
+    claimsSubmitter: string;
+    submitterId: string;
+    billingEmail: string;
+    billingPhone: string;
+    previouslyProvided: 'yes' | 'no' | '';
+    additionalInformation: string;
+    hostSignatureDate: string;
+};
 export type DashboardStats = {
     totalJobsPosted: number;
     activeJobs: number;
@@ -1292,6 +1322,62 @@ export const hostApi = {
             throw nestHttpError(text, res.status, 'Cancelling match');
         }
         return res.json() as Promise<{ success: boolean }>;
+    },
+    downloadGpLocumApplication: async (applicationId: string, locumLabel?: string): Promise<void> => {
+        const res = await trackedFetch(
+            `${NEST_BASE}/api/host/applications/${encodeURIComponent(applicationId)}/gp-locum-application.pdf`,
+            { headers: nestHeaders(false) },
+        );
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Downloading GP locum application');
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safe = (locumLabel ?? 'locum').replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 40);
+        a.download = `gp-locum-application-${safe}-${applicationId.slice(-8)}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    },
+    getGpLocumApplication: async (
+        applicationId: string,
+    ): Promise<{
+        fields: GpLocumApplicationFields;
+        savedAt: string | null;
+        locumLabel: string;
+        filename: string;
+    }> => {
+        const res = await trackedFetch(
+            `${NEST_BASE}/api/host/applications/${encodeURIComponent(applicationId)}/gp-locum-application`,
+            { headers: nestHeaders(false) },
+        );
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Loading GP locum application');
+        }
+        return res.json();
+    },
+    saveGpLocumApplication: async (
+        applicationId: string,
+        fields: Partial<GpLocumApplicationFields>,
+    ): Promise<{ fields: GpLocumApplicationFields; savedAt: string }> => {
+        const res = await trackedFetch(
+            `${NEST_BASE}/api/host/applications/${encodeURIComponent(applicationId)}/gp-locum-application`,
+            {
+                method: 'PATCH',
+                headers: nestHeaders(true),
+                body: JSON.stringify(fields),
+            },
+        );
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Saving GP locum application');
+        }
+        return res.json();
     },
     createSupportTicket: async (params: {
         jobPostingId: string;

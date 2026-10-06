@@ -12,8 +12,8 @@ import type { HostProfile } from '@/types';
 const DOCUMENTS = [
     {
         title: 'GP Locum Application Form',
-        description: 'Official application form for the GP Locum Program. Download and complete to apply.',
-        url: 'https://msi.medavie.bluecross.ca/wp-content/uploads/sites/3/2023/10/GP-Locum-Application-Form.pdf',
+        description: 'Official application form for the GP Locum Program. After a locum accepts, download a pre-filled copy from Applicants.',
+        url: '/documents/gp-locum-application-form.pdf',
         icon: 'pdf' as const,
     },
     {

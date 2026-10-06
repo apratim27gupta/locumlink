@@ -1,4 +1,12 @@
-import { IsString, IsOptional, IsInt, Min, IsIn, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsInt,
+  Min,
+  IsIn,
+  IsArray,
+  MaxLength,
+} from 'class-validator';
 export class SaveLocumProfileDto {
   @IsString()
   firstName!: string;
@@ -7,6 +15,10 @@ export class SaveLocumProfileDto {
   @IsString()
   @IsOptional()
   cpsnsNumber?: string;
+  @IsString()
+  @IsOptional()
+  @MaxLength(64)
+  msiProviderNumber?: string;
   @IsInt()
   @Min(0)
   @IsOptional()
@@ -34,7 +46,31 @@ export class SaveLocumProfileDto {
   province?: string;
   @IsString()
   @IsOptional()
+  @MaxLength(200)
+  practiceAddress1?: string;
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  practiceAddress2?: string;
+  @IsString()
+  @IsOptional()
+  @MaxLength(32)
+  practicePostalCode?: string;
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  practiceCity?: string;
+  @IsString()
+  @IsOptional()
+  @MaxLength(64)
+  practiceProvince?: string;
+  @IsString()
+  @IsOptional()
   phone?: string;
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  fax?: string;
   @IsString()
   @IsOptional()
   licenseFileName?: string;

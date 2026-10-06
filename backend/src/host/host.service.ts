@@ -26,7 +26,15 @@ import {
 import { GcsService } from '../gcs/gcs.service.js';
 import { assertOwnsStoragePath } from '../common/utils/storage-path.util.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { SaveHostProfileDto, CreateJobDto, UpdateJobDto } from './host.dto.js';
+import { SaveHostProfileDto, CreateJobDto, UpdateJobDto, SaveGpLocumApplicationDto } from './host.dto.js';
+import {
+  buildGpLocumApplicationPdf,
+  formatGpLocumDates,
+  formatPostalAddress,
+  mergeGpLocumApplicationFields,
+  type GpLocumApplicationFields,
+  EMPTY_GP_LOCUM_APPLICATION_FIELDS,
+} from './gp-locum-application.pdf.js';
 import {
   isCpsnsVerificationApproved,
   normalizeCpsns,
@@ -199,6 +207,7 @@ export type HostProfileApi = {
   contactFirstName: string;
   contactLastName: string;
   cpsnsNumber: string;
+  msiProviderNumber: string;
   speciality: string;
   licenseFile: string | null;
   licenseOriginalName: string | null;
@@ -209,6 +218,9 @@ export type HostProfileApi = {
   postalCode: string;
   city: string;
   province: string;
+  phone: string;
+  fax: string;
+  overheadPayee: string;
   amenities: string[];
   accommodationProvided: boolean;
   practiceType: string;
@@ -270,6 +282,7 @@ export class HostService {
       contactFirstName: profile.contactFirstName ?? '',
       contactLastName: profile.contactLastName ?? '',
       cpsnsNumber: profile.cpsnsNumber ?? '',
+      msiProviderNumber: profile.msiProviderNumber ?? '',
       speciality: profile.speciality ?? '',
       licenseFile: profile.licenseFile ?? null,
       licenseOriginalName: profile.licenseOriginalName ?? null,
@@ -281,6 +294,9 @@ export class HostService {
       postalCode: profile.postalCode ?? '',
       city: profile.city ?? '',
       province: profile.province ?? '',
+      phone: profile.phone ?? '',
+      fax: profile.fax ?? '',
+      overheadPayee: profile.overheadPayee ?? '',
       amenities: profile.servicesOffered ?? [],
       accommodationProvided: profile.accommodationProvided ?? false,
       practiceType: profile.practiceType ?? '',
@@ -301,8 +317,7 @@ export class HostService {
     const rawCpsns = dto.cpsnsNumber?.trim() ?? '';
     const cpsnsDigits = rawCpsns ? normalizeCpsns(rawCpsns) : '';
     const address =
-      [dto.address1, dto.address2].filter(Boolean).join(', ').trim() ||
-      'Address pending';
+      [dto.address1, dto.address2].filter(Boolean).join(', ').trim() || '';
     return {
       userId,
       practiceName: dto.clinicName,
@@ -312,12 +327,12 @@ export class HostService {
       province: dto.province ?? 'NS',
       servicesOffered: dto.amenities ?? [],
       highlights: (dto.clinicDescription ?? dto.clinicDesc)?.trim() || null,
-      phone: null as string | null,
       website: null as string | null,
       ruralDesignation: null as string | null,
       contactFirstName: dto.contactFirstName?.trim() || null,
       contactLastName: dto.contactLastName?.trim() || null,
       cpsnsNumber: cpsnsDigits || null,
+      msiProviderNumber: dto.msiProviderNumber?.trim() || null,
       speciality: dto.speciality?.trim() || null,
       address1: dto.address1?.trim() || null,
       address2: dto.address2?.trim() || null,
@@ -326,6 +341,9 @@ export class HostService {
       numPhysicians: dto.numPhysicians?.trim() || null,
       emr: (dto.emrSystem ?? dto.emr)?.trim() || null,
       patientVol: (dto.patientVolume ?? dto.patientVol)?.trim() || null,
+      phone: dto.phone?.trim() || null,
+      fax: dto.fax?.trim() || null,
+      overheadPayee: dto.overheadPayee?.trim() || null,
       licenseFile: dto.licenseFile ?? null,
       licenseOriginalName: dto.licenseOriginalName?.trim() || null,
       // PRD 9.1 comment AT42: save photo ID
@@ -1863,5 +1881,176 @@ export class HostService {
     });
     await this.applyCoverageStatusForJob(app.jobPostingId);
     return { success: true };
+  }
+
+  /**
+   * Prefills the MSI GP Locum Application for a locum-accepted match.
+   * Host can edit + save per-application draft, then download the PDF.
+   */
+  private async loadAcceptedApplicationForGpForm(userId: string, applicationId: string) {
+    const hostProfileId = await this.getHostProfileId(userId);
+    const app = await this.prisma.application.findFirst({
+      where: {
+        id: applicationId,
+        jobPosting: { hostProfileId },
+      },
+      include: {
+        locumProfile: {
+          include: { user: { select: { email: true } } },
+        },
+        jobPosting: {
+          include: {
+            hostProfile: {
+              include: { user: { select: { email: true } } },
+            },
+            shifts: { select: { id: true, date: true } },
+          },
+        },
+        shiftClaims: {
+          include: { shift: { select: { date: true } } },
+        },
+      },
+    });
+    if (!app) throw new NotFoundException('Application not found');
+    if (!app.locumAcceptedAt) {
+      throw new BadRequestException(
+        'GP Locum Application is available after the locum accepts the match.',
+      );
+    }
+    return app;
+  }
+
+  private buildGpLocumApplicationDefaults(
+    app: Awaited<ReturnType<HostService['loadAcceptedApplicationForGpForm']>>,
+  ): GpLocumApplicationFields {
+    const locum = app.locumProfile;
+    const host = app.jobPosting.hostProfile;
+    const claimDates = app.shiftClaims.map((c) => c.shift.date);
+    const dates =
+      claimDates.length > 0
+        ? claimDates
+        : (app.availableDates ?? []).map((iso) => new Date(`${iso}T00:00:00.000Z`));
+    const datesWorked = formatGpLocumDates(dates);
+
+    const services = [
+      ...(app.jobPosting.servicesRequired ?? []),
+      ...(host.servicesOffered ?? []),
+      app.jobPosting.title ?? '',
+    ]
+      .join(' ')
+      .toLowerCase();
+    const isNursingHome =
+      /\bltc\b/.test(services) ||
+      services.includes('nursing home') ||
+      services.includes('long-term');
+
+    const locumMailing = formatPostalAddress({
+      address1: locum.address1,
+      address2: locum.address2,
+      city: locum.city,
+      province: locum.province,
+      postalCode: locum.postalCode,
+    });
+    const locumPractice = formatPostalAddress({
+      address1: locum.practiceAddress1,
+      address2: locum.practiceAddress2,
+      city: locum.practiceCity,
+      province: locum.practiceProvince,
+      postalCode: locum.practicePostalCode,
+    });
+    const legacyAddress =
+      host.address?.trim() === 'Address pending' ? '' : (host.address ?? '');
+    const hostAddress = formatPostalAddress({
+      address1: host.address1,
+      address2: host.address2,
+      city: host.city,
+      province: host.province,
+      postalCode: host.postalCode,
+      fallback: legacyAddress,
+    });
+
+    return {
+      ...EMPTY_GP_LOCUM_APPLICATION_FIELDS,
+      locumName:
+        [locum.firstName, locum.lastName].filter(Boolean).join(' ').trim() || 'Locum',
+      locumCpsns: locum.cpsnsId ?? '',
+      locumMsiProviderNumber: locum.msiProviderNumber ?? '',
+      locumMailingAddress: locumMailing,
+      locumPracticeAddress: locumPractice || locumMailing,
+      locumPhone: locum.phone ?? '',
+      locumFax: locum.fax ?? '',
+      locumEmail: locum.user.email ?? '',
+      hostName:
+        [host.contactFirstName, host.contactLastName].filter(Boolean).join(' ').trim() ||
+        host.practiceName,
+      hostMsiProviderNumber: host.msiProviderNumber ?? '',
+      hostPracticeAddress: hostAddress,
+      hostPhone: host.phone ?? '',
+      hostFax: host.fax ?? '',
+      hostEmail: host.user.email ?? '',
+      overheadPayee: host.overheadPayee ?? '',
+      datesWorked,
+      serviceType: isNursingHome ? 'nursing_home' : 'office',
+    };
+  }
+
+  async getGpLocumApplicationForm(
+    userId: string,
+    applicationId: string,
+  ): Promise<{
+    fields: GpLocumApplicationFields;
+    savedAt: string | null;
+    locumLabel: string;
+    filename: string;
+  }> {
+    const app = await this.loadAcceptedApplicationForGpForm(userId, applicationId);
+    const defaults = this.buildGpLocumApplicationDefaults(app);
+    const fields = mergeGpLocumApplicationFields(defaults, app.gpLocumApplicationDraft);
+    const locum = app.locumProfile;
+    const safeLocum = (locum.lastName || locum.firstName || 'locum')
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .slice(0, 40);
+    return {
+      fields,
+      savedAt: app.gpLocumApplicationSavedAt?.toISOString() ?? null,
+      locumLabel:
+        [locum.firstName, locum.lastName].filter(Boolean).join(' ').trim() || 'Locum',
+      filename: `gp-locum-application-${safeLocum}-${applicationId.slice(-8)}.pdf`,
+    };
+  }
+
+  async saveGpLocumApplicationForm(
+    userId: string,
+    applicationId: string,
+    dto: SaveGpLocumApplicationDto,
+  ): Promise<{
+    fields: GpLocumApplicationFields;
+    savedAt: string;
+  }> {
+    const app = await this.loadAcceptedApplicationForGpForm(userId, applicationId);
+    const defaults = this.buildGpLocumApplicationDefaults(app);
+    const previous = mergeGpLocumApplicationFields(defaults, app.gpLocumApplicationDraft);
+    const fields = mergeGpLocumApplicationFields(previous, dto);
+    const savedAt = new Date();
+    await this.prisma.application.update({
+      where: { id: applicationId },
+      data: {
+        gpLocumApplicationDraft: fields as unknown as Prisma.InputJsonValue,
+        gpLocumApplicationSavedAt: savedAt,
+      },
+    });
+    return { fields, savedAt: savedAt.toISOString() };
+  }
+
+  async downloadGpLocumApplicationPdf(
+    userId: string,
+    applicationId: string,
+  ): Promise<{ buffer: Buffer; filename: string }> {
+    const { fields, filename } = await this.getGpLocumApplicationForm(
+      userId,
+      applicationId,
+    );
+    const buffer = await buildGpLocumApplicationPdf(fields);
+    return { buffer, filename };
   }
 }

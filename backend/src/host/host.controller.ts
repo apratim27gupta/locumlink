@@ -9,9 +9,11 @@ import {
   Query,
   UseGuards,
   Req,
+  Res,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -22,6 +24,7 @@ import {
   UpdateJobDto,
   UpdateApplicationDto,
   ReopenJobDto,
+  SaveGpLocumApplicationDto,
 } from './host.dto.js';
 import { CancelMatchDto } from '../payments/payments.dto.js';
 interface JwtRequest {
@@ -180,5 +183,46 @@ export class HostController {
       applicationId,
       dto.reason,
     );
+  }
+
+  @Get('applications/:applicationId/gp-locum-application')
+  getGpLocumApplication(
+    @Req() req: JwtRequest,
+    @Param('applicationId') applicationId: string,
+  ) {
+    return this.hostService.getGpLocumApplicationForm(req.user.id, applicationId);
+  }
+
+  @Patch('applications/:applicationId/gp-locum-application')
+  @HttpCode(HttpStatus.OK)
+  saveGpLocumApplication(
+    @Req() req: JwtRequest,
+    @Param('applicationId') applicationId: string,
+    @Body() dto: SaveGpLocumApplicationDto,
+  ) {
+    return this.hostService.saveGpLocumApplicationForm(
+      req.user.id,
+      applicationId,
+      dto,
+    );
+  }
+
+  @Get('applications/:applicationId/gp-locum-application.pdf')
+  async downloadGpLocumApplication(
+    @Req() req: JwtRequest,
+    @Param('applicationId') applicationId: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, filename } =
+      await this.hostService.downloadGpLocumApplicationPdf(
+        req.user.id,
+        applicationId,
+      );
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': String(buffer.length),
+    });
+    res.send(buffer);
   }
 }

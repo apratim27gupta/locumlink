@@ -90,6 +90,7 @@ export type LocumProfileApi = {
   firstName?: string;
   lastName?: string;
   cpsnsNumber?: string;
+  msiProviderNumber?: string;
   yearsOfExperience?: number | null;
   professionalSummary?: string;
   specialization?: string;
@@ -98,7 +99,13 @@ export type LocumProfileApi = {
   postalCode?: string;
   city?: string;
   province?: string;
+  practiceAddress1?: string;
+  practiceAddress2?: string;
+  practicePostalCode?: string;
+  practiceCity?: string;
+  practiceProvince?: string;
   phone?: string;
+  fax?: string;
   licenseFile?: string;
   licenseOriginalName?: string;
   resumeFile?: string;
@@ -141,6 +148,7 @@ function parseSaveBody(body: Record<string, unknown>): SaveLocumProfileDto {
     firstName: s('firstName'),
     lastName: s('lastName'),
     cpsnsNumber: s('cpsnsNumber') || undefined,
+    msiProviderNumber: s('msiProviderNumber') || undefined,
     yearsOfExperience: n('yearsOfExperience'),
     professionalSummary: s('professionalSummary') || undefined,
     specialization: s('specialization') || undefined,
@@ -149,7 +157,13 @@ function parseSaveBody(body: Record<string, unknown>): SaveLocumProfileDto {
     postalCode: s('postalCode') || undefined,
     city: s('city') || undefined,
     province: s('province') || undefined,
+    practiceAddress1: s('practiceAddress1') || undefined,
+    practiceAddress2: s('practiceAddress2') || undefined,
+    practicePostalCode: s('practicePostalCode') || undefined,
+    practiceCity: s('practiceCity') || undefined,
+    practiceProvince: s('practiceProvince') || undefined,
     phone: s('phone') || undefined,
+    fax: s('fax') || undefined,
     licenseFileName: s('licenseFileName') || undefined,
     licenseOriginalName: s('licenseOriginalName') || undefined,
     resumeFileName: s('resumeFileName') || undefined,
@@ -196,6 +210,7 @@ export class LocumService {
       firstName: profile.firstName ?? undefined,
       lastName: profile.lastName ?? undefined,
       cpsnsNumber: adminCpsnsNumberOrEmpty(profile.cpsnsId) || undefined,
+      msiProviderNumber: profile.msiProviderNumber ?? undefined,
       yearsOfExperience: profile.yearsOfExperience ?? null,
       professionalSummary: profile.summary ?? undefined,
       specialization: spec,
@@ -204,7 +219,13 @@ export class LocumService {
       postalCode: profile.postalCode ?? undefined,
       city: profile.city ?? undefined,
       province: profile.province ?? undefined,
+      practiceAddress1: profile.practiceAddress1 ?? undefined,
+      practiceAddress2: profile.practiceAddress2 ?? undefined,
+      practicePostalCode: profile.practicePostalCode ?? undefined,
+      practiceCity: profile.practiceCity ?? undefined,
+      practiceProvince: profile.practiceProvince ?? undefined,
       phone: profile.phone ?? undefined,
+      fax: profile.fax ?? undefined,
       licenseFile: profile.licenseFileName ?? undefined,
       licenseOriginalName: profile.licenseOriginalName ?? undefined,
       resumeFile: profile.resumeFileName ?? undefined,
@@ -310,7 +331,14 @@ export class LocumService {
         postalCode: dto.postalCode?.trim() || null,
         city: dto.city?.trim() || null,
         province: dto.province?.trim() || null,
+        practiceAddress1: dto.practiceAddress1?.trim() || null,
+        practiceAddress2: dto.practiceAddress2?.trim() || null,
+        practicePostalCode: dto.practicePostalCode?.trim() || null,
+        practiceCity: dto.practiceCity?.trim() || null,
+        practiceProvince: dto.practiceProvince?.trim() || null,
         phone: dto.phone?.trim() || null,
+        fax: dto.fax?.trim() || null,
+        msiProviderNumber: dto.msiProviderNumber?.trim() || null,
         licenseFileName: dto.licenseFileName?.trim() || null,
         licenseOriginalName: dto.licenseOriginalName?.trim() || null,
         resumeFileName: dto.resumeFileName?.trim() || null,
@@ -332,7 +360,14 @@ export class LocumService {
         postalCode: dto.postalCode?.trim() ?? null,
         city: dto.city?.trim() ?? null,
         province: dto.province?.trim() ?? null,
+        practiceAddress1: dto.practiceAddress1?.trim() ?? null,
+        practiceAddress2: dto.practiceAddress2?.trim() ?? null,
+        practicePostalCode: dto.practicePostalCode?.trim() ?? null,
+        practiceCity: dto.practiceCity?.trim() ?? null,
+        practiceProvince: dto.practiceProvince?.trim() ?? null,
         phone: dto.phone?.trim() ?? null,
+        fax: dto.fax?.trim() ?? null,
+        msiProviderNumber: dto.msiProviderNumber?.trim() ?? null,
         licenseFileName: dto.licenseFileName?.trim() ?? null,
         licenseOriginalName: dto.licenseOriginalName?.trim() ?? null,
         resumeFileName: dto.resumeFileName?.trim() ?? null,

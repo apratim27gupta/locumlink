@@ -207,6 +207,8 @@ export default function LocumProfilePage(props: {
 
   /* ── step 2 – contact details ───────────────────────────────────────── */
   const [phone, setPhone] = useState('');
+  const [fax, setFax] = useState('');
+  const [msiProviderNumber, setMsiProviderNumber] = useState('');
   const [email, setEmail] = useState(getEmail() ?? '');
 
   /* ── step 3 – location ──────────────────────────────────────────────── */
@@ -215,6 +217,11 @@ export default function LocumProfilePage(props: {
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
   const [postal, setPostal] = useState('');
+  const [practiceAddr1, setPracticeAddr1] = useState('');
+  const [practiceAddr2, setPracticeAddr2] = useState('');
+  const [practiceCity, setPracticeCity] = useState('');
+  const [practiceProvince, setPracticeProvince] = useState('');
+  const [practicePostal, setPracticePostal] = useState('');
 
   /* city autocomplete */
   const [cityResults, setCityResults] = useState<CanadianCityRow[]>([]);
@@ -327,11 +334,18 @@ export default function LocumProfilePage(props: {
             : [],
         );
         setPhone(p.phone ?? '');
+        setFax(p.fax ?? '');
+        setMsiProviderNumber(p.msiProviderNumber ?? '');
         setAddr1(p.address1 ?? '');
         setAddr2(p.address2 ?? '');
         setCity(formatCanadianCityDisplay(p.city ?? ''));
         setProvince(p.province ?? '');
         setPostal(p.postalCode ?? '');
+        setPracticeAddr1(p.practiceAddress1 ?? '');
+        setPracticeAddr2(p.practiceAddress2 ?? '');
+        setPracticeCity(formatCanadianCityDisplay(p.practiceCity ?? ''));
+        setPracticeProvince(p.practiceProvince ?? '');
+        setPracticePostal(p.practicePostalCode ?? '');
 
         const lf = p.licenseFile ?? p.licenseFileName ?? '';
         const rf = p.resumeFile ?? p.resumeFileName ?? '';
@@ -382,11 +396,18 @@ export default function LocumProfilePage(props: {
       professionalSummary: summary,
       specialization: specialityTags.join(', '),
       phone,
+      fax,
+      msiProviderNumber,
       address1: addr1,
       address2: addr2,
       postalCode: postal,
       city,
       province,
+      practiceAddress1: practiceAddr1,
+      practiceAddress2: practiceAddr2,
+      practicePostalCode: practicePostal,
+      practiceCity,
+      practiceProvince,
       licenseFile,
       resumeFile,
       extraFile,
@@ -399,11 +420,18 @@ export default function LocumProfilePage(props: {
       summary,
       specialityTags,
       phone,
+      fax,
+      msiProviderNumber,
       addr1,
       addr2,
       postal,
       city,
       province,
+      practiceAddr1,
+      practiceAddr2,
+      practicePostal,
+      practiceCity,
+      practiceProvince,
       licenseFile,
       resumeFile,
       extraFile,
@@ -465,11 +493,18 @@ export default function LocumProfilePage(props: {
             professionalSummary: summary,
             specialization: specialityTags.join(', '),
             phone,
+            fax,
+            msiProviderNumber,
             address1: addr1,
             address2: addr2,
             postalCode: postal,
             city,
             province,
+            practiceAddress1: practiceAddr1,
+            practiceAddress2: practiceAddr2,
+            practicePostalCode: practicePostal,
+            practiceCity,
+            practiceProvince,
           },
           {
             licenseFile,
@@ -813,7 +848,7 @@ export default function LocumProfilePage(props: {
             </div>
           </div>
 
-          {/* CPSNS + years */}
+          {/* CPSNS + MSI */}
           <div
             className="locum-form-row"
             style={{
@@ -837,6 +872,31 @@ export default function LocumProfilePage(props: {
                 placeholder="CPSNS Number"
               />
             </div>
+            <div>
+              <label style={{ ...lbl, textTransform: 'none' }}>
+                MSI Provider #
+              </label>
+              <input
+                style={{ ...inp, textTransform: 'none' }}
+                autoComplete="off"
+                value={msiProviderNumber}
+                onChange={(e) => setMsiProviderNumber(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="MSI Provider #"
+              />
+            </div>
+          </div>
+
+          {/* Years of experience */}
+          <div
+            className="locum-form-row"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 16,
+              marginBottom: 12,
+            }}
+          >
             <div>
               <label style={{ ...lbl, textTransform: 'none' }}>
                 Years of Experience
@@ -1164,6 +1224,18 @@ export default function LocumProfilePage(props: {
               />
             </div>
             <div>
+              <label style={lbl}>Fax</label>
+              <input
+                style={inp}
+                value={fax}
+                onChange={(e) => setFax(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Fax"
+                type="tel"
+                autoComplete="off"
+              />
+            </div>
+            <div>
               <label style={lbl}>Email</label>
               <input
                 style={{ ...inp }}
@@ -1368,7 +1440,12 @@ export default function LocumProfilePage(props: {
 
           {/* Postal Code */}
           <div
-            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 16,
+              marginBottom: 20,
+            }}
           >
             <div>
               <label style={lbl}>Postal Code</label>
@@ -1376,6 +1453,98 @@ export default function LocumProfilePage(props: {
                 style={inp}
                 value={postal}
                 onChange={(e) => setPostal(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Postal Code"
+              />
+            </div>
+            <div aria-hidden />
+          </div>
+
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#6B7280',
+              marginBottom: 12,
+            }}
+          >
+            Practice address (if different from mailing)
+          </div>
+
+          <div
+            className="locum-form-row"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 16,
+              marginBottom: 12,
+            }}
+          >
+            <div>
+              <label style={lbl}>Practice Address Line 1</label>
+              <input
+                style={inp}
+                value={practiceAddr1}
+                onChange={(e) => setPracticeAddr1(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Practice Address Line 1"
+              />
+            </div>
+            <div>
+              <label style={lbl}>Practice Address Line 2</label>
+              <input
+                style={inp}
+                value={practiceAddr2}
+                onChange={(e) => setPracticeAddr2(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Practice Address Line 2"
+              />
+            </div>
+          </div>
+
+          <div
+            className="locum-form-row"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 16,
+              marginBottom: 12,
+            }}
+          >
+            <div>
+              <label style={lbl}>Practice City</label>
+              <input
+                style={inp}
+                value={practiceCity}
+                onChange={(e) => setPracticeCity(e.target.value)}
+                onBlur={(e) =>
+                  setPracticeCity(formatCanadianCityDisplay(e.target.value))
+                }
+                onClick={(e) => e.stopPropagation()}
+                placeholder="City"
+              />
+            </div>
+            <div>
+              <label style={lbl}>Practice Province</label>
+              <input
+                style={inp}
+                value={practiceProvince}
+                onChange={(e) => setPracticeProvince(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Province"
+              />
+            </div>
+          </div>
+
+          <div
+            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}
+          >
+            <div>
+              <label style={lbl}>Practice Postal Code</label>
+              <input
+                style={inp}
+                value={practicePostal}
+                onChange={(e) => setPracticePostal(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Postal Code"
               />
