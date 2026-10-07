@@ -199,7 +199,8 @@ export function AuthProvider({ children }: {
                         })();
                     }
                     else if (event === 'TOKEN_REFRESHED') {
-                        // Keep Nest cookies aligned; do not call sync-supabase.
+                        // Keep Nest cookies aligned; do not remint Nest JWT or
+                        // rewrite ll_role — that auto-flipped Host↔Locum mid-session.
                         syncCookies();
                     }
                 }

@@ -231,28 +231,29 @@ export function saveRole(role: Role): void {
 export function getRole(): Role | null {
     if (typeof window === 'undefined')
         return null;
-    // On host/locum routes the URL is authoritative — never let a stale cookie
-    // flip clinic↔locum (that caused middleware bounce / full-page refresh loops).
     const pathRole = roleForPath(window.location.pathname);
-    if (pathRole) {
-        localStorage.setItem(ROLE_KEY, pathRole);
-        setCookie(ROLE_KEY, pathRole, 365);
-        return pathRole;
-    }
     const fromLs = asFrontendRole(localStorage.getItem(ROLE_KEY));
     const fromCookie = asFrontendRole(readBrowserCookie(ROLE_KEY));
-    // Middleware reads cookies — if LS drifted, heal toward the cookie.
-    if (fromLs && fromCookie && fromLs !== fromCookie) {
-        localStorage.setItem(ROLE_KEY, fromCookie);
-        return fromCookie;
+    const jwtRole = roleFromNestJwt(readBrowserCookie('ll_access'));
+
+    // Mid intentional switch: Nest JWT already flipped, URL still on the old
+    // dashboard. Trust the JWT — never rewrite role back to the old path (that
+    // snapped users back / bounced middleware after deploy).
+    if (pathRole && jwtRole && pathRole !== jwtRole) {
+        return jwtRole;
     }
+    // Stable dashboard: path wins so stale cookies cannot auto-flip roles.
+    if (pathRole)
+        return pathRole;
+
+    // Off host/locum routes: cookie wins over drifted localStorage (middleware).
+    if (fromLs && fromCookie && fromLs !== fromCookie)
+        return fromCookie;
     if (fromLs)
         return fromLs;
-    if (fromCookie) {
-        localStorage.setItem(ROLE_KEY, fromCookie);
+    if (fromCookie)
         return fromCookie;
-    }
-    return null;
+    return jwtRole;
 }
 export function saveEmail(email: string): void {
     if (typeof window === 'undefined')

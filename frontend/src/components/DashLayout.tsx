@@ -195,6 +195,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     async function handleRoleSwitch(target: Role) {
         const hasTarget =
             target === 'clinic' ? availableRoles.host : availableRoles.locum;
+        // Only switch on an explicit click of the *other* role — never auto-toggle.
         if (roleSwitchBusy || target === activeDashRole) return;
         if (!hasTarget) {
             setMissingRoleMenu((current) => (current === target ? null : target));
@@ -209,9 +210,13 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 setRoleSwitchBusy(false);
                 return;
             }
-            // Full navigation so middleware + Nest JWT cookies stay aligned (client
-            // soft-nav raced role cookies after Cloud Run and caused random denials).
+            // Full navigation with cookies flushed first so Cloud Run middleware
+            // sees the new Nest JWT + ll_role together (soft-nav raced and broke auth).
             syncCookies();
+            beforeClientNavigation(result.redirectTo);
+            await new Promise<void>((resolve) => {
+                window.setTimeout(resolve, 30);
+            });
             window.location.assign(result.redirectTo);
         } catch (err) {
             console.error(err);
@@ -662,9 +667,6 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     const bellListNotifications = showAllNotifications
         ? visibleNotifications
         : unreadNotifications;
-    const bellListPreview = showAllNotifications
-        ? bellListNotifications
-        : bellListNotifications.slice(0, 3);
     const mergedFirst = apiFirstName?.trim() || topbarFirstName?.trim() || '';
     const mergedLast = apiLastName?.trim() || topbarLastName?.trim() || '';
     const initialsFromContactNames = computeAvatarInitials(mergedFirst || undefined, mergedLast || undefined, topbarAvatarText);
@@ -989,7 +991,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 <div style={{ overflowY: 'auto', overflowX: 'hidden', flex: 1, minHeight: 0 }}>
                   {(() => {
                     if (bellListNotifications.length === 0) return <div style={{ padding: '36px 20px', textAlign: 'center' }}><div style={{ fontSize: 28, marginBottom: 8 }}>🔔</div><div style={{ fontSize: 'var(--font-body)', color: '#9CA3AF' }}>No new notifications</div></div>;
-                    return bellListPreview.map((notif) => {
+                    return bellListNotifications.map((notif) => {
                     const isUnread = notif.read !== true;
                     const rowBg = '#fff';
                     const rowHover = '#F5F6FF';
@@ -1099,8 +1101,10 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
 
                 
                 {(() => {
-                  const hasMoreThanThree = unreadNotifications.length > 3;
-                  if (!hasMoreThanThree || showAllNotifications) return null;
+                  const hasReadHidden =
+                    !showAllNotifications
+                    && visibleNotifications.some((n) => n.read === true);
+                  if (!hasReadHidden) return null;
                   return (
                     <div style={{
                     padding: '10px 16px',
@@ -1109,16 +1113,6 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 }}>
                     <button onClick={() => {
                     setShowAllNotifications(true);
-                    setNotifPanelH((h) => {
-                        const next = Math.max(h, 560);
-                        try {
-                            localStorage.setItem(NOTIF_H_KEY, String(next));
-                        }
-                        catch {
-                            /* ignore */
-                        }
-                        return next;
-                    });
                 }} style={{
                     background: 'none',
                     border: 'none',
@@ -1128,7 +1122,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     cursor: 'pointer',
                     fontFamily: 'inherit',
                 }}>
-                      Show all notifications →
+                      Show read notifications →
                     </button>
                   </div>
                   );
