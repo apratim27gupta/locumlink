@@ -90,10 +90,6 @@ export async function fetchAllPaginated<T>(
     } while (cursor && pages < maxPages);
     return all;
 }
-/** Avoid full-page /auth redirects from background polls (notifications etc.). */
-let unauthorizedRedirectAt = 0;
-const UNAUTHORIZED_REDIRECT_COOLDOWN_MS = 60_000;
-
 function pathRoleFromLocation(): Role | null {
     if (typeof window === 'undefined')
         return null;
@@ -130,19 +126,10 @@ function handleUnauthorized(): void {
         return;
     }
 
-    // Keep cookies aligned; do not hard-reload every poll tick (was every ~8–12s).
+    // Session cookie/JWT still present: realign only. Never hard-navigate —
+    // applicants/posting polls (and notif polls) were forcing a full refresh
+    // every few seconds on transient 401s.
     syncCookies();
-    const now = Date.now();
-    if (now - unauthorizedRedirectAt < UNAUTHORIZED_REDIRECT_COOLDOWN_MS)
-        return;
-    unauthorizedRedirectAt = now;
-    const roleQs = pathRole ?? getRole() ?? 'locum';
-    const next = encodeURIComponent(
-        `${window.location.pathname}${window.location.search}`,
-    );
-    setTimeout(() => {
-        window.location.href = `/auth?mode=signin&role=${roleQs}&next=${next}`;
-    }, 100);
 }
 function nestHeaders(json: boolean, tokenOverride?: string | null): HeadersInit {
     const token = tokenOverride ?? getToken();
@@ -1164,6 +1151,8 @@ export const hostApi = {
             res = await trackedFetch(`${NEST_BASE}/api/host/jobs/${encodeURIComponent(jobId)}`, {
                 cache: 'no-store',
                 headers: nestHeaders(false),
+                // Polled on applicants/posting — do not flash the top loader.
+                skipTopLoader: true,
             });
         }
         catch (err) {
@@ -1171,7 +1160,9 @@ export const hostApi = {
         }
         if (!res.ok) {
             const text = await res.text();
-            throw nestHttpError(text, res.status, 'Loading job');
+            throw nestHttpError(text, res.status, 'Loading job', {
+                skipAuthRedirect: true,
+            });
         }
         return res.json() as Promise<{
             job: Job;
@@ -1231,14 +1222,24 @@ export const hostApi = {
     getApplications: async (jobId: string, params?: PaginationQuery): Promise<PaginatedResult<ApplicationRecord>> => {
         let res: Response;
         try {
-            res = await trackedFetch(`${NEST_BASE}/api/host/jobs/${encodeURIComponent(jobId)}/applications${buildPaginationQs(params)}`, { cache: 'no-store', headers: nestHeaders(false) });
+            res = await trackedFetch(
+                `${NEST_BASE}/api/host/jobs/${encodeURIComponent(jobId)}/applications${buildPaginationQs(params)}`,
+                {
+                    cache: 'no-store',
+                    headers: nestHeaders(false),
+                    // Polled every few seconds on applicants — silent background fetch.
+                    skipTopLoader: true,
+                },
+            );
         }
         catch (err) {
             throw networkFetchError('Loading applications', err);
         }
         if (!res.ok) {
             const text = await res.text();
-            throw nestHttpError(text, res.status, 'Loading applications');
+            throw nestHttpError(text, res.status, 'Loading applications', {
+                skipAuthRedirect: true,
+            });
         }
         return res.json() as Promise<PaginatedResult<ApplicationRecord>>;
     },
@@ -1312,10 +1313,13 @@ export const hostApi = {
         const res = await trackedFetch(`${NEST_BASE}/api/host/match-fees${buildPaginationQs(params)}`, {
             cache: 'no-store',
             headers: nestHeaders(false),
+            skipTopLoader: true,
         });
         if (!res.ok) {
             const text = await res.text();
-            throw nestHttpError(text, res.status, 'Loading match fees');
+            throw nestHttpError(text, res.status, 'Loading match fees', {
+                skipAuthRedirect: true,
+            });
         }
         return res.json() as Promise<PaginatedResult<MatchFeeInvoice>>;
     },

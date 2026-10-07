@@ -406,6 +406,8 @@ export default function HostApplicantsPage(props: {
     const { profile: headerProfile } = useHostProfile();
     const { isLoading: authLoading, userId } = useAuth();
     const [jobId, setJobId] = useState<string | null>(null);
+    /** Avoid full-page loading flash when auth/userId ticks remount the poll effect. */
+    const loadedJobIdRef = useRef<string | null>(null);
     const [job, setJob] = useState<Job | null>(null);
     const [apps, setApps] = useState<ApplicationRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -502,8 +504,11 @@ export default function HostApplicantsPage(props: {
         }
         let cancelled = false;
         let initial = true;
-        setLoading(true);
-        setError(null);
+        const isFirstPaintForJob = loadedJobIdRef.current !== jobId;
+        if (isFirstPaintForJob) {
+            setLoading(true);
+            setError(null);
+        }
 
         const loadJob = () =>
             hostApi
@@ -513,7 +518,7 @@ export default function HostApplicantsPage(props: {
                         setJob(normalizeHostJob(res.job));
                 })
                 .catch(() => {
-                    if (!cancelled)
+                    if (!cancelled && initial)
                         setJob(null);
                 });
 
@@ -535,6 +540,7 @@ export default function HostApplicantsPage(props: {
                 .finally(() => {
                     if (!cancelled && initial) {
                         setLoading(false);
+                        loadedJobIdRef.current = jobId;
                         initial = false;
                     }
                 });
@@ -543,11 +549,16 @@ export default function HostApplicantsPage(props: {
         void loadApps();
 
         // Keep acceptance / confirmation status near real-time while this page is open.
+        // Fetches are silent (skipTopLoader) — must not feel like a hard refresh.
         const intervalId = window.setInterval(() => {
+            if (document.visibilityState !== 'visible')
+                return;
             void loadApps();
             void loadJob();
         }, 8_000);
         const onFocus = () => {
+            if (document.visibilityState !== 'visible')
+                return;
             void loadApps();
             void loadJob();
         };
