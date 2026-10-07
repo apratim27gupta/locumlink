@@ -231,6 +231,14 @@ export function saveRole(role: Role): void {
 export function getRole(): Role | null {
     if (typeof window === 'undefined')
         return null;
+    // On host/locum routes the URL is authoritative — never let a stale cookie
+    // flip clinic↔locum (that caused middleware bounce / full-page refresh loops).
+    const pathRole = roleForPath(window.location.pathname);
+    if (pathRole) {
+        localStorage.setItem(ROLE_KEY, pathRole);
+        setCookie(ROLE_KEY, pathRole, 365);
+        return pathRole;
+    }
     const fromLs = asFrontendRole(localStorage.getItem(ROLE_KEY));
     const fromCookie = asFrontendRole(readBrowserCookie(ROLE_KEY));
     // Middleware reads cookies — if LS drifted, heal toward the cookie.

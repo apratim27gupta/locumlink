@@ -7,7 +7,7 @@ import AppleIcon from '@/components/icons/AppleIcon';
 import GoogleIcon from '@/components/icons/GoogleIcon';
 import MicrosoftIcon from '@/components/icons/MicrosoftIcon';
 import { useAuth } from '@/providers/AuthProvider';
-import { getEmail, saveLastPath, saveRole } from '@/lib/auth';
+import { getEmail, getRole, saveLastPath, saveRole } from '@/lib/auth';
 import type { Role } from '@/lib/auth';
 import { sanitizeErrorMessage, toUserFacingError } from '@/lib/userFacingError';
 import TurnstileWidget, { isTurnstileEnabled } from '@/components/TurnstileWidget';
@@ -46,7 +46,13 @@ function AuthPageInner() {
     const params = useSearchParams();
     const { sendOtp, signInWithOAuth } = useAuth();
     const [mode, setMode] = useState<Mode>(() => params.get('mode') === 'signin' ? 'signin' : 'create');
-    const [role, setRole] = useState<Role>(() => params.get('role') === 'clinic' ? 'clinic' : 'locum');
+    const [role, setRole] = useState<Role>(() => {
+        const fromUrl = params.get('role');
+        if (fromUrl === 'clinic' || fromUrl === 'locum')
+            return fromUrl;
+        // Preserve existing session role — never default to locum and overwrite a host.
+        return getRole() ?? 'locum';
+    });
     const [email, setEmail] = useState('');
     const [error, setError] = useState(() => sanitizeErrorMessage(params.get('error')));
     const [busyAction, setBusyAction] = useState<
@@ -63,7 +69,8 @@ function AuthPageInner() {
         setError(sanitizeErrorMessage(params.get('error')));
     }, [params]);
 
-    // Keep ll_role aligned with the URL so verify never falls back to locum.
+    // Keep ll_role aligned with the selected role so verify never falls back wrongly.
+    // Only write when the URL explicitly set a role, or the user changed the toggle.
     useEffect(() => {
         if (role === 'clinic' || role === 'locum') saveRole(role);
     }, [role]);

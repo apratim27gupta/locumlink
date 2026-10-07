@@ -1,6 +1,12 @@
 import type { HostProfile, LocumProfile } from '@/types';
-import type { Role } from '@/lib/auth';
-import { getToken, clearSession, syncCookies } from '@/lib/auth';
+import {
+    getToken,
+    getRole,
+    saveRole,
+    clearSession,
+    syncCookies,
+    type Role,
+} from '@/lib/auth';
 import { startLoader, stopLoader } from '@/lib/topLoader';
 /** Server: direct Nest URL. Browser: same-origin `/api/*` via Next rewrites (avoids CORS). */
 const NEST_BASE =
@@ -84,20 +90,59 @@ export async function fetchAllPaginated<T>(
     } while (cursor && pages < maxPages);
     return all;
 }
+/** Avoid full-page /auth redirects from background polls (notifications etc.). */
+let unauthorizedRedirectAt = 0;
+const UNAUTHORIZED_REDIRECT_COOLDOWN_MS = 60_000;
+
+function pathRoleFromLocation(): Role | null {
+    if (typeof window === 'undefined')
+        return null;
+    const path = window.location.pathname;
+    if (path.startsWith('/host'))
+        return 'clinic';
+    if (path.startsWith('/locum'))
+        return 'locum';
+    return null;
+}
+
 function handleUnauthorized(): void {
     if (typeof window === 'undefined')
         return;
+    // Already on auth — do not bounce the page again.
+    if (window.location.pathname.startsWith('/auth'))
+        return;
+
+    // Heal role from the route so a host session is not rewritten to locum on /auth.
+    const pathRole = pathRoleFromLocation();
+    if (pathRole)
+        saveRole(pathRole);
+
     const token = getToken();
-    if (token) {
-        syncCookies();
-        setTimeout(() => {
-            window.location.href = '/auth';
-        }, 100);
-    }
-    else {
+    if (!token) {
         clearSession();
-        window.location.href = '/auth';
+        const roleQs = pathRole ?? getRole();
+        const next = encodeURIComponent(
+            `${window.location.pathname}${window.location.search}`,
+        );
+        window.location.href = roleQs
+            ? `/auth?mode=signin&role=${roleQs}&next=${next}`
+            : `/auth?mode=signin&next=${next}`;
+        return;
     }
+
+    // Keep cookies aligned; do not hard-reload every poll tick (was every ~8–12s).
+    syncCookies();
+    const now = Date.now();
+    if (now - unauthorizedRedirectAt < UNAUTHORIZED_REDIRECT_COOLDOWN_MS)
+        return;
+    unauthorizedRedirectAt = now;
+    const roleQs = pathRole ?? getRole() ?? 'locum';
+    const next = encodeURIComponent(
+        `${window.location.pathname}${window.location.search}`,
+    );
+    setTimeout(() => {
+        window.location.href = `/auth?mode=signin&role=${roleQs}&next=${next}`;
+    }, 100);
 }
 function nestHeaders(json: boolean, tokenOverride?: string | null): HeadersInit {
     const token = tokenOverride ?? getToken();

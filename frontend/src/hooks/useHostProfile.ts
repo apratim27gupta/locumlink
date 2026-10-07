@@ -12,6 +12,7 @@ export function useHostProfile() {
     const [error, setError] = useState<string | null>(null);
     /** After a local save we already have the response - skip the echo refresh. */
     const skipNextProfileEventRefresh = useRef(false);
+    const hasLoadedOnceRef = useRef(false);
 
     const refreshProfile = useCallback(async () => {
         const token = getToken();
@@ -25,6 +26,7 @@ export function useHostProfile() {
             const data = await hostApi.getProfile();
             setProfile(data ?? null);
             setError(null);
+            hasLoadedOnceRef.current = true;
         }
         catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Failed to fetch profile';
@@ -34,6 +36,10 @@ export function useHostProfile() {
     }, []);
 
     useEffect(() => {
+        hasLoadedOnceRef.current = false;
+    }, [userId]);
+
+    useEffect(() => {
         if (authLoading)
             return;
         const token = getToken();
@@ -41,10 +47,14 @@ export function useHostProfile() {
             setProfile(null);
             setError(null);
             setLoading(false);
+            hasLoadedOnceRef.current = false;
             return;
         }
         let cancelled = false;
-        setLoading(true);
+        // Only show the full-page loading shell on the first fetch — later
+        // refreshes must not remount the form (looks like a page refresh).
+        if (!hasLoadedOnceRef.current)
+            setLoading(true);
         void refreshProfile().finally(() => {
             if (!cancelled)
                 setLoading(false);
