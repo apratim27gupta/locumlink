@@ -28,7 +28,10 @@ import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
 import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, applicationCoveredShiftIds, formatApplicationSlotLabels, formatSpecificDate, getJobScheduleModel, getPostingDays } from '@/lib/jobSchedule';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { CountBadge } from '@/components/CountBadge';
-import { canMutateApplicationBeforeOngoing } from '@/lib/locumApplicationActions';
+import {
+    canMutateApplicationBeforeOngoing,
+    shouldHideFromLocumDashboard,
+} from '@/lib/locumApplicationActions';
 
 function applicationToBrowseJob(app: MyApplication): BrowseJob {
     const jp = app.jobPosting;
@@ -289,13 +292,6 @@ function applicationStatusPresentation(app: MyApplication): {
                 color: '#DC2626',
             };
         case 'WITHDRAWN':
-            if (app.locumResponse === 'REJECTED')
-                return {
-                    label: 'Rejected',
-                    bg: '#FEF2F2',
-                    border: '#FECACA',
-                    color: '#DC2626',
-                };
             return {
                 label: 'Withdrawn',
                 bg: '#F9FAFB',
@@ -553,6 +549,14 @@ export default function LocumDashboard(props: {
             && endDate
             && endDate.getTime() < todayStart.getTime();
     };
+    const dashboardShiftCtx = {
+        isUpcomingApplication,
+        isOngoingApplication,
+        isCompletedApplication,
+    };
+    const visibleApplications = applications.filter(
+        (app) => !shouldHideFromLocumDashboard(app, dashboardShiftCtx),
+    );
     const isRecentApplication = (app: MyApplication) => {
         // If it belongs to a time-based tab, exclude from Recent
         if (isUpcomingApplication(app)) return false;
@@ -561,10 +565,10 @@ export default function LocumDashboard(props: {
         return app.status === 'APPLIED'
             || app.status === 'SHORTLISTED'
             || app.status === 'CONFIRMED'
-            || app.locumResponse === 'ACCEPTED'
-            || app.locumResponse === 'REJECTED';
+            || app.status === 'REJECTED'
+            || app.locumResponse === 'ACCEPTED';
     };
-    const tabApps = applications.filter((app) => {
+    const tabApps = visibleApplications.filter((app) => {
         if (tab === 'recent')
             return isRecentApplication(app);
         if (tab === 'upcoming')
@@ -576,11 +580,11 @@ export default function LocumDashboard(props: {
         return false;
     });
     const locumAcceptedApplication = (a: MyApplication) => a.locumResponse === 'ACCEPTED' || !!a.locumAcceptedAt;
-    const acceptedFromApps = applications.filter(locumAcceptedApplication).length;
-    const completedFromApps = applications.filter(isCompletedApplication).length;
-    const recentCount = applications.filter(isRecentApplication).length;
-    const upcomingCount = applications.filter(isUpcomingApplication).length;
-    const ongoingCount = applications.filter(isOngoingApplication).length;
+    const acceptedFromApps = visibleApplications.filter(locumAcceptedApplication).length;
+    const completedFromApps = visibleApplications.filter(isCompletedApplication).length;
+    const recentCount = visibleApplications.filter(isRecentApplication).length;
+    const upcomingCount = visibleApplications.filter(isUpcomingApplication).length;
+    const ongoingCount = visibleApplications.filter(isOngoingApplication).length;
     const acceptedCount = shiftStats?.totalAcceptedShifts ?? acceptedFromApps;
     const completedCount = shiftStats?.completedShifts ?? completedFromApps;
     const locumTabCounts: Record<(typeof LOCUM_TABS)[number]['id'], number> = {

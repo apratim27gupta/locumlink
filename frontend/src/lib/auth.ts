@@ -128,12 +128,20 @@ function setCookie(name: string, value: string, days = 365): void {
     if (typeof document === 'undefined')
         return;
     const expires = new Date(Date.now() + days * 86400000).toUTCString();
-    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; expires=${expires}; SameSite=Lax`;
+    const secure =
+        typeof window !== 'undefined' && window.location.protocol === 'https:'
+            ? '; Secure'
+            : '';
+    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; expires=${expires}; SameSite=Lax${secure}`;
 }
 function deleteCookie(name: string): void {
     if (typeof document === 'undefined')
         return;
-    document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    const secure =
+        typeof window !== 'undefined' && window.location.protocol === 'https:'
+            ? '; Secure'
+            : '';
+    document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT${secure}`;
 }
 export function saveToken(token: string): void {
     if (typeof window === 'undefined')

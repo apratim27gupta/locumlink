@@ -19,7 +19,7 @@ type AdminMatchFeeRefundConfirmModalProps = {
   open: boolean;
   busy: boolean;
   mode: RefundConfirmMode;
-  /** Required for discretionary mode: the fee portion ($5 or $10); HST is added on top. */
+  /** Required for discretionary mode: the fee portion (CA$5 or CA$10); HST is added on top. */
   amountCents?: number;
   /** Required for duplicate mode: the extra payment to refund. */
   attempt?: AdminMatchFeePaymentAttempt | null;

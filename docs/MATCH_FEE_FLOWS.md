@@ -1,6 +1,9 @@
 # Match fee + HST — flows, data, Stripe, safety, manual tests
 
-Scope: **host platform match fee only** ($5 / $10 CAD + 14% HST — TEMP staging live QA; production rates were $125 / $250). Not locum clinical pay or Stripe Connect.
+**Full narrative (data flow, security, reconciliation, refunds, code links):**  
+[`MATCH_FEE_PAYMENT_FLOW_COMPLETE.md`](./MATCH_FEE_PAYMENT_FLOW_COMPLETE.md)
+
+Scope: **host platform match fee only** (CA$5 / CA$10 + 14% HST - TEMP staging live QA; production rates were CA$125 / CA$250). Not locum clinical pay or Stripe Connect.
 
 ---
 
@@ -36,8 +39,6 @@ stateDiagram-v2
 
 **Virtual UI:** `Refund in progress` = admin review pending **or** Stripe refund `REQUESTED`/`PENDING`.  
 **Virtual UI:** `Fee retained` = `PAID` + `FEE_NON_REFUNDABLE` event (late host cancel).
-
-**TEMP testing override:** `MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT=1` on the API makes locum late cancel skip `PENDING_REPLACEMENT` and go straight to admin refund-pending (same as early cancel). Unset / `0` restores the replacement flow.
 
 ---
 
@@ -109,9 +110,9 @@ sequenceDiagram
 |-------|----------------------|---------------------------|
 | Host | Paid → `PAID` + `refundResolution PENDING` + admin review | Paid → stay `PAID`, `FEE_NON_REFUNDABLE` |
 | Locum | Same refund review | Paid → `PENDING_REPLACEMENT` + `SEARCHING` (fee refundable if no replacement accepts) |
+| Either | Unpaid → `CANCELLED` | Unpaid → stays `PENDING`/`OVERDUE` (remains due) |
 
 **Tier top-up:** Post-placement `TIER_TOP_UP` invoices follow the same pay / cancel / refund rules as the primary match fee.
-| Either | Unpaid → `CANCELLED` | Unpaid → `CANCELLED` |
 
 **Triggers:** locum withdraw, host cancel match (applicants UI), job delete, admin.
 
@@ -287,7 +288,8 @@ Use **Stripe test mode** (`sk_test_`, test cards `4242…`). Run backend + front
 |---|--------|----------|
 | D1 | Applicants → locum accepted → Cancel match (≥14d, paid) | Modal; refund pending review; admin REFUND_DUE |
 | D2 | Same, &lt;14d paid | Confirm non-refundable; FEE_NON_REFUNDABLE; chip Fee retained |
-| D3 | Unpaid cancel | Invoice CANCELLED |
+| D3 | Unpaid cancel ≥14d | Invoice CANCELLED |
+| D4 | Unpaid cancel &lt;14d | Invoice stays due (PENDING/OVERDUE) |
 
 ### E. Locum withdraw
 

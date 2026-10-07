@@ -39,6 +39,7 @@ import {
   resolveNotificationActionFields,
   resolveNotificationTitle,
 } from './notification-defaults.js';
+import { sanitizeNotificationCopy } from './sanitize-notification-copy.js';
 import {
   buildH001LocumApplied,
   buildH002LocumAccepted,
@@ -151,7 +152,7 @@ function appUrl(path: string): string {
 }
 
 function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  return `CA$${(cents / 100).toFixed(2)}`;
 }
 
 /** `amountCents` is the total the host pays; `taxCents` is the HST included in it. */
@@ -211,6 +212,19 @@ export class NotificationsService {
     emailSubject?: string;
     emailBody?: string;
   }): Promise<void> {
+    const title = sanitizeNotificationCopy(params.title);
+    const body = sanitizeNotificationCopy(params.body);
+    const pushTitle = sanitizeNotificationCopy(
+      params.pushTitle ?? params.title,
+    );
+    const pushBody = sanitizeNotificationCopy(params.pushBody ?? params.body);
+    const emailSubject = params.emailSubject
+      ? sanitizeNotificationCopy(params.emailSubject)
+      : undefined;
+    const emailBody = params.emailBody
+      ? sanitizeNotificationCopy(params.emailBody)
+      : undefined;
+
     await this.prisma.notificationEvent.create({
       data: {
         recipientId: params.recipientId,
@@ -218,8 +232,8 @@ export class NotificationsService {
         referenceId: params.referenceId,
         referenceType: params.referenceType,
         payload: {
-          title: params.title,
-          body: params.body,
+          title,
+          body,
           href: params.href,
           priority: params.priority,
           actionLabel: params.actionLabel,
@@ -231,12 +245,12 @@ export class NotificationsService {
     });
 
     await this.push.sendToUser(params.recipientId, {
-      title: params.pushTitle ?? params.title,
-      body: params.pushBody ?? params.body,
+      title: pushTitle,
+      body: pushBody,
       url: params.href,
     });
 
-    if (params.emailTo && params.emailSubject && params.emailBody) {
+    if (params.emailTo && emailSubject && emailBody) {
       const user = await this.prisma.user.findUnique({
         where: { id: params.recipientId },
         select: { emailPrefs: true },
@@ -248,8 +262,8 @@ export class NotificationsService {
       } else {
         const emailResult = await this.email.send({
           to: params.emailTo,
-          subject: params.emailSubject,
-          text: params.emailBody,
+          subject: emailSubject,
+          text: emailBody,
         });
         if (!emailResult.ok) {
           this.logger.error(
@@ -1240,8 +1254,10 @@ export class NotificationsService {
       return {
         id: e.id,
         type: eventTypeToCategory(e.eventType),
-        title: resolveNotificationTitle(e.eventType, payload.title),
-        body: payload.body ?? '',
+        title: sanitizeNotificationCopy(
+          resolveNotificationTitle(e.eventType, payload.title),
+        ),
+        body: sanitizeNotificationCopy(payload.body ?? ''),
         href: resolved.href,
         read: e.deliveryStatus === 'READ',
         createdAt: e.sentAt.toISOString(),
@@ -1458,20 +1474,25 @@ export class NotificationsService {
     recipientEmail: string;
     jobTitle: string;
     invoiceId: string;
+    /** Total refund amount in cents (fee + HST). */
+    amountCents: number;
   }): Promise<void> {
+    const amount = formatCents(params.amountCents);
+    const timing =
+      `${amount} will be refunded to your original payment method in about 10-14 business days.`;
     await this.create({
       recipientId: params.recipientId,
       eventType: 'H_018_MATCH_FEE_REFUND',
-      title: 'Match fee refund issued',
-      body: `Your match fee for ${params.jobTitle} was refunded to your original payment method.`,
+      title: 'Match fee refund approved',
+      body: `Your match fee refund for ${params.jobTitle} was approved. ${timing}`,
       href: '/host/invoices',
       priority: 'MEDIUM',
       actionLabel: 'View Invoice',
       referenceId: params.invoiceId,
       referenceType: 'MatchFeeInvoice',
       emailTo: params.recipientEmail,
-      emailSubject: `Match fee refund: ${params.jobTitle}`,
-      emailBody: `LocumLink refunded your match fee for ${params.jobTitle} to your original payment method.`,
+      emailSubject: `Match fee refund approved: ${params.jobTitle}`,
+      emailBody: `LocumLink approved your match fee refund for ${params.jobTitle}. ${timing}`,
     });
   }
 

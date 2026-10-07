@@ -92,12 +92,12 @@ const APPLICANT_TABLE_COLUMNS: { label: string; title?: string; track: string }[
     { label: 'Status', track: 'minmax(120px, 0.8fr)' },
     { label: 'Response', title: 'Locum response', track: 'minmax(96px, 0.7fr)' },
     { label: 'Invoice', track: 'minmax(120px, 0.8fr)' },
-    { label: 'Form', title: 'GP Locum Application', track: 'minmax(110px, 0.7fr)' },
+    { label: 'GP Locum Form', title: 'GP Locum Application', track: 'minmax(130px, 0.85fr)' },
 ];
 const APPLICANT_GRID_TEMPLATE = APPLICANT_TABLE_COLUMNS.map((c) => c.track).join(' ');
 const APPLICANT_GRID_GAP = 12;
 /** Sum of column minimums + gaps + horizontal padding; below this the table scrolls. */
-const APPLICANT_TABLE_MIN_WIDTH = 970 + APPLICANT_GRID_GAP * (APPLICANT_TABLE_COLUMNS.length - 1) + 36;
+const APPLICANT_TABLE_MIN_WIDTH = 990 + APPLICANT_GRID_GAP * (APPLICANT_TABLE_COLUMNS.length - 1) + 36;
 function displayName(a: ApplicationRecord): string {
     const f = a.locumProfile.firstName?.trim() || '';
     const l = a.locumProfile.lastName?.trim() || '';
@@ -501,36 +501,64 @@ export default function HostApplicantsPage(props: {
             return;
         }
         let cancelled = false;
+        let initial = true;
         setLoading(true);
         setError(null);
-        hostApi
-            .getJob(jobId)
-            .then((res) => {
-            if (!cancelled)
-                setJob(normalizeHostJob(res.job));
-        })
-            .catch(() => {
-            if (!cancelled)
-                setJob(null);
-        });
-        hostApi
-            .getApplications(jobId, { limit: 100 })
-            .then((res) => {
-            if (!cancelled)
-                setApps(res.items ?? []);
-        })
-            .catch((e) => {
-            if (cancelled)
-                return;
-            setError(e instanceof Error ? e.message : 'Could not load applicants.');
-            setApps([]);
-        })
-            .finally(() => {
-            if (!cancelled)
-                setLoading(false);
-        });
+
+        const loadJob = () =>
+            hostApi
+                .getJob(jobId)
+                .then((res) => {
+                    if (!cancelled)
+                        setJob(normalizeHostJob(res.job));
+                })
+                .catch(() => {
+                    if (!cancelled)
+                        setJob(null);
+                });
+
+        const loadApps = () =>
+            hostApi
+                .getApplications(jobId, { limit: 100 })
+                .then((res) => {
+                    if (!cancelled)
+                        setApps(res.items ?? []);
+                })
+                .catch((e) => {
+                    if (cancelled)
+                        return;
+                    if (initial) {
+                        setError(e instanceof Error ? e.message : 'Could not load applicants.');
+                        setApps([]);
+                    }
+                })
+                .finally(() => {
+                    if (!cancelled && initial) {
+                        setLoading(false);
+                        initial = false;
+                    }
+                });
+
+        void loadJob();
+        void loadApps();
+
+        // Keep acceptance / confirmation status near real-time while this page is open.
+        const intervalId = window.setInterval(() => {
+            void loadApps();
+            void loadJob();
+        }, 8_000);
+        const onFocus = () => {
+            void loadApps();
+            void loadJob();
+        };
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onFocus);
+
         return () => {
             cancelled = true;
+            window.clearInterval(intervalId);
+            window.removeEventListener('focus', onFocus);
+            document.removeEventListener('visibilitychange', onFocus);
         };
     }, [jobId, authLoading, userId]);
     useEffect(() => {
@@ -561,7 +589,18 @@ export default function HostApplicantsPage(props: {
         }
         return groups;
     }, [apps]);
-    const invoiceByApplication = usePostingInvoices(jobId);
+    // When a locum accepts, the invoice is created in the same API request - but this
+    // host page may still be open. Refetch invoices whenever accepted apps change.
+    const invoiceRefreshKey = useMemo(
+        () =>
+            apps
+                .filter((a) => a.locumResponse === 'ACCEPTED')
+                .map((a) => a.id)
+                .sort()
+                .join(','),
+        [apps],
+    );
+    const invoiceByApplication = usePostingInvoices(jobId, invoiceRefreshKey);
 
     async function finishCancelMatch(applicationId: string) {
         setActioning((prev) => new Set(prev).add(applicationId));

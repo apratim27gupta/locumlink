@@ -211,6 +211,7 @@ export class AdminService {
     fillRate: number;
     avgTimesToPlacementHours: number | null;
     openReports: number;
+    openHostTickets: number;
   }> {
     const [
       roleGroups,
@@ -224,6 +225,7 @@ export class AdminService {
       confirmedApplications,
       placedApplications,
       openReports,
+      openHostTickets,
     ] = await Promise.all([
       this.prisma.user.groupBy({
         by: ['role'],
@@ -266,6 +268,9 @@ export class AdminService {
       }),
       this.prisma.userReport.count({
         where: { status: UserReportStatus.OPEN },
+      }),
+      this.prisma.supportTicket.count({
+        where: { status: 'OPEN' },
       }),
     ]);
 
@@ -312,6 +317,7 @@ export class AdminService {
       fillRate,
       avgTimesToPlacementHours,
       openReports,
+      openHostTickets,
     };
   }
 

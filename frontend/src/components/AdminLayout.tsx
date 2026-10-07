@@ -60,6 +60,7 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
   const { stats, adminEmail } = useAdminStats();
   const pendingCount = stats?.pendingVerifications ?? 0;
   const openReports = stats?.openReports ?? 0;
+  const openHostTickets = stats?.openHostTickets ?? 0;
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
@@ -113,6 +114,7 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
       label: 'Host tickets',
       href: '/admin/tickets',
       icon: <Ticket size={20} />,
+      badge: openHostTickets > 0 ? openHostTickets : undefined,
     },
     {
       id: 'payments',

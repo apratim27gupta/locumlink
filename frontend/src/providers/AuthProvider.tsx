@@ -53,11 +53,17 @@ function getJwtSubject(token: string | null): string | null {
     }
 }
 
-function resolveSyncRole(): Role {
+/**
+ * Role for Nest JWT minting. Never invent "locum" — that flips Host sessions after
+ * Cloud Run / multi-tab sync. Prefer path → stored role → existing Nest JWT.
+ */
+function resolveSyncRole(): Role | null {
     return (
         inferSessionRole(
             typeof window !== 'undefined' ? window.location.pathname : null,
-        ) ?? 'locum'
+        )
+        ?? getRole()
+        ?? roleFromNestJwt(getToken())
     );
 }
 
@@ -68,32 +74,37 @@ async function syncNestAccessToken(
 ): Promise<boolean> {
     if (syncNestInFlight) return syncNestInFlight;
     syncNestInFlight = (async () => {
-        const role = resolveSyncRole();
-        // Persist inferred role before writing tokens so saveToken hits the right key.
-        if (getRole() !== role)
-            saveRole(role);
-
-        const existing = getToken();
-        if (
-            !options?.force
-            && existing
-            && roleFromNestJwt(existing) === role
-        ) {
-            syncCookies();
-            return true;
-        }
-
         try {
-            const out = await authApi.syncFromSupabase(role, supabaseAccessToken);
-            // Drop the result if the user switched roles while this sync was in flight.
-            const roleNow = resolveSyncRole();
-            if (roleNow !== role)
-                return Boolean(getToken());
-            activateRole(role, out.accessToken);
-            return true;
-        }
-        catch {
-            return false;
+            const role = resolveSyncRole();
+            if (!role)
+                return false;
+
+            const existing = getToken();
+            if (
+                !options?.force
+                && existing
+                && roleFromNestJwt(existing) === role
+            ) {
+                // Align cookies with the already-valid Nest JWT; do not rewrite ll_role
+                // from a guessed default before the network round-trip.
+                if (getRole() !== role)
+                    saveRole(role);
+                syncCookies();
+                return true;
+            }
+
+            try {
+                const out = await authApi.syncFromSupabase(role, supabaseAccessToken);
+                // Drop the result if the user switched roles while this sync was in flight.
+                const roleNow = resolveSyncRole();
+                if (roleNow !== role)
+                    return Boolean(getToken());
+                activateRole(role, out.accessToken);
+                return true;
+            }
+            catch {
+                return false;
+            }
         }
         finally {
             syncNestInFlight = null;

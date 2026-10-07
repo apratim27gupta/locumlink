@@ -1,4 +1,37 @@
 import type { MyApplication } from '@/lib/api';
+import { isLocalPostingEndDatePassed } from '@/lib/localDateTime';
+
+/** Posting no longer open (expired, completed, removed, or past end date). */
+export function isPostingClosedForNewActivity(jp: {
+  status?: string | null;
+  isDeleted?: boolean;
+  endDate?: string | null;
+}): boolean {
+  if (jp.isDeleted) return true;
+  const st = (jp.status ?? '').toUpperCase();
+  if (st === 'EXPIRED' || st === 'COMPLETED') return true;
+  return isLocalPostingEndDatePassed(jp.endDate ?? null);
+}
+
+/** Omit withdrawn apps and stale applications on closed postings from My Applications. */
+export function shouldHideFromLocumDashboard(
+  app: MyApplication,
+  ctx: {
+    isUpcomingApplication: (a: MyApplication) => boolean;
+    isOngoingApplication: (a: MyApplication) => boolean;
+    isCompletedApplication: (a: MyApplication) => boolean;
+  },
+): boolean {
+  if (app.status === 'WITHDRAWN') return true;
+  if (
+    ctx.isUpcomingApplication(app)
+    || ctx.isOngoingApplication(app)
+    || ctx.isCompletedApplication(app)
+  ) {
+    return false;
+  }
+  return isPostingClosedForNewActivity(app.jobPosting);
+}
 
 /** Locum can change availability / withdraw until the posting is ongoing or finished. */
 export function canMutateApplicationBeforeOngoing(app: {

@@ -154,6 +154,32 @@ function highlightCityName(text: string, query: string): React.ReactNode {
   );
 }
 
+function locumPracticeAddressMatchesMailing(
+  mailing: {
+    address1: string;
+    address2: string;
+    city: string;
+    province: string;
+    postalCode: string;
+  },
+  practice: {
+    practiceAddress1: string;
+    practiceAddress2: string;
+    practiceCity: string;
+    practiceProvince: string;
+    practicePostalCode: string;
+  },
+): boolean {
+  const n = (s: string) => s.trim();
+  return (
+    n(mailing.address1) === n(practice.practiceAddress1) &&
+    n(mailing.address2) === n(practice.practiceAddress2) &&
+    n(mailing.city) === n(practice.practiceCity) &&
+    n(mailing.province) === n(practice.practiceProvince) &&
+    n(mailing.postalCode) === n(practice.practicePostalCode)
+  );
+}
+
 /* ── step status helpers ──────────────────────────────────────────────────── */
 function stepBorderColor(s: StepStatus) {
   if (s === 'complete') return '#16a34a';
@@ -222,6 +248,7 @@ export default function LocumProfilePage(props: {
   const [practiceCity, setPracticeCity] = useState('');
   const [practiceProvince, setPracticeProvince] = useState('');
   const [practicePostal, setPracticePostal] = useState('');
+  const [practiceSameAsMailing, setPracticeSameAsMailing] = useState(false);
 
   /* city autocomplete */
   const [cityResults, setCityResults] = useState<CanadianCityRow[]>([]);
@@ -238,6 +265,26 @@ export default function LocumProfilePage(props: {
     220,
   );
   const cityBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* practice city autocomplete (same behavior as mailing city) */
+  const [practiceCityResults, setPracticeCityResults] = useState<
+    CanadianCityRow[]
+  >([]);
+  const [practiceCityDropOpen, setPracticeCityDropOpen] = useState(false);
+  const [practiceCityActiveIdx, setPracticeCityActiveIdx] = useState(-1);
+  const practiceCityInputRef = useRef<HTMLInputElement>(null);
+  const practiceCityAnchorRef = useRef<HTMLDivElement>(null);
+  const practiceCityMenuRef = useRef<HTMLDivElement>(null);
+  const practiceCityMenuBox = useAnchoredDropdownMenu(
+    practiceCityDropOpen,
+    setPracticeCityDropOpen,
+    practiceCityAnchorRef,
+    practiceCityMenuRef,
+    220,
+  );
+  const practiceCityBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   /* ── step 4 – relevant documents ───────────────────────────────────── */
   const [licenseFile, setLicenseFile] = useState('');
@@ -295,9 +342,73 @@ export default function LocumProfilePage(props: {
     if (e.key === 'Escape') setCityDropOpen(false);
   }
 
+  const searchPracticeCities = useCallback((q: string) => {
+    if (!q || q.trim().length < 2) {
+      setPracticeCityResults([]);
+      setPracticeCityDropOpen(false);
+      return;
+    }
+    const found = filterCanadianCities(q, 8);
+    setPracticeCityResults(found);
+    setPracticeCityActiveIdx(-1);
+    setPracticeCityDropOpen(true);
+  }, []);
+
+  function handlePracticeCitySelect(row: CanadianCityRow) {
+    setPracticeCity(formatCanadianCityDisplay(row.name));
+    setPracticeProvince(
+      CANADIAN_PROVINCE_NAMES[row.province] ?? row.province,
+    );
+    setPracticeCityResults([]);
+    setPracticeCityDropOpen(false);
+  }
+
+  function handlePracticeCityKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (!practiceCityDropOpen) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setPracticeCityActiveIdx((i) =>
+        Math.min(i + 1, practiceCityResults.length - 1),
+      );
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setPracticeCityActiveIdx((i) => Math.max(i - 1, 0));
+    }
+    if (
+      e.key === 'Enter' &&
+      practiceCityActiveIdx >= 0 &&
+      practiceCityResults[practiceCityActiveIdx]
+    ) {
+      e.preventDefault();
+      handlePracticeCitySelect(practiceCityResults[practiceCityActiveIdx]);
+    }
+    if (e.key === 'Escape') setPracticeCityDropOpen(false);
+  }
+
+  useEffect(() => {
+    if (!practiceSameAsMailing) return;
+    setPracticeAddr1(addr1);
+    setPracticeAddr2(addr2);
+    setPracticeCity(city);
+    setPracticeProvince(province);
+    setPracticePostal(postal);
+    setPracticeCityDropOpen(false);
+    setPracticeCityResults([]);
+  }, [
+    practiceSameAsMailing,
+    addr1,
+    addr2,
+    city,
+    province,
+    postal,
+  ]);
+
   useEffect(
     () => () => {
       if (cityBlurTimer.current != null) clearTimeout(cityBlurTimer.current);
+      if (practiceCityBlurTimer.current != null)
+        clearTimeout(practiceCityBlurTimer.current);
     },
     [],
   );
@@ -346,6 +457,24 @@ export default function LocumProfilePage(props: {
         setPracticeCity(formatCanadianCityDisplay(p.practiceCity ?? ''));
         setPracticeProvince(p.practiceProvince ?? '');
         setPracticePostal(p.practicePostalCode ?? '');
+        setPracticeSameAsMailing(
+          locumPracticeAddressMatchesMailing(
+            {
+              address1: p.address1 ?? '',
+              address2: p.address2 ?? '',
+              city: formatCanadianCityDisplay(p.city ?? ''),
+              province: p.province ?? '',
+              postalCode: p.postalCode ?? '',
+            },
+            {
+              practiceAddress1: p.practiceAddress1 ?? '',
+              practiceAddress2: p.practiceAddress2 ?? '',
+              practiceCity: formatCanadianCityDisplay(p.practiceCity ?? ''),
+              practiceProvince: p.practiceProvince ?? '',
+              practicePostalCode: p.practicePostalCode ?? '',
+            },
+          ),
+        );
 
         const lf = p.licenseFile ?? p.licenseFileName ?? '';
         const rf = p.resumeFile ?? p.resumeFileName ?? '';
@@ -1466,10 +1595,39 @@ export default function LocumProfilePage(props: {
 
           <div
             className="locum-section-header"
-            style={{ marginBottom: 12, marginTop: 4 }}
+            style={{ marginBottom: 8, marginTop: 4 }}
           >
             <span>Practice address</span>
           </div>
+
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              cursor: 'pointer',
+              userSelect: 'none',
+              marginBottom: 14,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={practiceSameAsMailing}
+              onChange={(e) => setPracticeSameAsMailing(e.target.checked)}
+              style={{
+                width: 14,
+                height: 14,
+                border: '1px solid rgba(21, 20, 20, 0.4)',
+                borderRadius: 4,
+                accentColor: '#1522A6',
+                flexShrink: 0,
+              }}
+            />
+            <span style={{ fontSize: 14, fontWeight: 500, color: '#374151' }}>
+              Same as Mailing Address
+            </span>
+          </label>
 
           <div
             className="locum-form-row"
@@ -1483,8 +1641,14 @@ export default function LocumProfilePage(props: {
             <div>
               <label style={lbl}>Practice Address Line 1</label>
               <input
-                style={inp}
+                style={{
+                  ...inp,
+                  ...(practiceSameAsMailing
+                    ? { background: 'rgba(11,15,31,0.04)' }
+                    : {}),
+                }}
                 value={practiceAddr1}
+                readOnly={practiceSameAsMailing}
                 onChange={(e) => setPracticeAddr1(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Practice Address Line 1"
@@ -1493,8 +1657,14 @@ export default function LocumProfilePage(props: {
             <div>
               <label style={lbl}>Practice Address Line 2</label>
               <input
-                style={inp}
+                style={{
+                  ...inp,
+                  ...(practiceSameAsMailing
+                    ? { background: 'rgba(11,15,31,0.04)' }
+                    : {}),
+                }}
                 value={practiceAddr2}
+                readOnly={practiceSameAsMailing}
                 onChange={(e) => setPracticeAddr2(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Practice Address Line 2"
@@ -1511,24 +1681,127 @@ export default function LocumProfilePage(props: {
               marginBottom: 12,
             }}
           >
-            <div>
-              <label style={lbl}>Practice City</label>
+            <div ref={practiceCityAnchorRef} style={{ position: 'relative' }}>
+              <label htmlFor="locum-profile-practice-city" style={lbl}>
+                Practice City
+              </label>
               <input
-                style={inp}
+                id="locum-profile-practice-city"
+                ref={practiceCityInputRef}
+                autoComplete="off"
+                style={{
+                  ...inp,
+                  ...(practiceSameAsMailing
+                    ? { background: 'rgba(11,15,31,0.04)' }
+                    : {}),
+                }}
                 value={practiceCity}
-                onChange={(e) => setPracticeCity(e.target.value)}
-                onBlur={(e) =>
-                  setPracticeCity(formatCanadianCityDisplay(e.target.value))
-                }
+                readOnly={practiceSameAsMailing}
+                onChange={(e) => {
+                  setPracticeCity(e.target.value);
+                  setPracticeProvince('');
+                  searchPracticeCities(e.target.value);
+                }}
+                onKeyDown={handlePracticeCityKeyDown}
+                onFocus={() => {
+                  if (practiceSameAsMailing) return;
+                  if (practiceCityBlurTimer.current != null)
+                    clearTimeout(practiceCityBlurTimer.current);
+                  if (practiceCity.trim().length >= 2)
+                    searchPracticeCities(practiceCity);
+                  else if (practiceCityResults.length)
+                    setPracticeCityDropOpen(true);
+                }}
+                onBlur={(e) => {
+                  setPracticeCity(formatCanadianCityDisplay(e.target.value));
+                  practiceCityBlurTimer.current = setTimeout(
+                    () => setPracticeCityDropOpen(false),
+                    160,
+                  );
+                }}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="City"
               />
+
+              <AnchoredDropdownPortal
+                open={practiceCityDropOpen && !practiceSameAsMailing}
+                menuBox={practiceCityMenuBox}
+                menuRef={practiceCityMenuRef}
+              >
+                {practiceCityResults.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 14,
+                      fontSize: 13,
+                      color: 'rgba(11,15,31,0.45)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    No city found
+                  </div>
+                ) : (
+                  practiceCityResults.map((row, i) => (
+                    <div
+                      key={`practice-${row.name}-${row.province}`}
+                      role="option"
+                      aria-selected={i === practiceCityActiveIdx}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handlePracticeCitySelect(row);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        cursor: 'pointer',
+                        background:
+                          i === practiceCityActiveIdx
+                            ? 'rgba(15,42,122,0.05)'
+                            : 'transparent',
+                        borderBottom: '0.5px solid rgba(0,0,0,0.05)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 500,
+                          color: '#0B0F1F',
+                        }}
+                      >
+                        {highlightCityName(row.name, practiceCity)}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          background: 'rgba(59,198,198,0.12)',
+                          color: '#0F6E56',
+                          padding: '2px 9px',
+                          borderRadius: 20,
+                          flexShrink: 0,
+                          marginLeft: 8,
+                        }}
+                      >
+                        {CANADIAN_PROVINCE_NAMES[row.province] ?? row.province}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </AnchoredDropdownPortal>
             </div>
+
             <div>
               <label style={lbl}>Practice Province</label>
               <input
-                style={inp}
+                style={{
+                  ...inp,
+                  ...(practiceSameAsMailing
+                    ? { background: 'rgba(11,15,31,0.04)' }
+                    : {}),
+                }}
                 value={practiceProvince}
+                readOnly={practiceSameAsMailing}
                 onChange={(e) => setPracticeProvince(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Province"
@@ -1542,8 +1815,14 @@ export default function LocumProfilePage(props: {
             <div>
               <label style={lbl}>Practice Postal Code</label>
               <input
-                style={inp}
+                style={{
+                  ...inp,
+                  ...(practiceSameAsMailing
+                    ? { background: 'rgba(11,15,31,0.04)' }
+                    : {}),
+                }}
                 value={practicePostal}
+                readOnly={practiceSameAsMailing}
                 onChange={(e) => setPracticePostal(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Postal Code"

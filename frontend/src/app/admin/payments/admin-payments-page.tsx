@@ -319,7 +319,11 @@ export default function AdminPaymentsPage() {
             const visual = matchFeeVisualStatus(
               invoice.status,
               invoice.refundPendingReview,
-              { stripeRefundProcessing: refundInFlight },
+              {
+                stripeRefundProcessing: refundInFlight,
+                refundedCents: invoice.refundedCents,
+                totalCents: invoice.totalCents,
+              },
             );
             const colors = matchFeeStatusColor(visual);
             const disabled = busyId === invoice.id;
@@ -649,7 +653,7 @@ export default function AdminPaymentsPage() {
                                     })
                                   }
                                 >
-                                  Refund $5{hstSuffix}
+                                  Refund CA$5{hstSuffix}
                                 </button>
                               ) : null}
                               {remaining >= withHst(1000) ? (
@@ -666,7 +670,7 @@ export default function AdminPaymentsPage() {
                                     })
                                   }
                                 >
-                                  Refund $10{hstSuffix}
+                                  Refund CA$10{hstSuffix}
                                 </button>
                               ) : null}
                             </>

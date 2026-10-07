@@ -8,6 +8,7 @@ import {
   buildA004AccountFlagged,
   buildA005CpsnsUpdated,
 } from './admin-notification-copy.js';
+import { sanitizeNotificationCopy } from './sanitize-notification-copy.js';
 
 export type AdminNotifEventType =
   | 'A_001_NEW_HOST_REGISTRATION'
@@ -16,7 +17,8 @@ export type AdminNotifEventType =
   | 'A_004_ACCOUNT_FLAGGED'
   | 'A_005_CPSNS_UPDATED'
   | 'A_006_MATCH_FEE_OVERDUE'
-  | 'A_007_MATCH_FEE_OUTCOME';
+  | 'A_007_MATCH_FEE_OUTCOME'
+  | 'A_008_HOST_SUPPORT_TICKET';
 
 export type AdminNotificationPriority =
   | 'CRITICAL'
@@ -38,7 +40,8 @@ export type AdminNotificationItem = {
 };
 
 function eventTypeToCategory(eventType: string): AdminNotificationItem['type'] {
-  if (eventType.includes('MATCH_FEE')) return 'payment';
+  if (eventType.includes('MATCH_FEE') || eventType.includes('SUPPORT_TICKET'))
+    return 'payment';
   if (eventType.includes('CREDENTIAL') || eventType.includes('CPSNS'))
     return 'credential';
   if (eventType.includes('FLAGGED')) return 'flagged';
@@ -92,6 +95,8 @@ export class AdminNotificationsService {
     emailSubject?: string;
     emailBody?: string;
   }): Promise<void> {
+    const title = sanitizeNotificationCopy(params.title);
+    const body = sanitizeNotificationCopy(params.body);
     await this.prisma.adminNotificationEvent.create({
       data: {
         adminId: params.adminId,
@@ -99,8 +104,8 @@ export class AdminNotificationsService {
         referenceId: params.referenceId,
         referenceType: params.referenceType,
         payload: {
-          title: params.title,
-          body: params.body,
+          title,
+          body,
           href: params.href,
           priority: params.priority,
           actionLabel: params.actionLabel,
@@ -114,8 +119,8 @@ export class AdminNotificationsService {
     if (params.emailSubject && params.emailBody) {
       await this.email.send({
         to: params.adminEmail,
-        subject: params.emailSubject,
-        text: params.emailBody,
+        subject: sanitizeNotificationCopy(params.emailSubject),
+        text: sanitizeNotificationCopy(params.emailBody),
       });
     }
   }
@@ -229,18 +234,43 @@ export class AdminNotificationsService {
     amountCents: number;
     taxCents?: number;
   }): Promise<void> {
-    const amount = (params.amountCents / 100).toFixed(2);
+    const amount = `CA$${(params.amountCents / 100).toFixed(2)}`;
     await this.notifyAllAdmins({
       eventType: 'A_006_MATCH_FEE_OVERDUE',
       title: 'Overdue match fee needs review',
-      body: `${params.hostPracticeName} has a $${amount} match fee overdue 30+ days for ${params.jobTitle}.`,
+      body: `${params.hostPracticeName} has a ${amount} match fee overdue 30+ days for ${params.jobTitle}.`,
       href: '/admin/payments',
       priority: 'HIGH',
       actionLabel: 'Review Invoice',
       referenceId: params.invoiceId,
       referenceType: 'MatchFeeInvoice',
       emailSubject: `Overdue match fee: ${params.hostPracticeName}`,
-      emailBody: `${params.hostPracticeName} has an overdue $${amount} LocumLink match fee for ${params.jobTitle}. Review in the admin payments dashboard.`,
+      emailBody: `${params.hostPracticeName} has an overdue ${amount} LocumLink match fee for ${params.jobTitle}. Review in the admin payments dashboard.`,
+    });
+  }
+
+  async notifyHostSupportTicket(params: {
+    ticketId: string;
+    invoiceId: string;
+    hostPracticeName: string;
+    jobTitle: string;
+    message: string;
+  }): Promise<void> {
+    const preview =
+      params.message.length > 180
+        ? `${params.message.slice(0, 180)}…`
+        : params.message;
+    await this.notifyAllAdmins({
+      eventType: 'A_008_HOST_SUPPORT_TICKET',
+      title: 'New host match fee ticket',
+      body: `${params.hostPracticeName} · ${params.jobTitle}. ${preview}`,
+      href: '/admin/tickets',
+      priority: 'HIGH',
+      actionLabel: 'Open tickets',
+      referenceId: params.ticketId,
+      referenceType: 'SupportTicket',
+      emailSubject: `Host ticket: ${params.hostPracticeName}`,
+      emailBody: `${params.hostPracticeName} opened a match fee ticket for ${params.jobTitle}.\n\n${params.message}\n\nReview in admin Host tickets.`,
     });
   }
 
@@ -314,8 +344,8 @@ export class AdminNotificationsService {
       return {
         id: e.id,
         type: eventTypeToCategory(e.eventType),
-        title: payload.title ?? e.eventType,
-        body: payload.body ?? '',
+        title: sanitizeNotificationCopy(payload.title ?? e.eventType),
+        body: sanitizeNotificationCopy(payload.body ?? ''),
         href: payload.href ?? '/admin',
         read: e.deliveryStatus === 'READ',
         createdAt: e.sentAt.toISOString(),

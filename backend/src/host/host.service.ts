@@ -354,10 +354,6 @@ export class HostService {
 
   async saveProfile(userId: string, dto: SaveHostProfileDto) {
     await this.assertHostCanWrite(userId);
-    const licensePath = dto.licenseFile?.trim();
-    if (licensePath) assertOwnsStoragePath(licensePath, userId);
-    const photoPath = dto.photoIdFile?.trim();
-    if (photoPath) assertOwnsStoragePath(photoPath, userId);
     const data = this.toHostProfileData(userId, dto);
     const { userId: _userIdInData, ...update } = data;
     void _userIdInData;
@@ -370,6 +366,7 @@ export class HostService {
           cpsnsNumber: true,
           cpsnsVerificationStatus: true,
           licenseFile: true,
+          photoIdFile: true,
         },
       }),
       this.prisma.user.findUnique({
@@ -377,6 +374,19 @@ export class HostService {
         select: { status: true, email: true },
       }),
     ]);
+    // Only validate newly uploaded paths. Re-saving an unchanged (or legacy) path
+    // must not block the rest of the profile update.
+    const licensePath = dto.licenseFile?.trim();
+    if (
+      licensePath &&
+      licensePath !== (existing?.licenseFile ?? '').trim()
+    ) {
+      assertOwnsStoragePath(licensePath, userId);
+    }
+    const photoPath = dto.photoIdFile?.trim();
+    if (photoPath && photoPath !== (existing?.photoIdFile ?? '').trim()) {
+      assertOwnsStoragePath(photoPath, userId);
+    }
     const autoVerify = linkedCpsnsVerifiedPatch(
       await findLinkedCpsns(this.prisma, userId),
       cpsnsDigits || adminCpsnsNumberOrEmpty(existing?.cpsnsNumber),

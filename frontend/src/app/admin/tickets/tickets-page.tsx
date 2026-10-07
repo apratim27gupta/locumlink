@@ -262,7 +262,7 @@ export default function AdminTicketsPage() {
                         disabled={busy}
                         onClick={() => setRefundConfirm({ ticket, amountCents: 500 })}
                       >
-                        Refund $5{hstSuffix}
+                        Refund CA$5{hstSuffix}
                       </button>
                     ) : null}
                     {can10 ? (
@@ -272,7 +272,7 @@ export default function AdminTicketsPage() {
                         disabled={busy}
                         onClick={() => setRefundConfirm({ ticket, amountCents: 1000 })}
                       >
-                        Refund $10{hstSuffix}
+                        Refund CA$10{hstSuffix}
                       </button>
                     ) : null}
                     <button

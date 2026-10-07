@@ -54,7 +54,7 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
       {
         question: 'Do I have to pay?',
         answer:
-          'LocumLink is free for locums.\nHosts pay a platform match fee ($5 or $10 plus HST) after a locum accepts a confirmed placement — not to register or post jobs.',
+          'LocumLink is free for locums.\nHosts pay a platform match fee (CA$5 or CA$10 plus HST) after a locum accepts a confirmed placement - not to register or post jobs.',
       },
       {
         question: 'How long does verification take?',
@@ -81,7 +81,7 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
           'Absolutely.\nLocumLink simply helps physicians and clinics connect.\nEligible physicians can still access the Provincial Locum Program if they meet its requirements.',
       },
       {
-        question: 'Can I receive the $250/day hosting payment?',
+        question: 'Can I receive the CA$250/day hosting payment?',
         answer:
           'Yes.\nEligible clinics participating in the Provincial Locum Program may receive the administration/overhead payment in accordance with the program rules.',
       },
@@ -154,6 +154,41 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
         question: 'What stage is LocumLink at?',
         answer:
           'We are transitioning from a successful pilot into commercial launch, with our iOS app now live and continued improvements based on user feedback.',
+      },
+    ],
+  },
+  {
+    title: 'Host payments & refunds',
+    items: [
+      {
+        id: 'host-match-fee',
+        question: 'When do I pay the match fee?',
+        answer:
+          'You are not charged to register or post jobs.\nAfter a locum accepts a host-confirmed placement, LocumLink invoices a platform match fee of CA$5 or CA$10 (plus HST), depending on total claimed hours.\nPay from Match Fees in your host dashboard. The fee is due by the date shown on the invoice (usually within 7 days, or sooner if the first shift is earlier).',
+      },
+      {
+        id: 'host-how-to-pay',
+        question: 'How do I pay?',
+        answer:
+          'Open Match Fees, find the invoice, and choose Pay. You complete payment securely through Stripe Checkout using a card.\nLocumLink never stores your full card number.',
+      },
+      {
+        id: 'host-refund-policy',
+        question: 'When can I get a refund?',
+        answer:
+          'If the fee was paid and the match is cancelled 14 days or more before the first shift, LocumLink reviews the cancellation and refunds the fee and HST to the original payment method after admin approval. Unpaid invoices in that window are cancelled.\nIf either party cancels fewer than 14 days before start and the fee was paid: host cancel keeps the fee (non-refundable); locum cancel triggers a replacement search, with a refund only if none is found.\nIf either party cancels fewer than 14 days before start and the invoice is unpaid, the invoice remains due.',
+      },
+      {
+        id: 'host-refund-timing',
+        question: 'How long do refunds take?',
+        answer:
+          'After LocumLink approves a refund, the amount will be refunded to your original payment method in about 10-14 business days.\nYou will get an in-app notification and an email when a refund is approved.',
+      },
+      {
+        id: 'host-ticket',
+        question: 'What if I have a concern after the placement ends?',
+        answer:
+          'After the last shift on an invoice is completed, you can raise a ticket from that invoice in Match Fees.\nLocumLink reviews tickets and may issue a discretionary refund where appropriate. You will hear from us in-app and by email.',
       },
     ],
   },

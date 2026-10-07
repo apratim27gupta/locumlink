@@ -26,7 +26,6 @@ import {
   MATCH_FEE_OVERDUE_REMINDER_INTERVAL_DAYS,
   computeMatchFeeAmountCents,
   isPostingGrandfatheredFromMatchFee,
-  isMatchFeeTestingSkipLocumReplacement,
   matchFeeTierFromHours,
 } from './match-fee.constants.js';
 import {
@@ -43,6 +42,7 @@ import {
 } from './match-fee-invoice.presentation.js';
 import {
   cancellationActorToEventActor,
+  mapMatchFeeEventsForHost,
   mergeMatchFeeEvents,
   paymentProviderLabel,
   type MatchFeeInvoiceEventDto,
@@ -263,7 +263,7 @@ function isFeeRetained(row: {
 }
 
 function formatCad(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  return `CA$${(cents / 100).toFixed(2)}`;
 }
 
 function formatLocumName(
@@ -330,7 +330,10 @@ function mapInvoice(
     replacementApplicationId: row.replacementApplicationId ?? null,
     daysUntilStart: daysUntilCalendarDate(earliest),
     refundedCents: row.refundedCents ?? 0,
-    events: mergeMatchFeeEvents(row.events ?? [], row),
+    // Host API uses this mapper - never leak admin emails / internal notes.
+    events: mapMatchFeeEventsForHost(
+      mergeMatchFeeEvents(row.events ?? [], row),
+    ),
   };
 }
 
@@ -435,9 +438,8 @@ function mapAdminInvoice(
     lastReminderAt: row.lastReminderAt?.toISOString() ?? null,
     statusGuide: statusGuide ?? null,
     timeline,
-    events: base.events,
-    /** TEMP: when true, late locum cancel skips replacement (admin may refund). */
-    testingSkipLocumReplacement: isMatchFeeTestingSkipLocumReplacement(),
+    // Admin portal keeps full timeline (including ADMIN_NOTE + approver email).
+    events: mergeMatchFeeEvents(row.events ?? [], row),
   };
 }
 
@@ -460,8 +462,8 @@ export class PaymentsService {
       paymentMethods,
       emphasis:
         role === 'LOCUM'
-          ? 'LocumLink is free for locums. The host pays a match fee ($5 or $10) after you accept a confirmed placement, based on total hours claimed.'
-          : 'Free to post. Pay $5 or $10 per matched locum when they accept your confirmed match. Fees stay as invoiced, during the placement. After the last shift on an invoice, you can raise a ticket if you have concerns and LocumLink will follow up.',
+          ? 'LocumLink is free for locums. The host pays a match fee (CA$5 or CA$10) after you accept a confirmed placement, based on total hours claimed.'
+          : 'Free to post. Pay CA$5 or CA$10 per matched locum when they accept your confirmed match. Fees stay as invoiced, during the placement. After the last shift on an invoice, you can raise a ticket if you have concerns and LocumLink will follow up.',
     };
   }
 
@@ -620,25 +622,50 @@ export class PaymentsService {
     if (!paymentIntentId) {
       // No Stripe payment on file — reservation already marked SUCCEEDED.
       await this.finalizeSuccessfulRefund(refund.id, {
-        notifyHost: params.notifyHost !== false,
+        notifyHost: false,
         cancelledBy: params.cancelledBy ?? 'ADMIN',
       });
-      return;
-    }
-
-    if (stripeRefund?.status === 'succeeded') {
+    } else if (stripeRefund?.status === 'succeeded') {
       // createStripeRefund → applyStripeRefund already finalized the invoice side.
-      return;
+    } else {
+      // Stripe accepted the refund but it is still pending — do not mark REFUNDED yet.
+      const taxNote =
+        refund.taxCents > 0 ? ` (includes ${formatCad(refund.taxCents)} HST)` : '';
+      await this.recordMatchFeeEvent(invoice.id, 'ADMIN_NOTE', {
+        detail: `Refund of ${formatCad(refund.amountCents)}${taxNote} submitted to Stripe (${stripeRefund?.id ?? 'pending'}); waiting for confirmation. Approved by LocumLink admin.`,
+        actor: cancellationActorToEventActor(params.cancelledBy ?? 'ADMIN'),
+      });
+      await this.syncHostReviewFlag(invoice.hostProfileId);
     }
 
-    // Stripe accepted the refund but it is still pending — do not mark REFUNDED or notify yet.
-    const taxNote =
-      refund.taxCents > 0 ? ` (includes ${formatCad(refund.taxCents)} HST)` : '';
-    await this.recordMatchFeeEvent(invoice.id, 'ADMIN_NOTE', {
-      detail: `Refund of ${formatCad(refund.amountCents)}${taxNote} submitted to Stripe (${stripeRefund?.id ?? 'pending'}); waiting for confirmation. Approved by ${params.admin.email}.`,
-      actor: cancellationActorToEventActor(params.cancelledBy ?? 'ADMIN'),
-    });
-    await this.syncHostReviewFlag(invoice.hostProfileId);
+    if (params.notifyHost !== false) {
+      const host = await this.prisma.hostProfile.findUnique({
+        where: { id: invoice.hostProfileId },
+        select: {
+          userId: true,
+          user: { select: { email: true } },
+        },
+      });
+      const job = await this.prisma.jobPosting.findUnique({
+        where: { id: invoice.jobPostingId },
+        select: { title: true },
+      });
+      if (host?.userId && host.user?.email && job?.title) {
+        await this.notifications
+          .notifyHostMatchFeeRefund({
+            recipientId: host.userId,
+            recipientEmail: host.user.email,
+            jobTitle: job.title,
+            invoiceId: invoice.id,
+            amountCents: refund.amountCents,
+          })
+          .catch((err: unknown) =>
+            this.logger.warn(
+              `Refund approval notification failed for invoice ${invoice.id}: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          );
+      }
+    }
   }
 
   /**
@@ -674,7 +701,6 @@ export class PaymentsService {
     });
     if (already) return;
 
-    const approvedBy = row.requestedByAdminEmail ?? 'an admin';
     const taxNote =
       row.taxCents > 0 ? ` (includes ${formatCad(row.taxCents)} HST)` : '';
 
@@ -682,11 +708,11 @@ export class PaymentsService {
       if (row.paymentAttemptId) {
         await this.updateAttempt(row.paymentAttemptId, {
           completedAt: new Date(),
-          failureReason: `Extra payment refunded by ${approvedBy} (Stripe ${row.stripeRefundId ?? 'n/a'}).`,
+          failureReason: `Extra payment refunded by LocumLink admin (Stripe ${row.stripeRefundId ?? 'n/a'}).`,
         });
       }
       await this.recordMatchFeeEvent(row.invoiceId, 'REFUNDED', {
-        detail: `Extra payment of ${formatCad(row.amountCents)} refunded (Stripe ${row.stripeRefundId ?? 'n/a'}; refund ${row.id}). Approved by ${approvedBy}.`,
+        detail: `Extra payment of ${formatCad(row.amountCents)} refunded (Stripe ${row.stripeRefundId ?? 'n/a'}; refund ${row.id}). Approved by LocumLink admin.`,
         actor: 'ADMIN',
       });
       return;
@@ -712,24 +738,29 @@ export class PaymentsService {
       ? ` to the original payment method (Stripe ${row.stripeRefundId})`
       : '';
     await this.recordMatchFeeEvent(invoice.id, 'REFUNDED', {
-      detail: `Refunded ${formatCad(row.amountCents)}${taxNote}${stripeNote}${fullyRefunded ? '' : ' (partial)'} (refund ${row.id}). Approved by ${approvedBy}.`,
+      detail: `Refunded ${formatCad(row.amountCents)}${taxNote}${stripeNote}${fullyRefunded ? '' : ' (partial)'} (refund ${row.id}). Approved by LocumLink admin.`,
       actor: cancellationActorToEventActor(cancelledBy),
     });
 
-    const host = invoice.hostProfile;
-    if (opts?.notifyHost !== false && host?.userId && host.user?.email) {
-      await this.notifications
-        .notifyHostMatchFeeRefund({
-          recipientId: host.userId,
-          recipientEmail: host.user.email,
-          jobTitle: invoice.jobPosting.title,
-          invoiceId: invoice.id,
-        })
-        .catch((err: unknown) =>
-          this.logger.warn(
-            `Refund notification failed for invoice ${invoice.id}: ${err instanceof Error ? err.message : String(err)}`,
-          ),
-        );
+    // Host is notified when an admin approves the refund (processRefund), with
+    // amount + 10-14 business day timing - not again when Stripe confirms.
+    if (opts?.notifyHost) {
+      const host = invoice.hostProfile;
+      if (host?.userId && host.user?.email) {
+        await this.notifications
+          .notifyHostMatchFeeRefund({
+            recipientId: host.userId,
+            recipientEmail: host.user.email,
+            jobTitle: invoice.jobPosting.title,
+            invoiceId: invoice.id,
+            amountCents: row.amountCents,
+          })
+          .catch((err: unknown) =>
+            this.logger.warn(
+              `Refund notification failed for invoice ${invoice.id}: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          );
+      }
     }
 
     await this.syncHostReviewFlag(invoice.jobPosting.hostProfileId);
@@ -785,7 +816,7 @@ export class PaymentsService {
 
     if (stripeRefund.status !== 'succeeded') {
       await this.recordMatchFeeEvent(attempt.invoiceId, 'ADMIN_NOTE', {
-        detail: `Extra payment refund of ${formatCad(refund.amountCents)} submitted to Stripe (${stripeRefund.id}); waiting for confirmation. Approved by ${admin.email}.`,
+        detail: `Extra payment refund of ${formatCad(refund.amountCents)} submitted to Stripe (${stripeRefund.id}); waiting for confirmation. Approved by LocumLink admin.`,
         actor: 'ADMIN',
       });
     }
@@ -1171,7 +1202,7 @@ export class PaymentsService {
     const priceText = `${tierLabel} match fee ${formatCad(amountCents)} + ${formatCad(taxCents)} HST = ${formatCad(amountCents + taxCents)}`;
     await this.recordMatchFeeEvent(invoice.id, 'INVOICED', {
       detail: existingByApp
-        ? `Re-invoiced after prior cycle closed — ${app.jobPosting.title} · ${claimedHours}h · ${priceText}`
+        ? `Re-invoiced after prior cycle closed - ${app.jobPosting.title} · ${claimedHours}h · ${priceText}`
         : `${app.jobPosting.title} · ${claimedHours}h · ${priceText}`,
     });
   }
@@ -1328,7 +1359,7 @@ export class PaymentsService {
         },
       });
       await this.recordMatchFeeEvent(topUp.id, 'INVOICED', {
-        detail: `Tier top-up after placement ended — claimed hours ${liveHours}h (full-day). Additional match fee ${formatCad(deltaFeeCents)} + ${formatCad(taxCents)} HST = ${formatCad(deltaFeeCents + taxCents)} (original half-day invoice ${primary.id.slice(-8)} already paid).`,
+        detail: `Tier top-up after placement ended - claimed hours ${liveHours}h (full-day). Additional match fee ${formatCad(deltaFeeCents)} + ${formatCad(taxCents)} HST = ${formatCad(deltaFeeCents + taxCents)} (original half-day invoice ${primary.id.slice(-8)} already paid).`,
       });
       await this.recordMatchFeeEvent(primary.id, 'ADMIN_NOTE', {
         detail: `Tier top-up invoice ${topUp.id.slice(-8)} issued for ${formatCad(deltaFeeCents + taxCents)} after claimed hours rose to ${liveHours}h.`,
@@ -1695,11 +1726,15 @@ export class PaymentsService {
         detail: `${policy.reason} Approve the ${formatCad(refundable)} refund in admin Match Fees.`,
       });
       if (host?.userId && host.user?.email) {
+        const hostReason =
+          params.cancelledBy === 'LOCUM'
+            ? `The locum cancelled ${app.jobPosting.title}. Your match fee refund of ${formatCad(refundable)} is being reviewed by LocumLink and will go back to your original payment method once approved.`
+            : `${policy.reason} Your refund is being reviewed by LocumLink and will go back to your original payment method once approved.`;
         await this.notifications.notifyHostMatchFeeCancelled({
           recipientId: host.userId,
           recipientEmail: host.user.email,
           jobTitle: app.jobPosting.title,
-          reason: `${policy.reason} Your refund is being reviewed by LocumLink and will go back to your original payment method once approved.`,
+          reason: hostReason,
           invoiceId: invoice.id,
         });
       }
@@ -1765,11 +1800,26 @@ export class PaymentsService {
     }
 
     if (host?.userId && host.user?.email) {
+      let hostReason = policy.reason;
+      if (params.cancelledBy === 'LOCUM' && nextStatus === 'PENDING_REPLACEMENT') {
+        hostReason = `The locum cancelled ${app.jobPosting.title}. LocumLink is seeking a replacement. If none is found, your match fee will be refunded to your original payment method.`;
+      } else if (params.cancelledBy === 'LOCUM' && nextStatus === 'CANCELLED') {
+        hostReason = `The locum cancelled ${app.jobPosting.title}. The unpaid match fee invoice was cancelled.`;
+      } else if (
+        !wasPaid &&
+        policy.withinLateWindow &&
+        (nextStatus === 'PENDING' || nextStatus === 'OVERDUE')
+      ) {
+        hostReason =
+          params.cancelledBy === 'LOCUM'
+            ? `The locum cancelled ${app.jobPosting.title}. The match fee invoice remains due.`
+            : policy.reason;
+      }
       await this.notifications.notifyHostMatchFeeCancelled({
         recipientId: host.userId,
         recipientEmail: host.user.email,
         jobTitle: app.jobPosting.title,
-        reason: policy.reason,
+        reason: hostReason,
         invoiceId: invoice.id,
       });
     }
@@ -2996,17 +3046,6 @@ export class PaymentsService {
       daysUntilStart == null ||
       daysUntilStart < MATCH_FEE_CANCELLATION_WINDOW_DAYS
     ) {
-      if (locumWithdrew && isMatchFeeTestingSkipLocumReplacement()) {
-        await this.processRefund({
-          invoiceId,
-          kind: 'CANCELLATION',
-          admin,
-          adminNotes: notes,
-          cancelledBy: 'ADMIN',
-          reason: `TESTING: Admin refund after late locum cancel (replacement skipped). ${notes}`,
-        });
-        return { success: true };
-      }
       if (locumWithdrew) {
         throw new BadRequestException(
           'Locum cancelled fewer than 14 days before start. Use the replacement flow; refund only if no replacement is found.',
@@ -3050,7 +3089,7 @@ export class PaymentsService {
       params.amountCents !== MATCH_FEE_FULL_CENTS
     ) {
       throw new BadRequestException(
-        `Refund amount must be $${MATCH_FEE_HALF_CENTS / 100} or $${MATCH_FEE_FULL_CENTS / 100}.`,
+        `Refund amount must be CA$${MATCH_FEE_HALF_CENTS / 100} or CA$${MATCH_FEE_FULL_CENTS / 100}.`,
       );
     }
 

@@ -29,7 +29,7 @@ export type MatchFeeReceiptData = {
 };
 
 function formatMoney(amountCents: number, _currency: string): string {
-  return `$${(amountCents / 100).toFixed(2)}`;
+  return `CA$${(amountCents / 100).toFixed(2)}`;
 }
 
 function formatDate(d: Date): string {
@@ -46,7 +46,7 @@ export async function buildMatchFeeReceiptPdf(
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(20).text('LocumLink');
+    doc.fontSize(20).text('LocumLink Health Technologies Inc.');
     doc.fontSize(11).fillColor('#444').text('Match fee receipt');
     doc.moveDown(0.5);
     doc.fillColor('#000');
@@ -65,8 +65,8 @@ export async function buildMatchFeeReceiptPdf(
     doc.moveDown();
 
     doc.fontSize(12).text('Bill to', { underline: true });
-    doc.fontSize(10).text(data.practiceName);
-    doc.text(data.hostEmail);
+    doc.fontSize(10).text(`Clinic Name: ${data.practiceName}`);
+    doc.text(`E-mail: ${data.hostEmail}`);
     doc.moveDown();
 
     doc.fontSize(12).text('Match details', { underline: true });

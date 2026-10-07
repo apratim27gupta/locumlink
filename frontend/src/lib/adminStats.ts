@@ -6,6 +6,7 @@ export type AdminStats = {
   verifiedLocumUsers: number;
   pendingVerifications: number;
   openReports: number;
+  openHostTickets: number;
   activeJobPostings: number;
   totalJobPostings: number;
 };
@@ -26,6 +27,7 @@ export function normalizeAdminStats(raw: unknown): AdminStats | null {
     ),
     pendingVerifications: Number(s.pendingVerifications ?? 0),
     openReports: Number(s.openReports ?? 0),
+    openHostTickets: Number(s.openHostTickets ?? 0),
     activeJobPostings: Number(s.activeJobPostings ?? 0),
     totalJobPostings: Number(s.totalJobPostings ?? 0),
   };

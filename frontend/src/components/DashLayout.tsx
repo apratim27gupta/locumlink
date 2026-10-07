@@ -1,6 +1,6 @@
 'use client';
 import { showAlert } from '@/components/ui/AppDialog';
-import { ReactNode, useEffect, useRef, useState, useCallback } from 'react';
+import { ReactNode, useEffect, useRef, useState, useCallback, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useVisibilityPolling } from '@/hooks/useVisibilityPolling';
 import { onPwaRefresh } from '@/lib/pwaEvents';
@@ -209,9 +209,10 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 setRoleSwitchBusy(false);
                 return;
             }
+            // Full navigation so middleware + Nest JWT cookies stay aligned (client
+            // soft-nav raced role cookies after Cloud Run and caused random denials).
             syncCookies();
-            beforeClientNavigation(result.redirectTo);
-            router.push(result.redirectTo);
+            window.location.assign(result.redirectTo);
         } catch (err) {
             console.error(err);
             setRoleSwitchBusy(false);
@@ -279,6 +280,14 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     const [notifTotal, setNotifTotal] = useState(0);
     const [messageUnreadTotal, setMessageUnreadTotal] = useState(0);
     const [matchFeeDueCount, setMatchFeeDueCount] = useState(0);
+    const NOTIF_W_KEY = 'll_notif_panel_w';
+    const NOTIF_H_KEY = 'll_notif_panel_h';
+    const NOTIF_W_MIN = 320;
+    const NOTIF_W_MAX = 640;
+    const NOTIF_H_MIN = 280;
+    const NOTIF_H_MAX = 820;
+    const [notifPanelW, setNotifPanelW] = useState(420);
+    const [notifPanelH, setNotifPanelH] = useState(480);
     const bellRef = useRef<HTMLDivElement>(null);
     /** IDs dismissed locally after open; kept until server reports read (avoids poll flash-back). */
     const dismissedNotifIdsRef = useRef<Set<string>>(new Set());
@@ -350,6 +359,21 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         };
     }, [avatarMenuOpen]);
     useEffect(() => {
+        try {
+            const savedW = Number(localStorage.getItem(NOTIF_W_KEY));
+            const savedH = Number(localStorage.getItem(NOTIF_H_KEY));
+            if (Number.isFinite(savedW) && savedW > 0) {
+                setNotifPanelW(Math.min(Math.max(savedW, NOTIF_W_MIN), NOTIF_W_MAX));
+            }
+            if (Number.isFinite(savedH) && savedH > 0) {
+                setNotifPanelH(Math.min(Math.max(savedH, NOTIF_H_MIN), NOTIF_H_MAX));
+            }
+        }
+        catch {
+            /* ignore */
+        }
+    }, []);
+    useEffect(() => {
         if (!bellOpen)
             return;
         function onMouseDown(e: MouseEvent) {
@@ -361,6 +385,55 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         document.addEventListener('mousedown', onMouseDown);
         return () => document.removeEventListener('mousedown', onMouseDown);
     }, [bellOpen]);
+    const clampNotifSize = useCallback((w: number, h: number) => {
+        const maxW = typeof window === 'undefined'
+            ? NOTIF_W_MAX
+            : Math.min(NOTIF_W_MAX, window.innerWidth - 24);
+        const maxH = typeof window === 'undefined'
+            ? NOTIF_H_MAX
+            : Math.min(NOTIF_H_MAX, window.innerHeight - 80);
+        return {
+            w: Math.min(Math.max(w, NOTIF_W_MIN), Math.max(NOTIF_W_MIN, maxW)),
+            h: Math.min(Math.max(h, NOTIF_H_MIN), Math.max(NOTIF_H_MIN, maxH)),
+        };
+    }, []);
+    const onNotifResizeMouseDown = useCallback((
+        e: ReactMouseEvent<HTMLElement>,
+        mode: 'ew' | 'ns' | 'nwse',
+    ) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startW = notifPanelW;
+        const startH = notifPanelH;
+        let latest = { w: startW, h: startH };
+        const onMove = (ev: MouseEvent) => {
+            const nextW = mode === 'ns' ? startW : startW + (startX - ev.clientX);
+            const nextH = mode === 'ew' ? startH : startH + (ev.clientY - startY);
+            latest = clampNotifSize(nextW, nextH);
+            setNotifPanelW(latest.w);
+            setNotifPanelH(latest.h);
+        };
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            try {
+                localStorage.setItem(NOTIF_W_KEY, String(latest.w));
+                localStorage.setItem(NOTIF_H_KEY, String(latest.h));
+            }
+            catch {
+                /* ignore */
+            }
+        };
+        document.body.style.cursor =
+            mode === 'ew' ? 'ew-resize' : mode === 'ns' ? 'ns-resize' : 'nwse-resize';
+        document.body.style.userSelect = 'none';
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    }, [notifPanelW, notifPanelH, clampNotifSize]);
     const fetchNotifications = useCallback(async () => {
         if (!getToken())
             return;
@@ -796,12 +869,18 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
             </button>
 
             
-            {bellOpen && (<div className="dash-notifications-dropdown" style={{
+            {bellOpen && (<div
+              className="dash-notifications-dropdown"
+              style={{
+                ['--dash-notif-w' as string]: `${notifPanelW}px`,
+                ['--dash-notif-h' as string]: `${showAllNotifications ? Math.max(notifPanelH, 560) : notifPanelH}px`,
                 position: 'absolute',
                 top: 36,
                 right: 0,
-                width: 340,
-                maxHeight: showAllNotifications ? 640 : 440,
+                width: notifPanelW,
+                height: showAllNotifications ? Math.max(notifPanelH, 560) : notifPanelH,
+                maxWidth: 'calc(100vw - 24px)',
+                maxHeight: 'calc(100dvh - 72px)',
                 background: '#fff',
                 border: '1px solid #E5E7EB',
                 borderRadius: 12,
@@ -810,7 +889,70 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 overflow: 'hidden',
                 display: 'flex',
                 flexDirection: 'column',
-            }}>
+                boxSizing: 'border-box',
+              } as CSSProperties}
+            >
+                <div
+                  className="dash-notifications-resize-handle"
+                  title="Drag to resize width"
+                  onMouseDown={(e) => onNotifResizeMouseDown(e, 'ew')}
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    bottom: 14,
+                    width: 10,
+                    zIndex: 5,
+                    cursor: 'ew-resize',
+                    background: 'transparent',
+                  }}
+                />
+                <div
+                  className="dash-notifications-resize-handle"
+                  title="Drag to resize height"
+                  onMouseDown={(e) => onNotifResizeMouseDown(e, 'ns')}
+                  style={{
+                    position: 'absolute',
+                    left: 14,
+                    right: 0,
+                    bottom: 0,
+                    height: 10,
+                    zIndex: 5,
+                    cursor: 'ns-resize',
+                    background: 'transparent',
+                  }}
+                />
+                <div
+                  className="dash-notifications-resize-handle"
+                  title="Drag to resize"
+                  onMouseDown={(e) => onNotifResizeMouseDown(e, 'nwse')}
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    bottom: 0,
+                    width: 18,
+                    height: 18,
+                    zIndex: 6,
+                    cursor: 'nesw-resize',
+                    background: 'transparent',
+                  }}
+                />
+                <div
+                  aria-hidden
+                  className="dash-notifications-resize-handle"
+                  style={{
+                    position: 'absolute',
+                    left: 5,
+                    bottom: 5,
+                    width: 8,
+                    height: 8,
+                    borderLeft: '2px solid #D1D5DB',
+                    borderBottom: '2px solid #D1D5DB',
+                    borderRadius: 1,
+                    zIndex: 6,
+                    pointerEvents: 'none',
+                  }}
+                />
                 
                 <div style={{
                 padding: '14px 16px 10px',
@@ -818,11 +960,13 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                flexShrink: 0,
+                gap: 8,
             }}>
                   <span style={{ fontSize: 'var(--font-heading)', fontWeight: 'var(--font-weight-bold)', color: '#0f1523' }}>
                     Notifications
                   </span>
-                  {notifTotal > 0 && (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                  {notifTotal > 0 && (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                       <span style={{ fontSize: 'var(--font-small)', color: '#6B7280' }}>
                         {notifTotal} unread
                       </span>
@@ -842,7 +986,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 </div>
 
                 
-                <div style={{ overflowY: 'auto', flex: 1 }}>
+                <div style={{ overflowY: 'auto', overflowX: 'hidden', flex: 1, minHeight: 0 }}>
                   {(() => {
                     if (bellListNotifications.length === 0) return <div style={{ padding: '36px 20px', textAlign: 'center' }}><div style={{ fontSize: 28, marginBottom: 8 }}>🔔</div><div style={{ fontSize: 'var(--font-body)', color: '#9CA3AF' }}>No new notifications</div></div>;
                     return bellListPreview.map((notif) => {
@@ -859,6 +1003,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                     borderLeft: '3px solid transparent',
                     background: rowBg,
                     transition: 'background 0.1s',
+                    minWidth: 0,
                 }} onMouseEnter={(e) => (e.currentTarget.style.background = rowHover)} onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}>
                         
                         <div style={{
@@ -875,7 +1020,7 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                         </div>
 
                         
-                        <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                           <div style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -900,6 +1045,8 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                               color: '#6B7280',
                               lineHeight: 1.45,
                               whiteSpace: 'normal',
+                              overflowWrap: 'anywhere',
+                              wordBreak: 'break-word',
                             }}
                           />
                           {(() => {
@@ -962,6 +1109,16 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
                 }}>
                     <button onClick={() => {
                     setShowAllNotifications(true);
+                    setNotifPanelH((h) => {
+                        const next = Math.max(h, 560);
+                        try {
+                            localStorage.setItem(NOTIF_H_KEY, String(next));
+                        }
+                        catch {
+                            /* ignore */
+                        }
+                        return next;
+                    });
                 }} style={{
                     background: 'none',
                     border: 'none',

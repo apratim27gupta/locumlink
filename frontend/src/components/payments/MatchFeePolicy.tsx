@@ -194,9 +194,9 @@ export default function MatchFeePolicy({
 
 const HOST_REFUND_MIN_DAYS_BEFORE_START = 14; // policy: 14 days or more before start
 
-/** Always two decimals with `$` only: "$10.00", "$11.40". Do not append CAD. */
+/** Always two decimals with Canadian dollar prefix: "CA$10.00", "CA$11.40". */
 export function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  return `CA$${(cents / 100).toFixed(2)}`;
 }
 
 export function hstFor(feeCents: number, taxRateBps: number): number {
@@ -245,8 +245,6 @@ export function adminMatchFeeRefundEligibility(invoice: {
   cancellationReason?: string | null;
   refundPendingReview?: boolean;
   events?: Array<{ eventType: string }> | null;
-  /** TEMP testing flag from API when MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT is on. */
-  testingSkipLocumReplacement?: boolean;
 }): { allowed: boolean; reason: string } {
   if (invoice.refundPendingReview) {
     return {
@@ -294,13 +292,6 @@ export function adminMatchFeeRefundEligibility(invoice: {
     invoice.daysUntilStart < HOST_REFUND_MIN_DAYS_BEFORE_START
   ) {
     if (locumWithdrew) {
-      if (invoice.testingSkipLocumReplacement) {
-        return {
-          allowed: true,
-          reason:
-            'TESTING: Locum late cancel — replacement skipped; you may refund now.',
-        };
-      }
       return {
         allowed: false,
         reason:
@@ -332,7 +323,12 @@ export function matchFeeRefundInProgress(invoice: {
 export function matchFeeVisualStatus(
   status: string,
   refundPendingReview?: boolean,
-  opts?: { stripeRefundProcessing?: boolean; feeRetained?: boolean },
+  opts?: {
+    stripeRefundProcessing?: boolean;
+    feeRetained?: boolean;
+    refundedCents?: number;
+    totalCents?: number;
+  },
 ): string {
   if (matchFeeRefundInProgress({
     refundPendingReview,
@@ -341,6 +337,14 @@ export function matchFeeVisualStatus(
     return 'REFUND_IN_PROGRESS';
   }
   if (opts?.feeRetained && status === 'PAID') return 'FEE_RETAINED';
+  const refunded = opts?.refundedCents ?? 0;
+  const total = opts?.totalCents ?? 0;
+  if (status === 'PAID' && refunded > 0 && total > 0 && refunded < total) {
+    return 'PARTIALLY_REFUNDED';
+  }
+  if (status === 'PAID' && refunded > 0 && total > 0 && refunded >= total) {
+    return 'REFUNDED';
+  }
   return status;
 }
 
@@ -374,6 +378,8 @@ export function matchFeeStatusLabel(status: string): string {
       return 'Cancelled';
     case 'REFUNDED':
       return 'Refunded';
+    case 'PARTIALLY_REFUNDED':
+      return 'Partially refunded';
     case 'CREDITED':
       return 'Legacy credit';
     case 'PENDING_REPLACEMENT':
@@ -388,7 +394,13 @@ export function matchFeeStatusLabel(status: string): string {
 }
 
 function matchFeeStatusMood(status: string): 'happy' | 'neutral' | 'sad' {
-  if (status === 'PAID' || status === 'REFUNDED' || status === 'CREDITED') return 'happy';
+  if (
+    status === 'PAID' ||
+    status === 'REFUNDED' ||
+    status === 'PARTIALLY_REFUNDED' ||
+    status === 'CREDITED'
+  )
+    return 'happy';
   if (status === 'FEE_RETAINED') return 'neutral';
   if (status === 'OVERDUE') return 'sad';
   return 'neutral';
@@ -405,15 +417,21 @@ export function MatchFeeStatusChip({
   refundPendingReview,
   stripeRefundProcessing,
   feeRetained,
+  refundedCents,
+  totalCents,
 }: {
   status: string;
   refundPendingReview?: boolean;
   stripeRefundProcessing?: boolean;
   feeRetained?: boolean;
+  refundedCents?: number;
+  totalCents?: number;
 }) {
   const visual = matchFeeVisualStatus(status, refundPendingReview, {
     stripeRefundProcessing,
     feeRetained,
+    refundedCents,
+    totalCents,
   });
   const colors = matchFeeStatusColor(visual);
   const mood = matchFeeStatusMood(visual);
@@ -456,6 +474,8 @@ export function matchFeeStatusColor(status: string): { bg: string; text: string 
   switch (status) {
     case 'PAID':
       return { bg: '#D1FAE5', text: '#065F46' };
+    case 'PARTIALLY_REFUNDED':
+      return { bg: '#FEF3C7', text: '#92400E' };
     case 'OVERDUE':
       return { bg: '#FEE2E2', text: '#991B1B' };
     case 'PENDING':

@@ -40,6 +40,26 @@ describe('match-fee-cancellation.util', () => {
     expect(result.nonRefundable).toBe(true);
   });
 
+  it('host late cancel keeps unpaid invoice due', () => {
+    const result = evaluateCancellationPolicy({
+      cancelledBy: 'HOST',
+      wasPaid: false,
+      daysUntilStart: 10,
+    });
+    expect(result.invoiceStatus).toBe('UNCHANGED');
+    expect(result.nonRefundable).toBe(false);
+  });
+
+  it('locum late cancel keeps unpaid invoice due', () => {
+    const result = evaluateCancellationPolicy({
+      cancelledBy: 'LOCUM',
+      wasPaid: false,
+      daysUntilStart: 5,
+    });
+    expect(result.invoiceStatus).toBe('UNCHANGED');
+    expect(result.replacementStatus).toBe('NONE');
+  });
+
   it('host early cancel refunds paid fee', () => {
     const result = evaluateCancellationPolicy({
       cancelledBy: 'HOST',
@@ -59,24 +79,6 @@ describe('match-fee-cancellation.util', () => {
     expect(result.invoiceStatus).toBe('PENDING_REPLACEMENT');
     expect(result.replacementStatus).toBe('SEARCHING');
     expect(result.nonRefundable).toBe(false);
-  });
-
-  it('testing flag: locum late cancel skips replacement and refunds', () => {
-    const prev = process.env.MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT;
-    process.env.MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT = '1';
-    try {
-      const result = evaluateCancellationPolicy({
-        cancelledBy: 'LOCUM',
-        wasPaid: true,
-        daysUntilStart: 5,
-      });
-      expect(result.invoiceStatus).toBe('REFUNDED');
-      expect(result.refundResolution).toBe('REFUND');
-      expect(result.replacementStatus).toBe('NONE');
-    } finally {
-      if (prev === undefined) delete process.env.MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT;
-      else process.env.MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT = prev;
-    }
   });
 
   it('host early cancel boundary is 14 days or more', () => {

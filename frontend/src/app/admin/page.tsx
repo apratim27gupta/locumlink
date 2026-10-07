@@ -170,7 +170,7 @@ export default function AdminOverviewPage() {
   const received = feeSummary?.received;
   const feeAmount =
     received != null
-      ? `$${((received.amountCents ?? 0) / 100).toLocaleString('en-CA', {
+      ? `CA$${((received.amountCents ?? 0) / 100).toLocaleString('en-CA', {
           maximumFractionDigits: 0,
         })}`
       : '—';

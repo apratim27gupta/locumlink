@@ -43,10 +43,41 @@ const EVENT_LABELS: Record<MatchFeeInvoiceEventType, string> = {
   TICKET_RESOLVED: 'Host ticket closed',
 };
 
-/** Normalize user-facing detail text (legacy rows may still contain em dashes). */
+/**
+ * Normalize user-facing detail text.
+ * Legacy rows may still contain em dashes or "$250 CAD" / "Full tier, $250 CAD".
+ */
 function sanitizeEventDetail(detail: string | null): string | null {
   if (detail == null) return null;
-  return detail.replace(/\u2014/g, '-').replace(/\u2013/g, '-');
+  return detail
+    .replace(/\u2014/g, ' - ')
+    .replace(/\u2013/g, ' - ')
+    // "$250 CAD" / "$11.40 CAD" → "CA$250" / "CA$11.40"
+    .replace(/\$(\d+(?:\.\d{1,2})?)\s*CAD\b/gi, 'CA$$$1')
+    // Older "FULL tier" / "HALF tier" labels → readable day tiers
+    .replace(/\bFULL\s+tier\b/gi, 'Full-day tier')
+    .replace(/\bHALF\s+tier\b/gi, 'Half-day tier')
+    .replace(/\bFull\s+tier\b/g, 'Full-day tier')
+    .replace(/\bHalf\s+tier\b/g, 'Half-day tier')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+/**
+ * Host-facing timeline must not expose admin emails or internal admin notes.
+ * Legacy rows may still say "Approved by admin@…".
+ */
+export function redactMatchFeeEventDetailForHost(
+  detail: string | null,
+): string | null {
+  const base = sanitizeEventDetail(detail);
+  if (base == null || base === '') return null;
+  return base
+    .replace(/Approved by\s+[^\s,;]+@[^\s,;]+/gi, 'Approved by LocumLink')
+    .replace(/by\s+[^\s,;]+@[^\s,;]+/gi, 'by LocumLink')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted]')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 export function mapMatchFeeEventRow(
@@ -60,6 +91,18 @@ export function mapMatchFeeEventRow(
     actor: row.actor,
     occurredAt: row.occurredAt.toISOString(),
   };
+}
+
+/** Events safe to show on the host Match Fees / invoices UI. */
+export function mapMatchFeeEventsForHost(
+  events: MatchFeeInvoiceEventDto[],
+): MatchFeeInvoiceEventDto[] {
+  return events
+    .filter((ev) => ev.eventType !== 'ADMIN_NOTE')
+    .map((ev) => ({
+      ...ev,
+      detail: redactMatchFeeEventDetailForHost(ev.detail),
+    }));
 }
 
 export function cancellationActorToEventActor(

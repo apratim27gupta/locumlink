@@ -429,7 +429,7 @@ export function LocumBrowseJobDetail({
                 fontWeight: 'var(--font-weight-bold)',
               }}
             >
-              ${Number(job.payPerDay).toLocaleString()}/day
+              {`CA$${Number(job.payPerDay).toLocaleString()}/day`}
             </span>
           ) : null}
           {hasMinYearsExperience(job.minYearsExperience) ? (

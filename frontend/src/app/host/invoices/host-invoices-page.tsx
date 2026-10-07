@@ -309,6 +309,8 @@ export default function HostInvoicesPage() {
                         refundPendingReview={invoice.refundPendingReview}
                         stripeRefundProcessing={invoice.stripeRefundProcessing}
                         feeRetained={invoice.feeRetained}
+                        refundedCents={invoice.refundedCents}
+                        totalCents={invoice.totalCents}
                       />
                     </div>
                     <div style={{ fontSize: 14, color: '#111827', marginTop: 6, fontWeight: 600 }}>
@@ -326,7 +328,8 @@ export default function HostInvoicesPage() {
                       </div>
                     ) : invoice.stripeRefundProcessing ? (
                       <div style={{ fontSize: 13, color: '#9A3412', marginTop: 4 }}>
-                        Refund processing at Stripe — usually 5–10 business days to your card.
+                        Refund approved. The amount will be refunded to your original payment
+                        method in about 10-14 business days.
                       </div>
                     ) : invoice.feeRetained ? (
                       <div style={{ fontSize: 13, color: '#4B5563', marginTop: 4 }}>
@@ -362,6 +365,11 @@ export default function HostInvoicesPage() {
                         {formatCents(invoice.taxCents)} HST ({formatTaxRate(invoice.taxRateBps)})
                       </span>
                     ) : null}
+                    {(invoice.refundedCents ?? 0) > 0 ? (
+                      <span style={{ fontSize: 13, color: '#B45309', fontWeight: 600 }}>
+                        {formatCents(invoice.refundedCents ?? 0)} refunded
+                      </span>
+                    ) : null}
                     <span style={{ fontSize: 13, color: '#6B7280' }}>
                       Due {new Date(invoice.dueAt).toLocaleDateString('en-CA')}
                       {invoice.paidAt
@@ -380,9 +388,24 @@ export default function HostInvoicesPage() {
                         marginTop: 10,
                       }}
                     >
-                      Refund in progress. LocumLink will refund{' '}
-                      {formatCents(invoice.totalCents - (invoice.refundedCents ?? 0))} to your
-                      original payment method once approved.
+                      Refund in progress. Once approved,{' '}
+                      {formatCents(invoice.totalCents - (invoice.refundedCents ?? 0))} will be
+                      refunded to your original payment method in about 10-14 business days.
+                    </div>
+                  ) : null}
+                  {(invoice.refundedCents ?? 0) > 0 && !invoice.refundPendingReview ? (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: '#92400E',
+                        background: '#FFFBEB',
+                        borderRadius: 8,
+                        padding: '8px 12px',
+                        marginTop: 10,
+                      }}
+                    >
+                      {formatCents(invoice.refundedCents ?? 0)} will be refunded to your original
+                      payment method in about 10-14 business days.
                     </div>
                   ) : null}
 

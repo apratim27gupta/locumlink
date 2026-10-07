@@ -4,6 +4,7 @@ import {
   getReviewPlaygroundEmails,
   isReviewPlaygroundEmail,
 } from '../config/review-playground.util.js';
+import { sanitizeNotificationCopy } from './sanitize-notification-copy.js';
 
 export type EmailSendResult =
   | { ok: true; messageId?: string; skipped?: boolean }
@@ -91,7 +92,11 @@ export class EmailService {
 
     const fromName =
       this.config.get<string>('MAIL_FROM_NAME')?.trim() || 'Locum Link';
-    const { text, html } = withTeamSignoff(params.text, params.html);
+    const subject = sanitizeNotificationCopy(params.subject);
+    const { text, html } = withTeamSignoff(
+      sanitizeNotificationCopy(params.text),
+      params.html ? sanitizeNotificationCopy(params.html) : undefined,
+    );
 
     const credentials = Buffer.from(`${sid}:${secret}`).toString('base64');
     const res = await fetch('https://comms.twilio.com/v1/Emails', {
@@ -105,7 +110,7 @@ export class EmailService {
         from: { address: from, name: fromName },
         to: [{ address: to }],
         content: {
-          subject: params.subject,
+          subject,
           html,
           text,
         },

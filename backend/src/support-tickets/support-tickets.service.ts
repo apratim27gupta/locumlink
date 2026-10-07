@@ -2,10 +2,12 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, SupportTicketStatus } from '../prisma/prisma-client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
 import {
   platformCalendarDateOf,
   platformCalendarDateToday,
@@ -28,7 +30,12 @@ function isPostingCompletedForTicket(posting: {
 
 @Injectable()
 export class SupportTicketsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(SupportTicketsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly adminNotifications: AdminNotificationsService,
+  ) {}
 
   async createHostTicket(
     userId: string,
@@ -55,7 +62,7 @@ export class SupportTicketsService {
 
     const hostProfile = await this.prisma.hostProfile.findUnique({
       where: { userId },
-      select: { id: true },
+      select: { id: true, practiceName: true },
     });
     if (!hostProfile) throw new NotFoundException('Host profile not found.');
 
@@ -137,6 +144,22 @@ export class SupportTicketsService {
         detail: message.length > 400 ? `${message.slice(0, 400)}…` : message,
       },
     });
+
+    try {
+      await this.adminNotifications.notifyHostSupportTicket({
+        ticketId: ticket.id,
+        invoiceId: invoice.id,
+        hostPracticeName: hostProfile.practiceName?.trim() || 'Host',
+        jobTitle: posting.title,
+        message,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Admin ticket notification failed for ${ticket.id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
 
     return {
       success: true,
@@ -351,7 +374,7 @@ export class SupportTicketsService {
             notes ? `Notes: ${notes}` : null,
           ]
             .filter(Boolean)
-            .join(' — '),
+            .join(' - '),
         },
       });
       if (notes) {

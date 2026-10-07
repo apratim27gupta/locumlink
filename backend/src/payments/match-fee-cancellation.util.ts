@@ -2,7 +2,6 @@ import {
   MATCH_FEE_CANCELLATION_WINDOW_DAYS,
   MATCH_FEE_DUE_DAYS,
   MATCH_FEE_ESCALATION_DAYS_AFTER_DUE,
-  isMatchFeeTestingSkipLocumReplacement,
 } from './match-fee.constants.js';
 import {
   applicationClaimedDates,
@@ -108,12 +107,14 @@ export function evaluateCancellationPolicy(params: {
       return {
         daysUntilStart,
         withinLateWindow: true,
-        invoiceStatus: wasPaid ? 'UNCHANGED' : 'CANCELLED',
+        // Late cancel: paid fee is retained; unpaid invoice stays due (same for host + locum).
+        invoiceStatus: 'UNCHANGED',
         refundResolution: 'NONE',
         replacementStatus: 'NONE',
         nonRefundable: wasPaid,
-        reason:
-          'Host cancelled fewer than 14 days before start. The match fee is non-refundable.',
+        reason: wasPaid
+          ? 'Host cancelled fewer than 14 days before start. The match fee is non-refundable.'
+          : 'Host cancelled fewer than 14 days before start. The match fee remains due.',
       };
     }
     return {
@@ -130,29 +131,16 @@ export function evaluateCancellationPolicy(params: {
 
   if (cancelledBy === 'LOCUM') {
     if (withinLateWindow) {
-      // TEMP testing: skip replacement search → admin can refund immediately.
-      if (isMatchFeeTestingSkipLocumReplacement()) {
-        return {
-          daysUntilStart,
-          withinLateWindow: true,
-          invoiceStatus: wasPaid ? 'REFUNDED' : 'CANCELLED',
-          refundResolution: wasPaid ? 'REFUND' : 'NONE',
-          replacementStatus: 'NONE',
-          nonRefundable: false,
-          reason: wasPaid
-            ? 'TESTING: Locum cancelled within 14 days — replacement flow skipped; admin may refund. (MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT)'
-            : 'Locum cancelled. Unpaid invoice cancelled.',
-        };
-      }
       return {
         daysUntilStart,
         withinLateWindow: true,
-        invoiceStatus: wasPaid ? 'PENDING_REPLACEMENT' : 'CANCELLED',
+        invoiceStatus: wasPaid ? 'PENDING_REPLACEMENT' : 'UNCHANGED',
         refundResolution: wasPaid ? 'PENDING' : 'NONE',
         replacementStatus: wasPaid ? 'SEARCHING' : 'NONE',
         nonRefundable: false,
-        reason:
-          'Locum cancelled fewer than 14 days before start. LocumLink will seek a replacement before issuing a refund.',
+        reason: wasPaid
+          ? 'Locum cancelled fewer than 14 days before start. LocumLink will seek a replacement before issuing a refund.'
+          : 'Locum cancelled fewer than 14 days before start. The match fee remains due.',
       };
     }
     return {

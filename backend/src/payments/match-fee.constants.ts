@@ -35,20 +35,6 @@ export const MATCH_FEE_CANCELLATION_WINDOW_DAYS = 14;
 export const MATCH_FEE_OVERDUE_REMINDER_INTERVAL_DAYS = 7;
 export const MATCH_FEE_ESCALATION_DAYS_AFTER_DUE = 30;
 
-/**
- * TEMP testing override: when true, locum cancel within the 14-day window skips
- * PENDING_REPLACEMENT / SEARCHING and goes straight to admin refund-pending
- * (same as early locum cancel). Turn off to restore the replacement flow.
- *
- * Set MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT=1 (or true) on the API.
- */
-export function isMatchFeeTestingSkipLocumReplacement(): boolean {
-  const raw = (process.env.MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT ?? '')
-    .trim()
-    .toLowerCase();
-  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
-}
-
 export type MatchFeeTier = 'HALF' | 'FULL';
 
 /**
@@ -88,14 +74,14 @@ export const MATCH_FEE_POLICY = {
   /** Discrete bullets shown under "Match fee". */
   matchFeePoints: [
     'When a locum confirms a match on your posting, LocumLink invoices a platform match fee per locum.',
-    `$${MATCH_FEE_HALF_CENTS / 100} when the locum claims up to 3.5 hours total.`,
-    `$${MATCH_FEE_FULL_CENTS / 100} when the locum claims more than 3.5 hours total.`,
+    `CA$${MATCH_FEE_HALF_CENTS / 100} when the locum claims up to 3.5 hours total.`,
+    `CA$${MATCH_FEE_FULL_CENTS / 100} when the locum claims more than 3.5 hours total.`,
     '14% HST is added to each match fee invoice.',
-    `If the locum increases availability from 1 half-day slot to more after the $${MATCH_FEE_HALF_CENTS / 100} invoice was created, an additional $${MATCH_FEE_HALF_CENTS / 100} invoice will be created after the shifts are completed.`,
+    `If the locum increases availability from 1 half-day slot to more after the CA$${MATCH_FEE_HALF_CENTS / 100} invoice was created, an additional CA$${MATCH_FEE_HALF_CENTS / 100} invoice will be created after the shifts are completed.`,
   ],
   /** @deprecated Prefer matchFeePoints; kept for older clients. */
   matchFeeDescription:
-    `When a locum confirms a match on your posting, a platform match fee is invoiced per locum: $${MATCH_FEE_HALF_CENTS / 100} for up to 3.5 hours total claimed, or $${MATCH_FEE_FULL_CENTS / 100} when the locum claims more than 3.5 hours. 14% HST is added to each invoice.`,
+    `When a locum confirms a match on your posting, a platform match fee is invoiced per locum: CA$${MATCH_FEE_HALF_CENTS / 100} for up to 3.5 hours total claimed, or CA$${MATCH_FEE_FULL_CENTS / 100} when the locum claims more than 3.5 hours. 14% HST is added to each invoice.`,
   perLocumFeeRule:
     'Each matched locum generates a separate invoice. Another locum on the same posting means another match fee at the same rates.',
   dueRule:
@@ -111,12 +97,12 @@ export const MATCH_FEE_POLICY = {
     {
       id: 'host_late_cancel',
       summary:
-        'Host cancels fewer than 14 days before start - the match fee is non-refundable.',
+        'Host cancels fewer than 14 days before start - if paid, the match fee is non-refundable; if unpaid, the invoice remains due.',
     },
     {
       id: 'locum_late_cancel',
       summary:
-        'Locum cancels fewer than 14 days before start - LocumLink will try to find a replacement. If none is found, LocumLink refunds the fee and HST to the original payment method.',
+        'Locum cancels fewer than 14 days before start - if paid, LocumLink will try to find a replacement (refund only if none is found); if unpaid, the invoice remains due.',
     },
     {
       id: 'locum_late_cancel_replacement_fee',
@@ -126,7 +112,7 @@ export const MATCH_FEE_POLICY = {
     {
       id: 'post_completion_tier_top_up',
       summary:
-        `If the locum increases availability from 1 half-day slot to more after the $${MATCH_FEE_HALF_CENTS / 100} invoice was created, an additional $${MATCH_FEE_HALF_CENTS / 100} invoice will be created after the shifts are completed. That top-up follows the same payment and cancellation rules as the original match fee.`,
+        `If the locum increases availability from 1 half-day slot to more after the CA$${MATCH_FEE_HALF_CENTS / 100} invoice was created, an additional CA$${MATCH_FEE_HALF_CENTS / 100} invoice will be created after the shifts are completed. That top-up follows the same payment and cancellation rules as the original match fee.`,
     },
     {
       id: 'post_completion_tickets',

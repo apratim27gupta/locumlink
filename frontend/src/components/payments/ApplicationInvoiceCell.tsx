@@ -37,25 +37,48 @@ export function buildInvoiceByApplication(
   return map;
 }
 
-/** Loads a posting's match fee invoices keyed by application. */
+/**
+ * Loads a posting's match fee invoices keyed by application.
+ * Refetches when `refreshKey` changes (e.g. after locum accept) and polls so
+ * Pay buttons appear shortly after acceptance without a full page reload.
+ */
 export function usePostingInvoices(
   jobPostingId: string | null | undefined,
+  refreshKey?: string | number,
 ): Map<string, ApplicationInvoiceLink> {
   const [invoices, setInvoices] = useState<MatchFeeInvoice[]>([]);
   useEffect(() => {
     if (!jobPostingId) return;
     let cancelled = false;
-    fetchAllPaginated((cursor) => hostApi.listMatchFees({ jobPostingId, limit: 50, cursor }))
-      .then((items) => {
-        if (!cancelled) setInvoices(items);
-      })
-      .catch(() => {
-        if (!cancelled) setInvoices([]);
-      });
+
+    const load = () =>
+      fetchAllPaginated((cursor) =>
+        hostApi.listMatchFees({ jobPostingId, limit: 50, cursor }),
+      )
+        .then((items) => {
+          if (!cancelled) setInvoices(items);
+        })
+        .catch(() => {
+          if (!cancelled) setInvoices([]);
+        });
+
+    void load();
+    const intervalId = window.setInterval(() => {
+      void load();
+    }, 8_000);
+    const onFocus = () => {
+      void load();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
     };
-  }, [jobPostingId]);
+  }, [jobPostingId, refreshKey]);
   return useMemo(() => buildInvoiceByApplication(invoices), [invoices]);
 }
 
@@ -83,7 +106,7 @@ export function ApplicationInvoiceCell({
     const awaitingLocum = app.status === 'CONFIRMED' && app.locumResponse !== 'ACCEPTED';
     return (
       <span style={{ fontSize: 12, color: '#9CA3AF' }}>
-        {awaitingLocum ? 'Awaiting locum' : '-'}
+        {awaitingLocum ? 'Awaiting Locum Acceptance' : '-'}
       </span>
     );
   }
@@ -141,6 +164,8 @@ export function ApplicationInvoiceCell({
   const visual = matchFeeVisualStatus(invoice.status, invoice.refundPendingReview, {
     stripeRefundProcessing: invoice.stripeRefundProcessing,
     feeRetained: invoice.feeRetained,
+    refundedCents: invoice.refundedCents,
+    totalCents: invoice.totalCents,
   });
   const colors = matchFeeStatusColor(visual);
   return (

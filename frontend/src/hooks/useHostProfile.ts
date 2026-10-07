@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import type { HostProfile } from '@/types';
 import { hostApi } from '@/lib/api';
 import { getToken } from '@/lib/auth';
@@ -10,6 +10,8 @@ export function useHostProfile() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** After a local save we already have the response - skip the echo refresh. */
+    const skipNextProfileEventRefresh = useRef(false);
 
     const refreshProfile = useCallback(async () => {
         const token = getToken();
@@ -54,6 +56,10 @@ export function useHostProfile() {
 
     useEffect(() => {
         return subscribeProfileUpdated(() => {
+            if (skipNextProfileEventRefresh.current) {
+                skipNextProfileEventRefresh.current = false;
+                return;
+            }
             void refreshProfile();
         });
     }, [refreshProfile]);
@@ -64,6 +70,7 @@ export function useHostProfile() {
         try {
             const saved = await hostApi.saveProfile(data);
             setProfile(saved);
+            skipNextProfileEventRefresh.current = true;
             dispatchProfileUpdated();
         }
         catch (err: unknown) {

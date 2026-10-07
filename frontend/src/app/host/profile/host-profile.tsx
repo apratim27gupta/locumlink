@@ -45,6 +45,7 @@ import {
   profileTextCapitalize,
 } from '@/lib/profileFormTypography';
 import { getEmail } from '@/lib/auth';
+import { useAuth } from '@/providers/AuthProvider';
 import { useAnchoredDropdownMenu } from '@/hooks/useAnchoredDropdownMenu';
 import { AnchoredDropdownPortal } from '@/components/ui/AnchoredDropdownMenu';
 
@@ -294,9 +295,12 @@ export default function HostProfilePage(props: {
 }) {
   useNextPageClientProps(props);
   const { profile, loading, saveProfile, saving } = useHostProfile();
+  const { userId } = useAuth();
   const verified = isCpsnsVerificationApproved(
     profile?.cpsnsVerificationStatus,
   );
+  /** Only copy server profile into the form once per user - later refreshes must not wipe edits. */
+  const hydratedUserIdRef = useRef<string | null>(null);
   const welcomeDoctorLabel =
     profile?.contactFirstName || profile?.contactLastName
       ? `Dr ${(profile?.contactFirstName ?? '').trim()} ${(profile?.contactLastName ?? '').trim()}`.trim()
@@ -424,8 +428,16 @@ export default function HostProfilePage(props: {
     if (e.key === 'Escape') setHostCityDropOpen(false);
   }
 
+  // Clear before hydrate so account switches re-fill the form once.
   useEffect(() => {
-    if (!profile) return;
+    hydratedUserIdRef.current = null;
+  }, [userId]);
+
+  useEffect(() => {
+    if (loading || !profile) return;
+    const hydrateKey = userId ?? 'host';
+    if (hydratedUserIdRef.current === hydrateKey) return;
+    hydratedUserIdRef.current = hydrateKey;
     setClinicName(profile.clinicName ?? '');
     setContactFirst(profile.contactFirstName ?? '');
     setContactLast(profile.contactLastName ?? '');
@@ -463,7 +475,7 @@ export default function HostProfilePage(props: {
     setClinicDesc((profile.clinicDesc ?? '').slice(0, 1000));
     setAmenities(profile.amenities ?? []);
     setAccommodation(profile.accommodationProvided ?? false);
-  }, [profile]);
+  }, [loading, profile, userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -616,8 +628,12 @@ export default function HostProfilePage(props: {
       await saveProfile(data);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch {
-      setSaveError('Could not save. Please try again.');
+    } catch (err: unknown) {
+      setSaveError(
+        err instanceof Error && err.message.trim()
+          ? err.message
+          : 'Could not save. Please try again.',
+      );
     }
   }
 

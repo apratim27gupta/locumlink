@@ -19,7 +19,7 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
     status: 'PENDING',
     label: 'Pending payment',
     summary: 'Match confirmed; host has not paid yet and due date has not passed.',
-    hostObligation: 'Pay the match fee ($5 or $10) by the due date shown on the invoice.',
+    hostObligation: 'Pay the match fee (CA$5 or CA$10) by the due date shown on the invoice.',
   },
   {
     status: 'OVERDUE',
@@ -53,7 +53,7 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
     status: 'PENDING_REPLACEMENT',
     label: 'Replacement pending',
     summary:
-      'Locum cancelled fewer than 14 days before start after the fee was paid. Seeking a replacement — confirmed only when another locum accepts on the posting. If none accepts, refund the host.',
+      'Locum cancelled fewer than 14 days before start after the fee was paid. Seeking a replacement - confirmed only when another locum accepts on the posting. If none accepts, refund the host.',
     hostObligation:
       'Nothing to do for now. LocumLink is looking for a replacement. If none accepts, LocumLink refunds the fee.',
   },

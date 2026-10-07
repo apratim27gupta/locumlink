@@ -24,6 +24,7 @@ export async function GET(req: Request) {
     activeJobPostings,
     totalJobPostings,
     openReports,
+    openHostTickets,
   ] = await Promise.all([
     db.user.count(),
     db.user.count({ where: { role: 'HOST' } }),
@@ -59,6 +60,7 @@ export async function GET(req: Request) {
     }),
     db.jobPosting.count({ where: { isDeleted: false } }),
     db.userReport.count({ where: { status: 'OPEN' } }),
+    db.supportTicket.count({ where: { status: 'OPEN' } }),
   ]);
 
   return NextResponse.json({
@@ -71,6 +73,7 @@ export async function GET(req: Request) {
       verifiedLocumUsers,
       pendingVerifications: pendingLocumVerifications + pendingHostVerifications,
       openReports,
+      openHostTickets,
       activeJobPostings,
       totalJobPostings,
     },

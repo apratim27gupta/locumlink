@@ -1880,9 +1880,14 @@ body.app-body {
     cursor: pointer;
   }
   .dash-notifications-dropdown {
-    width: min(340px, calc(100vw - 32px)) !important;
+    width: min(var(--dash-notif-w, 340px), calc(100vw - 32px)) !important;
     max-width: calc(100vw - 32px) !important;
+    height: min(var(--dash-notif-h, 440px), 80dvh) !important;
+    max-height: min(var(--dash-notif-h, 440px), 80dvh) !important;
     right: 0 !important;
+  }
+  .dash-notifications-resize-handle {
+    display: none !important;
   }
   .browse-search-wrap {
     display: block !important;
@@ -3647,7 +3652,6 @@ main.dash-main-content {
   /* ── Step 5: Dropdowns & popovers ── */
   .anchored-dropdown-menu,
   .host-job-preset-dropdown,
-  .dash-notifications-dropdown,
   [data-anchored-dropdown],
   .driver-popover {
     max-width: calc(100vw - 32px) !important;
@@ -3659,6 +3663,9 @@ main.dash-main-content {
   .dash-notifications-dropdown {
     right: 0 !important;
     left: auto !important;
+    max-width: calc(100vw - 32px) !important;
+    max-height: min(var(--dash-notif-h, 70dvh), 80dvh) !important;
+    box-sizing: border-box !important;
   }
 
   /* ── Step 6: Modals & sheets (bottom-sheet on mobile) ── */
@@ -3876,8 +3883,10 @@ main.dash-main-content {
 
   /* ── Dropdowns & notifications ── */
   .dash-notifications-dropdown {
-    width: min(340px, calc(100vw - 32px)) !important;
+    width: min(var(--dash-notif-w, 400px), calc(100vw - 32px)) !important;
     max-width: calc(100vw - 32px) !important;
+    height: min(var(--dash-notif-h, 480px), 75dvh) !important;
+    max-height: min(var(--dash-notif-h, 480px), 75dvh) !important;
     right: 0 !important;
   }
 

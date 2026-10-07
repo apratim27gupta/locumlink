@@ -135,14 +135,6 @@ class EnvironmentVariables {
   @IsOptional()
   HST_REGISTRATION_NUMBER?: string;
 
-  /**
-   * TEMP testing: skip locum late-cancel replacement search so admin can refund
-   * immediately. Set to 1/true; omit or 0 to restore replacement flow.
-   */
-  @IsString()
-  @IsOptional()
-  MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT?: string;
-
   /** Host-facing frontend URL for Stripe Checkout return links */
   @IsUrl({ require_tld: false })
   @IsOptional()

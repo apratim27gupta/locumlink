@@ -985,6 +985,7 @@ function mapRawToHostProfile(raw: Record<string, unknown>): HostProfile {
         contactFirstName: String(raw.contactFirstName ?? ''),
         contactLastName: String(raw.contactLastName ?? ''),
         cpsnsNumber: String(raw.cpsnsNumber ?? ''),
+        msiProviderNumber: String(raw.msiProviderNumber ?? ''),
         cpsnsVerificationStatus: raw.cpsnsVerificationStatus as HostProfile['cpsnsVerificationStatus'],
         rejectionReason: (raw.rejectionReason as string | null | undefined) ?? null,
         rejectedAt: (raw.rejectedAt as string | null | undefined) ?? null,
@@ -999,6 +1000,9 @@ function mapRawToHostProfile(raw: Record<string, unknown>): HostProfile {
         postalCode: String(raw.postalCode ?? ''),
         city: String(raw.city ?? ''),
         province: String(raw.province ?? ''),
+        phone: String(raw.phone ?? ''),
+        fax: String(raw.fax ?? ''),
+        overheadPayee: String(raw.overheadPayee ?? ''),
         amenities: Array.isArray(raw.servicesOffered)
             ? (raw.servicesOffered as string[])
             : Array.isArray(raw.amenities)

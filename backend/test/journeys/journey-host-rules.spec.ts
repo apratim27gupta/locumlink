@@ -105,7 +105,9 @@ describe('Journey - Host posting rules and linked CPSNS', () => {
     const hostPaidNotice = await getTestDb().notificationEvent.findFirst({
       where: { recipientId: host.user.id, eventType: 'H_017_MATCH_FEE_PAID' },
     });
-    expect(JSON.stringify(hostPaidNotice?.payload)).toContain('$285 (including $35 HST)');
+    expect(JSON.stringify(hostPaidNotice?.payload)).toContain(
+      'CA$285.00 (including CA$35.00 HST)',
+    );
 
     await http
       .patch(`/api/host/jobs/${draft.body.job.id}`, { status: 'ACTIVE' })

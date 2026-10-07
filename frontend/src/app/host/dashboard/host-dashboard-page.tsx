@@ -889,7 +889,7 @@ function JobCard({ job, expandedJobId, applications, loadingAppsFor, onToggleApp
     const endFmt = fmtDate(job.endDate);
     const scheduleMode = getJobScheduleMode(job);
     const pay = job.payPerDay
-        ? `$${Number(job.payPerDay).toLocaleString()}/day`
+        ? `CA$${Number(job.payPerDay).toLocaleString()}/day`
         : null;
     const menuItemBase: React.CSSProperties = {
         width: '100%',

@@ -21,8 +21,55 @@
 
 set -euo pipefail
 
+# Force UTF-8 for Python/gcloud YAML merges (Windows PowerShell often injects BOM/CP1252).
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+export LANG="${LANG:-en_US.UTF-8}"
+export LC_ALL="${LC_ALL:-en_US.UTF-8}"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+
+# Fail fast on UTF-16 / UTF-8 BOM / non-UTF-8 text in deploy-critical files.
+assert_utf8_text() {
+  local path="$1"
+  local py
+  py="$(command -v python3 || command -v python || true)"
+  if [[ -z "${py}" ]]; then
+    echo "ERROR: python3/python required for UTF-8 deploy checks" >&2
+    exit 1
+  fi
+  "${py}" - "$path" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.is_file():
+    print(f"ERROR: missing file for UTF-8 check: {path}", file=sys.stderr)
+    sys.exit(1)
+raw = path.read_bytes()
+if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+    print(f"ERROR: {path} is UTF-16; rewrite as UTF-8 without BOM", file=sys.stderr)
+    sys.exit(1)
+if raw.startswith(b"\xef\xbb\xbf"):
+    print(f"ERROR: {path} has a UTF-8 BOM; strip BOM and redeploy", file=sys.stderr)
+    sys.exit(1)
+try:
+    raw.decode("utf-8")
+except UnicodeDecodeError as exc:
+    print(f"ERROR: {path} is not valid UTF-8: {exc}", file=sys.stderr)
+    sys.exit(1)
+print(f"==> UTF-8 OK: {path}", file=sys.stderr)
+PY
+}
+
+assert_utf8_text "scripts/deploy-cloudrun-nonprod.sh"
+if [[ -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" != "scripts/deploy-cloudrun-nonprod.sh" ]]; then
+  assert_utf8_text "${BASH_SOURCE[0]}"
+fi
+if [[ -n "${ENV_VARS_FILE:-}" && -f "${ENV_VARS_FILE}" ]]; then
+  assert_utf8_text "${ENV_VARS_FILE}"
+fi
 
 ENV_NAME="${1:-}"
 if [[ "${ENV_NAME}" != "staging" && "${ENV_NAME}" != "demo" ]]; then
@@ -60,7 +107,6 @@ CONSOLE_OWNED_ENV_KEYS=(
   STRIPE_SECRET_KEY
   STRIPE_WEBHOOK_SECRET
   HST_REGISTRATION_NUMBER
-  MATCH_FEE_TESTING_SKIP_LOCUM_REPLACEMENT
 )
 
 echo "==> Env:       ${ENV_NAME}"
@@ -121,7 +167,16 @@ for e in svc["spec"]["template"]["spec"]["containers"][0].get("env") or []:
         live[e["name"]] = e["value"]
 
 path = Path(yaml_path)
-text = path.read_text(encoding="utf-8-sig")  # strip BOM
+raw = path.read_bytes()
+if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+    raise SystemExit(f"ERROR: {path} is UTF-16; rewrite as UTF-8 without BOM")
+if raw.startswith(b"\xef\xbb\xbf"):
+    print(f"==> Stripping UTF-8 BOM from {path}", file=sys.stderr)
+    raw = raw[3:]
+try:
+    text = raw.decode("utf-8")
+except UnicodeDecodeError as exc:
+    raise SystemExit(f"ERROR: {path} is not valid UTF-8: {exc}") from exc
 lines_out = []
 seen = set()
 for line in text.splitlines():
@@ -155,7 +210,8 @@ for key, val in live.items():
     )
     lines_out.append(f'{key}: "{esc}"')
     print(f"==> Injected console-owned {key} from live {service}", file=sys.stderr)
-path.write_text("\n".join(lines_out) + "\n", encoding="utf-8")
+# Always write UTF-8 (no BOM) with LF newlines.
+path.write_bytes(("\n".join(lines_out) + "\n").encode("utf-8"))
 if not live:
     print(
         f"==> Warning: no console-owned keys found on live {service}; YAML values used as-is",
