@@ -517,37 +517,43 @@ export default function LocumDashboard(props: {
     const cpsnsVerified = isCpsnsVerificationApproved(profile?.cpsnsVerificationStatus);
     const todayStart =
         startOfLocalCalendarDay(localCalendarDateToIso()) ?? new Date();
-    const isUpcomingApplication = (app: MyApplication) => {
+    const isUpcomingApplication = (app: MyApplication): boolean => {
         const startDate = localDateFromCalendarInput(
             app.jobPosting.startDate ?? null,
         );
-        return app.status === 'CONFIRMED'
+        return Boolean(
+            app.status === 'CONFIRMED'
             && !!app.locumAcceptedAt
             && startDate
-            && startDate.getTime() > todayStart.getTime();
+            && startDate.getTime() > todayStart.getTime(),
+        );
     };
-    const isOngoingApplication = (app: MyApplication) => {
+    const isOngoingApplication = (app: MyApplication): boolean => {
         const startDate = localDateFromCalendarInput(
             app.jobPosting.startDate ?? null,
         );
         const endDate = localDateFromCalendarInput(
             app.jobPosting.endDate ?? null,
         );
-        return app.status === 'CONFIRMED'
+        return Boolean(
+            app.status === 'CONFIRMED'
             && !!app.locumAcceptedAt
             && startDate
             && endDate
             && startDate.getTime() <= todayStart.getTime()
-            && endDate.getTime() >= todayStart.getTime();
+            && endDate.getTime() >= todayStart.getTime(),
+        );
     };
-    const isCompletedApplication = (app: MyApplication) => {
+    const isCompletedApplication = (app: MyApplication): boolean => {
         const endDate = localDateFromCalendarInput(
             app.jobPosting.endDate ?? null,
         );
-        return app.status === 'CONFIRMED'
+        return Boolean(
+            app.status === 'CONFIRMED'
             && !!app.locumAcceptedAt
             && endDate
-            && endDate.getTime() < todayStart.getTime();
+            && endDate.getTime() < todayStart.getTime(),
+        );
     };
     const dashboardShiftCtx = {
         isUpcomingApplication,
