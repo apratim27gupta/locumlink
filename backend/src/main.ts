@@ -1,12 +1,18 @@
+import './tracing.js';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module.js';
 import { PrismaClientKnownExceptionFilter } from './prisma/prisma-client-exception.filter.js';
+import { OtelNestLogger } from './otel-nest-logger.js';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+    bufferLogs: true,
+  });
+  app.useLogger(new OtelNestLogger());
   const config = app.get(ConfigService);
   app.useGlobalFilters(new PrismaClientKnownExceptionFilter());
   app.useGlobalPipes(
