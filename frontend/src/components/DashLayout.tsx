@@ -25,6 +25,7 @@ import { SupportLegalLinks } from '@/components/SupportLegalLinks';
 import SidebarFeedback from '@/components/SidebarFeedback';
 import AppStoreInstallButton from '@/components/AppStoreInstallButton';
 import NotificationBody from '@/components/NotificationBody';
+import DashboardHero from '@/components/DashboardHero';
 import { roleAccent, roleFromPathname, ROLE_GUIDE } from '@/lib/roleAccent';
 interface NavItem {
     label: string;
@@ -688,6 +689,10 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         }
         return item;
     });
+    // Browse/messages need a fill-height pane; other pages scroll hero + content together.
+    const fillHeightPage =
+      !!pathname &&
+      (pathname.includes('/browse') || pathname.includes('/messages'));
     return (<div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -1573,22 +1578,36 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
         </aside>
 
         <div
-            className="dash-content-column"
+            className={
+              fillHeightPage
+                ? 'dash-content-column dash-content-column--fill'
+                : 'dash-content-column dash-content-column--scroll'
+            }
             style={{
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
             minWidth: 0,
             height: '100%',
-            overflow: 'hidden',
+            overflowY: fillHeightPage ? 'hidden' : 'auto',
+            overflowX: 'hidden',
+            background: '#F7F8FA',
         }}>
+          <DashboardHero
+            variant={activeDashRole === 'clinic' ? 'host' : 'locum'}
+            displayName={
+              mergedFirst || mergedLast
+                ? `Dr ${[mergedFirst, mergedLast].filter(Boolean).join(' ')}`.trim()
+                : null
+            }
+          />
           <main className="dash-main-content" style={{
-            flex: 1,
-            minHeight: 0,
+            flex: fillHeightPage ? 1 : '0 0 auto',
+            minHeight: fillHeightPage ? 0 : undefined,
             display: 'flex',
             flexDirection: 'column',
             padding: 28,
-            overflowY: 'auto',
+            overflowY: fillHeightPage ? 'auto' : 'visible',
             overflowX: 'hidden',
             background: '#F7F8FA',
             boxSizing: 'border-box',

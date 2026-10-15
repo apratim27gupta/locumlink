@@ -132,7 +132,7 @@ export default function LocumResourcesPage(props: {
 
     return (
         <DashLayout navItems={NAV} activeHref="/locum/resources" topbarFirstName={profile?.firstName} topbarLastName={profile?.lastName}>
-            <div style={{ maxWidth: 720 }}>
+            <div style={{ width: '100%', maxWidth: 'none' }}>
                 {showGuide ? (
                     <>
                         <button

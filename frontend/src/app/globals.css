@@ -2002,6 +2002,153 @@ body.app-body {
 }
 
 /* ══════════════════════════════════════════════
+   DASH HERO (host / locum banner under top nav)
+   Full-bleed image + soft left wash (sample style)
+   ══════════════════════════════════════════════ */
+
+.dash-hero-wrap {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 20px 28px 0;
+  background: #F7F8FA;
+  box-sizing: border-box;
+}
+
+.dash-hero {
+  position: relative;
+  width: 100%;
+  min-height: clamp(200px, 24vw, 260px);
+  overflow: hidden;
+  border-radius: 16px;
+  background: #EEF1F6;
+  box-shadow: 0 1px 2px rgba(15, 21, 35, 0.04);
+}
+
+.dash-hero-image {
+  object-fit: cover;
+}
+
+/* Keep focal subjects visible on the right */
+.dash-hero--host .dash-hero-image {
+  object-position: 82% 40%;
+}
+
+.dash-hero--locum .dash-hero-image {
+  object-position: 78% 52%;
+}
+
+/* Light left wash — enough for type, image still reads through */
+.dash-hero-wash {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(247, 248, 250, 0.82) 0%,
+    rgba(247, 248, 250, 0.58) 34%,
+    rgba(247, 248, 250, 0.22) 58%,
+    rgba(247, 248, 250, 0) 78%
+  );
+}
+
+.dash-hero-copy {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-height: inherit;
+  max-width: min(520px, 58%);
+  padding: clamp(22px, 3vw, 40px) clamp(22px, 3vw, 44px);
+  box-sizing: border-box;
+}
+
+.dash-hero-eyebrow {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dash-hero-title {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-size: clamp(22px, 2.5vw, 30px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.dash-hero-subtitle {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-size: clamp(13px, 1.35vw, 15px);
+  font-weight: 400;
+  line-height: 1.5;
+  max-width: 40ch;
+}
+
+/* Host: navy hierarchy */
+.dash-hero--host .dash-hero-eyebrow {
+  color: #3A65DB;
+}
+
+.dash-hero--host .dash-hero-title {
+  color: #0F2A7A;
+}
+
+.dash-hero--host .dash-hero-subtitle {
+  color: #4A5F8A;
+}
+
+/* Locum: cyan / teal hierarchy */
+.dash-hero--locum .dash-hero-eyebrow {
+  color: #38C6C6;
+}
+
+.dash-hero--locum .dash-hero-title {
+  color: #0E6E6E;
+}
+
+.dash-hero--locum .dash-hero-subtitle {
+  color: #4A7A7A;
+}
+
+@media (max-width: 768px) {
+  .dash-hero-wrap {
+    padding: 14px 12px 0;
+  }
+
+  .dash-hero {
+    min-height: 180px;
+  }
+
+  .dash-hero-copy {
+    max-width: 75%;
+    padding: 18px 16px;
+    gap: 6px;
+  }
+
+  .dash-hero-subtitle {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .dash-hero--host .dash-hero-image {
+    object-position: 75% 38%;
+  }
+
+  .dash-hero--locum .dash-hero-image {
+    object-position: 70% 50%;
+  }
+}
+
+/* ══════════════════════════════════════════════
    LAYOUT CONSISTENCY FIXES
    ══════════════════════════════════════════════ */
 
@@ -2101,11 +2248,18 @@ body.app-body {
   }
 
   /* ── 2. MAIN CONTENT: same inset as desktop (from sidebar / header) ── */
+  .dash-content-column--scroll {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  .dash-content-column--scroll > main.dash-main-content {
+    overflow: visible !important;
+  }
+
   .dash-content-column > main.dash-main-content,
   .dash-sidebar ~ div main.dash-main-content {
     padding: 16px 12px 28px !important;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
     box-sizing: border-box !important;
     width: 100% !important;
   }
@@ -3313,6 +3467,19 @@ body.app-body {
 }
 
 /* Dashboard pages: consistent inset from sidebar / header (main padding only) */
+.dash-content-column--scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dash-content-column--scroll > main.dash-main-content {
+  overflow: visible !important;
+}
+
+.dash-content-column--fill {
+  overflow: hidden;
+}
+
 .dash-content-column > main.dash-main-content,
 main.dash-main-content {
   padding: 28px !important;
@@ -3320,10 +3487,18 @@ main.dash-main-content {
 }
 
 .dash-page-shell,
-.host-dash-page,
 .host-profile-inner {
   width: 100%;
   max-width: 1180px;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Host dashboard: full content-column width to match hero */
+.host-dash-page {
+  width: 100%;
+  max-width: none;
   margin: 0;
   padding: 0;
   box-sizing: border-box;

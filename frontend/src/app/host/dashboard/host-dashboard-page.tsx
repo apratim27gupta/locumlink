@@ -3021,8 +3021,7 @@ export default function HostDashboard(props: {
                 fontSize: 14,
             }}>
         Loading dashboard…
-      </div>) : (<><div className="host-dash-page dash-page-shell" style={{
-            maxWidth: 1180,
+      </div>) : (<><div className="host-dash-page" style={{
             width: '100%',
             minWidth: 0,
             display: 'flex',
