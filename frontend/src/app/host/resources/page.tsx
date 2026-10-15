@@ -149,7 +149,7 @@ export default function HostResourcesPage(props: {
 
     return (
         <DashLayout navItems={NAV} activeHref="/host/resources" topbarFirstName={profile?.contactFirstName} topbarLastName={profile?.contactLastName}>
-            <div style={{ maxWidth: 720 }}>
+            <div style={{ width: '100%', maxWidth: 'none' }}>
                 {showGuide ? (
                     <>
                         <button
