@@ -15,10 +15,21 @@ const GENERIC_HOSTS = new Set([
   '::1',
 ]);
 
+/** Helix groups prod and staging. Cloud Run sets NODE_ENV to "production". */
+export function deploymentEnvironment(raw: string | undefined): string {
+  const value = raw?.trim().toLowerCase() || 'development';
+  if (value === 'production' || value === 'prod') return 'prod';
+  if (value === 'staging') return 'staging';
+  if (value === 'demo') return 'demo';
+  if (value === 'development' || value === 'dev') return 'development';
+  return value;
+}
+
 export function hostNameFrom(input: {
   hostname?: string;
   envHostname?: string;
   podName?: string;
+  cloudRunRevision?: string;
 }): string {
   const pod = clean(input.podName);
   if (pod) return pod;
@@ -26,6 +37,8 @@ export function hostNameFrom(input: {
   if (fromEnv) return fromEnv;
   const fromOs = usableHost(input.hostname);
   if (fromOs) return fromOs;
+  const revision = clean(input.cloudRunRevision);
+  if (revision) return revision;
   return clean(input.envHostname) || clean(input.hostname) || 'unknown';
 }
 

@@ -1,4 +1,8 @@
-import { hostNameFrom, serviceResourceAttributes } from './resource.js';
+import {
+  deploymentEnvironment,
+  hostNameFrom,
+  serviceResourceAttributes,
+} from './resource.js';
 
 describe('service resource attributes', () => {
   it('sets the identity Helix groups by, including the host', () => {
@@ -45,5 +49,17 @@ describe('service resource attributes', () => {
     expect(hostNameFrom({ hostname: 'localhost', podName: 'api-pod' })).toBe(
       'api-pod',
     );
+    expect(
+      hostNameFrom({
+        hostname: 'localhost',
+        cloudRunRevision: 'l2-api-staging-00033-jpk',
+      }),
+    ).toBe('l2-api-staging-00033-jpk');
+  });
+
+  it('labels production as prod so Helix can separate it from staging', () => {
+    expect(deploymentEnvironment('production')).toBe('prod');
+    expect(deploymentEnvironment('staging')).toBe('staging');
+    expect(deploymentEnvironment(undefined)).toBe('development');
   });
 });

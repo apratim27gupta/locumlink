@@ -33,6 +33,7 @@ import {
   signalUrl,
 } from './telemetry/ingest.js';
 import {
+  deploymentEnvironment,
   hostNameFrom,
   serviceResourceAttributes,
 } from './telemetry/resource.js';
@@ -85,15 +86,15 @@ const exporting = Boolean(key) && !sendingToCollector;
 const resource = resourceFromAttributes(
   serviceResourceAttributes({
     serviceName,
-    environment:
-      process.env.DEPLOYMENT_ENVIRONMENT?.trim() ||
-      process.env.NODE_ENV?.trim() ||
-      'development',
+    environment: deploymentEnvironment(
+      process.env.DEPLOYMENT_ENVIRONMENT || process.env.NODE_ENV,
+    ),
     version: process.env.OTEL_SERVICE_VERSION?.trim() || 'unknown',
     hostName: hostNameFrom({
       hostname: hostname(),
       envHostname: process.env.HOSTNAME,
       podName: process.env.POD_NAME || process.env.K8S_POD_NAME,
+      cloudRunRevision: process.env.K_REVISION,
     }),
     podName: process.env.POD_NAME || process.env.K8S_POD_NAME,
     podNamespace: process.env.POD_NAMESPACE || process.env.K8S_NAMESPACE_NAME,
@@ -213,7 +214,7 @@ const sdk = new NodeSDK({
         ],
       },
       '@opentelemetry/instrumentation-winston': {
-        logSeverity: SeverityNumber.WARN,
+        logSeverity: SeverityNumber.INFO,
       },
     }),
   ],

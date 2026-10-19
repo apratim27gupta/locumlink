@@ -39,7 +39,10 @@ import {
   clearUserOtpVerifyAttempts,
   recordUserOtpVerifyFailure,
 } from './user-otp-rate-limit.js';
-import { getFixedAuthOtp, getReviewOtpForEmail } from '../config/fixed-otp.util.js';
+import {
+  getFixedAuthOtp,
+  getReviewOtpForEmail,
+} from '../config/fixed-otp.util.js';
 import { hashOtpCode, verifyOtpCode } from '../common/utils/otp-hash.util.js';
 import { TurnstileService } from '../common/turnstile/turnstile.service.js';
 
@@ -291,11 +294,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
     });
-    if (
-      !user ||
-      user.status === 'DEACTIVATED' ||
-      user.status === 'SUSPENDED'
-    ) {
+    if (!user || user.status === 'DEACTIVATED' || user.status === 'SUSPENDED') {
       throw new UnauthorizedException('Session invalid');
     }
     return user;
@@ -340,7 +339,9 @@ export class AuthService {
         }
         const nodeEnv = this.config.get<string>('NODE_ENV') ?? 'development';
         if (error && nodeEnv !== 'production') {
-          this.logger.warn(`sync-supabase: Supabase getUser failed: ${error.message}`);
+          this.logger.warn(
+            `sync-supabase: Supabase getUser failed: ${error.message}`,
+          );
         }
       } catch (err) {
         const nodeEnv = this.config.get<string>('NODE_ENV') ?? 'development';
@@ -510,7 +511,9 @@ export class AuthService {
       assertUserOtpVerifyAllowed(normalizedEmail, ip);
     } catch (err) {
       if (err instanceof UserOtpRateLimitError) {
-        throw new UnauthorizedException('Invalid or expired verification code.');
+        throw new UnauthorizedException(
+          'Invalid or expired verification code.',
+        );
       }
       throw err;
     }
@@ -553,6 +556,7 @@ export class AuthService {
       normalizedEmail,
       roleHint,
     );
+    this.logger.log(`Login succeeded for role ${roleHint} user ${user.id}`);
     return this.issueTokens(user);
   }
 
@@ -662,10 +666,7 @@ export class AuthService {
     return next;
   }
 
-  async markTourSeen(
-    userId: string,
-    tourKey: 'host' | 'locum',
-  ): Promise<void> {
+  async markTourSeen(userId: string, tourKey: 'host' | 'locum'): Promise<void> {
     await this.prisma.user.update({
       where: { id: userId },
       data:

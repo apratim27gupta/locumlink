@@ -92,13 +92,38 @@ describe('telemetry signal policy', () => {
     ).toBe(false);
   });
 
-  it('exports warn and error logs, and skips info plus known client errors', () => {
+  it('exports warnings, errors, and info worth looking up', () => {
     expect(
       shouldExportLog({
         severityNumber: SeverityNumber.INFO,
         body: 'Mapped {/api/health, GET} route',
+        attributes: { 'nestjs.context': 'RouterExplorer' },
       }),
     ).toBe(false);
+    expect(
+      shouldExportLog({
+        severityNumber: SeverityNumber.INFO,
+        body: 'HTTP Request',
+      }),
+    ).toBe(false);
+    expect(
+      shouldExportLog({
+        severityNumber: SeverityNumber.DEBUG,
+        body: 'console.log noise',
+      }),
+    ).toBe(false);
+    expect(
+      shouldExportLog({
+        severityNumber: SeverityNumber.INFO,
+        body: 'Login succeeded for role LOCUM user user-1',
+      }),
+    ).toBe(true);
+    expect(
+      shouldExportLog({
+        severityNumber: SeverityNumber.INFO,
+        body: 'Expired 2 posting(s) with passed shift start',
+      }),
+    ).toBe(true);
     expect(
       shouldExportLog({
         severityNumber: SeverityNumber.ERROR,

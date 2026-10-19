@@ -4,11 +4,11 @@ import { isNoiseError } from '../common/ops-alert.constants.js';
 /**
  * What Helix should receive from locumlink-api.
  *
- * Keep: HTTP requests, Nest controller spans, Postgres queries, outbound calls,
- * process metrics, and warn/error logs for real failures.
- * Drop: probes, framework internals, duplicate handler spans, and expected
- * client errors (auth, validation, throttling) that the ops-alert rules already
- * treat as noise.
+ * Traces: one request, with database and outbound calls as children.
+ * Logs: warnings and errors always; info only for events worth looking up
+ * later (a login, a job that did work). Not one line per successful request,
+ * and not Nest startup route maps. Severity is INFO, WARN, ERROR, or FATAL.
+ * Metrics: host and process numbers. Request latency stays on the trace.
  */
 
 const DROPPED_SPAN_NAMES = new Set([
@@ -90,18 +90,40 @@ export function isExpectedClientFailure(span: SpanView): boolean {
   return false;
 }
 
+const INFO_SEVERITY: number = SeverityNumber.INFO;
 const WARN_SEVERITY: number = SeverityNumber.WARN;
 
+const FRAMEWORK_INFO_CONTEXTS = new Set([
+  'RouterExplorer',
+  'RoutesResolver',
+  'InstanceLoader',
+  'NestFactory',
+]);
+
 export function shouldExportLog(record: LogView): boolean {
-  if ((record.severityNumber ?? 0) < WARN_SEVERITY) {
-    return false;
-  }
+  const severity = record.severityNumber ?? 0;
+  if (severity < INFO_SEVERITY) return false;
+
   const body = typeof record.body === 'string' ? record.body : '';
-  if (body.startsWith('Mapped {')) return false;
+  if (severity < WARN_SEVERITY && isRoutineInfo(record, body)) return false;
 
   const statusCode = numberAttr(record.attributes, 'statusCode');
   if (statusCode != null && isNoiseError(statusCode, body)) return false;
   return true;
+}
+
+function isRoutineInfo(record: LogView, body: string): boolean {
+  if (
+    body.startsWith('Mapped {') ||
+    body.startsWith('HTTP Request') ||
+    body.startsWith('Nest application successfully started') ||
+    body.startsWith('Starting Nest application') ||
+    body.endsWith('dependencies initialized')
+  ) {
+    return true;
+  }
+  const context = stringAttr(record.attributes, 'nestjs.context');
+  return context != null && FRAMEWORK_INFO_CONTEXTS.has(context);
 }
 
 function isHealthProbeQuery(

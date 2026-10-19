@@ -2,8 +2,9 @@ import { ConsoleLogger, LogLevel } from '@nestjs/common';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 
 /**
- * Nest ConsoleLogger. Stdout keeps every line. Helix only receives warn and
- * error, so startup route maps stay off the telemetry pipeline.
+ * Nest ConsoleLogger. Stdout keeps every line. Helix receives info, warn,
+ * error, and fatal. Nest's "log" level is sent as INFO. Startup route maps
+ * are dropped later by the export policy.
  */
 export class OtelNestLogger extends ConsoleLogger {
   private readonly otel = logs.getLogger('nestjs');
@@ -15,14 +16,19 @@ export class OtelNestLogger extends ConsoleLogger {
     writeStreamType?: 'stdout' | 'stderr',
     errorStack?: unknown,
   ): void {
-    if (logLevel === 'warn' || logLevel === 'error' || logLevel === 'fatal') {
+    if (
+      logLevel === 'log' ||
+      logLevel === 'warn' ||
+      logLevel === 'error' ||
+      logLevel === 'fatal'
+    ) {
       try {
         for (const message of messages) {
           this.otel.emit({
             body:
               typeof message === 'string' ? message : safeStringify(message),
             severityNumber: nestLevelToSeverity(logLevel),
-            severityText: logLevel.toUpperCase(),
+            severityText: nestSeverityText(logLevel),
             attributes: {
               'nestjs.context': context ?? 'Nest',
               'code.function': 'NestLogger',
@@ -43,12 +49,26 @@ export class OtelNestLogger extends ConsoleLogger {
   }
 }
 
+function nestSeverityText(level: LogLevel): string {
+  switch (level) {
+    case 'fatal':
+      return 'FATAL';
+    case 'error':
+      return 'ERROR';
+    case 'warn':
+      return 'WARN';
+    default:
+      return 'INFO';
+  }
+}
+
 function nestLevelToSeverity(
   level?: LogLevel,
 ): (typeof SeverityNumber)[keyof typeof SeverityNumber] {
   switch (level) {
-    case 'error':
     case 'fatal':
+      return SeverityNumber.FATAL;
+    case 'error':
       return SeverityNumber.ERROR;
     case 'warn':
       return SeverityNumber.WARN;
