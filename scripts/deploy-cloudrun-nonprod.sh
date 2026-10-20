@@ -20,6 +20,8 @@
 #   NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... ./scripts/deploy-cloudrun-nonprod.sh staging
 
 set -euo pipefail
+# gcloud's shell launcher errors on inherited nounset (CLOUDSDK_* unbound).
+set +u
 
 # Force UTF-8 for Python/gcloud YAML merges (Windows PowerShell often injects BOM/CP1252).
 export PYTHONUTF8=1
