@@ -21,7 +21,10 @@ import {
   serviceInstanceIdDetector,
 } from '@opentelemetry/resources';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { SignalSpanProcessor } from './telemetry/export-processors.js';
+import {
+  SeverityTextProcessor,
+  SignalSpanProcessor,
+} from './telemetry/export-processors.js';
 import {
   helixHeaders,
   ingestBaseUrl,
@@ -174,12 +177,14 @@ const sdk = new NodeSDK({
     : [],
   logRecordProcessors: exporting
     ? [
-        new BatchLogRecordProcessor({
-          exporter: new OTLPLogExporter({
-            url: logsUrl,
-            headers,
+        new SeverityTextProcessor(
+          new BatchLogRecordProcessor({
+            exporter: new OTLPLogExporter({
+              url: logsUrl,
+              headers,
+            }),
           }),
-        }),
+        ),
       ]
     : [],
   instrumentations: [

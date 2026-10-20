@@ -292,13 +292,10 @@ helix_web_env_csv() {
   "${py}" - "$GCP_PROJECT" "$GCP_REGION" "$API_SERVICE" "$ENV_NAME" "$gcloud_bin" <<'PY'
 import json, subprocess, sys
 project, region, service, env_name, gcloud_bin = sys.argv[1:]
-raw = subprocess.check_output(
-    [
-        gcloud_bin, "run", "services", "describe", service,
-        f"--project={project}", f"--region={region}", "--format=json",
-    ],
-    text=True,
-)
+gcloud_cmd = [gcloud_bin, "run", "services", "describe", service, f"--project={project}", f"--region={region}", "--format=json"]
+if gcloud_bin.lower().endswith((".cmd", ".bat")):
+    gcloud_cmd = ["cmd.exe", "/c", *gcloud_cmd]
+raw = subprocess.check_output(gcloud_cmd, text=True)
 svc = json.loads(raw)
 live = {}
 for item in svc["spec"]["template"]["spec"]["containers"][0].get("env") or []:
