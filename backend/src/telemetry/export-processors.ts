@@ -1,5 +1,4 @@
 import { SpanStatusCode } from '@opentelemetry/api';
-import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 import type {
   ReadableSpan,
   Span,
@@ -9,7 +8,6 @@ import type { Context } from '@opentelemetry/api';
 import {
   isExpectedClientFailure,
   shouldDropSpan,
-  shouldExportLog,
   type SpanView,
 } from './signal-policy.js';
 
@@ -27,35 +25,6 @@ export class SignalSpanProcessor implements SpanProcessor {
     this.inner.onEnd(
       isExpectedClientFailure(view) ? withoutException(span) : span,
     );
-  }
-
-  forceFlush(): Promise<void> {
-    return this.inner.forceFlush();
-  }
-
-  shutdown(): Promise<void> {
-    return this.inner.shutdown();
-  }
-}
-
-/** Forwards warn/error logs that are not expected client noise. */
-export class SignalLogRecordProcessor implements LogRecordProcessor {
-  constructor(private readonly inner: LogRecordProcessor) {}
-
-  onEmit(
-    logRecord: Parameters<LogRecordProcessor['onEmit']>[0],
-    context?: Context,
-  ): void {
-    if (
-      !shouldExportLog({
-        severityNumber: logRecord.severityNumber,
-        body: logRecord.body,
-        attributes: logRecord.attributes as Record<string, unknown>,
-      })
-    ) {
-      return;
-    }
-    this.inner.onEmit(logRecord, context);
   }
 
   forceFlush(): Promise<void> {

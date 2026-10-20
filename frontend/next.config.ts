@@ -4,6 +4,21 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  // Keep OpenTelemetry outside the webpack bundle so instrumentation hooks load.
+  serverExternalPackages: [
+    '@opentelemetry/api-logs',
+    '@opentelemetry/auto-instrumentations-node',
+    '@opentelemetry/exporter-logs-otlp-proto',
+    '@opentelemetry/exporter-metrics-otlp-proto',
+    '@opentelemetry/exporter-trace-otlp-proto',
+    '@opentelemetry/instrumentation-winston',
+    '@opentelemetry/resources',
+    '@opentelemetry/sdk-logs',
+    '@opentelemetry/sdk-metrics',
+    '@opentelemetry/sdk-node',
+    'import-in-the-middle',
+    'require-in-the-middle',
+  ],
   async redirects() {
     return [
       {

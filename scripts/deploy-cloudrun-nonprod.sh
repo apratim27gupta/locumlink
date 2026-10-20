@@ -267,6 +267,65 @@ else
     --format='value(status.url)')"
 fi
 
+# Copies Helix ingest settings from the API service. Prints a comma-separated
+# KEY=VALUE list. Key names are logged; values are not.
+helix_web_env_csv() {
+  local py
+  py="$(command -v python3 || command -v python || true)"
+  if [[ -z "${py}" ]]; then
+    echo "ERROR: python3/python required to copy Helix env onto the web service" >&2
+    return 1
+  fi
+  "${py}" - "$GCP_PROJECT" "$GCP_REGION" "$API_SERVICE" "$ENV_NAME" <<'PY'
+import json, subprocess, sys
+project, region, service, env_name = sys.argv[1:]
+raw = subprocess.check_output(
+    [
+        "gcloud", "run", "services", "describe", service,
+        f"--project={project}", f"--region={region}", "--format=json",
+    ],
+    text=True,
+)
+svc = json.loads(raw)
+live = {}
+for item in svc["spec"]["template"]["spec"]["containers"][0].get("env") or []:
+    if item.get("value") is not None:
+        live[item["name"]] = item["value"]
+keys = [
+    "HELIX_INGESTION_KEY",
+    "HOLOTRACER_INGESTION_KEY",
+    "HELIX_INGEST_BASE",
+    "HOLOTRACER_INGEST_BASE",
+    "HELIX_TRACES_URL",
+    "HELIX_LOGS_URL",
+    "HELIX_METRICS_URL",
+    "HOLOTRACER_TRACES_URL",
+    "HOLOTRACER_LOGS_URL",
+    "HOLOTRACER_METRICS_URL",
+    "DEPLOYMENT_ENVIRONMENT",
+]
+wanted = {key: live[key] for key in keys if live.get(key)}
+if "DEPLOYMENT_ENVIRONMENT" not in wanted:
+    wanted["DEPLOYMENT_ENVIRONMENT"] = env_name
+wanted["OTEL_SERVICE_NAME"] = "locumlink-web"
+copied = [key for key in ("HELIX_INGESTION_KEY", "HOLOTRACER_INGESTION_KEY") if key in wanted]
+if copied:
+    print(
+        f"==> Web telemetry: copying {', '.join(copied)} from {service}",
+        file=sys.stderr,
+    )
+else:
+    print(
+        f"==> Warning: {service} has no Helix ingestion key; web telemetry will not export",
+        file=sys.stderr,
+    )
+for value in wanted.values():
+    if "," in value or "\n" in value:
+        raise SystemExit("ERROR: Helix env value contains a comma or newline")
+print(",".join(f"{key}={value}" for key, value in wanted.items()))
+PY
+}
+
 if [[ "${SKIP_WEB:-0}" != "1" ]]; then
   : "${NEXT_PUBLIC_SUPABASE_URL:?Set NEXT_PUBLIC_SUPABASE_URL for web build}"
   : "${NEXT_PUBLIC_SUPABASE_ANON_KEY:?Set NEXT_PUBLIC_SUPABASE_ANON_KEY for web build}"
@@ -278,6 +337,8 @@ if [[ "${SKIP_WEB:-0}" != "1" ]]; then
     --substitutions="_REGION=${GCP_REGION},_REPOSITORY=${ARTIFACT_REPO},_SERVICE=${WEB_SERVICE},_TAG=${COMMIT_SHA},_PUBLIC_ORIGIN=${PUBLIC_ORIGIN},_API_INTERNAL_URL=${API_URL},_NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL},_NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}"
 
   echo "==> Deploying ${WEB_SERVICE}..."
+  # Same Helix ingest key as the API. Values are not printed.
+  HELIX_WEB_ENV="$(helix_web_env_csv)"
   WEB_DEPLOY_ARGS=(
     run deploy "${WEB_SERVICE}"
     --project="${GCP_PROJECT}"
@@ -300,6 +361,16 @@ if [[ "${SKIP_WEB:-0}" != "1" ]]; then
       echo "NEXT_PUBLIC_API_URL: \"${PUBLIC_ORIGIN}\""
       echo "NEXT_PUBLIC_APP_URL: \"${PUBLIC_ORIGIN}\""
       grep -E '^(DATABASE_URL|JWT_SECRET|SUPABASE_URL|SUPABASE_ANON_KEY):' "${ENV_FILE}" || true
+      if [[ -n "${HELIX_WEB_ENV}" ]]; then
+        IFS=',' read -ra HELIX_PARTS <<< "${HELIX_WEB_ENV}"
+        for part in "${HELIX_PARTS[@]}"; do
+          key="${part%%=*}"
+          val="${part#*=}"
+          val="${val//\\/\\\\}"
+          val="${val//\"/\\\"}"
+          printf '%s: "%s"\n' "${key}" "${val}"
+        done
+      fi
     } > "${WEB_ENV}"
     gcloud run services update "${WEB_SERVICE}" \
       --project="${GCP_PROJECT}" \
@@ -309,9 +380,12 @@ if [[ "${SKIP_WEB:-0}" != "1" ]]; then
     gcloud "${WEB_DEPLOY_ARGS[@]}" --env-vars-file="${WEB_ENV}" --clear-secrets
     rm -f "${WEB_ENV}"
   else
-    # Keep web runtime env; only refresh public URL pointers if the service already exists.
-    gcloud "${WEB_DEPLOY_ARGS[@]}" \
-      --update-env-vars="API_INTERNAL_URL=${API_URL},NEXT_PUBLIC_API_URL=${PUBLIC_ORIGIN},NEXT_PUBLIC_APP_URL=${PUBLIC_ORIGIN}"
+    # Keep web runtime env; refresh public URLs and Helix ingest settings.
+    WEB_ENV_UPDATE="API_INTERNAL_URL=${API_URL},NEXT_PUBLIC_API_URL=${PUBLIC_ORIGIN},NEXT_PUBLIC_APP_URL=${PUBLIC_ORIGIN}"
+    if [[ -n "${HELIX_WEB_ENV}" ]]; then
+      WEB_ENV_UPDATE="${WEB_ENV_UPDATE},${HELIX_WEB_ENV}"
+    fi
+    gcloud "${WEB_DEPLOY_ARGS[@]}" --update-env-vars="${WEB_ENV_UPDATE}"
   fi
 
   WEB_URL="$(gcloud run services describe "${WEB_SERVICE}" \

@@ -1,9 +1,7 @@
-import { SeverityNumber } from '@opentelemetry/api-logs';
 import {
   isExpectedClientFailure,
   isProbePath,
   shouldDropSpan,
-  shouldExportLog,
 } from './signal-policy.js';
 
 describe('telemetry signal policy', () => {
@@ -92,57 +90,4 @@ describe('telemetry signal policy', () => {
     ).toBe(false);
   });
 
-  it('exports warnings, errors, and info worth looking up', () => {
-    expect(
-      shouldExportLog({
-        severityNumber: SeverityNumber.INFO,
-        body: 'Mapped {/api/health, GET} route',
-        attributes: { 'nestjs.context': 'RouterExplorer' },
-      }),
-    ).toBe(false);
-    expect(
-      shouldExportLog({
-        severityNumber: SeverityNumber.INFO,
-        body: 'HTTP Request',
-      }),
-    ).toBe(false);
-    expect(
-      shouldExportLog({
-        severityNumber: SeverityNumber.DEBUG,
-        body: 'console.log noise',
-      }),
-    ).toBe(false);
-    expect(
-      shouldExportLog({
-        severityNumber: SeverityNumber.INFO,
-        body: 'Login succeeded for role LOCUM user user-1',
-      }),
-    ).toBe(true);
-    expect(
-      shouldExportLog({
-        severityNumber: SeverityNumber.INFO,
-        body: 'Expired 2 posting(s) with passed shift start',
-      }),
-    ).toBe(true);
-    expect(
-      shouldExportLog({
-        severityNumber: SeverityNumber.ERROR,
-        body: 'Unauthorized',
-        attributes: { statusCode: 401 },
-      }),
-    ).toBe(false);
-    expect(
-      shouldExportLog({
-        severityNumber: SeverityNumber.ERROR,
-        body: 'Database not reachable',
-        attributes: { statusCode: 500 },
-      }),
-    ).toBe(true);
-    expect(
-      shouldExportLog({
-        severityNumber: SeverityNumber.WARN,
-        body: 'Stripe webhook signature mismatch',
-      }),
-    ).toBe(true);
-  });
 });

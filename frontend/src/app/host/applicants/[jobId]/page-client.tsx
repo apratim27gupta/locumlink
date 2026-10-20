@@ -657,17 +657,19 @@ export default function HostApplicantsPage(props: {
             setCancelMatchAppId(app.id);
             return;
         }
-        const latePaid =
-            Boolean(inv?.paidAt) &&
-            inv!.daysUntilStart != null &&
-            inv!.daysUntilStart < 14;
+        const withinLateWindow =
+            inv != null && inv.daysUntilStart != null && inv.daysUntilStart < 14;
+        const latePaid = Boolean(inv?.paidAt) && withinLateWindow;
+        const lateUnpaid = inv != null && !inv.paidAt && withinLateWindow;
         const ok = await showConfirm({
             title: 'Cancel this match?',
             message: latePaid
                 ? 'The match fee is non-refundable because the shift starts in fewer than 14 days. The invoice will stay paid.'
-                : inv?.paidAt
-                  ? 'LocumLink will review a refund if policy allows. Continue?'
-                  : 'This cancels the confirmed match. An unpaid invoice is voided.',
+                : lateUnpaid
+                  ? 'The shift starts in fewer than 14 days. The unpaid invoice remains due.'
+                  : inv?.paidAt
+                    ? 'LocumLink will review a refund if policy allows. Continue?'
+                    : 'This cancels the confirmed match. An unpaid invoice is voided.',
             confirmLabel: 'Cancel match',
             cancelLabel: 'Keep match',
         });

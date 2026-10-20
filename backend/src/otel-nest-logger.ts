@@ -2,9 +2,8 @@ import { ConsoleLogger, LogLevel } from '@nestjs/common';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 
 /**
- * Nest ConsoleLogger. Stdout keeps every line. Helix receives info, warn,
- * error, and fatal. Nest's "log" level is sent as INFO. Startup route maps
- * are dropped later by the export policy.
+ * Nest ConsoleLogger. Stdout keeps every line. Helix receives log, warn,
+ * error, and fatal. Nest's "log" level is sent as INFO.
  */
 export class OtelNestLogger extends ConsoleLogger {
   private readonly otel = logs.getLogger('nestjs');
