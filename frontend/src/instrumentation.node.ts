@@ -7,7 +7,12 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
-import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
+import {
+  BatchLogRecordProcessor,
+  type LogRecordProcessor,
+  type ReadWriteLogRecord,
+} from '@opentelemetry/sdk-logs';
+import type { Context } from '@opentelemetry/api';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
@@ -17,6 +22,27 @@ import {
   isCollectorEndpoint,
   signalUrl,
 } from './lib/helix-ingest';
+
+/** Winston emits "info"; other loggers emit "INFO". Keep one severity text. */
+class SeverityTextProcessor implements LogRecordProcessor {
+  constructor(private readonly inner: LogRecordProcessor) {}
+
+  onEmit(logRecord: ReadWriteLogRecord, context?: Context): void {
+    const text = logRecord.severityText;
+    if (text && text !== text.toUpperCase()) {
+      logRecord.setSeverityText(text.toUpperCase());
+    }
+    this.inner.onEmit(logRecord, context);
+  }
+
+  forceFlush(): Promise<void> {
+    return this.inner.forceFlush();
+  }
+
+  shutdown(): Promise<void> {
+    return this.inner.shutdown();
+  }
+}
 
 function startWebTelemetry(): void {
   const key = ingestionKey(process.env);
@@ -53,10 +79,6 @@ function startWebTelemetry(): void {
     return;
   }
 
-  console.log(
-    `[otel] exporting web traces+metrics+logs as protobuf for service="${serviceName}" → ${ingestBase}`,
-  );
-
   const environment = deploymentEnvironment(
     process.env.DEPLOYMENT_ENVIRONMENT || process.env.NODE_ENV,
   );
@@ -82,9 +104,11 @@ function startWebTelemetry(): void {
     ],
     spanProcessors: [new BatchSpanProcessor(traceExporter)],
     logRecordProcessors: [
-      new BatchLogRecordProcessor({
-        exporter: new OTLPLogExporter({ url: logsUrl, headers }),
-      }),
+      new SeverityTextProcessor(
+        new BatchLogRecordProcessor({
+          exporter: new OTLPLogExporter({ url: logsUrl, headers }),
+        }),
+      ),
     ],
     instrumentations: [
       getNodeAutoInstrumentations({
@@ -121,6 +145,9 @@ function startWebTelemetry(): void {
 
   sdk.start();
   patchConsoleToOtel(serviceName);
+  console.log(
+    `[otel] exporting web traces+metrics+logs as protobuf for service="${serviceName}" → ${ingestBase}`,
+  );
 
   process.on('SIGTERM', () => {
     sdk
@@ -225,24 +252,44 @@ function usableHost(value: string | undefined): string | undefined {
 
 function patchConsoleToOtel(name: string): void {
   const otelLogger = logs.getLogger(name);
-  for (const method of ['warn', 'error'] as const) {
+  let emitting = false;
+  for (const method of ['debug', 'log', 'info', 'warn', 'error'] as const) {
     const original = console[method].bind(console);
     console[method] = (...args: unknown[]) => {
-      try {
-        otelLogger.emit({
-          body: args
-            .map((part) => (typeof part === 'string' ? part : safeStringify(part)))
-            .join(' '),
-          severityNumber:
-            method === 'error' ? SeverityNumber.ERROR : SeverityNumber.WARN,
-          severityText: method.toUpperCase(),
-          attributes: { 'code.function': `console.${method}` },
-        });
-      } catch {
-        // never break logging if OTel emit fails
+      if (!emitting) {
+        emitting = true;
+        try {
+          otelLogger.emit({
+            body: args
+              .map((part) => (typeof part === 'string' ? part : safeStringify(part)))
+              .join(' '),
+            severityNumber: consoleMethodToSeverity(method),
+            severityText: method === 'log' || method === 'info' ? 'INFO' : method.toUpperCase(),
+            attributes: { 'code.function': `console.${method}` },
+          });
+        } catch {
+          // never break logging if OTel emit fails
+        } finally {
+          emitting = false;
+        }
       }
       original(...args);
     };
+  }
+}
+
+function consoleMethodToSeverity(
+  method: string,
+): (typeof SeverityNumber)[keyof typeof SeverityNumber] {
+  switch (method) {
+    case 'error':
+      return SeverityNumber.ERROR;
+    case 'warn':
+      return SeverityNumber.WARN;
+    case 'debug':
+      return SeverityNumber.DEBUG;
+    default:
+      return SeverityNumber.INFO;
   }
 }
 
