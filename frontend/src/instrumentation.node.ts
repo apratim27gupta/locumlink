@@ -1,5 +1,5 @@
-import { hostname } from 'node:os';
-import type { IncomingMessage, RequestOptions } from 'node:http';
+import { hostname } from 'os';
+import type { IncomingMessage, RequestOptions } from 'http';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
