@@ -272,18 +272,29 @@ fi
 # Copies Helix ingest settings from the API service. Prints a comma-separated
 # KEY=VALUE list. Key names are logged; values are not.
 helix_web_env_csv() {
-  local py
+  local py gcloud_bin
   py="$(command -v python3 || command -v python || true)"
   if [[ -z "${py}" ]]; then
     echo "ERROR: python3/python required to copy Helix env onto the web service" >&2
     return 1
   fi
-  "${py}" - "$GCP_PROJECT" "$GCP_REGION" "$API_SERVICE" "$ENV_NAME" <<'PY'
+  # Python CreateProcess cannot run Git Bash's extensionless gcloud script.
+  gcloud_bin="$(command -v gcloud.cmd || true)"
+  if [[ -n "${gcloud_bin}" ]] && command -v cygpath >/dev/null 2>&1; then
+    gcloud_bin="$(cygpath -w "${gcloud_bin}")"
+  elif [[ -z "${gcloud_bin}" ]]; then
+    gcloud_bin="$(command -v gcloud || true)"
+  fi
+  if [[ -z "${gcloud_bin}" ]]; then
+    echo "ERROR: gcloud not found" >&2
+    return 1
+  fi
+  "${py}" - "$GCP_PROJECT" "$GCP_REGION" "$API_SERVICE" "$ENV_NAME" "$gcloud_bin" <<'PY'
 import json, subprocess, sys
-project, region, service, env_name = sys.argv[1:]
+project, region, service, env_name, gcloud_bin = sys.argv[1:]
 raw = subprocess.check_output(
     [
-        "gcloud", "run", "services", "describe", service,
+        gcloud_bin, "run", "services", "describe", service,
         f"--project={project}", f"--region={region}", "--format=json",
     ],
     text=True,
