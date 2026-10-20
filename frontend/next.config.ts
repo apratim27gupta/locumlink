@@ -1,5 +1,8 @@
+import path from 'path';
 import withPWA from 'next-pwa';
 import type { NextConfig } from 'next';
+
+const instrumentationEdgeStub = path.join(__dirname, 'src', 'instrumentation.edge.ts');
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -111,14 +114,32 @@ const nextConfig: NextConfig = {
       { source: '/api/health',            destination: `${apiBase}/api/health` },
     ];
   },
-  webpack: (config, { dev, isServer }) => {
-    if (isServer) {
+  webpack: (config, { dev, isServer, nextRuntime, webpack }) => {
+    // Next compiles instrumentation.ts for Edge and the browser as well as
+    // Node. Webpack follows the dynamic import before it can drop the branch,
+    // then fails on Node built-ins (os, fs, stream, net). Swap in an empty
+    // file for those compiles. The Node server compile keeps the real SDK.
+    if (nextRuntime === 'edge' || !isServer) {
+      config.plugins ??= [];
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /instrumentation\.node(\.ts)?$/,
+          instrumentationEdgeStub,
+        ),
+      );
+    } else {
       const externals = Array.isArray(config.externals) ? config.externals : [];
       externals.push(
         ({ request }: { request?: string }, callback: (err?: null, result?: string) => void) => {
+          if (!request) {
+            callback();
+            return;
+          }
           if (
-            request &&
-            (request.startsWith('@opentelemetry/') || request.startsWith('@grpc/'))
+            request.startsWith('@opentelemetry/') ||
+            request.startsWith('@grpc/') ||
+            request === 'import-in-the-middle' ||
+            request === 'require-in-the-middle'
           ) {
             callback(null, `commonjs ${request}`);
             return;
@@ -127,7 +148,8 @@ const nextConfig: NextConfig = {
         },
       );
       config.externals = externals;
-    } else if (dev) {
+    }
+    if (!isServer && dev) {
       config.output = config.output ?? {};
       config.output.chunkLoadTimeout = 300000;
     }
