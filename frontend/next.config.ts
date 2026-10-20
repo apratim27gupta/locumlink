@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
     '@opentelemetry/sdk-logs',
     '@opentelemetry/sdk-metrics',
     '@opentelemetry/sdk-node',
+    '@grpc/grpc-js',
     'import-in-the-middle',
     'require-in-the-middle',
   ],
@@ -111,7 +112,22 @@ const nextConfig: NextConfig = {
     ];
   },
   webpack: (config, { dev, isServer }) => {
-    if (dev && !isServer) {
+    if (isServer) {
+      const externals = Array.isArray(config.externals) ? config.externals : [];
+      externals.push(
+        ({ request }: { request?: string }, callback: (err?: null, result?: string) => void) => {
+          if (
+            request &&
+            (request.startsWith('@opentelemetry/') || request.startsWith('@grpc/'))
+          ) {
+            callback(null, `commonjs ${request}`);
+            return;
+          }
+          callback();
+        },
+      );
+      config.externals = externals;
+    } else if (dev) {
       config.output = config.output ?? {};
       config.output.chunkLoadTimeout = 300000;
     }
