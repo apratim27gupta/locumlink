@@ -348,7 +348,7 @@ function HostWhatHappensNext() {
                         Review applications, shortlist, and confirm the shifts you want to offer. The locum must accept before the match is finalized.
                     </div>
                     <div style={{ marginBottom: 10 }}>
-                        LocumLink then fills the GP Locum Application from both profiles and the confirmed shifts. You download the PDF, review and sign it, and submit it to MSI. Once approved, MSI emails you and the locum. You—not the locum—are responsible for submitting the application.
+                        LocumLink then fills the GP Locum Application from both profiles and the confirmed shifts. You download the PDF, review and sign it, and submit it to MSI. Once approved, MSI emails you and the locum. You - not the locum - are responsible for submitting the application.
                     </div>
                     <a
                         href={HOST_PHYSICIAN_GUIDE_HREF}

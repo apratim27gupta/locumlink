@@ -274,7 +274,7 @@ function AppliedStatusInfo({ align = 'right' }: { align?: 'left' | 'right' }) {
             Not every application is shortlisted or confirmed. We will notify you if your status changes.
           </div>
           <div style={{ marginBottom: 10 }}>
-            After you accept, LocumLink fills the GP Locum Application from your profile, the host’s details and the confirmed shifts. The host—not you—downloads the PDF and submits it to MSI. Once approved, MSI emails both of you.
+            After you accept, LocumLink fills the GP Locum Application from your profile, the host’s details and the confirmed shifts. The host - not you - downloads the PDF and submits it to MSI. Once approved, MSI emails both of you.
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <a href={LOCUM_PHYSICIAN_GUIDE_HREF} style={{ color: '#3B4FD8', fontWeight: 600, textDecoration: 'none' }}>
@@ -363,7 +363,7 @@ function LocumWhatHappensNext() {
                         If you are shortlisted, message the host, then review the offered shifts before you accept or decline.
                     </div>
                     <div style={{ marginBottom: 10 }}>
-                        After you accept, LocumLink fills the GP Locum Application from your profile, the host’s details and the confirmed shifts. The host—not you—downloads the PDF and submits it to MSI. Once approved, MSI emails you and the host. Wait for that confirmation before you start.
+                        After you accept, LocumLink fills the GP Locum Application from your profile, the host’s details and the confirmed shifts. The host - not you - downloads the PDF and submits it to MSI. Once approved, MSI emails you and the host. Wait for that confirmation before you start.
                     </div>
                     <a href={LOCUM_PHYSICIAN_GUIDE_HREF} style={{ color: '#3B4FD8', fontWeight: 600, textDecoration: 'none' }}>
                         Read the Locum Physician Guide
