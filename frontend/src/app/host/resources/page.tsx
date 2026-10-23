@@ -114,6 +114,17 @@ export default function HostResourcesPage(props: {
     const [showGuide, setShowGuide] = useState(false);
 
     useEffect(() => {
+        if (new URLSearchParams(window.location.search).get('guide') === '1') setShowGuide(true);
+    }, []);
+
+    function closeGuide() {
+        setShowGuide(false);
+        if (new URLSearchParams(window.location.search).get('guide') === '1') {
+            window.history.replaceState(null, '', '/host/resources');
+        }
+    }
+
+    useEffect(() => {
         hostApi
             .getProfile()
             .then((data) => setProfile(data ?? null))
@@ -127,7 +138,7 @@ export default function HostResourcesPage(props: {
                     <>
                         <button
                             type="button"
-                            onClick={() => setShowGuide(false)}
+                            onClick={closeGuide}
                             style={{
                                 border: 'none',
                                 background: 'none',

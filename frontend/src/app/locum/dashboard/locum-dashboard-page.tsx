@@ -10,6 +10,7 @@ import { LocumApplyModal } from '@/components/locum/LocumApplyModal';
 import { InlineAvailabilityEditor } from '@/components/locum/InlineAvailabilityEditor';
 import { fetchAllPaginated, locumApi, type BrowseJob, type MyApplication } from '@/lib/api';
 import { FAQ_AFTER_APPLYING_ID } from '@/lib/faqContent';
+import { LOCUM_PHYSICIAN_GUIDE_HREF } from '@/lib/resourceGuides';
 import { getToken } from '@/lib/auth';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { useAuth } from '@/providers/AuthProvider';
@@ -371,7 +372,7 @@ function AppliedStatusInfo({ align = 'right' }: { align?: 'left' | 'right' }) {
                 top: 'calc(100% + 6px)',
                 ...(align === 'right' ? { right: 0 } : { left: 0 }),
                 zIndex: 50,
-                width: 280,
+                width: 320,
                 maxWidth: 'calc(100vw - 48px)',
                 background: '#fff',
                 border: '1px solid #E5E7EB',
@@ -390,14 +391,108 @@ function AppliedStatusInfo({ align = 'right' }: { align?: 'left' | 'right' }) {
           <div style={{ marginBottom: 6 }}>
             Your application was sent and the host can review it. The host may shortlist you, confirm you for the shift, or go with another physician.
           </div>
-          <div style={{ marginBottom: 10 }}>
+          <div style={{ marginBottom: 6 }}>
             Not every application is shortlisted or confirmed. We will notify you if your status changes.
           </div>
-          <a href={`/locum/faq#${FAQ_AFTER_APPLYING_ID}`} style={{ color: '#3B4FD8', fontWeight: 600, textDecoration: 'none' }}>
-            Read more in FAQs
-          </a>
+          <div style={{ marginBottom: 10 }}>
+            After you accept, LocumLink fills the GP Locum Application from your profile, the host’s details and the confirmed shifts. The host—not you—downloads the PDF and submits it to MSI. Once approved, MSI emails both of you.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <a href={LOCUM_PHYSICIAN_GUIDE_HREF} style={{ color: '#3B4FD8', fontWeight: 600, textDecoration: 'none' }}>
+              Read the Locum Physician Guide
+            </a>
+            <a href={`/locum/faq#${FAQ_AFTER_APPLYING_ID}`} style={{ color: '#3B4FD8', fontWeight: 600, textDecoration: 'none' }}>
+              Read more in FAQs
+            </a>
+          </div>
         </div>) : null}
     </span>);
+}
+function LocumWhatHappensNext() {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!open) return;
+        function onDown(e: MouseEvent) {
+            if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+        }
+        function onKey(e: KeyboardEvent) {
+            if (e.key === 'Escape') setOpen(false);
+        }
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+    return (
+        <div ref={wrapRef} style={{ position: 'relative', display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <button
+                type="button"
+                aria-expanded={open}
+                aria-label="What happens next?"
+                onClick={() => setOpen((v) => !v)}
+                style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    border: 'none',
+                    background: open ? '#EEF0FB' : 'transparent',
+                    color: '#3B4FD8',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    borderRadius: 8,
+                    padding: '6px 8px',
+                }}
+            >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4M12 8h.01"/>
+                </svg>
+                What happens next?
+            </button>
+            {open ? (
+                <div
+                    role="dialog"
+                    aria-label="What happens next"
+                    style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 6px)',
+                        right: 0,
+                        zIndex: 50,
+                        width: 340,
+                        maxWidth: 'calc(100vw - 48px)',
+                        background: '#fff',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: 10,
+                        boxShadow: '0 10px 30px rgba(15, 23, 42, 0.15)',
+                        padding: '12px 14px',
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        color: '#374151',
+                        textAlign: 'left',
+                        fontWeight: 400,
+                    }}
+                >
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0f1523', marginBottom: 6 }}>
+                        What happens next?
+                    </div>
+                    <div style={{ marginBottom: 6 }}>
+                        If you are shortlisted, message the host, then review the offered shifts before you accept or decline.
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                        After you accept, LocumLink fills the GP Locum Application from your profile, the host’s details and the confirmed shifts. The host—not you—downloads the PDF and submits it to MSI. Once approved, MSI emails you and the host. Wait for that confirmation before you start.
+                    </div>
+                    <a href={LOCUM_PHYSICIAN_GUIDE_HREF} style={{ color: '#3B4FD8', fontWeight: 600, textDecoration: 'none' }}>
+                        Read the Locum Physician Guide
+                    </a>
+                </div>
+            ) : null}
+        </div>
+    );
 }
 export default function LocumDashboard(props: {
     params?: Promise<Record<string, string | string[] | undefined>>;
@@ -769,6 +864,7 @@ export default function LocumDashboard(props: {
       </div>
 
       
+      <LocumWhatHappensNext />
       <div style={{
             display: 'flex',
             borderBottom: '1px solid #e2e5ee',
