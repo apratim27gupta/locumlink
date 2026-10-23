@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
+import { recordDependencyFailure } from '../telemetry/app-metrics.js';
 @Injectable()
 export class GcsService {
   private readonly logger = new Logger(GcsService.name);
@@ -49,10 +50,15 @@ export class GcsService {
   ): Promise<string> {
     const ext = originalName.split('.').pop()?.toLowerCase() ?? 'bin';
     const path = `${folder}/${randomUUID()}.${ext}`;
-    await this.storage
-      .bucket(this.bucket)
-      .file(path)
-      .save(buffer, { metadata: { contentType }, resumable: false });
+    try {
+      await this.storage
+        .bucket(this.bucket)
+        .file(path)
+        .save(buffer, { metadata: { contentType }, resumable: false });
+    } catch (err) {
+      recordDependencyFailure('gcs');
+      throw err;
+    }
     this.logger.log(`Uploaded: ${path}`);
     return path;
   }
@@ -76,6 +82,9 @@ export class GcsService {
       );
       this.logger.log(`Uploaded: ${path}`);
       return path;
+    } catch (err) {
+      recordDependencyFailure('gcs');
+      throw err;
     } finally {
       await unlink(localPath).catch(() => {});
     }

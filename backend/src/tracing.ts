@@ -8,10 +8,7 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
-import {
-  AggregationType,
-  PeriodicExportingMetricReader,
-} from '@opentelemetry/sdk-metrics';
+import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import {
   envDetector,
@@ -38,6 +35,8 @@ import {
   serviceResourceAttributes,
 } from './telemetry/resource.js';
 import { isProbePath } from './telemetry/signal-policy.js';
+import { dropAutoInstrumentationMetrics } from './telemetry/drop-auto-metrics.js';
+import { startProcessMetrics } from './telemetry/process-metrics.js';
 
 // Nest ConfigModule loads .env later — OTel must see the key before sdk.start().
 loadEnv({ path: resolve(process.cwd(), '.env') });
@@ -136,6 +135,7 @@ const UNUSED_OR_NOISY_INSTRUMENTATIONS = [
   '@opentelemetry/instrumentation-restify',
   '@opentelemetry/instrumentation-router',
   '@opentelemetry/instrumentation-socket.io',
+  '@opentelemetry/instrumentation-runtime-node',
   '@opentelemetry/instrumentation-tedious',
 ] as const;
 
@@ -151,16 +151,7 @@ const sdk = new NodeSDK({
     processDetector,
     serviceInstanceIdDetector,
   ],
-  views: [
-    {
-      instrumentName: 'http.server.request.duration',
-      aggregation: { type: AggregationType.DROP },
-    },
-    {
-      instrumentName: 'http.client.request.duration',
-      aggregation: { type: AggregationType.DROP },
-    },
-  ],
+  views: dropAutoInstrumentationMetrics(),
   metricReaders: traceExporter
     ? [
         new PeriodicExportingMetricReader({
@@ -204,15 +195,7 @@ const sdk = new NodeSDK({
       '@opentelemetry/instrumentation-undici': {
         ignoreRequestHook: (request) => isIngestOrigin(request.origin),
       },
-      '@opentelemetry/instrumentation-host-metrics': {
-        metricGroups: [
-          'system.cpu',
-          'system.memory',
-          'system.network',
-          'process.cpu',
-          'process.memory',
-        ],
-      },
+      '@opentelemetry/instrumentation-host-metrics': { enabled: false },
       '@opentelemetry/instrumentation-winston': {
         logSeverity: SeverityNumber.INFO,
       },
@@ -221,6 +204,7 @@ const sdk = new NodeSDK({
 });
 
 sdk.start();
+startProcessMetrics('locumlink-api');
 
 // Only console warnings and errors. Startup console.log stays on stdout.
 patchConsoleToOtel(serviceName);

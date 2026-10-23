@@ -5,6 +5,7 @@ import {
   isReviewPlaygroundEmail,
 } from '../config/review-playground.util.js';
 import { sanitizeNotificationCopy } from './sanitize-notification-copy.js';
+import { recordDependencyFailure } from '../telemetry/app-metrics.js';
 
 export type EmailSendResult =
   | { ok: true; messageId?: string; skipped?: boolean }
@@ -99,25 +100,34 @@ export class EmailService {
     );
 
     const credentials = Buffer.from(`${sid}:${secret}`).toString('base64');
-    const res = await fetch('https://comms.twilio.com/v1/Emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: { address: from, name: fromName },
-        to: [{ address: to }],
-        content: {
-          subject,
-          html,
-          text,
+    let res: Response;
+    try {
+      res = await fetch('https://comms.twilio.com/v1/Emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
         },
-      }),
-    });
+        body: JSON.stringify({
+          from: { address: from, name: fromName },
+          to: [{ address: to }],
+          content: {
+            subject,
+            html,
+            text,
+          },
+        }),
+      });
+    } catch (err) {
+      recordDependencyFailure('twilio');
+      const error = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Twilio Email API request failed: ${error}`);
+      return { ok: false, error };
+    }
 
     if (!res.ok) {
+      recordDependencyFailure('twilio');
       const detail = await res.text();
       const error = `Twilio Email API error (${res.status}): ${detail}`;
       this.logger.error(error);

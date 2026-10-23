@@ -49,6 +49,10 @@ export class PrismaService
       );
     }
   }
+  poolForTelemetry(): Pool {
+    return this.pool;
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.$disconnect();
     await this.pool.end();

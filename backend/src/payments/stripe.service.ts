@@ -2,6 +2,10 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service.js';
+import {
+  isStripeDependencyFailure,
+  recordDependencyFailure,
+} from '../telemetry/app-metrics.js';
 
 /** Stripe allows Checkout sessions to expire between 30 minutes and 24 hours after creation. */
 const CHECKOUT_EXPIRY_MIN_MINUTES = 30;
@@ -82,6 +86,16 @@ export class StripeService {
     return this.stripe;
   }
 
+  private async stripeCall<T>(run: (stripe: Stripe) => Promise<T>): Promise<T> {
+    const stripe = this.requireStripe();
+    try {
+      return await run(stripe);
+    } catch (err) {
+      if (isStripeDependencyFailure(err)) recordDependencyFailure('stripe');
+      throw err;
+    }
+  }
+
   /** Verifies the Stripe-Signature header (HMAC-SHA256 with the webhook secret, 5 minute tolerance). */
   constructWebhookEvent(
     rawBody: Buffer,
@@ -101,8 +115,6 @@ export class StripeService {
   }
 
   async ensureHostStripeCustomer(hostProfileId: string): Promise<string> {
-    const stripe = this.requireStripe();
-
     const host = await this.prisma.hostProfile.findUnique({
       where: { id: hostProfileId },
       select: {
@@ -116,9 +128,9 @@ export class StripeService {
       throw new Error('Host email is required for Stripe checkout.');
     }
     if (host.stripeCustomerId) {
-      const existing = await stripe.customers
-        .retrieve(host.stripeCustomerId)
-        .catch((err: unknown) => {
+      const existing = await this.stripeCall((client) =>
+        client.customers.retrieve(host.stripeCustomerId!),
+      ).catch((err: unknown) => {
           if (err instanceof Stripe.errors.StripeInvalidRequestError && err.code === 'resource_missing') {
             return null;
           }
@@ -132,14 +144,14 @@ export class StripeService {
       );
     }
 
-    const customer = await stripe.customers.create(
+    const customer = await this.stripeCall((client) => client.customers.create(
       {
         email: host.user.email,
         name: host.practiceName,
         metadata: { hostProfileId },
       },
       { idempotencyKey: `host-customer-${hostProfileId}-${this.liveMode ? 'live' : 'test'}` },
-    );
+    ));
     await this.prisma.hostProfile.update({
       where: { id: hostProfileId },
       data: { stripeCustomerId: customer.id },
@@ -154,8 +166,7 @@ export class StripeService {
     amountCents: number;
     invoiceId: string;
   }): Promise<Stripe.Refund> {
-    const stripe = this.requireStripe();
-    return stripe.refunds.create(
+    return this.stripeCall((stripe) => stripe.refunds.create(
       {
         payment_intent: params.paymentIntentId,
         amount: params.amountCents,
@@ -166,11 +177,11 @@ export class StripeService {
         },
       },
       { idempotencyKey: `match-fee-refund-${params.refundId}` },
-    );
+    ));
   }
 
   async retrieveRefund(refundId: string): Promise<Stripe.Refund> {
-    return this.requireStripe().refunds.retrieve(refundId);
+    return this.stripeCall((stripe) => stripe.refunds.retrieve(refundId));
   }
 
   /** Looks up a refund we created for `refundRowId` in case the create response was lost. */
@@ -178,10 +189,10 @@ export class StripeService {
     paymentIntentId: string,
     refundRowId: string,
   ): Promise<Stripe.Refund | null> {
-    const refunds = await this.requireStripe().refunds.list({
+    const refunds = await this.stripeCall((stripe) => stripe.refunds.list({
       payment_intent: paymentIntentId,
       limit: 100,
-    });
+    }));
     return refunds.data.find((r) => r.metadata?.matchFeeRefundId === refundRowId) ?? null;
   }
 
@@ -196,8 +207,6 @@ export class StripeService {
     jobTitle: string;
     expiresAt: Date;
   }): Promise<{ url: string; sessionId: string; expiresAt: Date }> {
-    const stripe = this.requireStripe();
-
     const customerId = await this.ensureHostStripeCustomer(params.hostProfileId);
     const successUrl = `${this.frontendBaseUrl}/host/invoices?paid=1&invoiceId=${encodeURIComponent(params.invoiceId)}`;
     const cancelUrl = `${this.frontendBaseUrl}/host/invoices?cancelled=1&invoiceId=${encodeURIComponent(params.invoiceId)}`;
@@ -207,7 +216,7 @@ export class StripeService {
       hostProfileId: params.hostProfileId,
     };
 
-    const session = await stripe.checkout.sessions.create(
+    const session = await this.stripeCall((client) => client.checkout.sessions.create(
       {
         mode: 'payment',
         customer: customerId,
@@ -244,7 +253,7 @@ export class StripeService {
         payment_intent_data: { metadata },
       },
       { idempotencyKey: `match-fee-checkout-${params.attemptId}` },
-    );
+    ));
 
     if (!session.url) {
       throw new Error('Stripe did not return a checkout URL.');
@@ -258,17 +267,16 @@ export class StripeService {
   }
 
   async retrieveCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session> {
-    return this.requireStripe().checkout.sessions.retrieve(sessionId);
+    return this.stripeCall((stripe) => stripe.checkout.sessions.retrieve(sessionId));
   }
 
   /** Expires an open session so it can no longer be paid. Returns the latest session state. */
   async expireCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session> {
-    const stripe = this.requireStripe();
     try {
-      return await stripe.checkout.sessions.expire(sessionId);
+      return await this.stripeCall((stripe) => stripe.checkout.sessions.expire(sessionId));
     } catch (err) {
       if (err instanceof Stripe.errors.StripeInvalidRequestError) {
-        return stripe.checkout.sessions.retrieve(sessionId);
+        return this.stripeCall((stripe) => stripe.checkout.sessions.retrieve(sessionId));
       }
       throw err;
     }

@@ -7,6 +7,8 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { dropAutoInstrumentationMetrics } from './lib/drop-auto-metrics';
+import { startProcessMetrics } from './lib/process-metrics';
 import {
   BatchLogRecordProcessor,
   type LogRecordProcessor,
@@ -90,6 +92,7 @@ function startWebTelemetry(): void {
 
   const traceExporter = new OTLPTraceExporter({ url: tracesUrl, headers });
   const sdk = new NodeSDK({
+    views: dropAutoInstrumentationMetrics(),
     resource: resourceFromAttributes({
       'service.name': serviceName,
       'deployment.environment': environment,
@@ -127,15 +130,7 @@ function startWebTelemetry(): void {
           enhancedDatabaseReporting: false,
           requireParentSpan: true,
         },
-        '@opentelemetry/instrumentation-host-metrics': {
-          metricGroups: [
-            'system.cpu',
-            'system.memory',
-            'system.network',
-            'process.cpu',
-            'process.memory',
-          ],
-        },
+        '@opentelemetry/instrumentation-host-metrics': { enabled: false },
         '@opentelemetry/instrumentation-winston': {
           logSeverity: SeverityNumber.INFO,
         },
@@ -144,6 +139,7 @@ function startWebTelemetry(): void {
   });
 
   sdk.start();
+  startProcessMetrics('locumlink-web');
   patchConsoleToOtel(serviceName);
   console.log(
     `[otel] exporting web traces+metrics+logs as protobuf for service="${serviceName}" → ${ingestBase}`,
@@ -191,6 +187,7 @@ const UNUSED_OR_NOISY_INSTRUMENTATIONS = [
   '@opentelemetry/instrumentation-restify',
   '@opentelemetry/instrumentation-router',
   '@opentelemetry/instrumentation-socket.io',
+  '@opentelemetry/instrumentation-runtime-node',
   '@opentelemetry/instrumentation-tedious',
 ] as const;
 

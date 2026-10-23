@@ -6,9 +6,16 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Prisma } from '@prisma/client';
+import {
+  isPostgresDependencyFailure,
+  recordDependencyFailure,
+} from '../telemetry/app-metrics.js';
 @Catch(Prisma.PrismaClientKnownRequestError)
 export class PrismaClientKnownExceptionFilter implements ExceptionFilter {
   catch(exception: Prisma.PrismaClientKnownRequestError, host: ArgumentsHost) {
+    if (isPostgresDependencyFailure(exception.code)) {
+      recordDependencyFailure('postgres');
+    }
     const res = host.switchToHttp().getResponse<Response>();
     const isProd = process.env.NODE_ENV === 'production';
     const code = exception.code;

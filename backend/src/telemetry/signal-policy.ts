@@ -5,7 +5,8 @@ import { isNoiseError } from '../common/ops-alert.constants.js';
  *
  * Traces: one request, with database and outbound calls as children.
  * Logs: every record the SDK emits, including request lines, auth failures,
- * and Nest startup. Metrics: host and process numbers. Request latency stays
+ * and Nest startup. Metrics are the process gauges, the Postgres pool, dependency
+ * failures, and cron duration, failures, and backlog. Request latency stays
  * on the trace.
  */
 

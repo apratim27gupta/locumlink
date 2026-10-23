@@ -4,6 +4,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { recordDependencyFailure } from '../../telemetry/app-metrics.js';
 
 type TurnstileVerifyResponse = {
   success: boolean;
@@ -52,6 +53,7 @@ export class TurnstileService {
       );
       payload = (await res.json()) as TurnstileVerifyResponse;
     } catch (err) {
+      recordDependencyFailure('turnstile');
       this.logger.error(`Turnstile verify request failed: ${String(err)}`);
       throw new BadRequestException(
         'Captcha verification failed. Please try again.',
