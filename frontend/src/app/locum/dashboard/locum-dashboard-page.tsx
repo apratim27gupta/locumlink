@@ -25,7 +25,7 @@ import {
     startOfLocalCalendarDay,
 } from '@/lib/localDateTime';
 import { relativeHoursOrDaysAgo } from '@/lib/relativeTime';
-import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, applicationCoveredShiftIds, formatApplicationSlotLabels, formatSpecificDate, getJobScheduleModel, getPostingDays } from '@/lib/jobSchedule';
+import { getJobScheduleMode, formatScheduleSummaryText, hasVaryingShiftTimes, isPartialAvailability, applicationCoveredDays, applicationCoveredShiftIds, appliedForAvailableShiftsLabel, formatApplicationSlotLabels, formatSpecificDate, getJobScheduleModel, getPostingDays } from '@/lib/jobSchedule';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { CountBadge } from '@/components/CountBadge';
 import {
@@ -867,6 +867,7 @@ export default function LocumDashboard(props: {
             tabApps.map((app) => {
                 const jp = app.jobPosting;
                 const postingRemoved = Boolean(jp.isDeleted);
+                const appliedShiftLabel = appliedForAvailableShiftsLabel(app, jp);
                 const st = applicationStatusPresentation(app);
                 const responding = respondingAppId === app.id;
                 const needsLocumResponse = app.status === 'CONFIRMED' && !app.locumAcceptedAt && !postingRemoved;
@@ -996,6 +997,11 @@ export default function LocumDashboard(props: {
                   {relativeHoursOrDaysAgo(app.appliedAt)}
                 </span>
               </div>
+              {appliedShiftLabel ? (
+                <div style={{ marginTop: 8, fontSize: 13, fontWeight: 600, color: '#0f1523' }}>
+                  {appliedShiftLabel}
+                </div>
+              ) : null}
               <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button
                   type="button"
@@ -1136,6 +1142,7 @@ export default function LocumDashboard(props: {
         const myFocus = myShiftFocusForApp(app);
         const preview = app.acceptPreview;
         const highlightIds = applicationCoveredShiftIds(app, app.jobPosting);
+        const appliedShiftLabel = appliedForAvailableShiftsLabel(app, app.jobPosting);
         const takenSlotLabels =
           getJobScheduleModel(app.jobPosting) === 'SLOTS' &&
           (preview?.takenShiftIds?.length ?? 0) > 0
@@ -1218,6 +1225,7 @@ export default function LocumDashboard(props: {
               <LocumBrowseJobDetail
                 job={applicationToBrowseJob(app)}
                 revealHostDetails
+                appliedShiftLabel={appliedShiftLabel}
                 highlightShiftIds={
                   getJobScheduleModel(app.jobPosting) === 'SLOTS' ? highlightIds : null
                 }
@@ -1289,6 +1297,7 @@ export default function LocumDashboard(props: {
                       <InlineAvailabilityEditor
                         job={applicationToBrowseJob(app)}
                         label={myFocus.label}
+                        summary={appliedShiftLabel}
                         initialKind={app.availabilityKind === 'PARTIAL' ? 'PARTIAL' : 'FULL'}
                         initialDates={app.availableDates ?? []}
                         initialShiftIds={app.requestedShiftIds ?? []}
@@ -1303,9 +1312,14 @@ export default function LocumDashboard(props: {
                         borderRadius: 10,
                         padding: '12px 14px',
                       }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: '#0F766E', marginBottom: 8 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#0F766E', marginBottom: appliedShiftLabel ? 4 : 8 }}>
                           {myFocus.label}
                         </div>
+                        {appliedShiftLabel ? (
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#115E59', marginBottom: 8 }}>
+                            {appliedShiftLabel}
+                          </div>
+                        ) : null}
                         <SlotLabelChips items={myFocus.items} tone="teal" />
                         {takenSlotLabels.length > 0 ? (
                           <div style={{ marginTop: 10 }}>

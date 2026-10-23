@@ -51,6 +51,7 @@ export function JobScheduleDates({
   fontSize = 'var(--font-small)',
   style,
   highlightShiftIds,
+  countLabel,
 }: {
   job: JobScheduleLike;
   tone?: JobScheduleTone;
@@ -58,6 +59,8 @@ export function JobScheduleDates({
   style?: CSSProperties;
   /** When set, highlighted shifts use the tone; others render muted. */
   highlightShiftIds?: string[] | null;
+  /** Replaces the "N total slots" chip, e.g. shifts this locum applied for. */
+  countLabel?: string | null;
 }) {
   const shifts = getJobShifts(job);
   if (shifts.length === 0) return null;
@@ -86,7 +89,7 @@ export function JobScheduleDates({
       }}
     >
       <span
-        title="Total slots in this posting."
+        title={countLabel ?? 'Total slots in this posting.'}
         style={{
           background: t.bg,
           border: `1px solid ${t.border}`,
@@ -101,7 +104,7 @@ export function JobScheduleDates({
         }}
       >
         <MiniCalendarIcon color={t.color} />
-        {slotCount} total slot{slotCount === 1 ? '' : 's'}
+        {countLabel ?? `${slotCount} total slot${slotCount === 1 ? '' : 's'}`}
       </span>
       {shifts.map((s, i) => {
         const on = !highlight || (s.id != null && highlight.has(s.id));

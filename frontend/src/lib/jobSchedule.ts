@@ -690,6 +690,39 @@ export function applicationSlotCoverageCounts(
   return { covered: covered.length, total: slots.length };
 }
 
+/** "Applied for 3 of 15 available shifts". */
+export function appliedForShiftCountLabel(covered: number, total: number): string {
+  const noun = total === 1 ? 'shift' : 'shifts';
+  return `Applied for ${covered} of ${total} available ${noun}`;
+}
+
+/**
+ * How many advertised shifts this application asked for.
+ * Uses requested slots or selected days, not later confirmed claims.
+ */
+export function appliedForAvailableShiftsLabel(
+  app: ApplicationAvailability,
+  job: JobScheduleLike | null | undefined,
+): string | null {
+  const slots = getPostingSlots(job);
+  if (slots.length > 0) {
+    const allIds = slots.map((s) => s.id).filter((id): id is string => Boolean(id));
+    const requested = [...new Set((app.requestedShiftIds ?? []).filter((id) => allIds.includes(id)))];
+    if (requested.length > 0) {
+      return appliedForShiftCountLabel(requested.length, allIds.length);
+    }
+    if (app.availabilityKind === 'PARTIAL' && (app.availableDates?.length ?? 0) > 0) {
+      const days = new Set((app.availableDates ?? []).map((d) => d.slice(0, 10)));
+      const covered = slots.filter((s) => s.id && days.has(s.date)).length;
+      return appliedForShiftCountLabel(covered, slots.length);
+    }
+    return appliedForShiftCountLabel(allIds.length, allIds.length);
+  }
+  const days = getPostingDays(job);
+  if (days.length === 0) return null;
+  return appliedForShiftCountLabel(applicationCoveredDays(app, days).length, days.length);
+}
+
 /** "Sep 24, 2026 · 09:00 AM - 12:30 PM" (omits time when missing). */
 export function formatShiftSlotLabel(shift: JobShiftLike): string {
   const date = formatSpecificDate(shift.date);

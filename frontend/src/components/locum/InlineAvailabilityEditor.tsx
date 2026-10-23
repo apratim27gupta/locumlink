@@ -17,6 +17,7 @@ type Row = { key: string; label: string; taken: boolean; date: string };
 export function InlineAvailabilityEditor({
   job,
   label,
+  summary,
   initialKind,
   initialDates,
   initialShiftIds,
@@ -26,6 +27,8 @@ export function InlineAvailabilityEditor({
 }: {
   job: BrowseJob;
   label: string;
+  /** e.g. "Applied for 3 of 15 available shifts". */
+  summary?: string | null;
   initialKind: 'FULL' | 'PARTIAL';
   initialDates: string[];
   initialShiftIds: string[];
@@ -130,6 +133,11 @@ export function InlineAvailabilityEditor({
       >
         <span style={{ fontSize: 12, fontWeight: 700, color: '#0F766E' }}>{label}</span>
       </div>
+      {summary ? (
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#115E59', marginBottom: 8 }}>
+          {summary}
+        </div>
+      ) : null}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rows.map((r) => {
           const checked = selected.has(r.key);

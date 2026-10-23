@@ -82,6 +82,8 @@ export type LocumBrowseJobDetailProps = {
   revealHostDetails: boolean;
   /** When set, highlight these shift pills in the schedule list (dim the rest). */
   highlightShiftIds?: string[] | null;
+  /** Replaces the total-slot chip, e.g. "Applied for 3 of 15 available shifts". */
+  appliedShiftLabel?: string | null;
   /** Panel open class for mobile master-detail. */
   open?: boolean;
   contentOpacity?: number;
@@ -100,6 +102,7 @@ export function LocumBrowseJobDetail({
   job,
   revealHostDetails,
   highlightShiftIds,
+  appliedShiftLabel,
   open = true,
   contentOpacity = 1,
   banner,
@@ -339,6 +342,7 @@ export function LocumBrowseJobDetail({
               job={job}
               tone="teal"
               highlightShiftIds={highlightShiftIds}
+              countLabel={appliedShiftLabel}
             />
           ) : (
             (job.startDate || job.endDate) &&
