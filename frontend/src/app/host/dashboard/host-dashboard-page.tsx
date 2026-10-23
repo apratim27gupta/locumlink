@@ -11,6 +11,7 @@ import { hostProfileCompletionPct } from '@/lib/hostProfileCompletion';
 import { isCpsnsVerificationApproved } from '@/lib/cpsnsVerify';
 import { ApiHttpError, fetchAllPaginated, hostApi, isActiveJob, isDraftJob, normalizeHostJob, type Job, type ApplicationRecord, type CreateJobPayload, type DashboardStats} from '@/lib/api';
 import { beforeClientNavigation } from '@/lib/topLoader';
+import { HOST_PHYSICIAN_GUIDE_HREF } from '@/lib/resourceGuides';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import type { HostProfile } from '@/types';
 import { sortByLabel, sortStringsLocale } from '@/lib/sortLocale';
@@ -270,6 +271,96 @@ function ActiveBadge() {
         <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     </div>);
+}
+function HostWhatHappensNext() {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!open) return;
+        function onDown(e: MouseEvent) {
+            if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+        }
+        function onKey(e: KeyboardEvent) {
+            if (e.key === 'Escape') setOpen(false);
+        }
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [open]);
+    return (
+        <div ref={wrapRef} style={{ position: 'relative', display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+                type="button"
+                aria-expanded={open}
+                aria-label="What happens next?"
+                onClick={() => setOpen((v) => !v)}
+                style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    border: 'none',
+                    background: open ? '#EEF0FB' : 'transparent',
+                    color: '#3B4FD8',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    borderRadius: 8,
+                    padding: '6px 8px',
+                }}
+            >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4M12 8h.01"/>
+                </svg>
+                What happens next?
+            </button>
+            {open ? (
+                <div
+                    role="dialog"
+                    aria-label="What happens next"
+                    style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 6px)',
+                        right: 0,
+                        zIndex: 50,
+                        width: 340,
+                        maxWidth: 'calc(100vw - 48px)',
+                        background: '#fff',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: 10,
+                        boxShadow: '0 10px 30px rgba(15, 23, 42, 0.15)',
+                        padding: '12px 14px',
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        color: '#374151',
+                        textAlign: 'left',
+                        fontWeight: 400,
+                    }}
+                >
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0f1523', marginBottom: 6 }}>
+                        What happens next?
+                    </div>
+                    <div style={{ marginBottom: 6 }}>
+                        Review applications, shortlist, and confirm the shifts you want to offer. The locum must accept before the match is finalized.
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                        LocumLink then fills the GP Locum Application from both profiles and the confirmed shifts. You download the PDF, review and sign it, and submit it to MSI. Once approved, MSI emails you and the locum. You—not the locum—are responsible for submitting the application.
+                    </div>
+                    <a
+                        href={HOST_PHYSICIAN_GUIDE_HREF}
+                        onClick={() => beforeClientNavigation(HOST_PHYSICIAN_GUIDE_HREF)}
+                        style={{ color: '#3B4FD8', fontWeight: 600, textDecoration: 'none' }}
+                    >
+                        Read the Host Physician Guide
+                    </a>
+                </div>
+            ) : null}
+        </div>
+    );
 }
 function Chevron() {
     return (<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -2514,6 +2605,7 @@ export default function HostDashboard(props: {
             </div>
 
             <div className="host-dash-jobs-section" style={{ display: 'flex', flexDirection: 'column' }}>
+              <HostWhatHappensNext />
               <div className="host-dash-tabs-row">
                 <div className="host-dash-tabs-scroll">
                   {TABS.map((tab) => {

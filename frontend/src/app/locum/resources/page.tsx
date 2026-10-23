@@ -122,6 +122,17 @@ export default function LocumResourcesPage(props: {
     const [showGuide, setShowGuide] = useState(false);
 
     useEffect(() => {
+        if (new URLSearchParams(window.location.search).get('guide') === '1') setShowGuide(true);
+    }, []);
+
+    function closeGuide() {
+        setShowGuide(false);
+        if (new URLSearchParams(window.location.search).get('guide') === '1') {
+            window.history.replaceState(null, '', '/locum/resources');
+        }
+    }
+
+    useEffect(() => {
         locumApi
             .getProfile()
             .then((data) => {
@@ -137,7 +148,7 @@ export default function LocumResourcesPage(props: {
                     <>
                         <button
                             type="button"
-                            onClick={() => setShowGuide(false)}
+                            onClick={closeGuide}
                             style={{
                                 border: 'none',
                                 background: 'none',
