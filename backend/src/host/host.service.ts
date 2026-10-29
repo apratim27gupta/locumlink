@@ -67,6 +67,7 @@ import {
 } from './job-schedule.util.js';
 import { getReviewPlaygroundEmails, isReviewPlaygroundEmail } from '../config/review-playground.util.js';
 import { PaymentsService } from '../payments/payments.service.js';
+import { PlacementFeedbackService } from '../placement-feedback/placement-feedback.service.js';
 
 export type ApiJobShift = {
   id?: string;
@@ -245,6 +246,7 @@ export class HostService {
     private readonly notifService: NotificationsService,
     private readonly adminNotif: AdminNotificationsService,
     private readonly paymentsService: PaymentsService,
+    private readonly placementFeedback: PlacementFeedbackService,
   ) {}
 
   private async assertHostCanWrite(userId: string): Promise<void> {
@@ -962,6 +964,9 @@ export class HostService {
       });
       await this.paymentsService
         .reconcileTierTopUpsAfterCompletion(toComplete)
+        .catch(() => undefined);
+      await this.placementFeedback
+        .requestFeedbackForCompletedPostings(toComplete)
         .catch(() => undefined);
     }
     if (toOngoing.length > 0) {

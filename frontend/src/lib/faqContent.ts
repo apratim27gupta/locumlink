@@ -6,6 +6,7 @@ export type FaqItem = {
 };
 
 export const FAQ_AFTER_APPLYING_ID = 'after-applying';
+export const FAQ_PLACEMENT_FEEDBACK_ID = 'placement-feedback';
 
 export type FaqSection = {
   title: string;
@@ -189,6 +190,12 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
         question: 'What if I have a concern after the placement ends?',
         answer:
           'After the last shift on an invoice is completed, you can raise a ticket from that invoice in Match Fees.\nLocumLink reviews tickets and may issue a discretionary refund where appropriate. You will hear from us in-app and by email.',
+      },
+      {
+        id: FAQ_PLACEMENT_FEEDBACK_ID,
+        question: 'Will I be asked for feedback after a placement?',
+        answer:
+          'Yes. After a confirmed placement ends, the host may receive an email and in-app prompt to share brief confidential feedback about that locum match.\nFeedback stays private within LocumLink. It is not shown as a public rating on locum profiles.\nOne form is requested per accepted match (not per shift).',
       },
     ],
   },

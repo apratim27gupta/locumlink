@@ -2,6 +2,7 @@ import { PushService } from '../notifications/push.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
+import { PlacementFeedbackService } from '../placement-feedback/placement-feedback.service.js';
 import { formatAdminDoctorName } from '../notifications/admin-notification-copy.js';
 import { formatLocumDoctorName } from '../notifications/notification-copy.js';
 import { isShiftWithin24Hours } from '../notifications/host-notification-copy.js';
@@ -182,6 +183,7 @@ export class LocumService {
     private readonly notifService: NotificationsService,
     private readonly adminNotif: AdminNotificationsService,
     private readonly paymentsService: PaymentsService,
+    private readonly placementFeedback: PlacementFeedbackService,
   ) {}
 
   private async assertLocumCanWrite(userId: string): Promise<void> {
@@ -1675,6 +1677,9 @@ export class LocumService {
         if (nextStatus === 'COMPLETED') {
           await this.paymentsService
             .reconcileTierTopUpsAfterCompletion([jobPostingId])
+            .catch(() => undefined);
+          await this.placementFeedback
+            .requestFeedbackForCompletedPostings([jobPostingId])
             .catch(() => undefined);
         }
       }

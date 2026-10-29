@@ -3,11 +3,18 @@ import { AuthModule } from '../auth/auth.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { GcsModule } from '../gcs/gcs.module.js';
 import { PaymentsModule } from '../payments/payments.module.js';
+import { PlacementFeedbackModule } from '../placement-feedback/placement-feedback.module.js';
 import { HostController } from './host.controller.js';
 import { HostPublicController } from './host-public.controller.js';
 import { HostService } from './host.service.js';
 @Module({
-  imports: [AuthModule, GcsModule, NotificationsModule, PaymentsModule],
+  imports: [
+    AuthModule,
+    GcsModule,
+    NotificationsModule,
+    PaymentsModule,
+    PlacementFeedbackModule,
+  ],
   controllers: [HostController, HostPublicController],
   providers: [HostService],
 })

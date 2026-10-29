@@ -1448,6 +1448,73 @@ export const hostApi = {
         }
         return res.json() as Promise<{ success: boolean; ticket: { id: string } }>;
     },
+    getPlacementFeedback: async (
+        applicationId: string,
+        accessToken?: string,
+    ): Promise<PlacementFeedbackPayload> => {
+        const token = accessToken?.trim();
+        const url = token
+            ? `${NEST_BASE}/api/public/placement-feedback/${encodeURIComponent(applicationId)}?token=${encodeURIComponent(token)}`
+            : `${NEST_BASE}/api/host/placement-feedback/${encodeURIComponent(applicationId)}`;
+        const res = await trackedFetch(url, {
+            cache: 'no-store',
+            headers: nestHeaders(false),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Loading placement feedback', {
+                skipAuthRedirect: Boolean(token),
+            });
+        }
+        return res.json() as Promise<PlacementFeedbackPayload>;
+    },
+    submitPlacementFeedback: async (
+        applicationId: string,
+        body: PlacementFeedbackSubmitBody,
+        accessToken?: string,
+    ): Promise<PlacementFeedbackPayload> => {
+        const token = accessToken?.trim();
+        const url = token
+            ? `${NEST_BASE}/api/public/placement-feedback/${encodeURIComponent(applicationId)}?token=${encodeURIComponent(token)}`
+            : `${NEST_BASE}/api/host/placement-feedback/${encodeURIComponent(applicationId)}`;
+        const res = await trackedFetch(url, {
+            method: 'POST',
+            headers: nestHeaders(true),
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Submitting placement feedback', {
+                skipAuthRedirect: Boolean(token),
+            });
+        }
+        return res.json() as Promise<PlacementFeedbackPayload>;
+    },
+};
+
+export type PlacementFeedbackRating = 'MET' | 'SOME' | 'SIGNIFICANT' | 'UNABLE';
+export type PlacementFeedbackBookAgain = 'YES' | 'MAYBE' | 'NO';
+export type PlacementFeedbackBasedOn = 'DIRECT' | 'STAFF' | 'BOTH';
+
+export type PlacementFeedbackSubmitBody = {
+    professionalism: PlacementFeedbackRating;
+    communication: PlacementFeedbackRating;
+    reliability: PlacementFeedbackRating;
+    documentation: PlacementFeedbackRating;
+    bookAgain: PlacementFeedbackBookAgain;
+    basedOn: PlacementFeedbackBasedOn;
+    comments?: string;
+};
+
+export type PlacementFeedbackPayload = {
+    applicationId: string;
+    status: 'PENDING' | 'SUBMITTED';
+    submittedAt: string | null;
+    locumName: string;
+    clinicName: string;
+    jobTitle: string;
+    coverageLabel: string;
+    answers: PlacementFeedbackSubmitBody | null;
 };
 export type MatchFeeInvoiceStatus =
     | 'PENDING'

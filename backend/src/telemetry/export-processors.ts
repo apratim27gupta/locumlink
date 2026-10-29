@@ -82,7 +82,7 @@ function toSpanView(span: ReadableSpan): SpanView {
 
 function withoutException(span: ReadableSpan): ReadableSpan {
   return new Proxy(span, {
-    get(target, prop): unknown {
+    get(target, prop, receiver): unknown {
       if (prop === 'status') return { code: SpanStatusCode.UNSET };
       if (prop === 'events') {
         return target.events.filter((event) => event.name !== 'exception');

@@ -84,6 +84,30 @@ enum LocumResponse {
   REJECTED
 }
 
+enum PlacementFeedbackRating {
+  MET
+  SOME
+  SIGNIFICANT
+  UNABLE
+}
+
+enum PlacementFeedbackBookAgain {
+  YES
+  MAYBE
+  NO
+}
+
+enum PlacementFeedbackBasedOn {
+  DIRECT
+  STAFF
+  BOTH
+}
+
+enum PlacementFeedbackStatus {
+  PENDING
+  SUBMITTED
+}
+
 enum DocumentType {
   CPSNS_LICENSE
   CMPA_CERTIFICATE
@@ -285,6 +309,7 @@ model User {
   reportsFiled       UserReport[]       @relation("ReportsFiled")
   reportsReceived    UserReport[]       @relation("ReportsReceived")
   feedbackEntries    Feedback[]
+  placementFeedbackAsHost PlacementFeedback[] @relation("PlacementFeedbackHost")
 
   @@unique([email, role])
   @@map("users")
@@ -339,6 +364,7 @@ model LocumProfile {
 
   documents           Document[]
   applications        Application[]
+  placementFeedback   PlacementFeedback[]
 
   @@map("locum_profiles")
 }
@@ -463,6 +489,7 @@ model JobPosting {
   messages              Message[]
   matchFeeInvoices      MatchFeeInvoice[]
   supportTickets        SupportTicket[]
+  placementFeedback     PlacementFeedback[]
 
   @@index([status, id], map: "job_postings_status_id_idx")
   @@map("job_postings")
@@ -538,6 +565,7 @@ model Application {
   /** Invoices where this application was accepted as the replacement locum. */
   matchFeeInvoicesAsReplacement MatchFeeInvoice[] @relation("MatchFeeInvoiceReplacement")
   shiftClaims     ApplicationShiftClaim[]
+  placementFeedback PlacementFeedback?
 
   // Active uniqueness (status <> WITHDRAWN) is enforced by a partial unique index
   // in SQL — see migration applications_active_unique. Withdrawn rows can coexist
@@ -799,6 +827,43 @@ model Feedback {
   @@index([createdAt])
   @@index([userId])
   @@map("feedback")
+}
+
+/** Confidential host feedback for one completed placement match (accepted application). */
+model PlacementFeedback {
+  id              String   @id @default(cuid())
+  applicationId   String   @unique @map("application_id")
+  jobPostingId    String   @map("job_posting_id")
+  hostUserId      String   @map("host_user_id")
+  locumProfileId  String   @map("locum_profile_id")
+  /** Opaque email-link token so hosts can open/submit without signing in. */
+  accessToken     String   @unique @map("access_token")
+
+  status          PlacementFeedbackStatus @default(PENDING)
+
+  professionalism PlacementFeedbackRating? @map("professionalism")
+  communication   PlacementFeedbackRating? @map("communication")
+  reliability     PlacementFeedbackRating? @map("reliability")
+  documentation   PlacementFeedbackRating? @map("documentation")
+  bookAgain       PlacementFeedbackBookAgain? @map("book_again")
+  basedOn         PlacementFeedbackBasedOn? @map("based_on")
+  comments        String?  @db.Text
+
+  needsReview     Boolean  @default(false) @map("needs_review")
+  requestedAt     DateTime @default(now()) @map("requested_at")
+  submittedAt     DateTime? @map("submitted_at")
+  reminderSentAt  DateTime? @map("reminder_sent_at")
+
+  application  Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  jobPosting   JobPosting   @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  hostUser     User         @relation("PlacementFeedbackHost", fields: [hostUserId], references: [id], onDelete: Cascade)
+  locumProfile LocumProfile @relation(fields: [locumProfileId], references: [id], onDelete: Cascade)
+
+  @@index([status, requestedAt])
+  @@index([hostUserId, status])
+  @@index([jobPostingId])
+  @@index([needsReview, submittedAt])
+  @@map("placement_feedback")
 }
 
 model ErrorLog {

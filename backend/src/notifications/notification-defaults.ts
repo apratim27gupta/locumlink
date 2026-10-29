@@ -86,6 +86,14 @@ export const NOTIFICATION_EVENT_DEFAULTS: Record<
     href: '/host/invoices',
     actionLabel: 'View Invoice',
   },
+  H_020_PLACEMENT_FEEDBACK_REQUEST: {
+    href: '/host/dashboard',
+    actionLabel: 'Complete feedback',
+  },
+  H_021_PLACEMENT_FEEDBACK_REMINDER: {
+    href: '/host/dashboard',
+    actionLabel: 'Complete feedback',
+  },
   L_001_NEW_OPPORTUNITY: {
     href: '/locum/browse',
     actionLabel: 'Browse Opportunities',
@@ -181,6 +189,8 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   H_017_MATCH_FEE_PAID: 'Match fee received',
   H_018_MATCH_FEE_REFUND: 'Match fee refund approved',
   H_019_MATCH_FEE_CANCELLED: 'Match fee updated after cancellation',
+  H_020_PLACEMENT_FEEDBACK_REQUEST: 'How was your locum experience?',
+  H_021_PLACEMENT_FEEDBACK_REMINDER: 'Reminder: locum feedback',
   L_001_NEW_OPPORTUNITY: 'New Locum Opportunity Available',
   L_002_HOST_CONFIRMED: 'Shift Confirmed',
   L_003_APPLICATION_ACCEPTED: 'Application Shortlisted',

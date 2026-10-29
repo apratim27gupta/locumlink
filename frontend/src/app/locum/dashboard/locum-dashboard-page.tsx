@@ -1553,6 +1553,9 @@ export default function LocumDashboard(props: {
                         {isSlots ? 'the confirmed slots' : 'the confirmed dates'}
                       </p>
                     )}
+                    <p style={{ margin: '12px 0 0', fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
+                      After the placement ends, the host may be asked for confidential feedback about the match. Feedback stays private within LocumLink.
+                    </p>
                   </>
                 )}
               </div>

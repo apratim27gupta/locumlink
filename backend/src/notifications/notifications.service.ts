@@ -80,6 +80,8 @@ export type NotifEventType =
   | 'H_017_MATCH_FEE_PAID'
   | 'H_018_MATCH_FEE_REFUND'
   | 'H_019_MATCH_FEE_CANCELLED'
+  | 'H_020_PLACEMENT_FEEDBACK_REQUEST'
+  | 'H_021_PLACEMENT_FEEDBACK_REMINDER'
   // Locum
   | 'L_001_NEW_OPPORTUNITY'
   | 'L_002_HOST_CONFIRMED'
@@ -163,15 +165,16 @@ function formatMatchFee(amountCents: number, taxCents?: number): string {
 
 function eventTypeToCategory(eventType: string): NotificationItem['type'] {
   if (eventType.includes('MESSAGE')) return 'message';
+  if (eventType.includes('REMINDER') || eventType.includes('EXPIRING'))
+    return 'reminder';
   if (
     eventType.includes('APPLIED') ||
     eventType.includes('ACCEPTED') ||
     eventType.includes('DECLINED') ||
-    eventType.includes('CONFIRMED')
+    eventType.includes('CONFIRMED') ||
+    eventType.includes('PLACEMENT_FEEDBACK')
   )
     return 'application';
-  if (eventType.includes('REMINDER') || eventType.includes('EXPIRING'))
-    return 'reminder';
   if (eventType.includes('CANCELLED') || eventType.includes('MATCH_FEE'))
     return 'cancellation';
   if (eventType.includes('REGISTRATION')) return 'registration';
