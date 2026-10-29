@@ -42,6 +42,7 @@ import {
   postingStatusAfterLocumAccept,
 } from './job-schedule.util.js';
 import { getReviewPlaygroundEmails, isReviewPlaygroundEmail } from '../config/review-playground.util.js';
+import { PlacementFeedbackService } from '../placement-feedback/placement-feedback.service.js';
 
 function mapJobPostingForApi<T extends {
   startDate?: Date | null;
@@ -101,6 +102,7 @@ export class HostService {
     private readonly pushService: PushService,
     private readonly notifService: NotificationsService,
     private readonly adminNotif: AdminNotificationsService,
+    private readonly placementFeedback: PlacementFeedbackService,
   ) {}
 
   private async assertHostCanWrite(userId: string): Promise<void> {
@@ -685,6 +687,9 @@ export class HostService {
         where: { id: { in: toComplete } },
         data: { status: 'COMPLETED' },
       });
+      await this.placementFeedback
+        .requestFeedbackForCompletedPostings(toComplete)
+        .catch(() => undefined);
     }
     if (toOngoing.length > 0) {
       await this.prisma.jobPosting.updateMany({

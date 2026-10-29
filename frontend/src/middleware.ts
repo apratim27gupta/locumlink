@@ -78,6 +78,7 @@ export async function middleware(request: NextRequest) {
 
   const isPublic =
     PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
+    pathname.startsWith('/host/feedback') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/favicon');

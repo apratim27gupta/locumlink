@@ -1144,6 +1144,11 @@ export default function HostApplicantsPage(props: {
                   {selected.status === 'SHORTLISTED' && (<button type="button" disabled={!jobId || actioning.has(selected.id)} onClick={async () => {
                         if (!jobId)
                             return;
+                        const ok = window.confirm(
+                            'After the placement ends, LocumLink may ask you for brief confidential feedback about this locum. Feedback stays private and is not shown as a public rating.\n\nConfirm this locum?',
+                        );
+                        if (!ok)
+                            return;
                         const app = selected;
                         setActioning((prev) => new Set(prev).add(app.id));
                         try {

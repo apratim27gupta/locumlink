@@ -883,6 +883,9 @@ export default function LocumDashboard(props: {
                   <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10 }}>
                     The host confirmed this placement. Accept to finalize or reject to decline.
                   </div>
+                  <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10, lineHeight: 1.5 }}>
+                    After the placement ends, the host may be asked for confidential feedback about the match. Feedback stays private within LocumLink.
+                  </div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <button type="button" disabled={responding} onClick={() => void respondToPlacement(app.id, 'accept')} style={{
                             padding: '9px 18px',

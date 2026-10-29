@@ -2,11 +2,17 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { GcsModule } from '../gcs/gcs.module.js';
+import { PlacementFeedbackModule } from '../placement-feedback/placement-feedback.module.js';
 import { HostController } from './host.controller.js';
 import { HostPublicController } from './host-public.controller.js';
 import { HostService } from './host.service.js';
 @Module({
-  imports: [AuthModule, GcsModule, NotificationsModule],
+  imports: [
+    AuthModule,
+    GcsModule,
+    NotificationsModule,
+    PlacementFeedbackModule,
+  ],
   controllers: [HostController, HostPublicController],
   providers: [HostService],
 })

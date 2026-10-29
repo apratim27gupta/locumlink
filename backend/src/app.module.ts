@@ -12,6 +12,7 @@ import { HostModule } from './host/host.module.js';
 import { LocumModule } from './locum/locum.module.js';
 import { MessageModule } from './message/message.module.js';
 import { FeedbackModule } from './feedback/feedback.module.js';
+import { PlacementFeedbackModule } from './placement-feedback/placement-feedback.module.js';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from './auth/guards/roles.guard.js';
 import { backendDevelopmentEnvPaths } from './config/backend-env-files.js';
@@ -49,6 +50,7 @@ import { TurnstileModule } from './common/turnstile/turnstile.module.js';
     LocumModule,
     MessageModule,
     FeedbackModule,
+    PlacementFeedbackModule,
     NotificationsModule,
     UploadModule,
     GcsModule,

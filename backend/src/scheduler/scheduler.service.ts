@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { EmailDigestService } from '../notifications/email-digest.service.js';
+import { PlacementFeedbackService } from '../placement-feedback/placement-feedback.service.js';
 import { browseShiftStartActiveSql, postingStatusAfterLocumAccept } from '../host/job-schedule.util.js';
 
 const locumReminderInclude = {
@@ -32,6 +33,7 @@ export class SchedulerService {
     private readonly prisma: PrismaService,
     private readonly notifService: NotificationsService,
     private readonly emailDigest: EmailDigestService,
+    private readonly placementFeedback: PlacementFeedbackService,
   ) {}
 
   private async shiftReminderAlreadySent(
@@ -304,6 +306,16 @@ export class SchedulerService {
           where: { id: { in: toComplete } },
           data: { status: 'COMPLETED' },
         });
+        try {
+          await this.placementFeedback.requestFeedbackForCompletedPostings(
+            toComplete,
+          );
+        } catch (err) {
+          this.logger.error(
+            'Placement feedback requests after completion failed',
+            err,
+          );
+        }
       }
       if (toOngoing.length > 0) {
         await this.prisma.jobPosting.updateMany({
@@ -324,6 +336,19 @@ export class SchedulerService {
       }
     } catch (err) {
       this.logger.error('Sync filled job posting statuses cron failed', err);
+    }
+  }
+
+  /** One reminder for pending post-placement host feedback (3+ days old). */
+  @Cron(CronExpression.EVERY_DAY_AT_10AM)
+  async handlePlacementFeedbackReminders(): Promise<void> {
+    try {
+      const sent = await this.placementFeedback.sendPendingReminders();
+      if (sent > 0) {
+        this.logger.log(`Sent ${sent} placement feedback reminder(s)`);
+      }
+    } catch (err) {
+      this.logger.error('Placement feedback reminder cron failed', err);
     }
   }
 }

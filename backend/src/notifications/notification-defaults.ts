@@ -58,6 +58,14 @@ export const NOTIFICATION_EVENT_DEFAULTS: Record<
     href: '/host/dashboard',
     actionLabel: 'View Posting',
   },
+  H_020_PLACEMENT_FEEDBACK_REQUEST: {
+    href: '/host/dashboard',
+    actionLabel: 'Complete feedback',
+  },
+  H_021_PLACEMENT_FEEDBACK_REMINDER: {
+    href: '/host/dashboard',
+    actionLabel: 'Complete feedback',
+  },
   L_001_NEW_OPPORTUNITY: {
     href: '/locum/browse',
     actionLabel: 'Browse Opportunities',
@@ -138,6 +146,8 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   H_010_ACCOUNT_WARNING: 'Account warning',
   H_011_PROFILE_REMINDER: 'Complete your Locum Link profile',
   H_012_JOB_POSTED: 'Job posted',
+  H_020_PLACEMENT_FEEDBACK_REQUEST: 'How was your locum experience?',
+  H_021_PLACEMENT_FEEDBACK_REMINDER: 'Reminder: locum feedback',
   L_001_NEW_OPPORTUNITY: 'New Locum Opportunity Available',
   L_002_HOST_CONFIRMED: 'Shift Confirmed',
   L_003_APPLICATION_ACCEPTED: 'Application Shortlisted',

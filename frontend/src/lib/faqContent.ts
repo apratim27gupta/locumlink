@@ -6,6 +6,7 @@ export type FaqItem = {
 };
 
 export const FAQ_AFTER_APPLYING_ID = 'after-applying';
+export const FAQ_PLACEMENT_FEEDBACK_ID = 'placement-feedback';
 
 export type FaqSection = {
   title: string;
@@ -134,6 +135,12 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
         question: 'My application says Applied. What happens next?',
         answer:
           'Applied means your application was sent and the host can review it.\n\nFrom there, the host may:\n• shortlist you while they consider applicants\n• confirm you for the shift, after which you can accept or decline\n• decide to go with another physician\n\nHosts review applications on their own timeline, and not every application is shortlisted or confirmed. You will get an in-app notification and an email if your status changes.\n\nYou can message the host once they message you or confirm you for the shift.',
+      },
+      {
+        id: FAQ_PLACEMENT_FEEDBACK_ID,
+        question: 'Will I be asked for feedback after a placement?',
+        answer:
+          'Yes. After a confirmed placement ends, the host may receive an email and in-app prompt to share brief confidential feedback about that locum match.\nFeedback stays private within LocumLink. It is not shown as a public rating on locum profiles.\nOne form is requested per accepted match (not per shift).',
       },
       {
         question: 'What if I can’t find a locum?',
