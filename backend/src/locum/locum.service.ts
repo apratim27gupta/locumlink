@@ -25,9 +25,12 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { assertOwnsStoragePath } from '../common/utils/storage-path.util.js';
 import {
   dbTimeToClockString,
+  extractCalendarDatePart,
   formatCalendarDateForApi,
   getPostingRequiredDates,
   isPostingFullyCovered,
+  platformCalendarDateOf,
+  platformCalendarDateToday,
   postingStatusAfterLocumAccept,
   finalizeAcceptDates,
   finalizeAcceptShiftIds,
@@ -1159,28 +1162,128 @@ export class LocumService {
       select: { id: true },
     });
     if (!locumProfile) {
-      return { totalAcceptedShifts: 0, completedShifts: 0 };
+      return {
+        totalAppliedShifts: 0,
+        totalAcceptedShifts: 0,
+        completedShifts: 0,
+      };
     }
     const now = new Date();
-    const locumAcceptedWhere = {
-      locumProfileId: locumProfile.id,
-      OR: [
-        { locumResponse: 'ACCEPTED' as const },
-        { locumAcceptedAt: { not: null } },
-      ],
-    };
-    const [totalAcceptedShifts, completedShifts] = await Promise.all([
-      this.prisma.application.count({ where: locumAcceptedWhere }),
-      this.prisma.application.count({
-        where: {
-          ...locumAcceptedWhere,
-          jobPosting: {
-            OR: [{ endDate: { lt: now } }, { status: 'COMPLETED' }],
+    const today = platformCalendarDateToday();
+
+    const apps = await this.prisma.application.findMany({
+      where: {
+        locumProfileId: locumProfile.id,
+        status: { notIn: ['WITHDRAWN', 'REJECTED'] },
+      },
+      select: {
+        status: true,
+        locumResponse: true,
+        locumAcceptedAt: true,
+        availabilityKind: true,
+        availableDates: true,
+        requestedShiftIds: true,
+        shiftClaims: { select: { shiftId: true } },
+        jobPosting: {
+          select: {
+            status: true,
+            endDate: true,
+            scheduleModel: true,
+            startDate: true,
+            shifts: {
+              select: {
+                id: true,
+                date: true,
+              },
+            },
           },
         },
-      }),
-    ]);
-    return { totalAcceptedShifts, completedShifts };
+      },
+    });
+
+    let totalAppliedShifts = 0;
+    let totalAcceptedShifts = 0;
+    let completedShifts = 0;
+
+    for (const app of apps) {
+      const posting = app.jobPosting;
+      const slots = posting.shifts ?? [];
+      const isSlots =
+        posting.scheduleModel === 'SLOTS' && slots.some((s) => s.id);
+      const accepted =
+        app.locumResponse === 'ACCEPTED' || app.locumAcceptedAt != null;
+
+      let appliedCount = 0;
+      if (isSlots) {
+        const allIds = slots
+          .map((s) => s.id)
+          .filter((id): id is string => Boolean(id));
+        const requested = [
+          ...new Set(
+            (app.requestedShiftIds ?? []).filter((id) => allIds.includes(id)),
+          ),
+        ];
+        if (requested.length > 0) {
+          appliedCount = requested.length;
+        } else if (
+          app.availabilityKind === 'PARTIAL' &&
+          (app.availableDates?.length ?? 0) > 0
+        ) {
+          const days = new Set(
+            (app.availableDates ?? [])
+              .map((d) => extractCalendarDatePart(d))
+              .filter((d): d is string => Boolean(d)),
+          );
+          appliedCount = slots.filter((s) => {
+            const cal = formatCalendarDateForApi(s.date);
+            return s.id && cal && days.has(cal);
+          }).length;
+        } else {
+          appliedCount = allIds.length;
+        }
+      } else {
+        const required = getPostingRequiredDates(posting);
+        appliedCount = applicationClaimedDates(app, required).length;
+      }
+      totalAppliedShifts += appliedCount;
+
+      if (!accepted) continue;
+
+      let acceptedIds: string[] = [];
+      let acceptedDays: string[] = [];
+      if (isSlots) {
+        acceptedIds = applicationClaimedShiftIds(app, posting);
+        totalAcceptedShifts += acceptedIds.length;
+      } else {
+        const required = getPostingRequiredDates(posting);
+        acceptedDays = applicationClaimedDates(app, required);
+        totalAcceptedShifts += acceptedDays.length;
+      }
+
+      const postingDone =
+        posting.status === 'COMPLETED' ||
+        (posting.endDate != null &&
+          platformCalendarDateOf(posting.endDate) < today);
+      if (postingDone) {
+        completedShifts += isSlots ? acceptedIds.length : acceptedDays.length;
+        continue;
+      }
+
+      if (isSlots) {
+        const claimed = new Set(acceptedIds);
+        for (const s of slots) {
+          if (!s.id || !claimed.has(s.id)) continue;
+          const cal = formatCalendarDateForApi(s.date);
+          if (cal && cal < today) completedShifts += 1;
+        }
+      } else {
+        for (const day of acceptedDays) {
+          if (day < today) completedShifts += 1;
+        }
+      }
+    }
+
+    return { totalAppliedShifts, totalAcceptedShifts, completedShifts };
   }
 
   private parseAvailabilityInput(

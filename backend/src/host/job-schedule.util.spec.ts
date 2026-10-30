@@ -150,30 +150,30 @@ describe('job-schedule.util', () => {
     const iso = (d: Date) => d.toISOString().slice(0, 10);
 
     it('computes end time from start + slot kind', () => {
-      expect(addClockHours('08:00', 3.5)).toBe('11:30');
-      expect(addClockHours('08:00', 7)).toBe('15:00');
+      expect(addClockHours('08:00', 3.75)).toBe('11:45');
+      expect(addClockHours('08:00', 7.5)).toBe('15:30');
       const result = parseJobShiftsSlots(
         [{ date: '2999-06-18', startTime: '08:00', slotKind: 'HALF' }],
         { allowPast: true },
       );
-      expect(result.shifts[0].endTime).toBe('11:30');
+      expect(result.shifts[0].endTime).toBe('11:45');
       expect(result.shifts[0].slotKind).toBe('HALF');
       expect(iso(result.startDate)).toBe('2999-06-18');
     });
 
-    it('allows a half-day custom end up to 6h59m and rejects 7h+', () => {
+    it('allows a half-day custom end up to 7h29m and rejects 7.5h+', () => {
       const ok = parseJobShiftsSlots(
         [
           {
             date: '2999-06-18',
             startTime: '08:00',
             slotKind: 'HALF',
-            endTime: '14:59',
+            endTime: '15:29',
           },
         ],
         { allowPast: true },
       );
-      expect(ok.shifts[0].endTime).toBe('14:59');
+      expect(ok.shifts[0].endTime).toBe('15:29');
       expect(() =>
         parseJobShiftsSlots(
           [
@@ -181,12 +181,12 @@ describe('job-schedule.util', () => {
               date: '2999-06-18',
               startTime: '08:00',
               slotKind: 'HALF',
-              endTime: '15:00',
+              endTime: '15:30',
             },
           ],
           { allowPast: true },
         ),
-      ).toThrow(/at most 6 hours 59 minutes/i);
+      ).toThrow(/at most 7 hours 29 minutes/i);
     });
 
     it('allows two half slots on one day and rejects full+half mix', () => {
@@ -223,11 +223,11 @@ describe('job-schedule.util', () => {
   });
 
   describe('match fee hours', () => {
-    it('tiers at 3.5 hours', () => {
+    it('tiers at 3.75 hours', () => {
       expect(computeMatchFeeAmountCents(0)).toBe(500);
-      expect(computeMatchFeeAmountCents(3.5)).toBe(500);
-      expect(computeMatchFeeAmountCents(3.51)).toBe(1000);
-      expect(computeMatchFeeAmountCents(7)).toBe(1000);
+      expect(computeMatchFeeAmountCents(3.75)).toBe(500);
+      expect(computeMatchFeeAmountCents(3.76)).toBe(1000);
+      expect(computeMatchFeeAmountCents(7.5)).toBe(1000);
     });
 
     it('sums claimed hours for SLOTS and LEGACY', () => {
@@ -239,14 +239,14 @@ describe('job-schedule.util', () => {
             date: utcDate('2999-06-01'),
             shiftType: 'HALF_DAY',
             startTime: '08:00',
-            endTime: '11:30',
+            endTime: '11:45',
           },
           {
             id: 's2',
             date: utcDate('2999-06-01'),
             shiftType: 'HALF_DAY',
             startTime: '12:00',
-            endTime: '15:30',
+            endTime: '15:45',
           },
         ],
       };
@@ -254,17 +254,17 @@ describe('job-schedule.util', () => {
         computeApplicationClaimedHours(slotsPosting, {
           shiftClaims: [{ shiftId: 's1' }],
         }),
-      ).toBe(3.5);
+      ).toBe(3.75);
       expect(
         computeApplicationClaimedHours(slotsPosting, {
           shiftClaims: [{ shiftId: 's1' }, { shiftId: 's2' }],
         }),
-      ).toBe(7);
+      ).toBe(7.5);
 
       const legacy = {
         scheduleModel: 'LEGACY',
         startTime: '08:00',
-        endTime: '11:30',
+        endTime: '11:45',
         shifts: [{ date: utcDate('2999-06-01') }],
       };
       expect(
@@ -272,7 +272,7 @@ describe('job-schedule.util', () => {
           availabilityKind: 'FULL',
           availableDates: [],
         }),
-      ).toBe(3.5);
+      ).toBe(3.75);
     });
 
     it('covers SLOTS by shift ids', () => {

@@ -51,7 +51,11 @@ import { buildMatchFeeReceiptPdf } from './match-fee-receipt.pdf.js';
 import { StripeService } from './stripe.service.js';
 import Stripe from 'stripe';
 import {
+  applicationClaimedDates,
+  applicationClaimedShiftIds,
   computeApplicationClaimedHours,
+  dbTimeToClockString,
+  formatCalendarDateForApi,
   getPostingRequiredDates,
   platformCalendarDateOf,
   platformCalendarDateToday,
@@ -170,20 +174,118 @@ const NON_DUPLICATE_REFUND_IN_FLIGHT: Prisma.MatchFeeRefundWhereInput = {
   status: { in: ['REQUESTED', 'PENDING'] },
 };
 
+function clockFromInvoiceShiftTime(
+  value: Date | string | null | undefined,
+): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    const m = value.trim().match(/^(\d{1,2}):(\d{2})/);
+    if (m) {
+      return `${m[1].padStart(2, '0')}:${m[2]}`;
+    }
+  }
+  return dbTimeToClockString(value);
+}
+
+function formatMatchedBlockLabel(shift: {
+  date: Date | string;
+  startTime?: Date | string | null;
+  endTime?: Date | string | null;
+}): string | null {
+  const date = formatCalendarDateForApi(shift.date);
+  if (!date) return null;
+  const start = clockFromInvoiceShiftTime(shift.startTime);
+  const end = clockFromInvoiceShiftTime(shift.endTime);
+  if (start && end) return `${date} · ${start}-${end}`;
+  if (start) return `${date} · ${start}`;
+  return date;
+}
+
+/** Invoice schedule: matched blocks for this application, not the full posting. */
 function formatPostingScheduleLabel(
   posting: Prisma.JobPostingGetPayload<{
     select: {
       startDate: true;
       endDate: true;
-      shifts: { select: { date: true } };
+      startTime: true;
+      endTime: true;
+      scheduleModel: true;
+      shifts: {
+        select: {
+          id: true;
+          date: true;
+          shiftType: true;
+          startTime: true;
+          endTime: true;
+        };
+      };
     };
   }>,
+  application: {
+    availabilityKind?: string | null;
+    availableDates?: string[] | null;
+    requestedShiftIds?: string[] | null;
+    shiftClaims?: { shiftId: string }[] | null;
+  },
 ): string | null {
-  const days = getPostingRequiredDates(posting);
-  if (days.length === 0) return null;
-  if (days.length === 1) return days[0];
-  if (days.length <= 4) return days.join(', ');
-  return `${days[0]} to ${days[days.length - 1]} (${days.length} days)`;
+  const shifts = posting.shifts ?? [];
+  const isSlots = posting.scheduleModel === 'SLOTS' && shifts.some((s) => s.id);
+
+  if (isSlots) {
+    const claimedIds = new Set(
+      applicationClaimedShiftIds(application, posting),
+    );
+    const matched = shifts
+      .filter((s) => s.id && claimedIds.has(s.id))
+      .slice()
+      .sort((a, b) => {
+        const da = formatCalendarDateForApi(a.date) ?? '';
+        const db = formatCalendarDateForApi(b.date) ?? '';
+        if (da !== db) return da.localeCompare(db);
+        return (clockFromInvoiceShiftTime(a.startTime) ?? '').localeCompare(
+          clockFromInvoiceShiftTime(b.startTime) ?? '',
+        );
+      });
+    const labels = matched
+      .map((s) => formatMatchedBlockLabel(s))
+      .filter((x): x is string => Boolean(x));
+    if (labels.length === 0) return null;
+    if (labels.length <= 8) return labels.join('; ');
+    return `${labels.slice(0, 6).join('; ')}; +${labels.length - 6} more`;
+  }
+
+  const required = getPostingRequiredDates(posting);
+  const claimedDays = applicationClaimedDates(application, required);
+  if (claimedDays.length === 0) return null;
+
+  const byDay = new Map<string, (typeof shifts)[number][]>();
+  for (const s of shifts) {
+    const cal = formatCalendarDateForApi(s.date);
+    if (!cal) continue;
+    const list = byDay.get(cal) ?? [];
+    list.push(s);
+    byDay.set(cal, list);
+  }
+
+  const labels: string[] = [];
+  for (const day of claimedDays) {
+    const dayShifts = byDay.get(day) ?? [];
+    if (dayShifts.length === 0) {
+      const start = clockFromInvoiceShiftTime(posting.startTime);
+      const end = clockFromInvoiceShiftTime(posting.endTime);
+      labels.push(
+        start && end ? `${day} · ${start}-${end}` : day,
+      );
+      continue;
+    }
+    for (const s of dayShifts) {
+      const label = formatMatchedBlockLabel(s);
+      if (label) labels.push(label);
+    }
+  }
+  if (labels.length === 0) return null;
+  if (labels.length <= 8) return labels.join('; ');
+  return `${labels.slice(0, 6).join('; ')}; +${labels.length - 6} more`;
 }
 
 export type MatchFeeInvoiceDto = {
@@ -312,7 +414,10 @@ function mapInvoice(
     createdAt: row.createdAt.toISOString(),
     jobTitle: row.jobPosting.title,
     postingLocation: row.jobPosting.location?.trim() || null,
-    postingScheduleLabel: formatPostingScheduleLabel(row.jobPosting),
+    postingScheduleLabel: formatPostingScheduleLabel(
+      row.jobPosting,
+      row.application,
+    ),
     postingCompleted,
     supportTicket: row.supportTicket
       ? { id: row.supportTicket.id, status: row.supportTicket.status }

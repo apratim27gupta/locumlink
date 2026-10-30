@@ -338,7 +338,7 @@ export default function HostInvoicesPage() {
                     ) : null}
                     {invoice.postingScheduleLabel ? (
                       <div style={{ fontSize: 13, color: '#374151', marginTop: 6 }}>
-                        Shifts: {invoice.postingScheduleLabel}
+                        Matched shifts: {invoice.postingScheduleLabel}
                       </div>
                     ) : null}
                     {invoice.postingLocation ? (

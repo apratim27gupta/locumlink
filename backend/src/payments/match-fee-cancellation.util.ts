@@ -5,6 +5,7 @@ import {
 } from './match-fee.constants.js';
 import {
   applicationClaimedDates,
+  applicationClaimedShiftIds,
   formatCalendarDateForApi,
   getPostingRequiredDates,
   platformCalendarDateToday,
@@ -37,12 +38,26 @@ type PostingForDates = {
 type ApplicationForDates = {
   availabilityKind?: string | null;
   availableDates?: string[] | null;
+  requestedShiftIds?: string[] | null;
+  shiftClaims?: { shiftId: string }[] | null;
 };
 
 export function computeEarliestShiftDate(
   posting: PostingForDates,
   application: ApplicationForDates,
 ): string | null {
+  const shifts = posting.shifts ?? [];
+  if (posting.scheduleModel === 'SLOTS' && shifts.some((s) => s.id)) {
+    const claimedIds = new Set(
+      applicationClaimedShiftIds(application, posting),
+    );
+    const dates = shifts
+      .filter((s) => s.id && claimedIds.has(s.id))
+      .map((s) => formatCalendarDateForApi(s.date))
+      .filter((d): d is string => Boolean(d))
+      .sort();
+    if (dates.length > 0) return dates[0];
+  }
   const required = getPostingRequiredDates(posting);
   const claimed = applicationClaimedDates(application, required);
   const sorted = [...claimed].sort();

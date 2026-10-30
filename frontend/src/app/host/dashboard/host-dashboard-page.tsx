@@ -230,7 +230,10 @@ function getLocumDisplayName(app: ApplicationRecord): string {
     return user.email.split('@')[0];
 }
 
-function applicationStatusDisplay(status: ApplicationRecord['status']): {
+function applicationStatusDisplay(
+    status: ApplicationRecord['status'],
+    locumResponse?: ApplicationRecord['locumResponse'],
+): {
     label: string;
     dotColor: string;
     textColor: string;
@@ -239,7 +242,9 @@ function applicationStatusDisplay(status: ApplicationRecord['status']): {
         case 'SHORTLISTED':
             return { label: 'Shortlisted', dotColor: '#10B981', textColor: '#166534' };
         case 'CONFIRMED':
-            return { label: 'Confirmed', dotColor: '#6366F1', textColor: '#4338CA' };
+            return locumResponse === 'ACCEPTED'
+                ? { label: 'Confirmed / Matched', dotColor: '#6366F1', textColor: '#4338CA' }
+                : { label: 'Awaiting Locum Acceptance', dotColor: '#F59E0B', textColor: '#B45309' };
         case 'REJECTED':
             return { label: 'Rejected', dotColor: '#EF4444', textColor: '#991B1B' };
         case 'WITHDRAWN':
@@ -782,7 +787,7 @@ function InlineApplicantsTable({ job, applications, loading, onViewAll, }: {
 
       {!loading &&
             preview.map((app, idx) => {
-                const statusUi = applicationStatusDisplay(app.status);
+                const statusUi = applicationStatusDisplay(app.status, app.locumResponse);
                 const rawSpec = app.locumProfile.specialty ?? '';
                 const specText = String((app.locumProfile as any).specializationText ?? '');
                 const fromSpecText = specText.split(',').map((s: string) => s.trim()).filter(Boolean);
@@ -1296,7 +1301,7 @@ function JobPostingOverlay({ onClose, onSuccess, onDraftSaved, verified = false,
     const [startDateInput, setStartDateInput] = useState('');
     const [endDateInput, setEndDateInput] = useState('');
     // Multiple date ranges: each has its own date span + start + slot kind (SLOTS).
-    // secondHalfStart is set only when slotKind is HALF and a second 3.5h slot is added.
+    // secondHalfStart is set only when slotKind is HALF and a second half-day slot is added.
     type DaySlotConfig = {
         startTime: string;
         slotKind: SlotKindOrEmpty;

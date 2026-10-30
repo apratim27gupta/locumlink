@@ -72,7 +72,7 @@ export async function buildMatchFeeReceiptPdf(
     doc.fontSize(12).text('Match details', { underline: true });
     doc.fontSize(10).text(`Posting: ${data.jobTitle}`);
     if (data.postingScheduleLabel) {
-      doc.text(`Shifts: ${data.postingScheduleLabel}`);
+      doc.text(`Matched shifts: ${data.postingScheduleLabel}`);
     }
     if (data.postingLocation) {
       doc.text(`Location: ${data.postingLocation}`);

@@ -103,6 +103,13 @@ export function ApplicationInvoiceCell({
     textOverflow: 'ellipsis',
   };
   if (!link) {
+    if (app.status === 'CONFIRMED' && app.locumResponse === 'ACCEPTED') {
+      return (
+        <span style={{ fontSize: 12, color: '#047857', fontWeight: 600 }}>
+          Confirmed / Matched
+        </span>
+      );
+    }
     const awaitingLocum = app.status === 'CONFIRMED' && app.locumResponse !== 'ACCEPTED';
     return (
       <span style={{ fontSize: 12, color: '#9CA3AF' }}>

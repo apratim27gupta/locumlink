@@ -729,6 +729,7 @@ export const locumApi = {
         return res.json();
     },
     getDashboardStats: async (): Promise<{
+        totalAppliedShifts: number;
         totalAcceptedShifts: number;
         completedShifts: number;
     }> => {
@@ -741,6 +742,7 @@ export const locumApi = {
             throw nestHttpError(text, res.status, 'Loading dashboard stats');
         }
         return res.json() as Promise<{
+            totalAppliedShifts: number;
             totalAcceptedShifts: number;
             completedShifts: number;
         }>;

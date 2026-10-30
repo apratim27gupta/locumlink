@@ -37,11 +37,14 @@ export type JobScheduleLike = {
   scheduleModel?: unknown;
 };
 
-export const HALF_SLOT_HOURS = 3.5;
-export const FULL_SLOT_HOURS = 7;
-/** Half-day custom end may be at most 6h59m; 7h+ must use full-day. */
-export const MAX_HALF_SLOT_MINUTES = 6 * 60 + 59;
+export const HALF_SLOT_HOURS = 3.75;
+export const FULL_SLOT_HOURS = 7.5;
+/** Half-day custom end may be at most 7h29m; 7.5h+ must use full-day. */
+export const MAX_HALF_SLOT_MINUTES = 7 * 60 + 29;
 export const MAX_HALF_SLOT_HOURS = MAX_HALF_SLOT_MINUTES / 60;
+/** TEMP staging live QA match-fee amounts (prod was CA$250 full / half of that). */
+export const MATCH_FEE_HALF_CAD = 5;
+export const MATCH_FEE_FULL_CAD = 10;
 
 /** Preview end time from start HH:mm + hours (mirrors backend addClockHours). */
 export function addClockHours(startHm: string, hours: number): string | null {
@@ -65,10 +68,28 @@ export function clockToMinutes(hm: string): number | null {
   return h * 60 + min;
 }
 
-/** Default slot end: start + 7h (full) or + 3.5h (half). */
+/** Default slot end: start + 7.5h (full) or + 3.75h (half). */
 export function defaultSlotEnd(start: string, kind: 'HALF' | 'FULL' | ''): string | null {
   if (!start.trim() || (kind !== 'HALF' && kind !== 'FULL')) return null;
   return addClockHours(start, kind === 'HALF' ? HALF_SLOT_HOURS : FULL_SLOT_HOURS);
+}
+
+/** Match-fee tier hint from a single slot's duration (hours). */
+export function matchFeeTierChargeHint(durationHours: number): string {
+  const half = MATCH_FEE_HALF_CAD;
+  const full = MATCH_FEE_FULL_CAD;
+  if (!Number.isFinite(durationHours) || durationHours <= 0) {
+    return `Match fee: ${HALF_SLOT_HOURS}h or less is billed as a half-day slot (CA$${half}); over ${HALF_SLOT_HOURS}h is a full-day slot (CA$${full}).`;
+  }
+  if (durationHours <= HALF_SLOT_HOURS) {
+    return `This ${formatHoursLabel(durationHours)} window is billed as a half-day slot (CA$${half} match fee while testing).`;
+  }
+  return `This ${formatHoursLabel(durationHours)} window is billed as a full-day slot (CA$${full} match fee while testing).`;
+}
+
+function formatHoursLabel(hours: number): string {
+  const rounded = Math.round(hours * 100) / 100;
+  return `${rounded}h`;
 }
 
 /** Host-set end time when present, otherwise the default for the slot kind. */
@@ -105,13 +126,13 @@ export function slotEndValidationError(
     const hours = (e - s) / 60;
     const mins = Math.round(hours * 60);
     if (mins > MAX_HALF_SLOT_MINUTES) {
-      return 'Half-day slots can be at most 6 hours 59 minutes. Switch to full-day for longer shifts.';
+      return `Half-day slots can be at most 7 hours 29 minutes. Switch to full-day for ${FULL_SLOT_HOURS}h or longer shifts.`;
     }
   }
   return null;
 }
 
-/** True when two half-day windows overlap; ends default to start + 3.5h. */
+/** True when two half-day windows overlap; ends default to start + 3.75h. */
 export function halfSlotsOverlap(
   startA: string,
   startB: string,

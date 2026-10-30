@@ -258,15 +258,15 @@ function applicationStatusPresentation(app: MyApplication): {
 } {
     switch (app.status) {
         case 'CONFIRMED':
-            if (app.locumResponse === 'ACCEPTED')
+            if (app.locumResponse === 'ACCEPTED' || !!app.locumAcceptedAt)
                 return {
-                    label: 'Accepted',
+                    label: 'Confirmed / Matched',
                     bg: '#ECFDF5',
                     border: '#A7F3D0',
                     color: '#047857',
                 };
             return {
-                label: 'Host Confirmed',
+                label: 'Awaiting Your Acceptance',
                 bg: '#FFFBEB',
                 border: '#FDE68A',
                 color: '#B45309',
@@ -506,6 +506,7 @@ export default function LocumDashboard(props: {
     const [profileError, setProfileError] = useState<string | null>(null);
     const [applications, setApplications] = useState<MyApplication[]>([]);
     const [shiftStats, setShiftStats] = useState<{
+        totalAppliedShifts: number;
         totalAcceptedShifts: number;
         completedShifts: number;
     } | null>(null);
@@ -681,11 +682,29 @@ export default function LocumDashboard(props: {
         return false;
     });
     const locumAcceptedApplication = (a: MyApplication) => a.locumResponse === 'ACCEPTED' || !!a.locumAcceptedAt;
-    const acceptedFromApps = visibleApplications.filter(locumAcceptedApplication).length;
-    const completedFromApps = visibleApplications.filter(isCompletedApplication).length;
+    const appliedFromApps = visibleApplications.reduce((sum, app) => {
+        const ids = applicationCoveredShiftIds(app, app.jobPosting);
+        if (ids.length > 0) return sum + ids.length;
+        return sum + applicationCoveredDays(app, getPostingDays(app.jobPosting)).length;
+    }, 0);
+    const acceptedFromApps = visibleApplications
+        .filter(locumAcceptedApplication)
+        .reduce((sum, app) => {
+            const ids = applicationCoveredShiftIds(app, app.jobPosting);
+            if (ids.length > 0) return sum + ids.length;
+            return sum + applicationCoveredDays(app, getPostingDays(app.jobPosting)).length;
+        }, 0);
+    const completedFromApps = visibleApplications
+        .filter(isCompletedApplication)
+        .reduce((sum, app) => {
+            const ids = applicationCoveredShiftIds(app, app.jobPosting);
+            if (ids.length > 0) return sum + ids.length;
+            return sum + applicationCoveredDays(app, getPostingDays(app.jobPosting)).length;
+        }, 0);
     const recentCount = visibleApplications.filter(isRecentApplication).length;
     const upcomingCount = visibleApplications.filter(isUpcomingApplication).length;
     const ongoingCount = visibleApplications.filter(isOngoingApplication).length;
+    const appliedCount = shiftStats?.totalAppliedShifts ?? appliedFromApps;
     const acceptedCount = shiftStats?.totalAcceptedShifts ?? acceptedFromApps;
     const completedCount = shiftStats?.completedShifts ?? completedFromApps;
     const locumTabCounts: Record<(typeof LOCUM_TABS)[number]['id'], number> = {
@@ -835,7 +854,7 @@ export default function LocumDashboard(props: {
             background: '#fff',
             flexShrink: 0,
         }}>
-        <div style={{ flex: 1, flexShrink: 0, padding: '18px 18px', borderRight: '1px solid #e2e5ee' }}>
+        <div style={{ flex: 1, flexShrink: 0, padding: '18px 14px', borderRight: '1px solid #e2e5ee' }}>
           <p style={{
             margin: 0,
             fontFamily: 'Inter, sans-serif',
@@ -844,11 +863,24 @@ export default function LocumDashboard(props: {
             lineHeight: '140%',
             color: '#4A4A4A',
         }}>
-            Total Accepted Shifts :{' '}
+            Total Shifts Applied :{' '}
+            <span style={{ color: '#000' }}>{loading ? '-' : appliedCount}</span>
+          </p>
+        </div>
+        <div style={{ flex: 1, flexShrink: 0, padding: '18px 14px', borderRight: '1px solid #e2e5ee' }}>
+          <p style={{
+            margin: 0,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 'var(--font-weight-bold)',
+            fontSize: 'var(--font-heading)',
+            lineHeight: '140%',
+            color: '#4A4A4A',
+        }}>
+            Total Shifts Accepted :{' '}
             <span style={{ color: '#000' }}>{loading ? '-' : acceptedCount}</span>
           </p>
         </div>
-        <div style={{ flex: 1, flexShrink: 0, padding: '18px 18px' }}>
+        <div style={{ flex: 1, flexShrink: 0, padding: '18px 14px' }}>
           <p style={{
             margin: 0,
             fontFamily: 'Inter, sans-serif',
@@ -857,7 +889,7 @@ export default function LocumDashboard(props: {
             lineHeight: '140%',
             color: '#4A4A4A',
         }}>
-            Completed Shifts :{' '}
+            Total Shifts Completed :{' '}
             <span style={{ color: '#000' }}>{loading ? '-' : completedCount}</span>
           </p>
         </div>
@@ -1094,7 +1126,18 @@ export default function LocumDashboard(props: {
                 </span>
               </div>
               {appliedShiftLabel ? (
-                <div style={{ marginTop: 8, fontSize: 13, fontWeight: 600, color: '#0f1523' }}>
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: postingRemoved ? '#6B7280' : '#0F2A7A',
+                    background: postingRemoved ? '#F3F4F6' : 'rgba(15, 42, 122, 0.06)',
+                    border: postingRemoved ? '1px solid #E5E7EB' : '1px solid rgba(15, 42, 122, 0.15)',
+                    borderRadius: 6,
+                    padding: '8px 10px',
+                  }}
+                >
                   {appliedShiftLabel}
                 </div>
               ) : null}
@@ -1191,8 +1234,8 @@ export default function LocumDashboard(props: {
                         paddingTop: 14,
                         borderTop: '1px solid #F3F4F6',
                     }}>
-                  <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10 }}>
-                    The host confirmed this placement. Review the dates before you accept, or reject to decline.
+                  <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10, lineHeight: 1.5 }}>
+                    The host has offered you the following shifts. Please review and accept or decline.
                   </div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <button type="button" disabled={responding} onClick={() => {
@@ -1544,7 +1587,9 @@ export default function LocumDashboard(props: {
                 ) : (
                   <>
                     <p style={{ margin: '0 0 10px 0' }}>
-                      You will accept this shift for:
+                      {acceptItems.length > 0
+                        ? `You are accepting the following ${acceptItems.length} shifts:`
+                        : 'You are accepting the following shifts:'}
                     </p>
                     {acceptItems.length > 0 ? (
                       <SlotLabelChips items={acceptItems} tone="teal" />

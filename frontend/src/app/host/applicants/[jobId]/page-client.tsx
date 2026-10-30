@@ -109,14 +109,19 @@ function statusToUi(status: ApplicationRecord['status']): 'shortlisted' | 'pendi
     return status === 'SHORTLISTED' || status === 'CONFIRMED' ? 'shortlisted' : 'pending';
 }
 
-function statusBadgeLabel(status: ApplicationRecord['status']): string {
+function statusBadgeLabel(
+    status: ApplicationRecord['status'],
+    locumResponse?: ApplicationRecord['locumResponse'],
+): string {
     switch (status) {
         case 'APPLIED':
             return 'Pending';
         case 'SHORTLISTED':
             return 'Shortlisted';
         case 'CONFIRMED':
-            return 'Confirmed';
+            return locumResponse === 'ACCEPTED'
+                ? 'Confirmed / Matched'
+                : 'Awaiting Locum Acceptance';
         case 'REJECTED':
             return 'Rejected';
         case 'WITHDRAWN':
@@ -126,9 +131,15 @@ function statusBadgeLabel(status: ApplicationRecord['status']): string {
     }
 }
 
-function StatusBadge({ status }: { status: ApplicationRecord['status'] }) {
+function StatusBadge({
+    status,
+    locumResponse,
+}: {
+    status: ApplicationRecord['status'];
+    locumResponse?: ApplicationRecord['locumResponse'];
+}) {
     const dotColor = STATUS_COLOR[status] ?? '#6B7280';
-    const label = statusBadgeLabel(status);
+    const label = statusBadgeLabel(status, locumResponse);
     return (<span style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -1126,7 +1137,7 @@ export default function HostApplicantsPage(props: {
                   <SpecialityTags specialities={tags} />
 
                   
-                  <StatusBadge status={a.status} />
+                  <StatusBadge status={a.status} locumResponse={a.locumResponse} />
 
                   
                   <div style={{ display: 'flex' }}>
@@ -1343,7 +1354,9 @@ export default function HostApplicantsPage(props: {
                         : selected.status === 'SHORTLISTED'
                             ? 'Shortlisted'
                             : selected.status === 'CONFIRMED'
-                                ? 'Confirmed'
+                                ? (selected.locumResponse === 'ACCEPTED'
+                                    ? 'Confirmed / Matched'
+                                    : 'Awaiting Locum Acceptance')
                                 : selected.status === 'REJECTED'
                                     ? 'Rejected'
                                     : selected.status === 'WITHDRAWN'

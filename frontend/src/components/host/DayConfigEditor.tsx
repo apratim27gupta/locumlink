@@ -3,9 +3,13 @@
 import type React from 'react';
 import {
   addClockHours,
+  clockToMinutes,
   HALF_SLOT_HOURS,
   FULL_SLOT_HOURS,
+  MATCH_FEE_FULL_CAD,
+  MATCH_FEE_HALF_CAD,
   halfSlotsOverlap,
+  matchFeeTierChargeHint,
   slotEndValidationError,
 } from '@/lib/jobSchedule';
 import { hostJobFieldInp, hostJobFieldLbl } from '@/lib/hostJobPostingForm';
@@ -65,6 +69,18 @@ function EndTimeField({
 }) {
   const custom = Boolean(override?.trim());
   const error = slotEndValidationError(start, override, { slotKind });
+  const endHm = custom ? override?.trim() ?? '' : defaultEnd ?? '';
+  const startM = clockToMinutes(start);
+  const endM = endHm ? clockToMinutes(endHm) : null;
+  const durationHours =
+    startM != null && endM != null && endM > startM
+      ? (endM - startM) / 60
+      : slotKind === 'HALF'
+        ? HALF_SLOT_HOURS
+        : slotKind === 'FULL'
+          ? FULL_SLOT_HOURS
+          : 0;
+  const chargeHint = matchFeeTierChargeHint(durationHours);
   return (
     <div style={{ marginTop: 8 }}>
       <label style={lbl}>End time</label>
@@ -100,25 +116,34 @@ function EndTimeField({
             </button>
           </>
         ) : slotKind === 'HALF' ? (
-          `Defaults to ${HALF_SLOT_HOURS} hours; half-day can be at most 6 hours 59 minutes.`
+          `Defaults to ${HALF_SLOT_HOURS} hours; half-day can be at most 7 hours 29 minutes.`
         ) : (
-          'Defaults from start time; change if your clinic hours differ.'
+          `Defaults to ${FULL_SLOT_HOURS} hours; change if your clinic hours differ.`
         )}
       </div>
       {error ? (
         <div style={{ fontSize: 12, color: '#B42318', marginTop: 4, fontWeight: 600 }}>
           {error}
         </div>
-      ) : null}
+      ) : (
+        <div style={{ fontSize: 12, color: '#9A3412', marginTop: 6, lineHeight: 1.45, fontWeight: 600 }}>
+          {chargeHint}
+          {custom ? (
+            <span style={{ display: 'block', fontWeight: 500, color: '#B45309', marginTop: 2 }}>
+              Shortening the window does not reduce the fee below that tier: ≤{HALF_SLOT_HOURS}h → CA${MATCH_FEE_HALF_CAD} half-day; over {HALF_SLOT_HOURS}h → CA${MATCH_FEE_FULL_CAD} full-day (testing amounts).
+            </span>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
 
 /**
- * One day of work: Full (7h) or Half (1–2 × 3.5h). Reused for continuous,
+ * One day of work: Full (7.5h) or Half (1–2 × 3.75h). Reused for continuous,
  * each range, and specific-date (shared or per-day) configs.
- * End times default to start + slot hours; pass the `on*EndChange` props to let
- * the host override them (billing still uses the nominal slot hours).
+ * End times default to start + slot hours; hosts can override and are warned
+ * about half/full match-fee tiers from the resulting duration.
  */
 export function DayConfigEditor({
   slotKind,
@@ -227,7 +252,7 @@ export function DayConfigEditor({
         >
           <div>Full day</div>
           <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.8, marginTop: 2 }}>
-            7hrs or more · one slot
+            {FULL_SLOT_HOURS} hrs · one slot
           </div>
         </button>
         <button
@@ -237,7 +262,7 @@ export function DayConfigEditor({
         >
           <div>Half day</div>
           <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.8, marginTop: 2 }}>
-            under 7 hrs · up to 2 slots per day
+            {HALF_SLOT_HOURS} hrs · up to 2 slots per day
           </div>
         </button>
       </div>
@@ -267,7 +292,7 @@ export function DayConfigEditor({
               }}
             >
               <span style={{ fontSize: 12, fontWeight: 700, color: '#1B6F86' }}>
-                Half-day 1 (3.5 hrs)
+                Half-day 1 ({HALF_SLOT_HOURS} hrs)
               </span>
             </div>
             <div>
@@ -293,7 +318,7 @@ export function DayConfigEditor({
                 }}
               >
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#1B6F86' }}>
-                  Half-day 2 (3.5 hrs)
+                  Half-day 2 ({HALF_SLOT_HOURS} hrs)
                 </span>
                 <button
                   type="button"
@@ -331,7 +356,7 @@ export function DayConfigEditor({
 
           {canAddSecond ? (
             <button type="button" onClick={onAddSecond} style={halfSlotAddBtnStyle}>
-              + Add second half-day (3.5 hrs)
+              + Add second half-day ({HALF_SLOT_HOURS} hrs)
             </button>
           ) : null}
         </div>

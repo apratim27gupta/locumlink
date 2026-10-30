@@ -120,7 +120,7 @@ export const HOST_PHYSICIAN_GUIDE: ResourceGuide = {
     { type: 'h', text: 'Step 6 - Matching Fee' },
     {
       type: 'p',
-      text: 'Posting opportunities is free. A $250 matching fee, plus applicable taxes, applies per successful confirmed match. Multiple shifts covered by the same locum within one opportunity count as one match. Each additional locum represents another match. The matching fee is paid by the host; locum physicians use LocumLink free of charge.',
+      text: 'Posting opportunities is free. A platform match fee (CA$5 for up to 3.75 claimed hours, or CA$10 when more than 3.75 hours are claimed — testing amounts), plus applicable taxes, applies per successful confirmed match. Multiple shifts covered by the same locum within one opportunity count as one match. Each additional locum represents another match. The matching fee is paid by the host; locum physicians use LocumLink free of charge.',
     },
     { type: 'h', text: 'Step 7 - GP Locum Application & MSI Approval' },
     {

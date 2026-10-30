@@ -414,8 +414,8 @@ export function parseJobShifts(
 }
 
 /**
- * Validate SLOTS schedule: per day either 1 full (7h) or 1–2 halves (3.5h each),
- * total <= 7h. End time defaults to start + slot kind unless the host sets one.
+ * Validate SLOTS schedule: per day either 1 full (7.5h) or 1–2 halves (3.75h each),
+ * total <= 7.5h. End time defaults to start + slot kind unless the host sets one.
  */
 export function parseJobShiftsSlots(
   shifts: JobSlotShiftInput[],
@@ -479,7 +479,7 @@ export function parseJobShiftsSlots(
       const durationMins = Math.round(durationHrs * 60);
       if (durationMins > MAX_HALF_SLOT_MINUTES) {
         throw new BadRequestException(
-          `Day ${cal}: half-day slots can be at most 6 hours 59 minutes. Switch to full-day for longer shifts.`,
+          `Day ${cal}: half-day slots can be at most 7 hours 29 minutes. Switch to full-day for ${FULL_SLOT_HOURS}h or longer shifts.`,
         );
       }
     }

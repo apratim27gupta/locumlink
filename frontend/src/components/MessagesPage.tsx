@@ -1687,14 +1687,22 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                         alignItems: 'center',
                         padding: '8px 16px',
                         borderRadius: 8,
-                        background: '#ECFDF5',
-                        border: '1px solid #A7F3D0',
-                        color: '#047857',
+                        background: threadHostApplication?.locumResponse === 'ACCEPTED'
+                            ? '#ECFDF5'
+                            : '#FFFBEB',
+                        border: threadHostApplication?.locumResponse === 'ACCEPTED'
+                            ? '1px solid #A7F3D0'
+                            : '1px solid #FDE68A',
+                        color: threadHostApplication?.locumResponse === 'ACCEPTED'
+                            ? '#047857'
+                            : '#B45309',
                         fontSize: 13,
                         fontWeight: 700,
                         fontFamily: 'inherit',
                     }}>
-                          Confirmed
+                          {threadHostApplication?.locumResponse === 'ACCEPTED'
+                            ? 'Confirmed / Matched'
+                            : 'Awaiting Locum Acceptance'}
                         </span>)) : null}
                       <div style={{ position: 'relative', flexShrink: 0 }} ref={threadMenuRef}>
                         <button type="button" aria-label="Conversation options" onClick={() => setThreadMenuOpen((v) => !v)} style={{
