@@ -680,6 +680,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
     const [threadHostApplication, setThreadHostApplication] = useState<{
         id: string;
         status: ApplicationRecord['status'];
+        locumResponse: ApplicationRecord['locumResponse'];
     } | null>(null);
     const [confirmLocumBusy, setConfirmLocumBusy] = useState(false);
     const [showConfirmJobOverlay, setShowConfirmJobOverlay] = useState(false);
@@ -896,7 +897,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                 return;
             const app = applications.find((a) => a.locumProfile.userId === selectedPartnerId);
             setThreadHostApplication(app
-                ? { id: app.id, status: app.status }
+                ? { id: app.id, status: app.status, locumResponse: app.locumResponse }
                 : null);
         })
             .catch(() => {
