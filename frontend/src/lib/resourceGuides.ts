@@ -61,7 +61,7 @@ export const LOCUM_PHYSICIAN_GUIDE: ResourceGuide = {
     { type: 'h', text: 'Step 6 - Accept Your Placement' },
     {
       type: 'p',
-      text: 'The host selects and offers you the relevant shifts. Review dates, working hours and remuneration before accepting or declining. Once accepted, your placement becomes Confirmed / Matched.',
+      text: 'The host selects and offers you the relevant shifts. Review dates, working hours and remuneration before accepting or declining. Once accepted, your placement becomes Matched.',
     },
     { type: 'h', text: 'Step 7 - GP Locum Application & MSI Approval' },
     {

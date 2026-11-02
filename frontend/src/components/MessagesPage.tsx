@@ -1702,7 +1702,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                         fontFamily: 'inherit',
                     }}>
                           {threadHostApplication?.locumResponse === 'ACCEPTED'
-                            ? 'Confirmed / Matched'
+                            ? 'Matched'
                             : 'Awaiting Locum Acceptance'}
                         </span>)) : null}
                       <div style={{ position: 'relative', flexShrink: 0 }} ref={threadMenuRef}>

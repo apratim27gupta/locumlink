@@ -260,7 +260,7 @@ function applicationStatusPresentation(app: MyApplication): {
         case 'CONFIRMED':
             if (app.locumResponse === 'ACCEPTED' || !!app.locumAcceptedAt)
                 return {
-                    label: 'Confirmed / Matched',
+                    label: 'Matched',
                     bg: '#ECFDF5',
                     border: '#A7F3D0',
                     color: '#047857',

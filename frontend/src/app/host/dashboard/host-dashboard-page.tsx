@@ -243,8 +243,8 @@ function applicationStatusDisplay(
             return { label: 'Shortlisted', dotColor: '#10B981', textColor: '#166534' };
         case 'CONFIRMED':
             return locumResponse === 'ACCEPTED'
-                ? { label: 'Confirmed / Matched', dotColor: '#6366F1', textColor: '#4338CA' }
-                : { label: 'Awaiting Locum Acceptance', dotColor: '#F59E0B', textColor: '#B45309' };
+                ? { label: 'Matched', dotColor: '#6366F1', textColor: '#4338CA' }
+                : { label: 'Awaiting Locum\nAcceptance', dotColor: '#F59E0B', textColor: '#B45309' };
         case 'REJECTED':
             return { label: 'Rejected', dotColor: '#EF4444', textColor: '#991B1B' };
         case 'WITHDRAWN':
@@ -848,17 +848,20 @@ function InlineApplicantsTable({ job, applications, loading, onViewAll, }: {
                     {s}
                   </span>))}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: statusUi.label.includes('\n') ? 'flex-start' : 'center', gap: 6, minWidth: 0 }}>
                 <span style={{
                         width: 7,
                         height: 7,
                         borderRadius: '50%',
                         background: statusUi.dotColor,
                         flexShrink: 0,
+                        marginTop: statusUi.label.includes('\n') ? 5 : 0,
                     }}/>
                 <span style={{
                         fontSize: 'var(--font-body)',
                         color: statusUi.textColor,
+                        whiteSpace: statusUi.label.includes('\n') ? 'pre-line' : 'nowrap',
+                        lineHeight: statusUi.label.includes('\n') ? 1.25 : undefined,
                     }}>
                   {statusUi.label}
                 </span>

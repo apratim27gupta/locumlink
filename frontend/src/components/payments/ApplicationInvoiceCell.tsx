@@ -106,14 +106,14 @@ export function ApplicationInvoiceCell({
     if (app.status === 'CONFIRMED' && app.locumResponse === 'ACCEPTED') {
       return (
         <span style={{ fontSize: 12, color: '#047857', fontWeight: 600 }}>
-          Confirmed / Matched
+          Matched
         </span>
       );
     }
     const awaitingLocum = app.status === 'CONFIRMED' && app.locumResponse !== 'ACCEPTED';
     return (
-      <span style={{ fontSize: 12, color: '#9CA3AF' }}>
-        {awaitingLocum ? 'Awaiting Locum Acceptance' : '-'}
+      <span style={{ fontSize: 12, color: '#9CA3AF', whiteSpace: awaitingLocum ? 'pre-line' : undefined, lineHeight: awaitingLocum ? 1.25 : undefined }}>
+        {awaitingLocum ? 'Awaiting Locum\nAcceptance' : '-'}
       </span>
     );
   }

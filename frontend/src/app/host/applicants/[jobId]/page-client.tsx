@@ -89,7 +89,7 @@ const APPLICANT_TABLE_COLUMNS: { label: string; title?: string; track: string }[
     { label: 'Availability', track: 'minmax(150px, 1.1fr)' },
     { label: 'Yrs exp', title: 'Years of experience', track: 'minmax(64px, 0.4fr)' },
     { label: 'Specialization', track: 'minmax(130px, 1fr)' },
-    { label: 'Status', track: 'minmax(120px, 0.8fr)' },
+    { label: 'Status', track: 'minmax(128px, 0.85fr)' },
     { label: 'Response', title: 'Locum response', track: 'minmax(96px, 0.7fr)' },
     { label: 'Invoice', track: 'minmax(120px, 0.8fr)' },
     { label: 'GP Locum Form', title: 'GP Locum Application', track: 'minmax(130px, 0.85fr)' },
@@ -120,8 +120,8 @@ function statusBadgeLabel(
             return 'Shortlisted';
         case 'CONFIRMED':
             return locumResponse === 'ACCEPTED'
-                ? 'Confirmed / Matched'
-                : 'Awaiting Locum Acceptance';
+                ? 'Matched'
+                : 'Awaiting Locum\nAcceptance';
         case 'REJECTED':
             return 'Rejected';
         case 'WITHDRAWN':
@@ -140,9 +140,10 @@ function StatusBadge({
 }) {
     const dotColor = STATUS_COLOR[status] ?? '#6B7280';
     const label = statusBadgeLabel(status, locumResponse);
+    const multiline = label.includes('\n');
     return (<span style={{
             display: 'inline-flex',
-            alignItems: 'center',
+            alignItems: multiline ? 'flex-start' : 'center',
             gap: 7,
             padding: '5px 10px',
             border: '1px solid #D1D5DB',
@@ -150,7 +151,10 @@ function StatusBadge({
             fontSize: 14,
             fontWeight: 500,
             color: '#6B7280',
-            whiteSpace: 'nowrap',
+            whiteSpace: multiline ? 'pre-line' : 'nowrap',
+            lineHeight: multiline ? '1.25' : undefined,
+            maxWidth: '100%',
+            boxSizing: 'border-box',
         }}>
       <span style={{
             width: 8,
@@ -158,6 +162,7 @@ function StatusBadge({
             borderRadius: '50%',
             flexShrink: 0,
             background: dotColor,
+            marginTop: multiline ? 4 : 0,
         }}/>
       {label}
     </span>);
@@ -1355,7 +1360,7 @@ export default function HostApplicantsPage(props: {
                             ? 'Shortlisted'
                             : selected.status === 'CONFIRMED'
                                 ? (selected.locumResponse === 'ACCEPTED'
-                                    ? 'Confirmed / Matched'
+                                    ? 'Matched'
                                     : 'Awaiting Locum Acceptance')
                                 : selected.status === 'REJECTED'
                                     ? 'Rejected'
