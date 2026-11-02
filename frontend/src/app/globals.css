@@ -797,13 +797,23 @@
   justify-content: center;
 }
 
+.home-landing-footer-bottom {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 934px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
 .home-landing-footer-credits {
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 934px;
   align-items: center;
   justify-content: center;
-  gap: 0;
   text-align: center;
 }
 
@@ -824,6 +834,57 @@
 
 .home-landing-powered-by {
   font-size: 14px;
+  color: #8a8a8b;
+}
+
+.home-landing-volta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  text-decoration: none;
+  color: inherit;
+  text-align: center;
+}
+
+.home-landing-volta:hover .home-landing-volta-label,
+.home-landing-volta:hover .home-landing-volta-tagline {
+  color: #404041;
+}
+
+.home-landing-volta:focus-visible {
+  outline: 2px solid rgba(30, 63, 175, 0.45);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.home-landing-volta-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 12px;
+}
+
+.home-landing-volta-logo {
+  width: 64px;
+  height: auto;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.home-landing-volta-label,
+.home-landing-volta-tagline {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #606061;
+}
+
+.home-landing-volta-tagline {
   color: #8a8a8b;
 }
 
