@@ -307,26 +307,49 @@ export function HomeLandingView({ interactive = true, rootStyle, initialActiveJo
                 {t}
               </span>))}
           </div>
-          <div className="home-landing-footer-credits">
-            <p className="home-landing-copyright">
-              © LocumLink 2026
-              <span className="home-landing-credits-sep" aria-hidden>
-                ·
-              </span>
-              <span className="home-landing-powered-by">
-                Developed by Aebeolle Consulting
-              </span>
-            </p>
-          </div>
-          {interactive ? (
-            <div className="home-landing-footer-bar">
-              <SocialLinks />
-              <HomeLandingLegalLinks />
-              <Link href="/admin/login" className="home-admin-login-btn home-admin-login-btn--inline">
-                Admin login
-              </Link>
+          <a
+            href="https://voltaeffect.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="home-landing-volta"
+            aria-label="A Volta Resident Company — Volta | Where builders get built in Atlantic Canada"
+          >
+            <span className="home-landing-volta-row">
+              <Image
+                src="/volta.svg"
+                alt=""
+                width={64}
+                height={26}
+                className="home-landing-volta-logo"
+              />
+              <span className="home-landing-volta-label">A Volta Resident Company</span>
+            </span>
+            <span className="home-landing-volta-tagline">
+              Volta | Where builders get built in Atlantic Canada
+            </span>
+          </a>
+          <div className="home-landing-footer-bottom">
+            {interactive ? (
+              <div className="home-landing-footer-bar">
+                <SocialLinks />
+                <HomeLandingLegalLinks />
+                <Link href="/admin/login" className="home-admin-login-btn home-admin-login-btn--inline">
+                  Admin login
+                </Link>
+              </div>
+            ) : null}
+            <div className="home-landing-footer-credits">
+              <p className="home-landing-copyright">
+                © LocumLink 2026
+                <span className="home-landing-credits-sep" aria-hidden>
+                  ·
+                </span>
+                <span className="home-landing-powered-by">
+                  Developed by Aebeolle Consulting
+                </span>
+              </p>
             </div>
-          ) : null}
+          </div>
         </footer>
       </main>
     </div>);
