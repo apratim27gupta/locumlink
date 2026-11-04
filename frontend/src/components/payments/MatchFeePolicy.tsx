@@ -1,6 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
+import { MATCH_FEE_FULL_CAD, MATCH_FEE_HALF_CAD } from '@/lib/jobSchedule';
 
 export type MatchFeePolicyContent = {
   role: 'HOST' | 'LOCUM';
@@ -197,6 +198,47 @@ const HOST_REFUND_MIN_DAYS_BEFORE_START = 14; // policy: 14 days or more before 
 /** Always two decimals with Canadian dollar prefix: "CA$10.00", "CA$11.40". */
 export function formatCents(cents: number): string {
   return `CA$${(cents / 100).toFixed(2)}`;
+}
+
+/**
+ * Staging still invoices CA$5 / CA$10 for live QA, but host UI shows CA$125 / CA$250.
+ * Map known QA fee amounts (and proportional tax/refunds) for display only.
+ */
+export function displayMatchFeeAmountCents(amountCents: number): number {
+  if (amountCents === 500) return MATCH_FEE_HALF_CAD * 100;
+  if (amountCents === 1000) return MATCH_FEE_FULL_CAD * 100;
+  return amountCents;
+}
+
+export function displayMatchFeeMoney(invoice: {
+  amountCents: number;
+  taxCents: number;
+  totalCents?: number;
+  refundedCents?: number | null;
+}): {
+  amountCents: number;
+  taxCents: number;
+  totalCents: number;
+  refundedCents: number;
+} {
+  const displayAmount = displayMatchFeeAmountCents(invoice.amountCents);
+  const refunded = invoice.refundedCents ?? 0;
+  if (displayAmount === invoice.amountCents || invoice.amountCents <= 0) {
+    return {
+      amountCents: invoice.amountCents,
+      taxCents: invoice.taxCents,
+      totalCents: invoice.totalCents ?? invoice.amountCents + invoice.taxCents,
+      refundedCents: refunded,
+    };
+  }
+  const scale = displayAmount / invoice.amountCents;
+  const taxCents = Math.round(invoice.taxCents * scale);
+  return {
+    amountCents: displayAmount,
+    taxCents,
+    totalCents: displayAmount + taxCents,
+    refundedCents: Math.round(refunded * scale),
+  };
 }
 
 export function hstFor(feeCents: number, taxRateBps: number): number {

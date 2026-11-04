@@ -5,14 +5,15 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import DashLayout from '@/components/DashLayout';
 import {
+  displayMatchFeeMoney,
   formatCents,
   formatTaxRate,
   MatchFeePolicyModal,
   MatchFeeStatusChip,
+  type MatchFeePolicyContent,
 } from '@/components/payments/MatchFeePolicy';
 import { MatchFeeEventTimeline } from '@/components/payments/MatchFeeEventTimeline';
 import { matchFeeOutlineButtonStyle } from '@/components/payments/MatchFeeRefundConfirmModal';
-import type { MatchFeePolicyContent } from '@/components/payments/MatchFeePolicy';
 import { HOST_DASH_NAV } from '@/lib/hostNav';
 import { notifyMatchFeesUpdated } from '@/lib/matchFeeUpdatedEvent';
 import { fetchAllPaginated, hostApi, type MatchFeeInvoice } from '@/lib/api';
@@ -102,7 +103,7 @@ export default function HostInvoicesPage() {
           setPaymentNotice({
             tone: 'success',
             title: 'Payment received',
-            message: `Your ${formatCents(invoice.totalCents)} match fee for ${invoice.jobTitle} is paid. You can download the receipt from this page.`,
+            message: `Your ${formatCents(displayMatchFeeMoney(invoice).totalCents)} match fee for ${invoice.jobTitle} is paid. You can download the receipt from this page.`,
           });
           await load();
           return;
@@ -259,6 +260,7 @@ export default function HostInvoicesPage() {
               const busy = payingId === invoice.id;
               const postingHref = `/host/applicants/${encodeURIComponent(invoice.jobPostingId)}`;
               const focused = invoice.id === focusInvoiceId;
+              const money = displayMatchFeeMoney(invoice);
               return (
                 <div
                   key={invoice.id}
@@ -357,17 +359,17 @@ export default function HostInvoicesPage() {
                     }}
                   >
                     <span style={{ fontWeight: 700, fontSize: 16, color: '#111827' }}>
-                      {formatCents(invoice.totalCents)}
+                      {formatCents(money.totalCents)}
                     </span>
-                    {invoice.taxCents > 0 ? (
+                    {money.taxCents > 0 ? (
                       <span style={{ fontSize: 13, color: '#6B7280' }}>
-                        {formatCents(invoice.amountCents)} fee +{' '}
-                        {formatCents(invoice.taxCents)} HST ({formatTaxRate(invoice.taxRateBps)})
+                        {formatCents(money.amountCents)} fee +{' '}
+                        {formatCents(money.taxCents)} HST ({formatTaxRate(invoice.taxRateBps)})
                       </span>
                     ) : null}
-                    {(invoice.refundedCents ?? 0) > 0 ? (
+                    {money.refundedCents > 0 ? (
                       <span style={{ fontSize: 13, color: '#B45309', fontWeight: 600 }}>
-                        {formatCents(invoice.refundedCents ?? 0)} refunded
+                        {formatCents(money.refundedCents)} refunded
                       </span>
                     ) : null}
                     <span style={{ fontSize: 13, color: '#6B7280' }}>
@@ -389,7 +391,7 @@ export default function HostInvoicesPage() {
                       }}
                     >
                       Refund in progress. Once approved,{' '}
-                      {formatCents(invoice.totalCents - (invoice.refundedCents ?? 0))} will be
+                      {formatCents(money.totalCents - money.refundedCents)} will be
                       refunded to your original payment method in about 10-14 business days.
                     </div>
                   ) : null}
@@ -404,7 +406,7 @@ export default function HostInvoicesPage() {
                         marginTop: 10,
                       }}
                     >
-                      {formatCents(invoice.refundedCents ?? 0)} will be refunded to your original
+                      {formatCents(money.refundedCents)} will be refunded to your original
                       payment method in about 10-14 business days.
                     </div>
                   ) : null}

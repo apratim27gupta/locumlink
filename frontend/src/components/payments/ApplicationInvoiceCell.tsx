@@ -11,6 +11,7 @@ import {
 } from '@/lib/api';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import {
+  displayMatchFeeMoney,
   formatCents,
   matchFeeStatusColor,
   matchFeeStatusLabel,
@@ -139,6 +140,7 @@ export function ApplicationInvoiceCell({
       </div>
     );
   }
+  const displayMoney = displayMatchFeeMoney(invoice);
   const payable = invoice.status === 'PENDING' || invoice.status === 'OVERDUE';
   if (payable) {
     const overdue = invoice.status === 'OVERDUE';
@@ -162,7 +164,7 @@ export function ApplicationInvoiceCell({
             whiteSpace: 'nowrap',
           }}
         >
-          Pay {formatCents(invoice.totalCents)}
+          Pay {formatCents(displayMoney.totalCents)}
         </Link>
         {overdue ? <div style={{ ...subStyle, color: '#B91C1C' }}>Overdue</div> : null}
       </div>
