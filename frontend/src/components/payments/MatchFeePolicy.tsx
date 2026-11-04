@@ -1,7 +1,6 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import { MATCH_FEE_FULL_CAD, MATCH_FEE_HALF_CAD } from '@/lib/jobSchedule';
 
 export type MatchFeePolicyContent = {
   role: 'HOST' | 'LOCUM';
@@ -200,26 +199,13 @@ export function formatCents(cents: number): string {
   return `CA$${(cents / 100).toFixed(2)}`;
 }
 
-/**
- * Map legacy staging QA fee amounts (CA$5 / CA$10) to production rates for display.
- * New invoices already use CA$125 / CA$250.
- */
+/** Pass-through helper (amounts come from the invoice row as charged). */
 export function displayMatchFeeAmountCents(amountCents: number): number {
-  if (amountCents === 500) return MATCH_FEE_HALF_CAD * 100;
-  if (amountCents === 1000) return MATCH_FEE_FULL_CAD * 100;
   return amountCents;
 }
 
-/** Rewrite legacy QA dollar strings in stored invoice event details. */
 export function displayMatchFeeEventDetail(detail: string | null | undefined): string | null {
-  if (!detail) return null;
-  return detail
-    .replace(/CA\$11\.40/g, 'CA$285.00')
-    .replace(/CA\$5\.70/g, 'CA$142.50')
-    .replace(/CA\$10\.00/g, 'CA$250.00')
-    .replace(/CA\$5\.00/g, 'CA$125.00')
-    .replace(/CA\$1\.40/g, 'CA$35.00')
-    .replace(/CA\$0\.70/g, 'CA$17.50');
+  return detail ?? null;
 }
 
 export function displayMatchFeeMoney(invoice: {
@@ -233,23 +219,12 @@ export function displayMatchFeeMoney(invoice: {
   totalCents: number;
   refundedCents: number;
 } {
-  const displayAmount = displayMatchFeeAmountCents(invoice.amountCents);
   const refunded = invoice.refundedCents ?? 0;
-  if (displayAmount === invoice.amountCents || invoice.amountCents <= 0) {
-    return {
-      amountCents: invoice.amountCents,
-      taxCents: invoice.taxCents,
-      totalCents: invoice.totalCents ?? invoice.amountCents + invoice.taxCents,
-      refundedCents: refunded,
-    };
-  }
-  const scale = displayAmount / invoice.amountCents;
-  const taxCents = Math.round(invoice.taxCents * scale);
   return {
-    amountCents: displayAmount,
-    taxCents,
-    totalCents: displayAmount + taxCents,
-    refundedCents: Math.round(refunded * scale),
+    amountCents: invoice.amountCents,
+    taxCents: invoice.taxCents,
+    totalCents: invoice.totalCents ?? invoice.amountCents + invoice.taxCents,
+    refundedCents: refunded,
   };
 }
 
