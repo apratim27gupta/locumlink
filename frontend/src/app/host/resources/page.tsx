@@ -46,7 +46,7 @@ const DOCUMENTS = [
     {
         title: 'Locum Program Guidelines',
         description: 'Comprehensive guidelines for the Locum Program, last updated April 2024.',
-        url: 'https://msi.medavie.bluecross.ca/wp-content/uploads/sites/3/2024/04/FINAL-Locum-Program-Guidelines-Apr-25-2024.pdf',
+        url: 'https://doctorsns.com/contract-and-support/master-agreement/programs-funding/locum-program',
         icon: 'pdf' as const,
     },
     {
