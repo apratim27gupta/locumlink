@@ -567,8 +567,8 @@ export class PaymentsService {
       paymentMethods,
       emphasis:
         role === 'LOCUM'
-          ? 'LocumLink is free for locums. The host pays a match fee (CA$5 or CA$10) after you accept a confirmed placement, based on total hours claimed.'
-          : 'Free to post. Pay CA$5 or CA$10 per matched locum when they accept your confirmed match. Fees stay as invoiced, during the placement. After the last shift on an invoice, you can raise a ticket if you have concerns and LocumLink will follow up.',
+          ? `LocumLink is free for locums. The host pays a match fee (CA$${MATCH_FEE_POLICY.matchFeeHalfCad} or CA$${MATCH_FEE_POLICY.matchFeeFullCad}) after you accept a confirmed placement, based on total hours claimed.`
+          : `Free to post. Pay CA$${MATCH_FEE_POLICY.matchFeeHalfCad} or CA$${MATCH_FEE_POLICY.matchFeeFullCad} per matched locum when they accept your confirmed match. Fees stay as invoiced, during the placement. After the last shift on an invoice, you can raise a ticket if you have concerns and LocumLink will follow up.`,
     };
   }
 

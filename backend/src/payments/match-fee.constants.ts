@@ -65,23 +65,30 @@ export function matchFeeTierFromHours(totalHours: number): MatchFeeTier {
     : 'FULL';
 }
 
+/**
+ * Display-only amounts for policy / FAQ copy.
+ * Charging still uses MATCH_FEE_HALF_CENTS / MATCH_FEE_FULL_CENTS (staging QA: $5 / $10).
+ */
+export const MATCH_FEE_HALF_DISPLAY_CAD = 125;
+export const MATCH_FEE_FULL_DISPLAY_CAD = 250;
+
 export const MATCH_FEE_POLICY = {
   locumFee: 'Free',
   hostPostingFee: 'Free to post',
-  matchFeeHalfCad: 5,
-  matchFeeFullCad: 10,
-  matchFeeAmountCad: 10,
+  matchFeeHalfCad: MATCH_FEE_HALF_DISPLAY_CAD,
+  matchFeeFullCad: MATCH_FEE_FULL_DISPLAY_CAD,
+  matchFeeAmountCad: MATCH_FEE_FULL_DISPLAY_CAD,
   /** Discrete bullets shown under "Match fee". */
   matchFeePoints: [
     'When a locum confirms a match on your posting, LocumLink invoices a platform match fee per locum.',
-    `CA$${MATCH_FEE_HALF_CENTS / 100} when the locum claims up to ${HALF_SLOT_HOURS} hours total.`,
-    `CA$${MATCH_FEE_FULL_CENTS / 100} when the locum claims more than ${HALF_SLOT_HOURS} hours total.`,
+    `CA$${MATCH_FEE_HALF_DISPLAY_CAD} when the locum claims up to ${HALF_SLOT_HOURS} hours total.`,
+    `CA$${MATCH_FEE_FULL_DISPLAY_CAD} when the locum claims more than ${HALF_SLOT_HOURS} hours total.`,
     '14% HST is added to each match fee invoice.',
-    `If the locum increases availability from 1 half-day slot to more after the CA$${MATCH_FEE_HALF_CENTS / 100} invoice was created, an additional CA$${MATCH_FEE_HALF_CENTS / 100} invoice will be created after the shifts are completed.`,
+    `If the locum increases availability from 1 half-day slot to more after the CA$${MATCH_FEE_HALF_DISPLAY_CAD} invoice was created, an additional CA$${MATCH_FEE_HALF_DISPLAY_CAD} invoice will be created after the shifts are completed.`,
   ],
   /** @deprecated Prefer matchFeePoints; kept for older clients. */
   matchFeeDescription:
-    `When a locum confirms a match on your posting, a platform match fee is invoiced per locum: CA$${MATCH_FEE_HALF_CENTS / 100} for up to ${HALF_SLOT_HOURS} hours total claimed, or CA$${MATCH_FEE_FULL_CENTS / 100} when the locum claims more than ${HALF_SLOT_HOURS} hours. 14% HST is added to each invoice.`,
+    `When a locum confirms a match on your posting, a platform match fee is invoiced per locum: CA$${MATCH_FEE_HALF_DISPLAY_CAD} for up to ${HALF_SLOT_HOURS} hours total claimed, or CA$${MATCH_FEE_FULL_DISPLAY_CAD} when the locum claims more than ${HALF_SLOT_HOURS} hours. 14% HST is added to each invoice.`,
   perLocumFeeRule:
     'Each matched locum generates a separate invoice. Another locum on the same posting means another match fee at the same rates.',
   dueRule:
@@ -112,7 +119,7 @@ export const MATCH_FEE_POLICY = {
     {
       id: 'post_completion_tier_top_up',
       summary:
-        `If the locum increases availability from 1 half-day slot to more after the CA$${MATCH_FEE_HALF_CENTS / 100} invoice was created, an additional CA$${MATCH_FEE_HALF_CENTS / 100} invoice will be created after the shifts are completed. That top-up follows the same payment and cancellation rules as the original match fee.`,
+        `If the locum increases availability from 1 half-day slot to more after the CA$${MATCH_FEE_HALF_DISPLAY_CAD} invoice was created, an additional CA$${MATCH_FEE_HALF_DISPLAY_CAD} invoice will be created after the shifts are completed. That top-up follows the same payment and cancellation rules as the original match fee.`,
     },
     {
       id: 'post_completion_tickets',

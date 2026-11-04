@@ -42,9 +42,12 @@ export const FULL_SLOT_HOURS = 7.5;
 /** Half-day custom end may be at most 7h29m; 7.5h+ must use full-day. */
 export const MAX_HALF_SLOT_MINUTES = 7 * 60 + 29;
 export const MAX_HALF_SLOT_HOURS = MAX_HALF_SLOT_MINUTES / 60;
-/** TEMP staging live QA match-fee amounts (prod was CA$250 full / half of that). */
-export const MATCH_FEE_HALF_CAD = 5;
-export const MATCH_FEE_FULL_CAD = 10;
+/**
+ * User-facing match-fee display amounts (half / full).
+ * Staging still charges CA$5 / CA$10 in the backend for live QA.
+ */
+export const MATCH_FEE_HALF_CAD = 125;
+export const MATCH_FEE_FULL_CAD = 250;
 
 /** Preview end time from start HH:mm + hours (mirrors backend addClockHours). */
 export function addClockHours(startHm: string, hours: number): string | null {
@@ -82,9 +85,9 @@ export function matchFeeTierChargeHint(durationHours: number): string {
     return `Match fee: ${HALF_SLOT_HOURS}h or less is billed as a half-day slot (CA$${half}); over ${HALF_SLOT_HOURS}h is a full-day slot (CA$${full}).`;
   }
   if (durationHours <= HALF_SLOT_HOURS) {
-    return `This ${formatHoursLabel(durationHours)} window is billed as a half-day slot (CA$${half} match fee while testing).`;
+    return `This ${formatHoursLabel(durationHours)} window is billed as a half-day slot (CA$${half} match fee).`;
   }
-  return `This ${formatHoursLabel(durationHours)} window is billed as a full-day slot (CA$${full} match fee while testing).`;
+  return `This ${formatHoursLabel(durationHours)} window is billed as a full-day slot (CA$${full} match fee).`;
 }
 
 function formatHoursLabel(hours: number): string {

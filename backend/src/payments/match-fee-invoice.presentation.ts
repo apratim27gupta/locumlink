@@ -19,7 +19,7 @@ export const MATCH_FEE_STATUS_ADMIN_GUIDE: MatchFeeStatusAdminGuide[] = [
     status: 'PENDING',
     label: 'Pending payment',
     summary: 'Match confirmed; host has not paid yet and due date has not passed.',
-    hostObligation: 'Pay the match fee (CA$5 or CA$10) by the due date shown on the invoice.',
+    hostObligation: `Pay the match fee (CA$${MATCH_FEE_POLICY.matchFeeHalfCad} or CA$${MATCH_FEE_POLICY.matchFeeFullCad}) by the due date shown on the invoice.`,
   },
   {
     status: 'OVERDUE',

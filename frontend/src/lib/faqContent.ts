@@ -55,7 +55,7 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
       {
         question: 'Do I have to pay?',
         answer:
-          'LocumLink is free for locums.\nHosts pay a platform match fee (CA$5 or CA$10 plus HST) after a locum accepts a confirmed placement - not to register or post jobs.',
+          'LocumLink is free for locums.\nHosts pay a platform match fee (CA$125 or CA$250 plus HST) after a locum accepts a confirmed placement - not to register or post jobs.',
       },
       {
         question: 'How long does verification take?',
@@ -165,7 +165,7 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
         id: 'host-match-fee',
         question: 'When do I pay the match fee?',
         answer:
-          'You are not charged to register or post jobs.\nAfter a locum accepts a host-confirmed placement, LocumLink invoices a platform match fee of CA$5 or CA$10 (plus HST), depending on total claimed hours.\nPay from Match Fees in your host dashboard. The fee is due by the date shown on the invoice (usually within 7 days, or sooner if the first shift is earlier).',
+          'You are not charged to register or post jobs.\nAfter a locum accepts a host-confirmed placement, LocumLink invoices a platform match fee of CA$125 or CA$250 (plus HST), depending on total claimed hours.\nPay from Match Fees in your host dashboard. The fee is due by the date shown on the invoice (usually within 7 days, or sooner if the first shift is earlier).',
       },
       {
         id: 'host-how-to-pay',

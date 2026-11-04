@@ -130,7 +130,7 @@ function EndTimeField({
           {chargeHint}
           {custom ? (
             <span style={{ display: 'block', fontWeight: 500, color: '#B45309', marginTop: 2 }}>
-              Shortening the window does not reduce the fee below that tier: ≤{HALF_SLOT_HOURS}h → CA${MATCH_FEE_HALF_CAD} half-day; over {HALF_SLOT_HOURS}h → CA${MATCH_FEE_FULL_CAD} full-day (testing amounts).
+              Shortening the window does not reduce the fee below that tier: ≤{HALF_SLOT_HOURS}h → CA${MATCH_FEE_HALF_CAD} half-day; over {HALF_SLOT_HOURS}h → CA${MATCH_FEE_FULL_CAD} full-day.
             </span>
           ) : null}
         </div>
