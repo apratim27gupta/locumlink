@@ -84,10 +84,10 @@ describe('Journey — Match fee invoices', () => {
     const invoice = await db.matchFeeInvoice.findUnique({
       where: { applicationId_kind: { applicationId: application.id, kind: 'PRIMARY' } },
     });
-    // Multi-day legacy span at 7h/day → >3.5h → $10.
+    // Multi-day legacy span at 7h/day → >3.5h → CA$250.
     expect(invoice).toEqual(
       expect.objectContaining({
-        amountCents: 1000,
+        amountCents: 25_000,
         currency: 'CAD',
         status: 'PENDING',
         hostProfileId: host.hostProfileId,
@@ -112,7 +112,7 @@ describe('Journey — Match fee invoices', () => {
     expect(paid?.stripePaymentIntentId).toBe(session.payment_intent);
   });
 
-  it('invoices $5 for a single half-day SLOTS claim and $5 for a second locum on the same posting', async () => {
+  it('invoices CA$125 for a single half-day SLOTS claim and CA$125 for a second locum on the same posting', async () => {
     const host = await createHostUser();
     const locumA = await createLocumUser();
     const locumB = await createLocumUser();
@@ -181,7 +181,7 @@ describe('Journey — Match fee invoices', () => {
     const invA = await db.matchFeeInvoice.findUnique({
       where: { applicationId_kind: { applicationId: appA.id, kind: 'PRIMARY' } },
     });
-    expect(invA?.amountCents).toBe(500);
+    expect(invA?.amountCents).toBe(12_500);
     expect(invA?.matchFeeTier).toBe('HALF');
 
     const appB = await createApplication({
@@ -208,7 +208,7 @@ describe('Journey — Match fee invoices', () => {
     const invB = await db.matchFeeInvoice.findUnique({
       where: { applicationId_kind: { applicationId: appB.id, kind: 'PRIMARY' } },
     });
-    expect(invB?.amountCents).toBe(500);
+    expect(invB?.amountCents).toBe(12_500);
     expect(invB?.id).not.toBe(invA?.id);
 
     const all = await db.matchFeeInvoice.findMany({

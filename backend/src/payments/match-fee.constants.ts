@@ -5,10 +5,10 @@ export const MAX_HOURS_PER_DAY = 7.5;
 export const MAX_HALF_SLOT_MINUTES = 7 * 60 + 29;
 export const MAX_HALF_SLOT_HOURS = MAX_HALF_SLOT_MINUTES / 60;
 
-/** Match fee: <= half-day total claimed hours. TEMP staging live QA: $5 (was $250). */
-export const MATCH_FEE_HALF_CENTS = 500;
-/** Match fee: more than half-day total claimed hours. TEMP staging live QA: $10 (was $250). */
-export const MATCH_FEE_FULL_CENTS = 1000;
+/** Match fee: <= half-day total claimed hours (CA$125). */
+export const MATCH_FEE_HALF_CENTS = 12_500;
+/** Match fee: more than half-day total claimed hours (CA$250). */
+export const MATCH_FEE_FULL_CENTS = 25_000;
 /** @deprecated Prefer MATCH_FEE_FULL_CENTS / computeMatchFeeAmountCents. */
 export const MATCH_FEE_AMOUNT_CENTS = MATCH_FEE_FULL_CENTS;
 
@@ -51,7 +51,7 @@ export function isPostingGrandfatheredFromMatchFee(
   return postingCreatedDay < start;
 }
 
-/** $5 if total claimed hours <= 3.75, else $10 (TEMP staging live QA amounts). */
+/** CA$125 if total claimed hours <= 3.75, else CA$250. */
 export function computeMatchFeeAmountCents(totalHours: number): number {
   if (!Number.isFinite(totalHours) || totalHours <= HALF_SLOT_HOURS) {
     return MATCH_FEE_HALF_CENTS;
@@ -65,12 +65,9 @@ export function matchFeeTierFromHours(totalHours: number): MatchFeeTier {
     : 'FULL';
 }
 
-/**
- * Display-only amounts for policy / FAQ copy.
- * Charging still uses MATCH_FEE_HALF_CENTS / MATCH_FEE_FULL_CENTS (staging QA: $5 / $10).
- */
-export const MATCH_FEE_HALF_DISPLAY_CAD = 125;
-export const MATCH_FEE_FULL_DISPLAY_CAD = 250;
+/** Same as charged amounts; kept for policy / FAQ copy helpers. */
+export const MATCH_FEE_HALF_DISPLAY_CAD = MATCH_FEE_HALF_CENTS / 100;
+export const MATCH_FEE_FULL_DISPLAY_CAD = MATCH_FEE_FULL_CENTS / 100;
 
 export const MATCH_FEE_POLICY = {
   locumFee: 'Free',

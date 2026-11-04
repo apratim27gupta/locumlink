@@ -25,7 +25,7 @@ function fmtDate(iso: string): string {
 
 type RefundConfirmState = {
   ticket: AdminSupportTicket;
-  amountCents: 500 | 1000;
+  amountCents: 12_500 | 25_000;
 };
 
 export default function AdminTicketsPage() {
@@ -84,7 +84,7 @@ export default function AdminTicketsPage() {
     setError('');
     try {
       await adminDiscretionaryMatchFeeRefund(ticket.invoice!.id, {
-        amountCents: (params.amountCents ?? amountCents) as 500 | 1000,
+        amountCents: (params.amountCents ?? amountCents) as 12_500 | 25_000,
         ticketId: ticket.id,
         adminNotes: params.notes,
       });
@@ -180,8 +180,8 @@ export default function AdminTicketsPage() {
             const taxRateBps = ticket.invoice?.taxRateBps ?? 0;
             const withHst = (feeCents: number) => feeCents + hstFor(feeCents, taxRateBps);
             const hstSuffix = taxRateBps > 0 ? ' + HST' : '';
-            const can5 = remaining >= withHst(500) && ticket.invoice?.status === 'PAID';
-            const can10 = remaining >= withHst(1000) && ticket.invoice?.status === 'PAID';
+            const can5 = remaining >= withHst(12_500) && ticket.invoice?.status === 'PAID';
+            const can10 = remaining >= withHst(25_000) && ticket.invoice?.status === 'PAID';
             const timelineEvents = (ticket.invoice?.events ?? []).map((e) => ({
               id: e.id,
               eventType: e.eventType,
@@ -260,9 +260,9 @@ export default function AdminTicketsPage() {
                         type="button"
                         className="btn btn-secondary"
                         disabled={busy}
-                        onClick={() => setRefundConfirm({ ticket, amountCents: 500 })}
+                        onClick={() => setRefundConfirm({ ticket, amountCents: 12_500 })}
                       >
-                        Refund CA$5{hstSuffix}
+                        Refund CA$125{hstSuffix}
                       </button>
                     ) : null}
                     {can10 ? (
@@ -270,9 +270,9 @@ export default function AdminTicketsPage() {
                         type="button"
                         className="btn btn-secondary"
                         disabled={busy}
-                        onClick={() => setRefundConfirm({ ticket, amountCents: 1000 })}
+                        onClick={() => setRefundConfirm({ ticket, amountCents: 25_000 })}
                       >
-                        Refund CA$10{hstSuffix}
+                        Refund CA$250{hstSuffix}
                       </button>
                     ) : null}
                     <button

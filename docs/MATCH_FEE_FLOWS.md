@@ -3,7 +3,7 @@
 **Full narrative (data flow, security, reconciliation, refunds, code links):**  
 [`MATCH_FEE_PAYMENT_FLOW_COMPLETE.md`](./MATCH_FEE_PAYMENT_FLOW_COMPLETE.md)
 
-Scope: **host platform match fee only** (CA$5 / CA$10 + 14% HST - TEMP staging live QA; production rates were CA$125 / CA$250). Not locum clinical pay or Stripe Connect.
+Scope: **host platform match fee only** (CA$125 / CA$250 + 14% HST). Not locum clinical pay or Stripe Connect.
 
 ---
 

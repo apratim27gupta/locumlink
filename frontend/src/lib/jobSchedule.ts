@@ -42,10 +42,7 @@ export const FULL_SLOT_HOURS = 7.5;
 /** Half-day custom end may be at most 7h29m; 7.5h+ must use full-day. */
 export const MAX_HALF_SLOT_MINUTES = 7 * 60 + 29;
 export const MAX_HALF_SLOT_HOURS = MAX_HALF_SLOT_MINUTES / 60;
-/**
- * User-facing match-fee display amounts (half / full).
- * Staging still charges CA$5 / CA$10 in the backend for live QA.
- */
+/** Match-fee amounts (half / full), aligned with backend charge cents. */
 export const MATCH_FEE_HALF_CAD = 125;
 export const MATCH_FEE_FULL_CAD = 250;
 

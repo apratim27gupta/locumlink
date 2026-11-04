@@ -17,8 +17,8 @@ Code links below are **repo-relative paths** (open in the IDE or on GitHub from 
 
 | Item | Rule | Code |
 |------|------|------|
-| Half-day tier | ≤ 3.75 claimed hours → **CA$5** (TEMP staging QA; was CA$250) | [`match-fee.constants.ts`](../backend/src/payments/match-fee.constants.ts) `MATCH_FEE_HALF_CENTS`, `computeMatchFeeAmountCents` |
-| Full-day tier | \> 3.75 claimed hours → **CA$10** (TEMP; was CA$250) | same file `MATCH_FEE_FULL_CENTS` |
+| Half-day tier | ≤ 3.75 claimed hours → **CA$125** | [`match-fee.constants.ts`](../backend/src/payments/match-fee.constants.ts) `MATCH_FEE_HALF_CENTS`, `computeMatchFeeAmountCents` |
+| Full-day tier | \> 3.75 claimed hours → **CA$250** | same file `MATCH_FEE_FULL_CENTS` |
 | Tax | **14% HST** snapshotted on invoice (`taxRateBps`, `taxCents`) | `MATCH_FEE_HST_RATE_BPS`, `computeMatchFeeTaxCents`, `matchFeeTotalCents` |
 | Host pays | `amountCents + taxCents` | Checkout line items built from DB, never from the browser |
 | Due date | min(invoice + 7 days, earliest claimed shift end-of-day) | [`match-fee-cancellation.util.ts`](../backend/src/payments/match-fee-cancellation.util.ts) `computeDueAt` |
@@ -320,4 +320,4 @@ When a locum accepts, LocumLink creates a **PENDING** host invoice for a compute
 
 ---
 
-*Last aligned with production replacement flow (no skip-replacement testing flag) and image-only deploy defaults. TEMP dollar amounts ($5/$10) are staging QA — update this doc when production rates return.*
+*Last aligned with production replacement flow (no skip-replacement testing flag) and image-only deploy defaults. Match fees are CA$125 / CA$250 + HST.*

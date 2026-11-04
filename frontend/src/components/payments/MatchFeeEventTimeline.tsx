@@ -1,5 +1,7 @@
 'use client';
 
+import { displayMatchFeeEventDetail } from '@/components/payments/MatchFeePolicy';
+
 export type MatchFeeInvoiceEventItem = {
   id: string;
   eventType: string;
@@ -46,15 +48,18 @@ export function MatchFeeEventTimeline({
           gap: 8,
         }}
       >
-        {events.map((ev) => (
+        {events.map((ev) => {
+          const detail = displayMatchFeeEventDetail(ev.detail);
+          return (
           <li key={ev.id} style={{ fontSize: 12, color: '#111827' }}>
             <div style={{ fontWeight: 600 }}>{ev.label}</div>
             <div style={{ color: '#6B7280', marginTop: 2 }}>
               {new Date(ev.occurredAt).toLocaleString('en-CA')}
-              {ev.detail ? ` · ${ev.detail}` : ''}
+              {detail ? ` · ${detail}` : ''}
             </div>
           </li>
-        ))}
+          );
+        })}
       </ol>
     </div>
   );

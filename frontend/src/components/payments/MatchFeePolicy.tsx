@@ -201,13 +201,25 @@ export function formatCents(cents: number): string {
 }
 
 /**
- * Staging still invoices CA$5 / CA$10 for live QA, but host UI shows CA$125 / CA$250.
- * Map known QA fee amounts (and proportional tax/refunds) for display only.
+ * Map legacy staging QA fee amounts (CA$5 / CA$10) to production rates for display.
+ * New invoices already use CA$125 / CA$250.
  */
 export function displayMatchFeeAmountCents(amountCents: number): number {
   if (amountCents === 500) return MATCH_FEE_HALF_CAD * 100;
   if (amountCents === 1000) return MATCH_FEE_FULL_CAD * 100;
   return amountCents;
+}
+
+/** Rewrite legacy QA dollar strings in stored invoice event details. */
+export function displayMatchFeeEventDetail(detail: string | null | undefined): string | null {
+  if (!detail) return null;
+  return detail
+    .replace(/CA\$11\.40/g, 'CA$285.00')
+    .replace(/CA\$5\.70/g, 'CA$142.50')
+    .replace(/CA\$10\.00/g, 'CA$250.00')
+    .replace(/CA\$5\.00/g, 'CA$125.00')
+    .replace(/CA\$1\.40/g, 'CA$35.00')
+    .replace(/CA\$0\.70/g, 'CA$17.50');
 }
 
 export function displayMatchFeeMoney(invoice: {

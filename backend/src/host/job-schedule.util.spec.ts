@@ -224,10 +224,10 @@ describe('job-schedule.util', () => {
 
   describe('match fee hours', () => {
     it('tiers at 3.75 hours', () => {
-      expect(computeMatchFeeAmountCents(0)).toBe(500);
-      expect(computeMatchFeeAmountCents(3.75)).toBe(500);
-      expect(computeMatchFeeAmountCents(3.76)).toBe(1000);
-      expect(computeMatchFeeAmountCents(7.5)).toBe(1000);
+      expect(computeMatchFeeAmountCents(0)).toBe(12_500);
+      expect(computeMatchFeeAmountCents(3.75)).toBe(12_500);
+      expect(computeMatchFeeAmountCents(3.76)).toBe(25_000);
+      expect(computeMatchFeeAmountCents(7.5)).toBe(25_000);
     });
 
     it('sums claimed hours for SLOTS and LEGACY', () => {

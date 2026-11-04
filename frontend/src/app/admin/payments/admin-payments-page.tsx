@@ -144,8 +144,8 @@ export default function AdminPaymentsPage() {
         await adminRefundDuplicatePayment(refundConfirm.attempt.id, params.notes);
       } else {
         const amount = (params.amountCents ?? refundConfirm.amountCents) as
-          | 500
-          | 1000;
+          | 12_500
+          | 25_000;
         await adminDiscretionaryMatchFeeRefund(invoice.id, {
           amountCents: amount,
           adminNotes: params.notes,
@@ -639,38 +639,38 @@ export default function AdminPaymentsPage() {
                           </button>
                           {postCompletion ? (
                             <>
-                              {remaining >= withHst(500) ? (
+                              {remaining >= withHst(12_500) ? (
                                 <button
                                   type="button"
                                   className="btn btn-secondary"
                                   disabled={disabled}
-                                  title={`Post-completion refund (${formatCents(withHst(500))}) - requires confirmation`}
+                                  title={`Post-completion refund (${formatCents(withHst(12_500))}) - requires confirmation`}
                                   onClick={() =>
                                     setRefundConfirm({
                                       invoice,
                                       mode: 'discretionary',
-                                      amountCents: 500,
+                                      amountCents: 12_500,
                                     })
                                   }
                                 >
-                                  Refund CA$5{hstSuffix}
+                                  Refund CA$125{hstSuffix}
                                 </button>
                               ) : null}
-                              {remaining >= withHst(1000) ? (
+                              {remaining >= withHst(25_000) ? (
                                 <button
                                   type="button"
                                   className="btn btn-secondary"
                                   disabled={disabled}
-                                  title={`Post-completion refund (${formatCents(withHst(1000))}) - requires confirmation`}
+                                  title={`Post-completion refund (${formatCents(withHst(25_000))}) - requires confirmation`}
                                   onClick={() =>
                                     setRefundConfirm({
                                       invoice,
                                       mode: 'discretionary',
-                                      amountCents: 1000,
+                                      amountCents: 25_000,
                                     })
                                   }
                                 >
-                                  Refund CA$10{hstSuffix}
+                                  Refund CA$250{hstSuffix}
                                 </button>
                               ) : null}
                             </>
