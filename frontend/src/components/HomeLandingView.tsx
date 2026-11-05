@@ -1,356 +1,254 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
 import AppStoreInstallButton from '@/components/AppStoreInstallButton';
 import SignInRoleDropdown from '@/components/SignInRoleDropdown';
-import { landingApi, locumApi } from '@/lib/api';
+import WhatsNewModal from '@/components/WhatsNewModal';
 import { SocialLinks } from '@/components/SocialLinks';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
 import { ROLE_GUIDE } from '@/lib/roleAccent';
-
-const LANDING_AVATAR_FALLBACKS = [
-    '/avatar-1.jpeg',
-    '/avatar-2.jpeg',
-    '/avatar-clinic.png',
-] as const;
-
-function footerAvatarSources(hostUrls: string[]): string[] {
-    const uniqueHosts = [...new Set(hostUrls)].slice(0, 3);
-    if (uniqueHosts.length >= 3) return uniqueHosts;
-    if (uniqueHosts.length === 0) return [...LANDING_AVATAR_FALLBACKS];
-    return [...uniqueHosts, ...LANDING_AVATAR_FALLBACKS].slice(0, 3);
-}
+import { VOLTA_URL } from '@/lib/support';
 
 function HomeLandingLegalLinks() {
-    return <SupportLegalLinks variant="landing" />;
+  return <SupportLegalLinks variant="landing" />;
 }
+
 export type HomeLandingViewProps = {
-    interactive?: boolean;
-    rootStyle?: React.CSSProperties;
-    /** Server-provided count of ACTIVE job postings; avoids "—" before client fetch. */
-    initialActiveJobCount?: number;
+  interactive?: boolean;
+  rootStyle?: React.CSSProperties;
+  /** Kept for callers; hero no longer shows live job counts. */
+  initialActiveJobCount?: number;
 };
-export function HomeLandingView({ interactive = true, rootStyle, initialActiveJobCount, }: HomeLandingViewProps) {
-    const [browseOpportunityCount, setBrowseOpportunityCount] = useState<number | null>(
-        initialActiveJobCount ?? null,
-    );
-    const [recentHostAvatars, setRecentHostAvatars] = useState<string[]>([]);
 
-    useEffect(() => {
-        let cancelled = false;
-        locumApi
-            .getBrowseOpportunitiesCount()
-            .then(({ count }) => {
-            if (!cancelled)
-                setBrowseOpportunityCount(count);
-        })
-            .catch(() => {
-            if (!cancelled)
-                setBrowseOpportunityCount(initialActiveJobCount ?? null);
-        });
-        landingApi
-            .getRecentHostAvatars()
-            .then(({ avatars }) => {
-            if (!cancelled)
-                setRecentHostAvatars(avatars);
-        })
-            .catch(() => {
-            if (!cancelled)
-                setRecentHostAvatars([]);
-        });
-        return () => {
-            cancelled = true;
-        };
-    }, [initialActiveJobCount]);
-    const mainOverflow = interactive ? 'auto' : 'hidden';
-    const opportunityCountLabel = browseOpportunityCount !== null
-        ? browseOpportunityCount.toLocaleString('en-CA')
-        : '—';
-    return (<div className="home-landing-root" style={{
-            position: 'relative',
-            height: '100vh',
-            maxHeight: '100vh',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            fontFamily: 'Inter, sans-serif',
-            ...rootStyle,
-        }}>
-      <nav className="home-landing-nav">
-        <Logo size="md" />
+export function HomeLandingView({
+  interactive = true,
+  rootStyle,
+}: HomeLandingViewProps) {
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
 
-        <div className="home-landing-nav__auth">
-          <AppStoreInstallButton variant="landing-nav" />
-          <SignInRoleDropdown interactive={interactive} />
-        </div>
-      </nav>
+  const openWhatsNew = useCallback(() => {
+    if (!interactive) return;
+    setWhatsNewOpen(true);
+  }, [interactive]);
 
-      <main className="home-landing-main" style={{
-            flex: '1 1 0',
-            minHeight: 0,
-            marginTop: 76,
-            overflowY: mainOverflow,
-            overflowX: 'hidden',
-            background: '#F7F8FA',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            padding: '56px 24px 48px',
-            boxSizing: 'border-box',
-        }}>
-        <div style={{
-            boxSizing: 'border-box',
-            width: '100%',
-            maxWidth: 1001,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 36,
-        }}>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 12,
-        }}>
-            <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 0,
-        }}>
-              <span className="home-landing-h1" style={{
-            fontFamily: 'var(--font-display), Outfit, sans-serif',
-            fontWeight: 700,
-            fontSize: 44,
-            lineHeight: '100%',
-            color: '#0B0F1F',
-            textAlign: 'center',
-        }}>
-                Find Verified Locums in as Fast as 48 Hours
-              </span>
-              <span className="home-landing-h1" style={{
-            fontFamily: 'var(--font-display), Outfit, sans-serif',
-            fontWeight: 700,
-            fontSize: 44,
-            lineHeight: '100%',
-            color: '#0B0F1F',
-            textAlign: 'center',
-        }}>
-                
-              </span>
+  const closeWhatsNew = useCallback(() => {
+    setWhatsNewOpen(false);
+    if (typeof window !== 'undefined' && window.location.hash === '#whats-new') {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!interactive) return;
+    const maybeOpen = () => {
+      if (window.location.hash === '#whats-new') setWhatsNewOpen(true);
+    };
+    maybeOpen();
+    window.addEventListener('hashchange', maybeOpen);
+    return () => window.removeEventListener('hashchange', maybeOpen);
+  }, [interactive]);
+
+  return (
+    <div
+      className="home-landing-root"
+      style={{
+        position: 'relative',
+        height: '100vh',
+        maxHeight: '100vh',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: 'Inter, sans-serif',
+        ...rootStyle,
+      }}
+    >
+      <WhatsNewModal open={whatsNewOpen} onClose={closeWhatsNew} />
+      <header className="home-landing-header">
+        <nav className="home-landing-nav" aria-label="Primary">
+          <div className="home-landing-nav__inner">
+            <Link href="/home" className="home-landing-nav__logo" aria-label="Locum Link home">
+              <Logo size="md" />
+            </Link>
+            <div className="home-landing-nav__links">
+              <Link href="/about" className="home-landing-nav__link">
+                About us
+              </Link>
+              <Link href="/how-it-works" className="home-landing-nav__link">
+                How it works
+              </Link>
+              <Link href="/resources" className="home-landing-nav__link">
+                Resources
+              </Link>
+              <Link href="/faq" className="home-landing-nav__link">
+                FAQs
+              </Link>
+              <Link href="/news" className="home-landing-nav__link">
+                News &amp; updates
+              </Link>
             </div>
-
-            <p className="home-landing-subhead" style={{
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 400,
-            fontSize: 26,
-            lineHeight: '132%',
-            color: '#2A3050',
-            textAlign: 'center',
-            maxWidth: '100%',
-            margin: 0,
-        }}>
-              Built for Nova Scotia physicians. Post a request and connect directly with qualified locums - without agency fees or endless back-and-forth.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
-              {['✓ Verified physicians','✓ Direct clinic-to-doctor matching','✓ No agency fees','✓ Built for Nova Scotia'].map((badge) => (<span key={badge} style={{ display: 'inline-flex', alignItems: 'center', padding: '6px 14px', borderRadius: 999, background: '#EEF2FF', color: '#1B31D2', fontFamily: 'Inter, sans-serif', fontWeight: 500, fontSize: 14 }}>{badge}</span>))}
+            <div className="home-landing-nav__auth">
+              <SignInRoleDropdown interactive={interactive} className="home-landing-signin" />
             </div>
           </div>
-
-          <div style={{
-            display: 'flex',
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 32,
-        }} className="home-landing-actions">
-            {interactive ? (<>
-                <span className="role-guide" data-tip={ROLE_GUIDE.clinic}>
-                  <Link href="/auth?mode=signin&role=clinic&locked=true" className="btn-landing-cta" aria-label={`Post a Locum Request. ${ROLE_GUIDE.clinic}`}>
-                    Post a Locum Request
-                  </Link>
-                </span>
-                <span className="role-guide" data-tip={ROLE_GUIDE.locum}>
-                  <Link href="/locum/browse" className="btn-landing-cta btn-landing-cta--teal" aria-label={`Browse Locum Shifts. ${ROLE_GUIDE.locum}`}>
-                    Browse Locum Shifts
-                  </Link>
-                </span>
-              </>) : (<>
-                <span className="role-guide" data-tip={ROLE_GUIDE.clinic}>
-                  <span className="btn-landing-cta" style={{ pointerEvents: 'none' }}>
-                    Post a Locum Request
-                  </span>
-                </span>
-                <span className="role-guide" data-tip={ROLE_GUIDE.locum}>
-                  <span className="btn-landing-cta btn-landing-cta--teal" style={{ pointerEvents: 'none' }}>
-                    Browse Locum Shifts
-                  </span>
-                </span>
-              </>)}
-          </div>
-        </div>
-
-        <div style={{
-            boxSizing: 'border-box',
-            width: '100%',
-            maxWidth: 1001,
-            marginTop: 40,
-            display: 'flex',
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 24,
-            padding: '20px 28px',
-            background: '#FFFFFF',
-            border: '1px solid rgba(0, 0, 0, 0.06)',
-            borderRadius: 12,
-            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
-        }}>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 4,
-            minWidth: 0,
-        }}>
-            <p style={{
-            margin: 0,
-            fontFamily: 'Inter, sans-serif',
-            fontSize: 18,
-            lineHeight: '140%',
-            color: '#0B0F1F',
-        }}>
-              <span style={{ fontWeight: 700, fontSize: 22 }}>{opportunityCountLabel}</span>
-              <span style={{ fontWeight: 400 }}>
-                {' '}
-                active job postings across Nova Scotia
-              </span>
+        </nav>
+        <div id="whats-new" className="home-landing-announce">
+          <div className="home-landing-announce__inner">
+            <span className="home-landing-announce__badge">New on LocumLink</span>
+            <p className="home-landing-announce__copy">
+              Half-day coverage blocks are now available.
             </p>
-            <span style={{
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 400,
-            fontSize: 15,
-            lineHeight: '140%',
-            color: '#6B7280',
-        }}>
-              Find your ideal fit
-            </span>
+            <Link href="/news#release" className="home-landing-announce__cta">
+              See what&apos;s new <span aria-hidden>→</span>
+            </Link>
           </div>
-          {interactive ? (<Link href="/locum/browse" style={{
-                flexShrink: 0,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: 18,
-                color: '#1B31D2',
-                textDecoration: 'none',
-            }}>
-              View
-              <span aria-hidden style={{ fontSize: 18, lineHeight: 1 }}>
-                →
-              </span>
-            </Link>) : (<span style={{
-                flexShrink: 0,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                fontSize: 18,
-                color: '#1B31D2',
-            }}>
-              View
-              <span aria-hidden style={{ fontSize: 18, lineHeight: 1 }}>
-                →
-              </span>
-            </span>)}
+        </div>
+      </header>
+
+      <main className="home-landing-main">
+        <div className="home-landing-body">
+          <section className="home-landing-hero" id="about">
+            <p className="home-landing-hero__tagline">CONNECT. COVER. CARE.</p>
+            <h1 className="home-landing-h1 home-landing-hero__headline">
+              Connect with verified locums across
+              <br />
+              <span className="home-landing-hero__nowrap">Nova Scotia</span>
+            </h1>
+            <p className="home-landing-subhead home-landing-hero__subhead">
+              Built by physicians, for physicians. Find coverage or your next locum opportunity in one
+              place.
+            </p>
+
+            <div id="how-it-works" className="home-landing-actions home-landing-hero__actions">
+              {interactive ? (
+                <>
+                  <span className="role-guide" data-tip={ROLE_GUIDE.clinic}>
+                    <Link
+                      href="/auth?mode=signin&role=clinic&locked=true"
+                      className="btn-landing-cta"
+                      aria-label={`Post a Locum Request. ${ROLE_GUIDE.clinic}`}
+                    >
+                      Post a Locum Request
+                    </Link>
+                  </span>
+                  <span className="role-guide" data-tip={ROLE_GUIDE.locum}>
+                    <Link
+                      href="/locum/browse"
+                      className="btn-landing-cta btn-landing-cta--teal"
+                      aria-label={`Browse Locum Shifts. ${ROLE_GUIDE.locum}`}
+                    >
+                      Browse Locum Shifts
+                    </Link>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="role-guide" data-tip={ROLE_GUIDE.clinic}>
+                    <span className="btn-landing-cta" style={{ pointerEvents: 'none' }}>
+                      Post a Locum Request
+                    </span>
+                  </span>
+                  <span className="role-guide" data-tip={ROLE_GUIDE.locum}>
+                    <span className="btn-landing-cta btn-landing-cta--teal" style={{ pointerEvents: 'none' }}>
+                      Browse Locum Shifts
+                    </span>
+                  </span>
+                </>
+              )}
+            </div>
+
+            <div className="home-landing-hero__badges" id="faqs">
+              {['✓ Verified physicians', '✓ Direct connections', '✓ Flexible shifts'].map((badge) => (
+                <span key={badge} className="home-landing-hero__badge">
+                  {badge}
+                </span>
+              ))}
+            </div>
+          </section>
+
+          <div className="home-landing-fee-banner">
+            <p className="home-landing-fee-banner__copy">
+              Explore available locum opportunities
+            </p>
+            <Link href="/locum/browse" className="home-landing-fee-banner__link">
+              View opportunities <span aria-hidden>→</span>
+            </Link>
+          </div>
         </div>
 
-        <footer style={{
-            boxSizing: 'border-box',
-            width: '100%',
-            maxWidth: 934,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            paddingTop: 10,
-            gap: 24,
-            marginTop: 'auto',
-        }}>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '12px 24px',
-            width: '100%',
-            maxWidth: 934,
-        }}>
+        <footer className="home-landing-footer">
+          <div className="home-landing-footer-trust">
             {[
-            'Built by a Nova Scotia family physician',
-            'CPSNS-ready verification',
-            'Designed for real clinic workflows',
-        ].map((t) => (<span key={t} style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontSize: 16,
-                color: '#606061',
-            }}>
+              'Built by a Nova Scotia family physician',
+              'CPSNS-ready verification',
+              'Designed for real clinic workflows',
+            ].map((t) => (
+              <span key={t} className="home-landing-footer-trust__item">
                 {t}
-              </span>))}
+              </span>
+            ))}
           </div>
-          <a
-            href="https://voltaeffect.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="home-landing-volta"
-            aria-label="A Volta Resident Company — Volta | Where builders get built in Atlantic Canada"
-          >
-            <span className="home-landing-volta-row">
-              <Image
-                src="/volta.svg"
-                alt=""
-                width={64}
-                height={26}
-                className="home-landing-volta-logo"
-              />
-              <span className="home-landing-volta-label">A Volta Resident Company</span>
-            </span>
-            <span className="home-landing-volta-tagline">
-              Volta | Where builders get built in Atlantic Canada
-            </span>
-          </a>
-          <div className="home-landing-footer-bottom">
-            {interactive ? (
-              <div className="home-landing-footer-bar">
-                <SocialLinks />
-                <HomeLandingLegalLinks />
-                <Link href="/admin/login" className="home-admin-login-btn home-admin-login-btn--inline">
-                  Admin login
-                </Link>
+          <div className="home-landing-footer-credits">
+            <div className="home-landing-footer-credits__inner">
+              {interactive ? (
+                <div className="home-landing-footer-credits__row home-landing-footer-credits__row--actions">
+                  <HomeLandingLegalLinks />
+                  <div className="home-landing-footer-follow-volta">
+                    <div className="home-landing-footer-follow">
+                      <span className="home-landing-footer-follow__label">Follow us:</span>
+                      <SocialLinks
+                        className="site-social-links site-social-links--footer"
+                        iconSize={28}
+                      />
+                    </div>
+                    <span className="home-landing-footer-follow-volta__divider" aria-hidden />
+                    <a
+                      href={VOLTA_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="home-landing-volta home-landing-volta--inline"
+                      aria-label="A Volta Resident Company"
+                    >
+                      <span className="home-landing-volta-row">
+                        <Image
+                          src="/volta.svg"
+                          alt=""
+                          width={72}
+                          height={28}
+                          className="home-landing-volta-logo"
+                        />
+                        <span className="home-landing-volta-divider" aria-hidden />
+                        <span className="home-landing-volta-label">A Volta Resident Company</span>
+                      </span>
+                    </a>
+                  </div>
+                </div>
+              ) : null}
+              <div className="home-landing-footer-credits__row home-landing-footer-credits__row--bottom">
+                <div className="home-landing-footer-credits-left">
+                  <p className="home-landing-copyright">© LocumLink 2026</p>
+                  <p className="home-landing-powered-by">Developed by Aebeolle Consulting</p>
+                </div>
+                {interactive ? (
+                  <div className="home-landing-footer-bar__right home-landing-footer-bar__right--bottom">
+                    <AppStoreInstallButton
+                      variant="landing-nav"
+                      className="home-landing-footer-appstore"
+                    />
+                    <Link
+                      href="/admin/login"
+                      className="home-admin-login-btn home-admin-login-btn--inline home-admin-login-btn--footer"
+                    >
+                      Admin login
+                    </Link>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-            <div className="home-landing-footer-credits">
-              <p className="home-landing-copyright">
-                © LocumLink 2026
-                <span className="home-landing-credits-sep" aria-hidden>
-                  ·
-                </span>
-                <span className="home-landing-powered-by">
-                  Developed by Aebeolle Consulting
-                </span>
-              </p>
             </div>
           </div>
         </footer>
       </main>
-    </div>);
+    </div>
+  );
 }

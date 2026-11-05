@@ -1237,6 +1237,9 @@ export default function LocumDashboard(props: {
                   <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10, lineHeight: 1.5 }}>
                     The host has offered you the following shifts. Please review and accept or decline.
                   </div>
+                  <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 10, lineHeight: 1.5 }}>
+                    After the placement ends, the host may be asked for confidential feedback about the match. Feedback stays private within LocumLink.
+                  </div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <button type="button" disabled={responding} onClick={() => {
                             setRespondError(null);

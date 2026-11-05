@@ -11,6 +11,9 @@ export const LINKEDIN_URL =
     'https://www.linkedin.com/company/locumlinkcanada/about/';
 export const FACEBOOK_URL =
     'https://www.facebook.com/share/1PtaXWzGYj/?mibextid=wwXIfr';
+export const INSTAGRAM_URL =
+    'https://www.instagram.com/locumlinkcanada/';
+export const VOLTA_URL = 'https://voltaeffect.com/';
 
 /** @deprecated Use PRIVACY_POLICY_PATH — kept for existing imports. */
 export const PRIVACY_POLICY_URL = PRIVACY_POLICY_PATH;
@@ -21,7 +24,17 @@ export const TERMS_OF_USE_URL = TERMS_OF_USE_PATH;
 export function isValidPublicPageFrom(from: string | null | undefined): from is string {
     if (!from || !from.startsWith('/') || from.startsWith('//'))
         return false;
-    return from === '/home' || from.startsWith('/host') || from.startsWith('/locum');
+    return (
+        from === '/home' ||
+        from === '/about' ||
+        from === '/how-it-works' ||
+        from === '/news' ||
+        from === '/resources' ||
+        from === '/faq' ||
+        from === '/how-to' ||
+        from.startsWith('/host') ||
+        from.startsWith('/locum')
+    );
 }
 
 export function legalPageHref(path: string, from?: string | null): string {

@@ -5,6 +5,7 @@ import { PaymentsModule } from '../payments/payments.module.js';
 import { PlacementFeedbackModule } from '../placement-feedback/placement-feedback.module.js';
 import { LocumController } from './locum.controller.js';
 import { LocumService } from './locum.service.js';
+
 @Module({
   imports: [
     AuthModule,

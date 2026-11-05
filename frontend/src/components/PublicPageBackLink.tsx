@@ -8,11 +8,11 @@ export function PublicPageBackLink({ className }: { className?: string }) {
     const searchParams = useSearchParams();
     const from = searchParams.get('from');
     const backHref = isValidPublicPageFrom(from) ? from : '/home';
-    const backLabel = isValidPublicPageFrom(from) ? '← Back' : '← Back to home';
+    const backLabel = isValidPublicPageFrom(from) ? 'Back' : 'Back to home';
 
     return (
         <p className={className ?? 'support-page__back support-page__back--top'}>
-            <Link href={backHref} className="support-text-link">
+            <Link href={backHref} className="public-page-back-btn">
                 {backLabel}
             </Link>
         </p>

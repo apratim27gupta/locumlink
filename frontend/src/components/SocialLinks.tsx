@@ -10,15 +10,14 @@ export function SocialLinks({ className, iconSize = 36 }: SocialLinksProps) {
   return (
     <div className={className ?? 'site-social-links'} role="group" aria-label="Social media">
       <a
-        href={LINKEDIN_URL}
-        className="site-social-link"
+        href={FACEBOOK_URL}
+        className="site-social-link site-social-link--circle"
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="LocumLink on LinkedIn"
+        aria-label="LocumLink on Facebook"
       >
-        {/* Official LinkedIn brand mark (square) */}
         <img
-          src="/icons/linkedin.svg"
+          src="/icons/facebook.svg"
           alt=""
           width={iconSize}
           height={iconSize}
@@ -27,15 +26,14 @@ export function SocialLinks({ className, iconSize = 36 }: SocialLinksProps) {
         />
       </a>
       <a
-        href={FACEBOOK_URL}
-        className="site-social-link site-social-link--circle"
+        href={LINKEDIN_URL}
+        className="site-social-link"
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="LocumLink on Facebook"
+        aria-label="LocumLink on LinkedIn"
       >
-        {/* Current official Facebook brand mark (circle) */}
         <img
-          src="/icons/facebook.svg"
+          src="/icons/linkedin.svg"
           alt=""
           width={iconSize}
           height={iconSize}

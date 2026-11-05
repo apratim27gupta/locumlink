@@ -102,6 +102,10 @@ export const NOTIFICATION_EVENT_DEFAULTS: Record<
     href: '/locum/dashboard',
     actionLabel: 'View Shift Details',
   },
+  L_002_PLACEMENT_DATES: {
+    href: '/locum/dashboard',
+    actionLabel: 'View Shift Details',
+  },
   L_003_APPLICATION_ACCEPTED: {
     href: '/locum/dashboard',
     actionLabel: 'Confirm Availability',
@@ -193,6 +197,7 @@ export const NOTIFICATION_EVENT_TITLES: Record<string, string> = {
   H_021_PLACEMENT_FEEDBACK_REMINDER: 'Reminder: locum feedback',
   L_001_NEW_OPPORTUNITY: 'New Locum Opportunity Available',
   L_002_HOST_CONFIRMED: 'Shift Confirmed',
+  L_002_PLACEMENT_DATES: 'Placement dates',
   L_003_APPLICATION_ACCEPTED: 'Application Shortlisted',
   L_004_APPLICATION_DECLINED: 'Application Update',
   L_005_SHIFT_REMINDER_48H: 'Upcoming Shift Reminder',
