@@ -1023,6 +1023,19 @@ model MatchFeeInvoiceEvent {
   @@map("match_fee_invoice_events")
 }
 
+model DemoRequest {
+  id        String   @id @default(cuid())
+  email     String   @unique @db.VarChar(320)
+  phone     String   @db.VarChar(40)
+  /** Optional free-text from the form (clinic name, notes). */
+  notes     String?  @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([createdAt])
+  @@map("demo_requests")
+}
+
 /** Host issues raised after a posting is completed; admin reviews and may refund. One per invoice. */
 model SupportTicket {
   id                String              @id @default(cuid())

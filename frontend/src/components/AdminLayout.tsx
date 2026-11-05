@@ -8,6 +8,7 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  Calendar,
   CreditCard,
   FileCheck,
   MessageSquare,
@@ -108,6 +109,12 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
       label: 'Feedbacks',
       href: '/admin/feedback',
       icon: <MessageSquare size={20} />,
+    },
+    {
+      id: 'demo-requests',
+      label: 'Demo requests',
+      href: '/admin/demo-requests',
+      icon: <Calendar size={20} />,
     },
     {
       id: 'tickets',

@@ -1,3 +1,5 @@
+'use client';
+
 import { NavIcon } from '@/components/DashLayout';
 
 export const HOST_DASH_NAV = [

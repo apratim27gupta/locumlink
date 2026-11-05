@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { FeedbackModule } from '../feedback/feedback.module.js';
+import { DemoRequestsModule } from '../demo-requests/demo-requests.module.js';
 import { PaymentsModule } from '../payments/payments.module.js';
 import { SupportTicketsModule } from '../support-tickets/support-tickets.module.js';
 import { GcsModule } from '../gcs/gcs.module.js';
@@ -14,6 +15,7 @@ import { AdminService } from './admin.service.js';
     GcsModule,
     NotificationsModule,
     FeedbackModule,
+    DemoRequestsModule,
     PaymentsModule,
     SupportTicketsModule,
   ],

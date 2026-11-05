@@ -15,6 +15,12 @@ const PUBLIC_PREFIXES = [
   '/terms-of-use',
   '/offline',
   '/locum/browse',
+  '/resources',
+  '/faq',
+  '/how-to',
+  '/about',
+  '/how-it-works',
+  '/news',
 ];
 
 export async function middleware(request: NextRequest) {

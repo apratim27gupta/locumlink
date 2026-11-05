@@ -166,6 +166,18 @@ export async function adminListFeedback(): Promise<{
   return adminFetchJson('/api/admin/feedback');
 }
 
+export async function adminListDemoRequests(): Promise<{
+  items: Array<{
+    id: string;
+    email: string;
+    phone: string;
+    notes: string | null;
+    createdAt: string;
+  }>;
+}> {
+  return adminFetchJson('/api/admin/demo-requests');
+}
+
 export async function adminListReports(status: AdminReportStatus = 'OPEN'): Promise<{ items: AdminReportRow[] }> {
   return adminFetchJson(`/api/admin/reports?${new URLSearchParams({ status }).toString()}`);
 }

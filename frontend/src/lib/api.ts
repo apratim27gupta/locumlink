@@ -631,6 +631,22 @@ export const landingApi = {
             avatars: string[];
         }>;
     },
+    requestDemo: async (body: {
+        email: string;
+        phone: string;
+        notes?: string;
+    }): Promise<{ id: string }> => {
+        const res = await trackedFetch(apiFetchUrl('/api/demo-requests'), {
+            method: 'POST',
+            headers: nestHeaders(true),
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Request demo');
+        }
+        return readJsonResponse(res, 'Request demo');
+    },
 };
 
 export type LinkedCpsns = { cpsnsNumber: string | null; verified: boolean };

@@ -22,6 +22,7 @@ import { AdminModule } from './admin/admin.module.js';
 import { SchedulerModule } from './scheduler/scheduler.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { SupportTicketsModule } from './support-tickets/support-tickets.module.js';
+import { DemoRequestsModule } from './demo-requests/demo-requests.module.js';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ErrorLogInterceptor } from './common/error-log.interceptor.js';
@@ -61,6 +62,7 @@ import { TurnstileModule } from './common/turnstile/turnstile.module.js';
     SchedulerModule,
     PaymentsModule,
     SupportTicketsModule,
+    DemoRequestsModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
   ],
   providers: [

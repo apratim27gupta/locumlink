@@ -26,6 +26,7 @@ import { CurrentAdmin } from '../admin-auth/decorators/current-admin.decorator.j
 import type { AdminJwtPayload } from '../admin-auth/admin-auth.types.js';
 import { AdminNotificationsService } from '../notifications/admin-notifications.service.js';
 import { FeedbackService } from '../feedback/feedback.service.js';
+import { DemoRequestsService } from '../demo-requests/demo-requests.service.js';
 import { SupportTicketsService } from '../support-tickets/support-tickets.service.js';
 import { AdminService } from './admin.service.js';
 import { AdminReportActionDto } from './dto/admin-report-action.dto.js';
@@ -54,6 +55,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly adminNotifications: AdminNotificationsService,
     private readonly feedback: FeedbackService,
+    private readonly demoRequests: DemoRequestsService,
     private readonly payments: PaymentsService,
     private readonly supportTickets: SupportTicketsService,
   ) {}
@@ -155,6 +157,11 @@ export class AdminController {
   @Get('feedback')
   async listFeedback() {
     return this.feedback.listForAdmin();
+  }
+
+  @Get('demo-requests')
+  async listDemoRequests() {
+    return this.demoRequests.listForAdmin();
   }
 
   @Get('support-tickets')

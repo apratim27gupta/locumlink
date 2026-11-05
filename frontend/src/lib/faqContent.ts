@@ -137,12 +137,6 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
           'Applied means your application was sent and the host can review it.\n\nFrom there, the host may:\n• shortlist you while they consider applicants\n• confirm you for the shift, after which you can accept or decline\n• decide to go with another physician\n\nHosts review applications on their own timeline, and not every application is shortlisted or confirmed. You will get an in-app notification and an email if your status changes.\n\nYou can message the host from My Applications once they confirm you, or reply in Messages after they message you first.',
       },
       {
-        id: FAQ_PLACEMENT_FEEDBACK_ID,
-        question: 'Will I be asked for feedback after a placement?',
-        answer:
-          'Yes. After a confirmed placement ends, the host may receive an email and in-app prompt to share brief confidential feedback about that locum match.\nFeedback stays private within LocumLink. It is not shown as a public rating on locum profiles.\nOne form is requested per accepted match (not per shift).',
-      },
-      {
         question: 'What if I can’t find a locum?',
         answer:
           'Your opportunity remains visible to verified physicians.\nAs our community grows, so does your reach.',
@@ -169,9 +163,15 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
     items: [
       {
         id: 'host-match-fee',
+        question: 'What are LocumLink match fees?',
+        answer:
+          'LocumLink is free for locum physicians.\nHosts are not charged to register or post jobs.\n\nEach confirmed locum on a posting is a separate match. Hosts pay a platform match fee after a locum accepts a host-confirmed placement:\n• CA$125 (plus HST) for one half-day with that locum on the posting\n• CA$250 (plus HST) for more than one half-day with the same locum on the same posting\n\nA half-day is 3.75 hours, in line with the GP Locum Programme guide. Two half-day blocks make a full day.\n\nPay from Match Fees in your host dashboard. The fee is due by the date shown on the invoice (usually within 7 days, or sooner if the first shift is earlier).',
+      },
+      {
+        id: 'host-when-pay-match-fee',
         question: 'When do I pay the match fee?',
         answer:
-          'You are not charged to register or post jobs.\nAfter a locum accepts a host-confirmed placement, LocumLink invoices a platform match fee of CA$125 or CA$250 (plus HST), depending on total claimed hours.\nPay from Match Fees in your host dashboard. The fee is due by the date shown on the invoice (usually within 7 days, or sooner if the first shift is earlier).',
+          'After a locum accepts a host-confirmed placement, LocumLink invoices the platform match fee (CA$125 or CA$250 plus HST) for that match.\nSee “What are LocumLink match fees?” for how the amount is determined.',
       },
       {
         id: 'host-how-to-pay',

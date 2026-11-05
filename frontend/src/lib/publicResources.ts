@@ -15,13 +15,15 @@ export const SHARED_RESOURCE_DOCUMENTS = [
   },
   {
     title: 'Locum Program Guidelines',
-    description: 'Comprehensive guidelines for the Locum Program, last updated April 2024.',
+    description:
+      'Comprehensive guidelines for the Locum Program, last updated April 2024.',
     url: 'https://doctorsns.com/contract-and-support/master-agreement/programs-funding/locum-program',
-    icon: 'pdf' as const,
+    icon: 'link' as const,
   },
   {
     title: 'Locum Program Claim Form',
-    description: 'Claim form for the Locum Program covering Jun 15, 2026 – Mar 31, 2027.',
+    description:
+      'Claim form for the Locum Program covering Jun 15, 2026 – Mar 31, 2027.',
     url: '/documents/locum-program-claim-form-2026-2027.pdf',
     icon: 'pdf' as const,
   },
@@ -32,7 +34,9 @@ export const SHARED_RESOURCE_DOCUMENTS = [
     url: 'https://cpsns.ns.ca/registrants/physicians/your-practice/atlantic-registry/',
     icon: 'link' as const,
   },
-] as const;
+];
+
+export type SharedResourceDocument = (typeof SHARED_RESOURCE_DOCUMENTS)[number];
 
 export type PublicResourceItem =
   | { kind: 'guide'; id: string; title: string; description: string }
@@ -58,7 +62,10 @@ export const PUBLIC_RESOURCES: PublicResourceItem[] = sortResourcesByTitle([
     title: LOCUM_PHYSICIAN_GUIDE.title,
     description: LOCUM_PHYSICIAN_GUIDE.description,
   },
-  ...SHARED_RESOURCE_DOCUMENTS.map((doc) => ({ kind: 'external' as const, ...doc })),
+  ...SHARED_RESOURCE_DOCUMENTS.map((doc) => ({
+    kind: 'external' as const,
+    ...doc,
+  })),
 ]);
 
 export function findPublicGuide(id: string) {
