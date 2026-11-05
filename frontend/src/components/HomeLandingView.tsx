@@ -7,7 +7,6 @@ import { PublicSiteNav } from '@/components/PublicSiteNav';
 import WhatsNewModal from '@/components/WhatsNewModal';
 import { SocialLinks } from '@/components/SocialLinks';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
-import { ABOUT_PAGE } from '@/content/about';
 import { ROLE_GUIDE } from '@/lib/roleAccent';
 import { VOLTA_URL } from '@/lib/support';
 
@@ -27,7 +26,6 @@ export function HomeLandingView({
   rootStyle,
 }: HomeLandingViewProps) {
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
-  const { story } = ABOUT_PAGE;
 
   const closeWhatsNew = useCallback(() => {
     setWhatsNewOpen(false);
@@ -136,25 +134,11 @@ export function HomeLandingView({
         </div>
 
         <footer className="home-landing-footer">
-          <section className="home-landing-founder" aria-labelledby="home-founder-title">
-            <div className="home-landing-founder__inner">
-              <figure className="home-landing-founder__photo">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={story.imageSrc}
-                  alt={story.imageAlt}
-                  width={480}
-                  height={480}
-                />
-              </figure>
-              <div className="home-landing-founder__copy">
-                <h2 id="home-founder-title" className="home-landing-founder__title">
-                  {story.title}
-                </h2>
-                <p className="home-landing-founder__body">{story.body}</p>
-              </div>
-            </div>
-          </section>
+          <p className="home-landing-founder-story">
+            I built LocumLink after experiencing how difficult it was to find coverage for my own
+            practice in Nova Scotia. It gives clinics a place to post their coverage needs and
+            physicians a way to find shifts that fit their schedules.
+          </p>
 
           <div className="home-landing-footer-trust">
             {[
