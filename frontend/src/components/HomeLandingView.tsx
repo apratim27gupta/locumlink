@@ -64,19 +64,19 @@ export function HomeLandingView({
         <PublicSiteNav interactive={interactive} showSignIn />
       </header>
 
-      <main className="home-landing-main">
-        <div id="whats-new" className="home-landing-announce">
-          <div className="home-landing-announce__inner">
-            <span className="home-landing-announce__badge">New on LocumLink</span>
-            <p className="home-landing-announce__copy">
-              Half-day coverage blocks are now available.
-            </p>
-            <Link href="/news#release" className="home-landing-announce__cta">
-              See what&apos;s new <span aria-hidden>→</span>
-            </Link>
-          </div>
+      <div id="whats-new" className="home-landing-announce">
+        <div className="home-landing-announce__inner">
+          <span className="home-landing-announce__badge">New on LocumLink</span>
+          <p className="home-landing-announce__copy">
+            Half-day coverage blocks are now available.
+          </p>
+          <Link href="/news#release" className="home-landing-announce__cta">
+            See what&apos;s new <span aria-hidden>→</span>
+          </Link>
         </div>
+      </div>
 
+      <main className="home-landing-main">
         <div className="home-landing-body">
           <section className="home-landing-hero" id="about">
             <p className="home-landing-hero__tagline">CONNECT. COVER. CARE.</p>
