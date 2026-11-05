@@ -506,8 +506,8 @@
 }
 
 .home-landing-main {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 0 auto;
+  min-height: min-content;
   margin-top: 0;
   overflow: visible;
   background: #f7f8fa;
@@ -529,6 +529,13 @@
   z-index: 10;
   background: #ffffff;
   box-shadow: 0 1px 0 rgba(15, 42, 122, 0.06);
+}
+
+/* Zoom / short viewports: sticky chrome eats the screen — scroll with the page instead. */
+@media (max-height: 700px) {
+  .home-landing-header {
+    position: static;
+  }
 }
 
 .home-landing-nav {
@@ -2391,11 +2398,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: clamp(24px, 3.5vh, 48px);
+  /* safe center: falls back to start when content would overflow/overlap */
+  justify-content: flex-start;
+  justify-content: safe center;
+  gap: clamp(16px, 2.5vh, 48px);
   flex: 1 1 auto;
-  min-height: 0;
-  padding: clamp(10px, 1.5vh, 20px) 24px 0;
+  min-height: min-content;
+  padding: clamp(12px, 1.5vh, 20px) 24px 0;
 }
 
 /* ── Home landing hero (text-only) ── */
@@ -2407,9 +2416,9 @@
   align-items: center;
   justify-content: flex-start;
   text-align: center;
-  gap: clamp(14px, 2.2vh, 26px);
+  gap: clamp(12px, 2vh, 26px);
   padding: 0;
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 
 .home-landing-hero__tagline {
@@ -2426,13 +2435,15 @@
   font-family: var(--font-display), Outfit, sans-serif;
   font-weight: 700;
   font-size: clamp(1.65rem, 3.8vw, 2.45rem);
-  line-height: 1.15;
+  line-height: 1.2;
   color: #0b0f1f;
   text-align: center;
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
 .home-landing-hero__nowrap {
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .home-landing-hero__subhead {
@@ -2461,10 +2472,12 @@
 }
 
 .home-landing-hero__actions .btn-landing-cta {
-  min-width: 210px;
-  height: 50px;
+  min-width: min(210px, 100%);
+  min-height: 50px;
+  height: auto;
   padding: 12px 22px;
   font-size: 17px;
+  white-space: normal;
 }
 
 .home-landing-hero__badges {
@@ -5499,6 +5512,7 @@ body.app-body {
   .home-landing-body {
     flex: 0 0 auto;
     justify-content: flex-start;
+    min-height: min-content;
     gap: 16px;
     padding: 16px 16px 0 !important;
   }
