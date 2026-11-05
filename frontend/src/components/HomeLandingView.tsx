@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import AppStoreInstallButton from '@/components/AppStoreInstallButton';
 import { PublicSiteNav } from '@/components/PublicSiteNav';
+import RequestDemoModal from '@/components/RequestDemoModal';
 import WhatsNewModal from '@/components/WhatsNewModal';
 import { SocialLinks } from '@/components/SocialLinks';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
@@ -26,11 +27,7 @@ export function HomeLandingView({
   rootStyle,
 }: HomeLandingViewProps) {
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
-
-  const openWhatsNew = useCallback(() => {
-    if (!interactive) return;
-    setWhatsNewOpen(true);
-  }, [interactive]);
+  const [demoOpen, setDemoOpen] = useState(false);
 
   const closeWhatsNew = useCallback(() => {
     setWhatsNewOpen(false);
@@ -54,9 +51,7 @@ export function HomeLandingView({
       className="home-landing-root"
       style={{
         position: 'relative',
-        height: '100vh',
-        maxHeight: '100vh',
-        overflow: 'hidden',
+        minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
         fontFamily: 'Inter, sans-serif',
@@ -64,29 +59,30 @@ export function HomeLandingView({
       }}
     >
       <WhatsNewModal open={whatsNewOpen} onClose={closeWhatsNew} />
+      <RequestDemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
+
       <header className="home-landing-header">
         <PublicSiteNav interactive={interactive} showSignIn />
-        <div id="whats-new" className="home-landing-announce">
-          <div className="home-landing-announce__inner">
-            <span className="home-landing-announce__badge">New on LocumLink</span>
-            <p className="home-landing-announce__copy">
-              Half-day coverage blocks are now available.
-            </p>
-            <Link href="/news#release" className="home-landing-announce__cta">
-              See what&apos;s new <span aria-hidden>→</span>
-            </Link>
-          </div>
-        </div>
       </header>
+
+      <div id="whats-new" className="home-landing-announce">
+        <div className="home-landing-announce__inner">
+          <span className="home-landing-announce__badge">New on LocumLink</span>
+          <p className="home-landing-announce__copy">
+            Half-day coverage blocks are now available.
+          </p>
+          <Link href="/news#release" className="home-landing-announce__cta">
+            See what&apos;s new <span aria-hidden>→</span>
+          </Link>
+        </div>
+      </div>
 
       <main className="home-landing-main">
         <div className="home-landing-body">
           <section className="home-landing-hero" id="about">
             <p className="home-landing-hero__tagline">CONNECT. COVER. CARE.</p>
             <h1 className="home-landing-h1 home-landing-hero__headline">
-              Connect with verified locums across
-              <br />
-              <span className="home-landing-hero__nowrap">Nova Scotia</span>
+              Find locum coverage and shifts across Nova Scotia.
             </h1>
             <p className="home-landing-subhead home-landing-hero__subhead">
               Built by physicians, for physicians. Find coverage or your next locum opportunity in one
@@ -141,16 +137,34 @@ export function HomeLandingView({
           </section>
 
           <div className="home-landing-fee-banner">
-            <p className="home-landing-fee-banner__copy">
-              Explore available locum opportunities
-            </p>
-            <Link href="/locum/browse" className="home-landing-fee-banner__link">
-              View opportunities <span aria-hidden>→</span>
-            </Link>
+            <div className="home-landing-fee-banner__text">
+              <p className="home-landing-fee-banner__copy">Request a Demo</p>
+              <p className="home-landing-fee-banner__subcopy">
+                For clinics that want a walkthrough of posting coverage on LocumLink.
+              </p>
+            </div>
+            {interactive ? (
+              <button
+                type="button"
+                className="home-landing-fee-banner__link"
+                onClick={() => setDemoOpen(true)}
+              >
+                Request a Demo <span aria-hidden>→</span>
+              </button>
+            ) : (
+              <span className="home-landing-fee-banner__link" style={{ pointerEvents: 'none' }}>
+                Request a Demo <span aria-hidden>→</span>
+              </span>
+            )}
           </div>
         </div>
 
         <footer className="home-landing-footer">
+          <p className="home-landing-founder-story">
+            I built LocumLink after experiencing how difficult it was to find coverage for my own
+            practice in Nova Scotia. It gives clinics a place to post their coverage needs and
+            physicians a way to find shifts that fit their schedules.
+          </p>
           <div className="home-landing-footer-trust">
             {[
               'Built by a Nova Scotia family physician',

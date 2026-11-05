@@ -492,15 +492,18 @@
 
 
 .home-landing-root {
-  --home-landing-header-offset: 124px;
+  --home-landing-header-offset: 72px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #f7f8fa;
 }
 
 .home-landing-main {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-height: 0;
-  margin-top: var(--home-landing-header-offset, 124px);
+  margin-top: 0;
   overflow-x: hidden;
-  overflow-y: hidden;
+  overflow-y: visible;
   background: #f7f8fa;
   display: flex;
   flex-direction: column;
@@ -510,15 +513,9 @@
   box-sizing: border-box;
 }
 
-@media (max-height: 700px) {
-  .home-landing-main {
-    overflow-y: auto;
-  }
-}
-
 .home-landing-header {
   box-sizing: border-box;
-  position: absolute;
+  position: sticky;
   left: 0;
   top: 0;
   width: 100%;
@@ -900,7 +897,7 @@
 
 @media (max-width: 720px) {
   .home-landing-root {
-    --home-landing-header-offset: 132px;
+    --home-landing-header-offset: 60px;
   }
 
   .home-landing-nav__inner {
@@ -2493,7 +2490,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px 20px;
-  padding: 12px 20px;
+  padding: 14px 20px;
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 12px;
@@ -2501,16 +2498,38 @@
   flex-shrink: 0;
 }
 
+.home-landing-fee-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .home-landing-fee-banner__copy {
   margin: 0;
   font-family: Inter, sans-serif;
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.35;
   color: #0b0f1f;
 }
 
+.home-landing-fee-banner__subcopy {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: #4b5563;
+}
+
 .home-landing-fee-banner__link {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -2524,6 +2543,19 @@
 
 .home-landing-fee-banner__link:hover {
   text-decoration: underline;
+}
+
+.home-landing-founder-story {
+  margin: 0 auto;
+  max-width: 720px;
+  padding: 0 8px;
+  font-family: Inter, sans-serif;
+  font-size: clamp(0.95rem, 1.6vw, 1.05rem);
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.55;
+  text-align: center;
+  color: #374151;
 }
 
 /* Large desktops: more vertical room + slightly wider hero */
@@ -5439,14 +5471,19 @@ body.app-body {
    ══════════════════════════════════════════════════ */
 @media (max-width: 768px) {
   .home-landing-root {
-    height: 100dvh !important;
-    max-height: 100dvh !important;
+    min-height: 100dvh !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  .home-landing-header {
+    top: env(safe-area-inset-top, 0px);
   }
 
   .home-landing-main {
     padding: 16px 16px 0 !important;
-    margin-top: calc(var(--home-landing-header-offset, 132px) + env(safe-area-inset-top, 0px)) !important;
-    overflow-y: auto !important;
+    margin-top: 0 !important;
+    overflow-y: visible !important;
   }
 
   .home-landing-body {
