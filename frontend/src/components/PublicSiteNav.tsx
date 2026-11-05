@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Logo from '@/components/Logo';
+import RequestDemoModal from '@/components/RequestDemoModal';
 import SignInRoleDropdown from '@/components/SignInRoleDropdown';
 
 export const PUBLIC_SITE_NAV_LINKS = [
@@ -17,6 +18,7 @@ export const PUBLIC_SITE_NAV_LINKS = [
 type PublicSiteNavProps = {
   interactive?: boolean;
   showSignIn?: boolean;
+  showRequestDemo?: boolean;
   /** Extra class on the outer <nav> (e.g. public-page-nav). */
   className?: string;
 };
@@ -24,10 +26,12 @@ type PublicSiteNavProps = {
 export function PublicSiteNav({
   interactive = true,
   showSignIn = true,
+  showRequestDemo = true,
   className,
 }: PublicSiteNavProps) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
   const panelId = useId();
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
@@ -52,88 +56,120 @@ export function PublicSiteNav({
   }, [menuOpen, closeMenu]);
 
   const navClass = ['home-landing-nav', className].filter(Boolean).join(' ');
+  const openDemo = useCallback(() => {
+    if (!interactive) return;
+    setDemoOpen(true);
+    closeMenu();
+  }, [interactive, closeMenu]);
 
   return (
-    <nav className={navClass} aria-label="Primary">
-      <div className="home-landing-nav__inner">
-        <Link href="/home" className="home-landing-nav__logo" aria-label="Locum Link home">
-          <Logo size="md" />
-        </Link>
+    <>
+      <RequestDemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
+      <nav className={navClass} aria-label="Primary">
+        <div className="home-landing-nav__inner">
+          <Link href="/home" className="home-landing-nav__logo" aria-label="Locum Link home">
+            <Logo size="md" />
+          </Link>
 
-        <div className="home-landing-nav__links" aria-hidden={menuOpen ? true : undefined}>
-          {PUBLIC_SITE_NAV_LINKS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`home-landing-nav__link${pathname === item.href || pathname.startsWith(`${item.href}/`) ? ' home-landing-nav__link--active' : ''}`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-
-        <div className="home-landing-nav__trailing">
-          {showSignIn ? (
-            <div className="home-landing-nav__auth">
-              <SignInRoleDropdown interactive={interactive} className="home-landing-signin" />
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            className={`home-landing-nav__menu-btn${menuOpen ? ' home-landing-nav__menu-btn--open' : ''}`}
-            aria-expanded={menuOpen}
-            aria-controls={panelId}
-            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-            onClick={toggleMenu}
-          >
-            <span className="home-landing-nav__menu-icon" aria-hidden>
-              <span />
-              <span />
-              <span />
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <div
-        className={`home-landing-nav__drawer${menuOpen ? ' home-landing-nav__drawer--open' : ''}`}
-        id={panelId}
-        hidden={!menuOpen}
-      >
-        <button
-          type="button"
-          className="home-landing-nav__drawer-backdrop"
-          aria-label="Close menu"
-          tabIndex={menuOpen ? 0 : -1}
-          onClick={closeMenu}
-        />
-        <div className="home-landing-nav__drawer-panel" role="dialog" aria-modal="true" aria-label="Site menu">
-          <div className="home-landing-nav__drawer-links">
+          <div className="home-landing-nav__links" aria-hidden={menuOpen ? true : undefined}>
             {PUBLIC_SITE_NAV_LINKS.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`home-landing-nav__drawer-link${pathname === item.href || pathname.startsWith(`${item.href}/`) ? ' home-landing-nav__drawer-link--active' : ''}`}
-                onClick={closeMenu}
+                className={`home-landing-nav__link${pathname === item.href || pathname.startsWith(`${item.href}/`) ? ' home-landing-nav__link--active' : ''}`}
               >
                 {item.label}
               </Link>
             ))}
           </div>
-          <div className="home-landing-nav__drawer-auth">
-            {showSignIn ? (
-              <SignInRoleDropdown
-                interactive={interactive}
-                className="home-landing-signin home-landing-signin--drawer"
-              />
+
+          <div className="home-landing-nav__trailing">
+            {showSignIn || showRequestDemo ? (
+              <div className="home-landing-nav__auth">
+                {showSignIn ? (
+                  <SignInRoleDropdown interactive={interactive} className="home-landing-signin" />
+                ) : null}
+                {showRequestDemo ? (
+                  interactive ? (
+                    <button type="button" className="btn-request-demo" onClick={openDemo}>
+                      Request a Demo
+                    </button>
+                  ) : (
+                    <span className="btn-request-demo" style={{ pointerEvents: 'none' }}>
+                      Request a Demo
+                    </span>
+                  )
+                ) : null}
+              </div>
             ) : null}
-            <Link href="/home" className="home-landing-nav__drawer-home" onClick={closeMenu}>
-              Back to home
-            </Link>
+
+            <button
+              type="button"
+              className={`home-landing-nav__menu-btn${menuOpen ? ' home-landing-nav__menu-btn--open' : ''}`}
+              aria-expanded={menuOpen}
+              aria-controls={panelId}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              onClick={toggleMenu}
+            >
+              <span className="home-landing-nav__menu-icon" aria-hidden>
+                <span />
+                <span />
+                <span />
+              </span>
+            </button>
           </div>
         </div>
-      </div>
-    </nav>
+
+        <div
+          className={`home-landing-nav__drawer${menuOpen ? ' home-landing-nav__drawer--open' : ''}`}
+          id={panelId}
+          hidden={!menuOpen}
+        >
+          <button
+            type="button"
+            className="home-landing-nav__drawer-backdrop"
+            aria-label="Close menu"
+            tabIndex={menuOpen ? 0 : -1}
+            onClick={closeMenu}
+          />
+          <div className="home-landing-nav__drawer-panel" role="dialog" aria-modal="true" aria-label="Site menu">
+            <div className="home-landing-nav__drawer-links">
+              {PUBLIC_SITE_NAV_LINKS.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`home-landing-nav__drawer-link${pathname === item.href || pathname.startsWith(`${item.href}/`) ? ' home-landing-nav__drawer-link--active' : ''}`}
+                  onClick={closeMenu}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+            <div className="home-landing-nav__drawer-auth">
+              {showSignIn ? (
+                <SignInRoleDropdown
+                  interactive={interactive}
+                  className="home-landing-signin home-landing-signin--drawer"
+                />
+              ) : null}
+              {showRequestDemo ? (
+                interactive ? (
+                  <button type="button" className="btn-request-demo btn-request-demo--drawer" onClick={openDemo}>
+                    Request a Demo
+                  </button>
+                ) : (
+                  <span className="btn-request-demo btn-request-demo--drawer" style={{ pointerEvents: 'none' }}>
+                    Request a Demo
+                  </span>
+                )
+              ) : null}
+              <Link href="/home" className="home-landing-nav__drawer-home" onClick={closeMenu}>
+                Back to home
+              </Link>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </>
   );
 }

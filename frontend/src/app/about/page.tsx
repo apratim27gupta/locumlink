@@ -1,18 +1,15 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense } from 'react';
 import { PublicPageShell } from '@/components/PublicPageShell';
 import { PublicPageBackLink } from '@/components/PublicPageBackLink';
-import RequestDemoModal from '@/components/RequestDemoModal';
 import { ABOUT_PAGE } from '@/content/about';
 
 export default function AboutPage() {
-  const { story, cta } = ABOUT_PAGE;
-  const [demoOpen, setDemoOpen] = useState(false);
+  const { story } = ABOUT_PAGE;
 
   return (
-    <PublicPageShell showSignIn={false}>
-      <RequestDemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
+    <PublicPageShell showSignIn>
       <div className="support-page support-page--wide">
         <Suspense fallback={null}>
           <PublicPageBackLink />
@@ -44,20 +41,6 @@ export default function AboutPage() {
                   ))}
                 </p>
               </div>
-            </div>
-          </section>
-
-          <section id="request-demo" className="about-page__cta">
-            <h2 className="about-page__section-title">{cta.title}</h2>
-            <p className="about-page__body">{cta.body}</p>
-            <div className="about-page__cta-row">
-              <button
-                type="button"
-                className="about-page__cta-btn"
-                onClick={() => setDemoOpen(true)}
-              >
-                {cta.primaryLabel}
-              </button>
             </div>
           </section>
         </article>

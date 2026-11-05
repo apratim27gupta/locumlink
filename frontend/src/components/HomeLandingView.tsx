@@ -4,10 +4,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import AppStoreInstallButton from '@/components/AppStoreInstallButton';
 import { PublicSiteNav } from '@/components/PublicSiteNav';
-import RequestDemoModal from '@/components/RequestDemoModal';
 import WhatsNewModal from '@/components/WhatsNewModal';
 import { SocialLinks } from '@/components/SocialLinks';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
+import { ABOUT_PAGE } from '@/content/about';
 import { ROLE_GUIDE } from '@/lib/roleAccent';
 import { VOLTA_URL } from '@/lib/support';
 
@@ -27,7 +27,7 @@ export function HomeLandingView({
   rootStyle,
 }: HomeLandingViewProps) {
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
-  const [demoOpen, setDemoOpen] = useState(false);
+  const { story } = ABOUT_PAGE;
 
   const closeWhatsNew = useCallback(() => {
     setWhatsNewOpen(false);
@@ -58,7 +58,6 @@ export function HomeLandingView({
       }}
     >
       <WhatsNewModal open={whatsNewOpen} onClose={closeWhatsNew} />
-      <RequestDemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
 
       <header className="home-landing-header">
         <PublicSiteNav interactive={interactive} showSignIn />
@@ -134,36 +133,29 @@ export function HomeLandingView({
               ))}
             </div>
           </section>
-
-          <div className="home-landing-fee-banner">
-            <div className="home-landing-fee-banner__text">
-              <p className="home-landing-fee-banner__copy">Request a Demo</p>
-              <p className="home-landing-fee-banner__subcopy">
-                For clinics that want a walkthrough of posting coverage on LocumLink.
-              </p>
-            </div>
-            {interactive ? (
-              <button
-                type="button"
-                className="home-landing-fee-banner__link"
-                onClick={() => setDemoOpen(true)}
-              >
-                Request a Demo <span aria-hidden>→</span>
-              </button>
-            ) : (
-              <span className="home-landing-fee-banner__link" style={{ pointerEvents: 'none' }}>
-                Request a Demo <span aria-hidden>→</span>
-              </span>
-            )}
-          </div>
         </div>
 
         <footer className="home-landing-footer">
-          <p className="home-landing-founder-story">
-            I built LocumLink after experiencing how difficult it was to find coverage for my own
-            practice in Nova Scotia. It gives clinics a place to post their coverage needs and
-            physicians a way to find shifts that fit their schedules.
-          </p>
+          <section className="home-landing-founder" aria-labelledby="home-founder-title">
+            <div className="home-landing-founder__inner">
+              <figure className="home-landing-founder__photo">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={story.imageSrc}
+                  alt={story.imageAlt}
+                  width={480}
+                  height={480}
+                />
+              </figure>
+              <div className="home-landing-founder__copy">
+                <h2 id="home-founder-title" className="home-landing-founder__title">
+                  {story.title}
+                </h2>
+                <p className="home-landing-founder__body">{story.body}</p>
+              </div>
+            </div>
+          </section>
+
           <div className="home-landing-footer-trust">
             {[
               'Built by a Nova Scotia family physician',

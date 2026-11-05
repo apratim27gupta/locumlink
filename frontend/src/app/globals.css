@@ -807,7 +807,8 @@
 
 .home-landing-nav__auth .btn-signin,
 .home-landing-nav__auth .btn-signup,
-.home-landing-nav__auth .btn-app-store {
+.home-landing-nav__auth .btn-app-store,
+.home-landing-nav__auth .btn-request-demo {
   appearance: none;
   -webkit-appearance: none;
 }
@@ -825,6 +826,45 @@
   border-color: #1a3a9a;
   color: #ffffff;
   box-shadow: 0 4px 12px rgba(15, 42, 122, 0.22);
+}
+
+.btn-request-demo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 18px;
+  min-width: 0;
+  height: 44px;
+  border: 1px solid #0F2A7A;
+  border-radius: 8px;
+  background: #ffffff;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.2;
+  color: #0F2A7A;
+  cursor: pointer;
+  white-space: nowrap;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.btn-request-demo:hover {
+  background: #f0f4ff;
+  border-color: #2a44e0;
+  box-shadow: 0 4px 12px rgba(28, 50, 210, 0.15);
+  transform: translateY(-1px);
+}
+
+.btn-request-demo:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px rgba(59, 79, 216, 0.45);
+}
+
+.btn-request-demo--drawer {
+  width: 100%;
 }
 
 .home-landing-announce {
@@ -999,7 +1039,8 @@
   }
 
   .btn-signin,
-  .btn-signup {
+  .btn-signup,
+  .btn-request-demo {
     min-width: 88px;
     padding: 10px 14px;
     font-size: 15px;
@@ -2051,7 +2092,7 @@
 }
 
 .support-page--wide {
-  max-width: 960px;
+  max-width: 1120px;
 }
 
 /* ── Public resources list ── */
@@ -2258,14 +2299,24 @@
 }
 
 .about-page__section--with-photo {
-  border-top: 1px solid #e5e7eb;
+  border-top: none;
+}
+
+.about-page__section--first.about-page__section--with-photo {
+  border-top: none;
+  padding-top: 0;
 }
 
 .about-page__story {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
-  gap: 28px 32px;
+  grid-template-columns: minmax(160px, 200px) minmax(0, 1fr);
+  gap: 24px 28px;
   align-items: start;
+}
+
+.about-page__story-copy .about-page__body {
+  max-width: none;
+  line-height: 1.55;
 }
 
 .about-page__story-photo {
@@ -2569,17 +2620,71 @@
   text-decoration: underline;
 }
 
-.home-landing-founder-story {
+.home-landing-founder {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1120px;
   margin: 0 auto;
-  max-width: 720px;
-  padding: 0 8px;
+  padding: 8px 28px 0;
+  border-top: none;
+}
+
+.home-landing-founder__inner {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+  gap: 20px 28px;
+  align-items: start;
+}
+
+.home-landing-founder__photo {
+  margin: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #eef2ff;
+  aspect-ratio: 1;
+  box-shadow: 0 8px 24px rgba(15, 42, 122, 0.1);
+}
+
+.home-landing-founder__photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.home-landing-founder__title {
+  margin: 0 0 10px;
   font-family: Inter, sans-serif;
-  font-size: clamp(0.95rem, 1.6vw, 1.05rem);
+  font-size: clamp(1.35rem, 2.4vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1.25;
+  color: #0b0f1f;
+}
+
+.home-landing-founder__body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  font-size: clamp(0.98rem, 1.5vw, 1.08rem);
   font-weight: 400;
-  font-style: italic;
   line-height: 1.55;
-  text-align: center;
   color: #374151;
+}
+
+@media (max-width: 720px) {
+  .home-landing-founder {
+    padding: 8px 16px 0;
+  }
+
+  .home-landing-founder__inner {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .home-landing-founder__photo {
+    width: min(180px, 55%);
+    margin-inline: auto;
+  }
 }
 
 /* Large desktops: more vertical room + slightly wider hero */
@@ -4932,7 +5037,8 @@ body.app-body {
     flex-shrink: 0 !important;
   }
   .home-landing-nav__auth .btn-signin,
-  .home-landing-nav__auth .btn-signup {
+  .home-landing-nav__auth .btn-signup,
+  .home-landing-nav__auth .btn-request-demo {
     min-width: unset !important;
     padding: 6px 10px !important;
     font-size: 12px !important;
