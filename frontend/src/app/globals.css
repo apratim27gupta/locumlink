@@ -493,16 +493,22 @@
 
 .home-landing-root {
   --home-landing-header-offset: 72px;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   align-self: stretch;
   width: 100%;
-  min-height: 0;
-  height: 100%;
-  max-height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  min-height: 100%;
+  height: auto;
+  max-height: none;
+  overflow: visible;
   background: #f7f8fa;
+}
+
+/* Landing scrolls on #app-root (same pattern as public pages) — avoids nested-scroll clip on phones. */
+#app-root:has(.home-landing-root) {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 .home-landing-main {
@@ -2059,6 +2065,7 @@
   overflow-x: hidden !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 .public-page-nav {
@@ -5555,13 +5562,33 @@ body.app-body {
    max-width: 768px only — desktop & PWA unchanged
    ══════════════════════════════════════════════════ */
 @media (max-width: 768px) {
-  .home-landing-root {
+  html,
+  body {
     height: 100% !important;
     max-height: 100% !important;
-    min-height: 0 !important;
+  }
+
+  #app-root {
+    height: 100% !important;
+    max-height: 100% !important;
+    /* dvh tracks mobile browser chrome better than vh */
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+  }
+
+  .home-landing-root {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    /* Keep full-bleed nav/announce — horizontal inset belongs on inner content */
+    padding-left: 0 !important;
+    padding-right: 0 !important;
   }
 
   .home-landing-header {
+    position: sticky;
+    top: 0;
     top: env(safe-area-inset-top, 0px);
   }
 
@@ -5579,7 +5606,19 @@ body.app-body {
   }
 
   .home-landing-footer {
-    margin-top: auto;
+    margin-top: 24px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .public-page-root {
+    min-height: 100% !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+  }
+
+  .public-page-main {
+    overflow: visible !important;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   .home-landing-hero__actions .btn-landing-cta {
@@ -5958,7 +5997,6 @@ main.dash-main-content {
 
   /* ── Step 3: Page wrappers ── */
   .auth-page,
-  .home-landing-root,
   .landing-root,
   .dash-page-shell,
   .host-dash-page,
@@ -5977,6 +6015,14 @@ main.dash-main-content {
     overflow-x: hidden;
     padding-left: 16px;
     padding-right: 16px;
+    box-sizing: border-box;
+  }
+
+  /* Landing keeps full-bleed chrome; pad content regions only */
+  .home-landing-root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
     box-sizing: border-box;
   }
 
@@ -6238,11 +6284,20 @@ main.dash-main-content {
   }
 
   .auth-page,
-  .home-landing-root,
   .landing-root,
   .offline-page-root,
   .not-found-page,
   .setup-page-shell {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Safe area on sticky nav, not the scroll root (avoids clipped first paint) */
+  .home-landing-root {
+    padding-top: 0;
+  }
+
+  .home-landing-header,
+  .public-page-nav {
     padding-top: env(safe-area-inset-top, 0px);
   }
 }
