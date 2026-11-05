@@ -1,5 +1,5 @@
 /**
- * Ten How it works / tutorial demos.
+ * How it works / tutorial demos — titles align with the release bulletin features.
  *
  * GCS bucket: how-to-videos-l2 (public objectViewer)
  * Folder:     How to- LocumLink/
@@ -42,34 +42,38 @@ export function howToVideoUploadHint(video: HowToVideo): string {
 
 export const HOW_TO_VIDEOS: HowToVideo[] = [
   {
-    id: 'post-for-specific-dates',
-    fileBase: 'Post_for_specific_dates',
-    title: 'Post for specific dates',
-    description: 'Choose exact calendar days when you need coverage.',
+    id: 'post-continuous-days-slots',
+    fileBase: 'Post_for_continuous_days-full-day_or_half-day_slots',
+    title: 'Flexible dates I',
+    description:
+      'Continuous dates: one stretch of days from a start to an end date. Also covers how to add full-day and half-day slots.',
     audience: 'Host',
     durationHint: 'Demo 01',
   },
   {
-    id: 'post-for-multiple-periods',
-    fileBase: 'Post_for_multiple_periods',
-    title: 'Post for multiple periods',
-    description: 'Create a posting that covers more than one date range or period.',
+    id: 'post-for-specific-dates',
+    fileBase: 'Post_for_specific_dates',
+    title: 'Flexible dates II',
+    description:
+      'Specific days: pick each day you need a locum. They do not have to be consecutive.',
     audience: 'Host',
     durationHint: 'Demo 02',
   },
   {
-    id: 'post-continuous-days-slots',
-    fileBase: 'Post_for_continuous_days-full-day_or_half-day_slots',
-    title: 'Continuous days - full or half-day slots',
-    description: 'Post a continuous span with full-day or 3.75-hour half-day slots.',
+    id: 'post-for-multiple-periods',
+    fileBase: 'Post_for_multiple_periods',
+    title: 'Flexible dates III',
+    description:
+      'Multiple periods: add one or more date periods, each with its own start, end, and time.',
     audience: 'Host',
     durationHint: 'Demo 03',
   },
   {
     id: 'book-multiple-locums',
     fileBase: 'Book_multiple_locums_for_one_posting+coverage_visibility',
-    title: 'Book multiple locums & coverage visibility',
-    description: 'Fill one posting with more than one locum and see which slots remain open.',
+    title: 'Multiple locums & coverage visibility',
+    description:
+      'Fill one posting with more than one locum and see which days and slots remain open.',
     audience: 'Host',
     durationHint: 'Demo 04',
   },
@@ -84,7 +88,7 @@ export const HOW_TO_VIDEOS: HowToVideo[] = [
   {
     id: 'pay-match-fees',
     fileBase: 'pay_match_fees',
-    title: 'Pay match fees',
+    title: 'Match fee payment',
     description: 'How host match fee payment works after a confirmed match.',
     audience: 'Host',
     durationHint: 'Demo 06',
@@ -93,7 +97,8 @@ export const HOW_TO_VIDEOS: HowToVideo[] = [
     id: 'pre-filled-gp-form',
     fileBase: 'pre-filled_GP_Form',
     title: 'MSI GP Locum Application',
-    description: 'Review, save and download the pre-filled MSI GP Locum Application after a locum accepts.',
+    description:
+      'Review, save and download the pre-filled MSI GP Locum Application after a locum accepts.',
     audience: 'Host',
     durationHint: 'Demo 07',
   },
@@ -116,10 +121,18 @@ export const HOW_TO_VIDEOS: HowToVideo[] = [
   {
     id: 'apply-remaining-blocks',
     fileBase: 'Apply_for_remaining_available_blocks',
-    title: 'Apply for remaining available blocks',
+    title: 'Partial postings',
     description: 'Apply to open coverage left on a partially filled posting.',
     audience: 'Locum',
     durationHint: 'Demo 10',
+  },
+  {
+    id: 'locum-withdraw-application',
+    fileBase: 'Locum_withdraw_application',
+    title: 'Withdraw application',
+    description: 'Withdraw an application before you are matched.',
+    audience: 'Locum',
+    durationHint: 'Demo 11',
   },
 ];
 

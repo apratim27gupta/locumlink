@@ -6,7 +6,8 @@ export type WhatsNewFeature = {
   user: 'Host' | 'Locum';
   feature: string;
   whatUsersCanDo: string;
-  howToVideoId: string | null;
+  /** One or more How it works demo ids (Flexible dates links to all three date demos). */
+  howToVideoIds: readonly string[];
 };
 
 export const WHATS_NEW_RELEASE = {
@@ -30,77 +31,78 @@ export const WHATS_NEW_RELEASE = {
       user: 'Host',
       feature: 'Flexible dates',
       whatUsersCanDo: 'Pick the exact days you need covered',
-      howToVideoId: 'post-for-specific-dates',
+      // Single Watch demo → Flexible dates I (also covers the three date modes entry point)
+      howToVideoIds: ['post-continuous-days-slots'],
     },
     {
       num: '02',
       user: 'Host',
       feature: 'Full / half-day slots',
       whatUsersCanDo: `Post ${HALF_SLOT_HOURS}-hour half-days or full days`,
-      howToVideoId: 'post-continuous-days-slots',
+      howToVideoIds: ['post-continuous-days-slots'],
     },
     {
       num: '03',
       user: 'Host',
       feature: 'Multiple locums',
       whatUsersCanDo: 'Fill one posting with more than one locum',
-      howToVideoId: 'book-multiple-locums',
+      howToVideoIds: ['book-multiple-locums'],
     },
     {
       num: '04',
       user: 'Host',
       feature: 'Coverage visibility',
       whatUsersCanDo: 'See which days and slots are still open',
-      howToVideoId: 'book-multiple-locums',
+      howToVideoIds: ['book-multiple-locums'],
     },
     {
       num: '05',
       user: 'Host',
       feature: 'Cancel a match',
       whatUsersCanDo: 'Cancel when plans change',
-      howToVideoId: 'cancel-match',
+      howToVideoIds: ['cancel-match'],
     },
     {
       num: '06',
       user: 'Host',
       feature: 'Match fee payment',
       whatUsersCanDo: 'Pay per confirmed match',
-      howToVideoId: 'pay-match-fees',
+      howToVideoIds: ['pay-match-fees'],
     },
     {
       num: '07',
       user: 'Host',
       feature: 'MSI GP Locum Application',
       whatUsersCanDo: 'Review, save and download the pre-filled application.',
-      howToVideoId: 'pre-filled-gp-form',
+      howToVideoIds: ['pre-filled-gp-form'],
     },
     {
       num: '08',
       user: 'Locum',
       feature: 'Flexible applications',
       whatUsersCanDo: 'Apply to the days and slots that work for you',
-      howToVideoId: 'locum-flexible-applications',
+      howToVideoIds: ['locum-flexible-applications'],
     },
     {
       num: '09',
       user: 'Locum',
       feature: 'Modify availability',
       whatUsersCanDo: 'Update your availability as it changes',
-      howToVideoId: 'locum-modify-availability',
+      howToVideoIds: ['locum-modify-availability'],
     },
     {
       num: '10',
       user: 'Locum',
       feature: 'Partial postings',
       whatUsersCanDo: 'Apply to remaining open coverage',
-      howToVideoId: 'apply-remaining-blocks',
+      howToVideoIds: ['apply-remaining-blocks'],
     },
     {
       num: '11',
       user: 'Locum',
       feature: 'Withdraw application',
       whatUsersCanDo: 'Withdraw before you are matched',
-      howToVideoId: 'locum-flexible-applications',
+      howToVideoIds: ['locum-withdraw-application'],
     },
   ] satisfies WhatsNewFeature[],
   fees: {
@@ -129,7 +131,12 @@ export const WHATS_NEW_RELEASE = {
   },
 } as const;
 
+export function featureHowToHrefs(feature: WhatsNewFeature): string[] {
+  return feature.howToVideoIds.map((id) => howToVideoHref(id));
+}
+
+/** @deprecated Prefer featureHowToHrefs — Flexible dates has multiple demos. */
 export function featureHowToHref(feature: WhatsNewFeature): string | null {
-  if (!feature.howToVideoId) return null;
-  return howToVideoHref(feature.howToVideoId);
+  const hrefs = featureHowToHrefs(feature);
+  return hrefs[0] ?? null;
 }

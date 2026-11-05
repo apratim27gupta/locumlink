@@ -17,9 +17,9 @@ export default function HowItWorksPage() {
         <article className="support-card">
           <h1 className="support-page__title">How it works</h1>
           <p className="support-page__lead">
-            Ten short demos for hosts and locums - posting, matching, fees, applications, and the
-            pre-filled GP form. Videos stream from cloud storage and cache in the browser after the
-            first play.
+            Short demos for hosts and locums aligned with this release — Flexible dates I–III,
+            matching, fees, applications, and the pre-filled GP form. Videos stream from cloud
+            storage and cache in the browser after the first play.
           </p>
           <p className="how-to-page__meta">
             <Link href="/news#release" className="support-text-link">

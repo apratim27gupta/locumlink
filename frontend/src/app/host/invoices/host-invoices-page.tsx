@@ -16,6 +16,7 @@ import { MatchFeeEventTimeline } from '@/components/payments/MatchFeeEventTimeli
 import { matchFeeOutlineButtonStyle } from '@/components/payments/MatchFeeRefundConfirmModal';
 import { HOST_DASH_NAV } from '@/lib/hostNav';
 import { notifyMatchFeesUpdated } from '@/lib/matchFeeUpdatedEvent';
+import { requestNativeStripeCheckout } from '@/lib/nativeShell';
 import { fetchAllPaginated, hostApi, type MatchFeeInvoice } from '@/lib/api';
 import type { HostProfile } from '@/types';
 
@@ -141,6 +142,11 @@ export default function HostInvoicesPage() {
     setError(null);
     try {
       const { url } = await hostApi.payMatchFeeStripe(invoice.id);
+      // Native shell: Custom Tab / Safari handles Checkout + 3DS more reliably than WKWebView.
+      if (requestNativeStripeCheckout(url)) {
+        setPayingId(null);
+        return;
+      }
       window.location.href = url;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Payment failed.');

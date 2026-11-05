@@ -194,6 +194,26 @@ export default function App() {
       });
   }, [handleOAuthReturnUrl]);
 
+  /** Stripe Checkout in system browser; closes when success/cancel hits /host/invoices. */
+  const openStripeCheckoutInBrowser = useCallback((url: string) => {
+    const returnUrl = `${APP_ORIGIN}/host/invoices`;
+    const browserOptions =
+      Platform.OS === 'android' ? { createTask: false } : undefined;
+
+    void WebBrowser.openAuthSessionAsync(url, returnUrl, browserOptions)
+      .then((result) => {
+        if (result.type === 'success' && result.url) {
+          navigateWebViewTo(result.url);
+          return;
+        }
+        // User closed the sheet — refresh invoices in case they paid then dismissed.
+        navigateWebViewTo(`${APP_ORIGIN}/host/invoices`);
+      })
+      .catch(() => {
+        navigateWebViewTo(`${APP_ORIGIN}/host/invoices`);
+      });
+  }, [navigateWebViewTo]);
+
   const handleNotificationTap = useCallback((url: string | undefined) => {
     const target = resolveNotificationUrl(url);
     if (!target) return;
@@ -272,11 +292,23 @@ export default function App() {
       }
       if (msg.type === 'oauth' && typeof msg.url === 'string') {
         openOAuthInBrowser(msg.url);
+        return;
+      }
+      if (msg.type === 'stripe-checkout' && typeof msg.url === 'string') {
+        openStripeCheckoutInBrowser(msg.url);
       }
     } catch {
       /* ignore */
     }
-  }, [runNativeAppleSignIn, openOAuthInBrowser]);
+  }, [runNativeAppleSignIn, openOAuthInBrowser, openStripeCheckoutInBrowser]);
+
+  const isStripeCheckoutUrl = useCallback((url: string): boolean => {
+    try {
+      return /(^|\.)stripe\.com$/i.test(new URL(url).hostname);
+    } catch {
+      return false;
+    }
+  }, []);
 
   const interceptOAuthNavigation = useCallback((url: string): boolean => {
     if (Platform.OS === 'web') return false;
@@ -300,8 +332,14 @@ export default function App() {
       return true;
     }
 
+    // Prefer system browser for Stripe Checkout / 3DS instead of WKWebView.
+    if (isStripeCheckoutUrl(url)) {
+      openStripeCheckoutInBrowser(url);
+      return true;
+    }
+
     return false;
-  }, [navigateWebViewTo, openOAuthInBrowser]);
+  }, [navigateWebViewTo, openOAuthInBrowser, isStripeCheckoutUrl, openStripeCheckoutInBrowser]);
 
   const handleShouldStartLoadWithRequest = useCallback((request: { url: string }) => {
     return !interceptOAuthNavigation(request.url);

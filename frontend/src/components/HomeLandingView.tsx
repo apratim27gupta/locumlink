@@ -2,9 +2,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import Logo from '@/components/Logo';
 import AppStoreInstallButton from '@/components/AppStoreInstallButton';
-import SignInRoleDropdown from '@/components/SignInRoleDropdown';
+import { PublicSiteNav } from '@/components/PublicSiteNav';
 import WhatsNewModal from '@/components/WhatsNewModal';
 import { SocialLinks } from '@/components/SocialLinks';
 import { SupportLegalLinks } from '@/components/SupportLegalLinks';
@@ -66,33 +65,7 @@ export function HomeLandingView({
     >
       <WhatsNewModal open={whatsNewOpen} onClose={closeWhatsNew} />
       <header className="home-landing-header">
-        <nav className="home-landing-nav" aria-label="Primary">
-          <div className="home-landing-nav__inner">
-            <Link href="/home" className="home-landing-nav__logo" aria-label="Locum Link home">
-              <Logo size="md" />
-            </Link>
-            <div className="home-landing-nav__links">
-              <Link href="/about" className="home-landing-nav__link">
-                About us
-              </Link>
-              <Link href="/how-it-works" className="home-landing-nav__link">
-                How it works
-              </Link>
-              <Link href="/resources" className="home-landing-nav__link">
-                Resources
-              </Link>
-              <Link href="/faq" className="home-landing-nav__link">
-                FAQs
-              </Link>
-              <Link href="/news" className="home-landing-nav__link">
-                News &amp; updates
-              </Link>
-            </div>
-            <div className="home-landing-nav__auth">
-              <SignInRoleDropdown interactive={interactive} className="home-landing-signin" />
-            </div>
-          </div>
-        </nav>
+        <PublicSiteNav interactive={interactive} showSignIn />
         <div id="whats-new" className="home-landing-announce">
           <div className="home-landing-announce__inner">
             <span className="home-landing-announce__badge">New on LocumLink</span>

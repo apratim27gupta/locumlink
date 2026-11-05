@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { howToVideoSrc, howToVideoUploadHint, type HowToVideo } from '@/lib/howToVideos';
 
 type HowToVideoCardProps = {
@@ -9,17 +9,34 @@ type HowToVideoCardProps = {
 };
 
 export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
-  const fileSrc = howToVideoSrc(video);
+  const publicSrc = howToVideoSrc(video);
+  const apiSrc = `/api/how-to-videos/${encodeURIComponent(video.id)}`;
   const embedUrl = video.embedUrl || null;
+
+  const [src, setSrc] = useState(video.providerSrc || publicSrc);
+  const [usedFallback, setUsedFallback] = useState(false);
   const [ready, setReady] = useState(Boolean(embedUrl));
   const [failed, setFailed] = useState(false);
+  const [selected, setSelected] = useState(false);
+
+  useEffect(() => {
+    const syncSelected = () => {
+      const hash = decodeURIComponent(window.location.hash.replace(/^#/, ''));
+      setSelected(hash === video.id);
+    };
+    syncSelected();
+    window.addEventListener('hashchange', syncSelected);
+    return () => window.removeEventListener('hashchange', syncSelected);
+  }, [video.id]);
 
   const showPlaceholder = !embedUrl && !ready;
 
   return (
     <section
       id={video.id}
-      className="how-to-video-card"
+      className={
+        selected ? 'how-to-video-card how-to-video-card--selected' : 'how-to-video-card'
+      }
       aria-labelledby={`${video.id}-title`}
     >
       <div className="how-to-video-card__player">
@@ -34,11 +51,12 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
           />
         ) : !failed ? (
           <video
+            key={src}
             controls={ready}
             controlsList="nodownload"
             playsInline
             preload="metadata"
-            src={fileSrc}
+            src={src}
             title={video.title}
             className={
               ready
@@ -46,7 +64,15 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
                 : 'how-to-video-card__video how-to-video-card__video--pending'
             }
             onLoadedData={() => setReady(true)}
-            onError={() => setFailed(true)}
+            onError={() => {
+              if (!usedFallback && src !== apiSrc) {
+                setUsedFallback(true);
+                setReady(false);
+                setSrc(apiSrc);
+                return;
+              }
+              setFailed(true);
+            }}
           />
         ) : null}
         {showPlaceholder ? (

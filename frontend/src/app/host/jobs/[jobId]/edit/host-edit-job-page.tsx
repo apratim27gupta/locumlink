@@ -26,12 +26,14 @@ import {
 } from '@/components/host/DayConfigEditor';
 import {
   HOST_JOB_CREDENTIAL_OPTIONS,
+  HOST_SCHEDULE_KIND_OPTIONS,
   autoResponsibilitiesForJobTitle,
   buildKeyResponsibilitiesPayload,
   emptyResponsibilitySelection,
   fmtIsoToMmDdYyyy,
   hostJobFieldInp,
   hostJobFieldLbl,
+  hostScheduleKindDescription,
   parseKeyResponsibilitiesFromLines,
   parseMmDdYyyyToIso,
   validateJobPostingSchedule,
@@ -1855,11 +1857,7 @@ export default function HostEditJobPage(props: {
                   <div>
                     <label style={lbl}>Scheduling</label>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      {([
-                        { id: 'range', label: 'Continuous dates' },
-                        { id: 'list', label: 'Specific days' },
-                        { id: 'ranges', label: 'Multiple periods' },
-                      ] as const).map((opt) => {
+                      {HOST_SCHEDULE_KIND_OPTIONS.map((opt) => {
                         const on = scheduleKind === opt.id;
                         return (
                           <button
@@ -1886,11 +1884,7 @@ export default function HostEditJobPage(props: {
                       })}
                     </div>
                     <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6 }}>
-                      {scheduleKind === 'list'
-                        ? 'Pick each day you need a locum. They do not have to be consecutive.'
-                        : scheduleKind === 'ranges'
-                        ? 'Add one or more date periods, each with its own start, end, and time.'
-                        : 'One continuous stretch of days from a start to an end date.'}
+                      {hostScheduleKindDescription(scheduleKind)}
                     </div>
                   </div>
                   {scheduleKind === 'range' ? (

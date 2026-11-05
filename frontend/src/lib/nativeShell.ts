@@ -70,6 +70,24 @@ export function requestNativeAppleSignIn(hashedNonce: string): boolean {
   return true;
 }
 
+/**
+ * Open Stripe Checkout in the system browser (Custom Tab / SFSafariViewController).
+ * More reliable for 3DS than staying inside the WebView; return URL lands back in-app.
+ */
+export function requestNativeStripeCheckout(url: string): boolean {
+  if (typeof window === 'undefined' || !isNativeShell()) return false;
+  const bridge = window.ReactNativeWebView;
+  if (!bridge?.postMessage) return false;
+  try {
+    const host = new URL(url).hostname;
+    if (!/(^|\.)stripe\.com$/i.test(host)) return false;
+  } catch {
+    return false;
+  }
+  bridge.postMessage(JSON.stringify({ type: 'stripe-checkout', url }));
+  return true;
+}
+
 function isAllowedMisdirectedCallback(host: string, appHost: string): boolean {
   return appHost === 'staging.locumlink.ca' && host === 'locumlink.ca';
 }

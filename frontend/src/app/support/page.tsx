@@ -1,6 +1,5 @@
 import { Suspense } from 'react';
 import { PublicPageShell } from '@/components/PublicPageShell';
-import { SupportLegalLinks } from '@/components/SupportLegalLinks';
 import { PublicPageBackLink } from '@/components/PublicPageBackLink';
 import { contactSupportMailtoHref, getSupportEmail } from '@/lib/support';
 
@@ -20,7 +19,7 @@ export default function SupportPage() {
                         Need help with Locum Link? Contact our team for account, billing, or platform questions.
                     </p>
 
-                    <section className="support-section">
+                    <section className="support-section support-section--last">
                         <h2 className="support-section__label">Contact</h2>
                         <p className="support-section__body">
                             Email us at{' '}
@@ -29,13 +28,6 @@ export default function SupportPage() {
                             </a>
                             . We typically respond within one business day.
                         </p>
-                    </section>
-
-                    <section className="support-section support-section--last">
-                        <h2 className="support-section__label">Legal</h2>
-                        <div className="support-legal-links">
-                            <SupportLegalLinks variant="landing" />
-                        </div>
                     </section>
                 </article>
             </div>
