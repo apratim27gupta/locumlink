@@ -145,15 +145,6 @@ export default function WhatsNewModal({ open, onClose }: WhatsNewModalProps) {
             <span className="whats-new-modal__fees-example-label">* {fees.exampleLabel}</span>{' '}
             {fees.example}
           </p>
-          <p className="whats-new-modal__fees-more">
-            <Link
-              href={fees.moreDetailsHref}
-              className="whats-new-modal__fees-more-link"
-              onClick={onClose}
-            >
-              {fees.moreDetailsLabel} <span aria-hidden>→</span>
-            </Link>
-          </p>
 
           <p className="whats-new-modal__thanks">
             {WHATS_NEW_RELEASE.thanks}

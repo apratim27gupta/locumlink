@@ -3152,7 +3152,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 14px 16px;
+  box-sizing: border-box;
+  padding: 14px 12px;
   border-radius: 10px;
   background: var(--color-primary-light);
 }
@@ -3160,15 +3161,19 @@
 .whats-new-modal__highlight-label {
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-primary);
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .whats-new-modal__highlight-detail {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--color-primary-hover);
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .whats-new-modal__section-head {

@@ -22,7 +22,7 @@ export const WHATS_NEW_RELEASE = {
   highlights: [
     { label: 'Flexible', detail: `${HALF_SLOT_HOURS}-hour half-days` },
     { label: 'Partial coverage', detail: 'Multiple locums' },
-    { label: 'Less paperwork', detail: 'MSI GP Locum Application' },
+    { label: 'Less paperwork', detail: 'MSI GP Application' },
     { label: 'Free for locums', detail: 'No locum fees' },
   ],
   features: [
@@ -118,8 +118,6 @@ export const WHATS_NEW_RELEASE = {
     halfDayCad: MATCH_FEE_HALF_CAD,
     moreThanHalfCad: MATCH_FEE_FULL_CAD,
     halfHours: HALF_SLOT_HOURS,
-    moreDetailsLabel: 'View more details in FAQs',
-    moreDetailsHref: '/faq#host-match-fee',
   },
   thanks: 'Thank you to the hosts and locums helping us improve LocumLink.',
   founder: 'Dr. Ifedolapo Fayanjuola, Founder',
