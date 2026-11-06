@@ -1192,11 +1192,7 @@ export class PaymentsService {
     });
     if (!app?.locumAcceptedAt) return;
 
-    if (
-      isPostingGrandfatheredFromMatchFee(
-        platformCalendarDateOf(app.jobPosting.createdAt),
-      )
-    ) {
+    if (isPostingGrandfatheredFromMatchFee(app.jobPosting.createdAt)) {
       return;
     }
 

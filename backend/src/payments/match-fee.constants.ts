@@ -38,17 +38,52 @@ export const MATCH_FEE_ESCALATION_DAYS_AFTER_DUE = 30;
 export type MatchFeeTier = 'HALF' | 'FULL';
 
 /**
- * Postings created (platform calendar day) before MATCH_FEE_START_DATE
- * (YYYY-MM-DD) are grandfathered and never invoiced. Unset or invalid means
- * every posting is invoiced.
+ * Postings created before MATCH_FEE_START_DATE are grandfathered (never invoiced).
+ *
+ * Accepts:
+ * - `YYYY-MM-DD` — posting's platform calendar day must be before that date
+ * - ISO-8601 datetime (e.g. `2026-11-06T18:30:00-04:00`) — posting `createdAt`
+ *   must be strictly before that instant
+ *
+ * Unset or invalid → not grandfathered (every posting can be invoiced).
+ *
+ * Pass either a Date (`createdAt`) or a YYYY-MM-DD calendar day string (date-only mode).
  */
 export function isPostingGrandfatheredFromMatchFee(
-  postingCreatedDay: string,
+  postingCreatedAt: Date | string,
   startDate: string | undefined = process.env.MATCH_FEE_START_DATE,
 ): boolean {
   const start = startDate?.trim();
-  if (!start || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return false;
-  return postingCreatedDay < start;
+  if (!start) return false;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(start)) {
+    const createdDay =
+      typeof postingCreatedAt === 'string'
+        ? postingCreatedAt.trim()
+        : formatPlatformCalendarDay(postingCreatedAt);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(createdDay)) return false;
+    return createdDay < start;
+  }
+
+  const startMs = Date.parse(start);
+  if (Number.isNaN(startMs)) return false;
+  const createdMs =
+    postingCreatedAt instanceof Date
+      ? postingCreatedAt.getTime()
+      : Date.parse(postingCreatedAt);
+  if (Number.isNaN(createdMs)) return false;
+  return createdMs < startMs;
+}
+
+/** YYYY-MM-DD in PLATFORM_TIMEZONE (inline to avoid circular import with job-schedule). */
+function formatPlatformCalendarDay(instant: Date): string {
+  const tz = process.env.PLATFORM_TIMEZONE?.trim() || 'America/Halifax';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
 }
 
 /** CA$125 if total claimed hours <= 3.75, else CA$250. */

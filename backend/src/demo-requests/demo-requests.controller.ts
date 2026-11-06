@@ -19,7 +19,8 @@ export class DemoRequestsController {
   @Public()
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  /** Per-IP: 5 POSTs / 15 min (LB Cloud Armor is a second layer). */
+  @Throttle({ default: { limit: 5, ttl: 900_000 } })
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   create(@Body() body: CreateDemoRequestDto) {
     return this.demoRequests.create(body);

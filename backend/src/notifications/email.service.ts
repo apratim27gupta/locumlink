@@ -28,20 +28,48 @@ function looksLikeEmail(address: string): boolean {
 
 const TEAM_SIGNOFF = 'Team LocumLink';
 
-function withTeamSignoff(text: string, html?: string): { text: string; html: string } {
+/** Absolute logo URL for HTML email (PNG — SVG is unreliable in clients). */
+function emailLogoUrl(frontendOrigin: string | undefined): string {
+  const base = (frontendOrigin?.trim() || 'https://locumlink.ca').replace(/\/$/, '');
+  return `${base}/logo1.png`;
+}
+
+function signoffHtmlBlock(logoUrl: string): string {
+  return `
+<div style="margin:24px 0 0">
+  <img src="${logoUrl}" width="36" height="36" alt="LocumLink" style="display:block;width:36px;height:36px;margin:0 0 8px;border:0;outline:none" />
+  <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#1f2937">${TEAM_SIGNOFF}</p>
+</div>`;
+}
+
+function withTeamSignoff(
+  text: string,
+  html: string | undefined,
+  logoUrl: string,
+): { text: string; html: string } {
   const trimmed = text.trimEnd();
   const signedText = /Team LocumLink\s*$/i.test(trimmed)
     ? trimmed
     : `${trimmed}\n\n${TEAM_SIGNOFF}`;
+  const block = signoffHtmlBlock(logoUrl);
   if (html) {
-    const signedHtml = /Team LocumLink/i.test(html)
-      ? html
-      : `${html}\n<p style="margin:24px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#1f2937">${TEAM_SIGNOFF}</p>`;
-    return { text: signedText, html: signedHtml };
+    if (/Team LocumLink/i.test(html)) {
+      // Insert logo above an existing text signoff when not already present.
+      if (!/logo1\.png/i.test(html)) {
+        const signedHtml = html.replace(
+          /(<p[^>]*>\s*)?Team LocumLink(\s*<\/p>)?/i,
+          block,
+        );
+        return { text: signedText, html: signedHtml };
+      }
+      return { text: signedText, html };
+    }
+    return { text: signedText, html: `${html}\n${block}` };
   }
+  const bodyOnly = signedText.replace(/\n*Team LocumLink\s*$/i, '').trimEnd();
   return {
     text: signedText,
-    html: `<p>${signedText.replace(/\n/g, '<br>')}</p>`,
+    html: `<p>${bodyOnly.replace(/\n/g, '<br>')}</p>${block}`,
   };
 }
 
@@ -94,9 +122,11 @@ export class EmailService {
     const fromName =
       this.config.get<string>('MAIL_FROM_NAME')?.trim() || 'Locum Link';
     const subject = sanitizeNotificationCopy(params.subject);
+    const logoUrl = emailLogoUrl(this.config.get<string>('HOST_FRONTEND_URL'));
     const { text, html } = withTeamSignoff(
       sanitizeNotificationCopy(params.text),
       params.html ? sanitizeNotificationCopy(params.html) : undefined,
+      logoUrl,
     );
 
     const credentials = Buffer.from(`${sid}:${secret}`).toString('base64');
