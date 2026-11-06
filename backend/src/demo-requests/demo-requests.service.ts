@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EmailService } from '../notifications/email.service.js';
@@ -6,8 +7,11 @@ import { EmailService } from '../notifications/email.service.js';
 const DUPLICATE_DEMO_MESSAGE =
   'We already have a demo request for this email. Our team will be in touch.';
 
-/** Inbox for every new public demo request. */
-const DEMO_REQUEST_NOTIFY_EMAIL = 'doctor@locumlink.ca';
+/** Default inboxes for every new public demo request. */
+const DEFAULT_DEMO_REQUEST_NOTIFY_EMAILS = [
+  'doctor@locumlink.ca',
+  'ash@aebeolleconsulting.com',
+] as const;
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -24,14 +28,33 @@ export class DemoRequestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
+    private readonly config: ConfigService,
   ) {}
+
+  /** Comma-separated DEMO_REQUEST_NOTIFY_EMAIL override, else doctor@ + ash@. */
+  private notifyEmails(): string[] {
+    const raw = this.config.get<string>('DEMO_REQUEST_NOTIFY_EMAIL')?.trim();
+    if (raw) {
+      return [
+        ...new Set(
+          raw
+            .split(',')
+            .map((e) => e.trim().toLowerCase())
+            .filter(Boolean),
+        ),
+      ];
+    }
+    return [...DEFAULT_DEMO_REQUEST_NOTIFY_EMAILS];
+  }
 
   async create(input: { email: string; phone: string; notes?: string }) {
     const email = normalizeEmail(input.email);
     const phone = normalizePhone(input.phone);
     const notes = input.notes?.trim() || null;
 
-    const existing = await this.prisma.demoRequest.findUnique({ where: { email } });
+    const existing = await this.prisma.demoRequest.findUnique({
+      where: { email },
+    });
     if (existing) {
       throw new ConflictException(DUPLICATE_DEMO_MESSAGE);
     }
@@ -41,7 +64,7 @@ export class DemoRequestsService {
         data: { email, phone, notes },
       });
 
-      void this.notifyDoctorInbox({
+      void this.sendDemoEmails({
         id: created.id,
         email: created.email,
         phone: created.phone,
@@ -49,7 +72,7 @@ export class DemoRequestsService {
         createdAt: created.createdAt,
       }).catch((err) => {
         this.logger.warn(
-          `Demo request saved (${created.id}) but notify email failed: ${
+          `Demo request saved (${created.id}) but email notify failed: ${
             err instanceof Error ? err.message : String(err)
           }`,
         );
@@ -63,14 +86,30 @@ export class DemoRequestsService {
         duplicate: false as const,
       };
     } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
         throw new ConflictException(DUPLICATE_DEMO_MESSAGE);
       }
       throw err;
     }
   }
 
-  private async notifyDoctorInbox(params: {
+  private async sendDemoEmails(params: {
+    id: string;
+    email: string;
+    phone: string;
+    notes: string | null;
+    createdAt: Date;
+  }) {
+    await Promise.all([
+      this.notifyTeamInbox(params),
+      this.confirmRequester(params.email),
+    ]);
+  }
+
+  private async notifyTeamInbox(params: {
     id: string;
     email: string;
     phone: string;
@@ -78,9 +117,7 @@ export class DemoRequestsService {
     createdAt: Date;
   }) {
     const when = params.createdAt.toISOString();
-    const notesBlock = params.notes?.trim()
-      ? params.notes.trim()
-      : '(none)';
+    const notesBlock = params.notes?.trim() ? params.notes.trim() : '(none)';
     const subject = `New LocumLink demo request — ${params.email}`;
     const text = [
       'A new demo request was submitted on LocumLink.',
@@ -109,15 +146,36 @@ export class DemoRequestsService {
       </p>
     `;
 
-    const result = await this.email.send({
-      to: DEMO_REQUEST_NOTIFY_EMAIL,
-      subject,
-      text,
-      html,
-    });
+    for (const to of this.notifyEmails()) {
+      const result = await this.email.send({ to, subject, text, html });
+      if (!result.ok) {
+        this.logger.warn(
+          `Demo request notify to ${to} failed: ${result.error}`,
+        );
+      }
+    }
+  }
+
+  private async confirmRequester(to: string) {
+    const subject = 'Your LocumLink demo request is registered';
+    const text = [
+      'Thanks for requesting a LocumLink demo.',
+      '',
+      'Your request is registered. Our team will reach out soon to schedule a walkthrough.',
+    ].join('\n');
+    const html = `
+      <p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#1f2937">
+        Thanks for requesting a LocumLink demo.
+      </p>
+      <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#1f2937">
+        Your request is registered. Our team will reach out soon to schedule a walkthrough.
+      </p>
+    `;
+
+    const result = await this.email.send({ to, subject, text, html });
     if (!result.ok) {
       this.logger.warn(
-        `Demo request notify to ${DEMO_REQUEST_NOTIFY_EMAIL} failed: ${result.error}`,
+        `Demo request confirmation to ${to} failed: ${result.error}`,
       );
     }
   }
