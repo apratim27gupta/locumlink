@@ -108,7 +108,7 @@ export const HOW_TO_VIDEOS: HowToVideo[] = [
     title: 'Flexible applications',
     description: 'Apply to the days and slots that work for you on a posting.',
     audience: 'Locum',
-    durationHint: 'Demo 08',
+    durationHint: 'Demo 01',
   },
   {
     id: 'locum-modify-availability',
@@ -116,7 +116,7 @@ export const HOW_TO_VIDEOS: HowToVideo[] = [
     title: 'Modify availability',
     description: 'Update your availability as it changes.',
     audience: 'Locum',
-    durationHint: 'Demo 09',
+    durationHint: 'Demo 02',
   },
   {
     id: 'apply-remaining-blocks',
@@ -124,7 +124,7 @@ export const HOW_TO_VIDEOS: HowToVideo[] = [
     title: 'Partial postings',
     description: 'Apply to open coverage left on a partially filled posting.',
     audience: 'Locum',
-    durationHint: 'Demo 10',
+    durationHint: 'Demo 03',
   },
   {
     id: 'locum-withdraw-application',
@@ -132,7 +132,7 @@ export const HOW_TO_VIDEOS: HowToVideo[] = [
     title: 'Withdraw application',
     description: 'Withdraw an application before you are matched.',
     audience: 'Locum',
-    durationHint: 'Demo 11',
+    durationHint: 'Demo 04',
   },
 ];
 

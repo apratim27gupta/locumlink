@@ -22,6 +22,7 @@ export const ABOUT_PAGE = {
     attributionRole: 'Founder, LocumLink',
     attributionLines: [
       'Family Physician, Elmsdale Medical Clinic',
+      'Associate Professor, Dalhousie University',
       'Former GP trainer (UK)',
     ],
     imageSrc: '/about/dr-ife.jpeg',

@@ -68,7 +68,7 @@ export function PublicSiteNav({
       <nav className={navClass} aria-label="Primary">
         <div className="home-landing-nav__inner">
           <Link href="/home" className="home-landing-nav__logo" aria-label="Locum Link home">
-            <Logo size="md" />
+            <Logo size="lg" />
           </Link>
 
           <div className="home-landing-nav__links" aria-hidden={menuOpen ? true : undefined}>
