@@ -9,7 +9,7 @@ export default function AboutPage() {
   const { story } = ABOUT_PAGE;
 
   return (
-    <PublicPageShell showSignIn>
+    <PublicPageShell>
       <div className="support-page support-page--wide">
         <Suspense fallback={null}>
           <PublicPageBackLink />

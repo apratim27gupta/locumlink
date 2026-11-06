@@ -249,6 +249,17 @@ export function hostMatchFeeRefundEligible(invoice: {
 }
 
 /**
+ * Host cancel-match is only after locum accept and before the first matched
+ * shift calendar day has passed (daysUntilStart >= 0).
+ */
+export function hostMatchCancelBeforeStart(
+  daysUntilStart: number | null | undefined,
+): boolean {
+  if (daysUntilStart == null) return true;
+  return daysUntilStart >= 0;
+}
+
+/**
  * Admin "Refund to payment method" is only for early-cancel leftovers after:
  * - locum withdraws, or
  * - host deletes the posting
@@ -269,6 +280,7 @@ export function adminMatchFeeRefundInFlight(invoice: {
 
 export function adminMatchFeeRefundEligibility(invoice: {
   status: string;
+  paidAt?: string | null;
   daysUntilStart: number | null;
   cancelledBy?: string | null;
   cancellationReason?: string | null;
@@ -283,10 +295,12 @@ export function adminMatchFeeRefundEligibility(invoice: {
     };
   }
   if (invoice.status === 'PENDING_REPLACEMENT') {
+    const unpaid = !invoice.paidAt;
     return {
       allowed: true,
-      reason:
-        'Locum cancelled fewer than 14 days before start. A replacement is confirmed only when another locum accepts. Refund if none has accepted.',
+      reason: unpaid
+        ? 'Locum cancelled fewer than 14 days before start. A replacement is confirmed only when another locum accepts. Cancel the unpaid invoice if none has accepted.'
+        : 'Locum cancelled fewer than 14 days before start. A replacement is confirmed only when another locum accepts. Refund if none has accepted.',
     };
   }
   if (invoice.status !== 'PAID') {

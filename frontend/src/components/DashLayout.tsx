@@ -693,10 +693,12 @@ export default function DashLayout({ navItems, activeHref, topbarRight, topbarFi
     const fillHeightPage =
       !!pathname &&
       (pathname.includes('/browse') || pathname.includes('/messages'));
-    return (<div style={{
+    return (<div
+        className="dash-app-shell"
+        style={{
             display: 'flex',
             flexDirection: 'column',
-            height: '100vh',
+            height: '100dvh',
             overflow: 'hidden',
             fontFamily: 'var(--font-family-body, DM Sans, sans-serif)',
             background: '#F1F3F7',

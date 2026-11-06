@@ -96,17 +96,17 @@ export const MATCH_FEE_POLICY = {
     {
       id: 'early_cancel',
       summary:
-        '14 days or more before start - either party may cancel. If the fee was paid, LocumLink reviews the cancellation and refunds the fee and HST to the original payment method.',
+        '14 days or more before start - either party may cancel (hosts only until the first matched shift day). Paid invoices are refunded by admin after review; unpaid invoices are cancelled.',
     },
     {
       id: 'host_late_cancel',
       summary:
-        'Host cancels fewer than 14 days before start - if paid, the match fee is non-refundable; if unpaid, the invoice remains due.',
+        'Host may cancel after accept until the first matched shift day. Fewer than 14 days before start - paid fee is non-refundable; unpaid invoice stays due. After the first shift day has passed, host cancel is unavailable.',
     },
     {
       id: 'locum_late_cancel',
       summary:
-        'Locum cancels fewer than 14 days before start - if paid, LocumLink will try to find a replacement (refund only if none is found); if unpaid, the invoice remains due.',
+        'Locum cancels fewer than 14 days before start - LocumLink seeks a replacement. If none is found, paid invoices are refunded by admin and unpaid invoices are cancelled. If a replacement accepts, the original invoice stands (no second fee).',
     },
     {
       id: 'locum_late_cancel_replacement_fee',

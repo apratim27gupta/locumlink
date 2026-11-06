@@ -12,7 +12,7 @@ export const PUBLIC_SITE_NAV_LINKS = [
   { href: '/how-it-works', label: 'How it works' },
   { href: '/resources', label: 'Resources' },
   { href: '/faq', label: 'FAQs' },
-  { href: '/news', label: 'News & updates' },
+  { href: '/news', label: 'News' },
 ] as const;
 
 type PublicSiteNavProps = {

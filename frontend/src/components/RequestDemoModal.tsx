@@ -103,10 +103,12 @@ export default function RequestDemoModal({ open, onClose }: RequestDemoModalProp
         <h2 id={titleId} className="request-demo-modal__title">
           Request a demo
         </h2>
-        <p className="request-demo-modal__lead">
-          For clinics and partners. Leave your email and phone and we’ll schedule a short
-          walkthrough.
-        </p>
+        {!done ? (
+          <p className="request-demo-modal__lead">
+            For clinics and partners. Leave your email and phone and we’ll schedule a short
+            walkthrough.
+          </p>
+        ) : null}
 
         {done ? (
           <div

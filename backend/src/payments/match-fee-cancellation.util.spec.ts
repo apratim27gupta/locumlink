@@ -3,6 +3,7 @@ import {
   daysUntilCalendarDate,
   evaluateCancellationPolicy,
   isEscalationDue,
+  isHostMatchCancelBeforeStart,
 } from './match-fee-cancellation.util';
 
 describe('match-fee-cancellation.util', () => {
@@ -30,6 +31,13 @@ describe('match-fee-cancellation.util', () => {
     expect(daysUntilCalendarDate('2026-06-15', lateEveningAtlantic)).toBe(15);
   });
 
+  it('host match cancel is only before the first shift day has passed', () => {
+    expect(isHostMatchCancelBeforeStart(null)).toBe(true);
+    expect(isHostMatchCancelBeforeStart(14)).toBe(true);
+    expect(isHostMatchCancelBeforeStart(0)).toBe(true);
+    expect(isHostMatchCancelBeforeStart(-1)).toBe(false);
+  });
+
   it('host late cancel keeps paid fee non-refundable', () => {
     const result = evaluateCancellationPolicy({
       cancelledBy: 'HOST',
@@ -50,14 +58,15 @@ describe('match-fee-cancellation.util', () => {
     expect(result.nonRefundable).toBe(false);
   });
 
-  it('locum late cancel keeps unpaid invoice due', () => {
+  it('locum late cancel seeks replacement for unpaid invoices too', () => {
     const result = evaluateCancellationPolicy({
       cancelledBy: 'LOCUM',
       wasPaid: false,
       daysUntilStart: 5,
     });
-    expect(result.invoiceStatus).toBe('UNCHANGED');
-    expect(result.replacementStatus).toBe('NONE');
+    expect(result.invoiceStatus).toBe('PENDING_REPLACEMENT');
+    expect(result.replacementStatus).toBe('SEARCHING');
+    expect(result.refundResolution).toBe('NONE');
   });
 
   it('host early cancel refunds paid fee', () => {

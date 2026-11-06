@@ -90,9 +90,7 @@ export default function WhatsNewModal({ open, onClose }: WhatsNewModalProps) {
 
           <div className="whats-new-modal__section-head">
             <h3 className="whats-new-modal__section-title">Release features</h3>
-            <Link href={HOW_IT_WORKS_PAGE_HREF} className="whats-new-modal__howto-all" onClick={onClose}>
-              View How it works demos →
-            </Link>
+            
           </div>
 
           <div className="whats-new-modal__table-wrap">

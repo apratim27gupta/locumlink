@@ -21,10 +21,10 @@ export const ABOUT_PAGE = {
     attributionName: 'Dr. Ifedolapo Fayanjuola',
     attributionRole: 'Founder, LocumLink',
     attributionLines: [
-      'Associate Professor, Dalhousie University',
+      'Family Physician, Elmsdale Medical Clinic',
       'Former GP trainer (UK)',
     ],
-    imageSrc: '/about/dr-ife.jpg',
+    imageSrc: '/about/dr-ife.jpeg',
     imageAlt: 'Dr. Ifedolapo Fayanjuola, founder of LocumLink',
   } satisfies AboutStory,
   cta: {

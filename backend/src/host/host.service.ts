@@ -67,6 +67,11 @@ import {
 } from './job-schedule.util.js';
 import { getReviewPlaygroundEmails, isReviewPlaygroundEmail } from '../config/review-playground.util.js';
 import { PaymentsService } from '../payments/payments.service.js';
+import {
+  computeEarliestShiftDate,
+  daysUntilCalendarDate,
+  isHostMatchCancelBeforeStart,
+} from '../payments/match-fee-cancellation.util.js';
 import { PlacementFeedbackService } from '../placement-feedback/placement-feedback.service.js';
 
 export type ApiJobShift = {
@@ -1867,12 +1872,32 @@ export class HostService {
         id: true,
         jobPostingId: true,
         locumAcceptedAt: true,
+        availabilityKind: true,
+        availableDates: true,
+        requestedShiftIds: true,
+        shiftClaims: { select: { shiftId: true } },
+        jobPosting: {
+          select: {
+            startDate: true,
+            endDate: true,
+            scheduleModel: true,
+            shifts: { select: { id: true, date: true } },
+          },
+        },
       },
     });
     if (!app) throw new NotFoundException('Application not found');
     if (!app.locumAcceptedAt) {
       throw new BadRequestException(
         'Only accepted matches can be cancelled through this flow.',
+      );
+    }
+
+    const earliest = computeEarliestShiftDate(app.jobPosting, app);
+    const daysUntilStart = daysUntilCalendarDate(earliest);
+    if (!isHostMatchCancelBeforeStart(daysUntilStart)) {
+      throw new BadRequestException(
+        'Matches cannot be cancelled after the first shift has started.',
       );
     }
 

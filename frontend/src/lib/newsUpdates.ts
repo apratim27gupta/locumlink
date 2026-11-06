@@ -6,7 +6,7 @@ export type NewsUpdateItem = {
   date: string;
   dateLabel: string;
   title: string;
-  summary: string;
+  // summary: string;
   /** Opens What's New modal when true */
   opensWhatsNewModal?: boolean;
 };
@@ -18,7 +18,7 @@ export const NEWS_UPDATES: NewsUpdateItem[] = [
     date: '2026-11-06',
     dateLabel: WHATS_NEW_RELEASE.dateLabel,
     title: 'Feature release - more flexibility, better locum coverage',
-    summary: WHATS_NEW_RELEASE.headline,
+    // summary: WHATS_NEW_RELEASE.headline,
     opensWhatsNewModal: true,
   },
 ];

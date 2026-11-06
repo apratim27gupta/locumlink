@@ -1033,6 +1033,7 @@
   }
 
   .public-page-main {
+    /* Match mobile nav inset (.home-landing-nav__inner at ≤720px) */
     padding: 24px 16px 40px;
   }
 
@@ -1325,24 +1326,6 @@
   z-index: 0;
 }
 
-.home-landing-footer-trust {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px 20px;
-  width: 100%;
-  max-width: 934px;
-}
-
-.home-landing-footer-trust__item {
-  font-family: Inter, sans-serif;
-  font-weight: 400;
-  font-size: 14px;
-  color: #606061;
-}
-
 .home-landing-footer-credits {
   box-sizing: border-box;
   width: 100vw;
@@ -1584,11 +1567,6 @@
     margin-left: 0;
     justify-content: flex-start;
     width: 100%;
-  }
-
-  .home-landing-footer-trust__item {
-    font-size: 0.8125rem;
-    text-align: center;
   }
 }
 
@@ -2081,25 +2059,76 @@
   text-decoration: none;
 }
 
+/* Same width + side padding as .home-landing-nav__inner so content edges match the navbar. */
 .public-page-main {
   flex: 1;
-  display: flex;
-  justify-content: center;
-  padding: 40px 24px 64px;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 40px 28px 64px;
   box-sizing: border-box;
+  display: block;
+}
+
+.public-page-root:has(.support-page--how-it-works) .public-page-main {
+  max-width: 1280px;
 }
 
 .support-page {
   width: 100%;
-  max-width: 640px;
+  max-width: none;
 }
 
-.support-page--legal {
-  max-width: 720px;
-}
-
+.support-page--legal,
 .support-page--wide {
-  max-width: 1120px;
+  max-width: none;
+}
+
+.support-page--how-it-works {
+  max-width: none;
+}
+
+.how-it-works-page__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px 32px;
+  align-items: start;
+  margin-top: 28px;
+}
+
+.how-it-works-page__column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.how-it-works-page__column-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.how-it-works-page__column-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0b0f1f;
+  line-height: 1.25;
+}
+
+.how-it-works-page__column-intro {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #4b5563;
+}
+
+@media (max-width: 900px) {
+  .how-it-works-page__columns {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
 }
 
 /* ── Public resources list ── */
@@ -2179,11 +2208,11 @@
 }
 
 .how-to-video-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   align-items: stretch;
-  padding: 16px;
+  padding: 14px;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
   background: #f8fafc;
@@ -2199,7 +2228,8 @@
 
 .how-to-video-card__player {
   position: relative;
-  min-height: 180px;
+  aspect-ratio: 16 / 9;
+  min-height: 140px;
   border-radius: 10px;
   overflow: hidden;
   background: #0a2540;
@@ -2210,8 +2240,7 @@
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 180px;
-  object-fit: contain;
+  object-fit: cover;
   background: #0a2540;
   border: none;
 }
@@ -2219,7 +2248,157 @@
 .how-to-video-card__embed {
   position: absolute;
   inset: 0;
-  min-height: 180px;
+  pointer-events: none;
+}
+
+.how-to-video-card__play {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: none;
+  margin: 0;
+  padding: 12px;
+  cursor: pointer;
+  background: linear-gradient(180deg, rgba(10, 37, 64, 0.15) 0%, rgba(10, 37, 64, 0.55) 100%);
+  color: #fff;
+  font: inherit;
+}
+
+.how-to-video-card__play:hover,
+.how-to-video-card__play:focus-visible {
+  background: linear-gradient(180deg, rgba(10, 37, 64, 0.25) 0%, rgba(10, 37, 64, 0.7) 100%);
+}
+
+.how-to-video-card__play-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(56, 198, 198, 0.95);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  position: relative;
+}
+
+.how-to-video-card__play-icon::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 54%;
+  transform: translate(-50%, -50%);
+  border-style: solid;
+  border-width: 10px 0 10px 16px;
+  border-color: transparent transparent transparent #0a2540;
+}
+
+.how-to-video-card__play-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.how-to-video-card__open-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #1e3faf;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.how-to-video-card__open-btn:hover {
+  background: #e0e7ff;
+}
+
+.how-to-video-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: rgba(8, 15, 30, 0.72);
+  box-sizing: border-box;
+}
+
+.how-to-video-lightbox__dialog {
+  width: min(1100px, 100%);
+  max-height: min(92dvh, 920px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 18px;
+  border-radius: 16px;
+  background: #0b1220;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.how-to-video-lightbox__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.how-to-video-lightbox__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.3;
+}
+
+.how-to-video-lightbox__close {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.how-to-video-lightbox__close:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.how-to-video-lightbox__stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+
+.how-to-video-lightbox__media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+  object-fit: contain;
+  background: #000;
+}
+
+.how-to-video-lightbox__desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(248, 250, 252, 0.78);
 }
 
 .about-page__hero {
@@ -2625,28 +2804,6 @@
 
 .home-landing-fee-banner__link:hover {
   text-decoration: underline;
-}
-
-.home-landing-founder-story {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 0 28px;
-  font-family: Inter, sans-serif;
-  font-size: clamp(0.98rem, 1.5vw, 1.08rem);
-  font-weight: 400;
-  font-style: normal;
-  line-height: 1.55;
-  text-align: left;
-  color: #374151;
-}
-
-@media (max-width: 720px) {
-  .home-landing-founder-story {
-    padding: 0 16px;
-    text-align: center;
-  }
 }
 
 /* Large desktops: more vertical room + slightly wider hero */
@@ -3133,8 +3290,13 @@
 }
 
 @media (max-width: 720px) {
-  .how-to-video-card {
-    grid-template-columns: 1fr;
+  .how-to-video-lightbox__dialog {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .how-to-video-lightbox__title {
+    font-size: 16px;
   }
 }
 
@@ -4532,6 +4694,26 @@ body.app-body {
     padding: 16px 12px 28px !important;
     box-sizing: border-box !important;
     width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* Host dashboard header + post CTA: stack on phones so actions aren't clipped */
+  .host-dash-header-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+
+  .host-dash-post-btn {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-dash-job-card-actions {
+    width: 100% !important;
+    justify-content: flex-start !important;
   }
 
   /* ── 3. ALL PAGE WRAPPERS: full width ────────── */
@@ -5606,7 +5788,9 @@ body.app-body {
   }
 
   .home-landing-footer {
-    margin-top: 24px;
+    margin-top: 16px;
+    padding-top: 8px;
+    gap: 0;
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
@@ -5624,6 +5808,10 @@ body.app-body {
   .home-landing-hero__actions .btn-landing-cta {
     min-width: 0;
     width: 100%;
+    min-height: 48px;
+    height: auto;
+    white-space: normal;
+    text-align: center;
   }
 
   .home-landing-footer-credits__inner {
@@ -5681,7 +5869,28 @@ body.app-body {
     right: 0 !important;
     height: 100dvh !important;
     max-height: 100dvh !important;
+    overflow: hidden !important;
     padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    box-sizing: border-box !important;
+  }
+
+  .host-applicant-detail-scroll {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .host-applicant-detail-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+  }
+
+  .host-applicant-detail-actions > button {
+    width: 100% !important;
+    justify-content: center !important;
   }
 
   .host-applicant-detail-resize-handle,
@@ -5794,10 +6003,19 @@ body.app-body {
   }
 }
 
+/* Dash shell: 100vh fallback, 100dvh preferred (mobile browser chrome). */
+.dash-app-shell {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+
 /* Dashboard pages: consistent inset from sidebar / header (main padding only) */
 .dash-content-column--scroll {
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .dash-content-column--scroll > main.dash-main-content {
@@ -6203,8 +6421,12 @@ main.dash-main-content {
     left: 0 !important;
     right: 0 !important;
     margin: 0 !important;
-    overflow-y: auto !important;
     box-sizing: border-box !important;
+  }
+
+  /* Keep panel chrome fixed; scroll only the body (avoids clipped actions on phones). */
+  .host-applicant-detail-panel {
+    overflow: hidden !important;
   }
 
   .host-quick-message-panel {
@@ -6806,11 +7028,21 @@ main.dash-main-content {
     appearance: none !important;
   }
 
-  /* Other slide-over panels */
+  /* Tablet: keep applicant drawer as a side sheet, not a tiny clipped strip */
   .host-applicant-detail-panel {
-    max-width: min(520px, 94vw) !important;
+    width: min(520px, 92vw) !important;
+    max-width: min(520px, 92vw) !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
     box-sizing: border-box !important;
-    overflow-x: hidden !important;
+    overflow: hidden !important;
+  }
+
+  .host-applicant-detail-scroll {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
   }
 
   .host-quick-message-panel {

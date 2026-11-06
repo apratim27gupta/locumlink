@@ -16,13 +16,22 @@ import {
 import { ApplicationInvoiceCell, usePostingInvoices } from '@/components/payments/ApplicationInvoiceCell';
 import { MatchFeeRefundConfirmModal } from '@/components/payments/MatchFeeRefundConfirmModal';
 import { GpLocumApplicationModal } from '@/components/host/GpLocumApplicationModal';
-import { hostMatchFeeRefundEligible } from '@/components/payments/MatchFeePolicy';
+import {
+  hostMatchCancelBeforeStart,
+  hostMatchFeeRefundEligible,
+} from '@/components/payments/MatchFeePolicy';
 import { getToken } from '@/lib/auth';
 import { useAuth } from '@/providers/AuthProvider';
 import { useNextPageClientProps } from '@/lib/use-next-page-client-props';
 import { beforeClientNavigation } from '@/lib/topLoader';
 import { useHostProfile } from '@/hooks/useHostProfile';
-import { getPostingDays } from '@/lib/jobSchedule';
+import {
+  applicationCoveredDays,
+  applicationCoveredShiftIds,
+  getPostingDays,
+  getPostingSlots,
+} from '@/lib/jobSchedule';
+import { localCalendarDateToIso } from '@/lib/localDateTime';
 import { AvailabilityStrip } from '@/components/AvailabilityStrip';
 import { CoverageCalendar } from '@/components/CoverageCalendar';
 import { HOST_DASH_NAV } from '@/lib/hostNav';
@@ -103,6 +112,43 @@ function displayName(a: ApplicationRecord): string {
     const l = a.locumProfile.lastName?.trim() || '';
     const base = `${f} ${l}`.trim();
     return base || a.locumProfile.user.email || 'Applicant';
+}
+
+/** Days until first matched shift; prefers invoice value, else posting coverage. */
+function daysUntilMatchStart(
+    app: ApplicationRecord,
+    job: Job | null | undefined,
+    postingDays: string[],
+    invoiceDaysUntilStart: number | null | undefined,
+): number | null {
+    if (invoiceDaysUntilStart != null) return invoiceDaysUntilStart;
+    const slots = getPostingSlots(job);
+    let earliest: string | null = null;
+    if (slots.length > 0) {
+        const covered = new Set(applicationCoveredShiftIds(app, job));
+        const dates = slots
+            .filter((s) => s.id && covered.has(s.id))
+            .map((s) => s.date.slice(0, 10))
+            .sort();
+        earliest = dates[0] ?? null;
+    }
+    if (!earliest) {
+        const coveredDays = applicationCoveredDays(app, postingDays);
+        earliest = [...coveredDays].sort()[0] ?? postingDays[0] ?? null;
+    }
+    if (!earliest) return null;
+    const today = localCalendarDateToIso();
+    const start = Date.UTC(
+        Number(earliest.slice(0, 4)),
+        Number(earliest.slice(5, 7)) - 1,
+        Number(earliest.slice(8, 10)),
+    );
+    const todayUtc = Date.UTC(
+        Number(today.slice(0, 4)),
+        Number(today.slice(5, 7)) - 1,
+        Number(today.slice(8, 10)),
+    );
+    return Math.floor((start - todayUtc) / (24 * 60 * 60 * 1000));
 }
 
 function statusToUi(status: ApplicationRecord['status']): 'shortlisted' | 'pending' {
@@ -661,6 +707,19 @@ export default function HostApplicantsPage(props: {
     async function beginCancelMatch(app: ApplicationRecord) {
         const link = invoiceByApplication.get(app.id);
         const inv = link?.role === 'own' ? link.invoice : undefined;
+        const daysUntilStart = daysUntilMatchStart(
+            app,
+            job,
+            postingDays,
+            inv?.daysUntilStart ?? link?.invoice.daysUntilStart,
+        );
+        if (!hostMatchCancelBeforeStart(daysUntilStart)) {
+            await showAlert(
+                'Matches cannot be cancelled after the first shift has started.',
+                { title: 'Cancel unavailable' },
+            );
+            return;
+        }
         if (
             inv &&
             hostMatchFeeRefundEligible({
@@ -673,19 +732,29 @@ export default function HostApplicantsPage(props: {
             setCancelMatchAppId(app.id);
             return;
         }
+        const invoiceClosed =
+            inv != null && ['CANCELLED', 'REFUNDED', 'CREDITED'].includes(inv.status);
         const withinLateWindow =
-            inv != null && inv.daysUntilStart != null && inv.daysUntilStart < 14;
-        const latePaid = Boolean(inv?.paidAt) && withinLateWindow;
-        const lateUnpaid = inv != null && !inv.paidAt && withinLateWindow;
+            daysUntilStart != null && daysUntilStart < 14;
+        const latePaid =
+            Boolean(inv?.paidAt) && withinLateWindow && inv?.status === 'PAID';
+        const lateUnpaid =
+            inv != null &&
+            !inv.paidAt &&
+            withinLateWindow &&
+            !invoiceClosed &&
+            ['PENDING', 'OVERDUE'].includes(inv.status);
         const ok = await showConfirm({
             title: 'Cancel this match?',
-            message: latePaid
-                ? 'The match fee is non-refundable because the shift starts in fewer than 14 days. The invoice will stay paid.'
-                : lateUnpaid
-                  ? 'The shift starts in fewer than 14 days. The unpaid invoice remains due.'
-                  : inv?.paidAt
-                    ? 'LocumLink will review a refund if policy allows. Continue?'
-                    : 'This cancels the confirmed match. An unpaid invoice is voided.',
+            message: invoiceClosed
+                ? 'This cancels the confirmed match. The match-fee invoice is already closed.'
+                : latePaid
+                  ? 'The match fee is non-refundable because the shift starts in fewer than 14 days. The invoice will stay paid.'
+                  : lateUnpaid
+                    ? 'The shift starts in fewer than 14 days. The unpaid invoice remains due.'
+                    : inv?.paidAt && inv.status === 'PAID'
+                      ? 'LocumLink will review a refund if policy allows. Continue?'
+                      : 'This cancels the confirmed match. An unpaid invoice is voided if policy allows.',
             confirmLabel: 'Cancel match',
             cancelLabel: 'Keep match',
         });
@@ -1203,11 +1272,12 @@ export default function HostApplicantsPage(props: {
                 top: 0,
                 right: 0,
                 width: detailPanelWidth,
-                height: '100vh',
+                height: '100dvh',
                 background: '#eef0fa',
                 zIndex: 221,
                 display: 'flex',
                 flexDirection: 'column',
+                overflow: 'hidden',
                 boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
                 fontFamily: 'Inter, sans-serif',
             }}>
@@ -1314,7 +1384,7 @@ export default function HostApplicantsPage(props: {
                   </div>
                 )}
 
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="host-applicant-detail-actions" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                   <button type="button" disabled={!jobId || selected.status !== 'APPLIED' || actioning.has(selected.id)} onClick={async () => {
                         if (!jobId)
                             return;
@@ -1372,13 +1442,14 @@ export default function HostApplicantsPage(props: {
 
                   {selected.locumResponse === 'ACCEPTED' &&
                   selected.status !== 'WITHDRAWN' &&
-                  (() => {
-                      const inv = invoiceByApplication.get(selected.id)?.invoice;
-                      const terminal =
-                          inv &&
-                          ['CANCELLED', 'REFUNDED', 'CREDITED'].includes(inv.status);
-                      if (terminal) return null;
-                      return (
+                  hostMatchCancelBeforeStart(
+                      daysUntilMatchStart(
+                          selected,
+                          job,
+                          postingDays,
+                          invoiceByApplication.get(selected.id)?.invoice.daysUntilStart,
+                      ),
+                  ) && (
                           <button
                               type="button"
                               disabled={!jobId || actioning.has(selected.id)}
@@ -1394,6 +1465,7 @@ export default function HostApplicantsPage(props: {
                                   padding: '10px 12px',
                                   height: 44,
                                   border: '1px solid #FCA5A5',
+                                  background: '#FEF2F2',
                                   borderRadius: 8,
                               }}
                           >
@@ -1408,8 +1480,7 @@ export default function HostApplicantsPage(props: {
                                   {actioning.has(selected.id) ? 'Cancelling…' : 'Cancel match'}
                               </span>
                           </button>
-                      );
-                  })()}
+                  )}
 
                   {selected.status === 'SHORTLISTED' && (<button type="button" disabled={!jobId || actioning.has(selected.id)} onClick={async () => {
                         if (!jobId)
@@ -1496,7 +1567,10 @@ export default function HostApplicantsPage(props: {
 
             </div>
 
-            <div style={{ padding: '0 18px 18px', overflowY: 'auto', flex: 1 }}>
+            <div
+              className="host-applicant-detail-scroll"
+              style={{ padding: '0 18px 18px', overflowY: 'auto', flex: 1, minHeight: 0 }}
+            >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

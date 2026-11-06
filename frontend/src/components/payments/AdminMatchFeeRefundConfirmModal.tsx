@@ -121,9 +121,17 @@ export function AdminMatchFeeRefundConfirmModal({
     ) : invoice.status === 'PENDING_REPLACEMENT' ? (
       <>
         Locum cancelled fewer than 14 days before start for <strong>{invoice.jobTitle}</strong>.
-        Replacement is only confirmed when another locum accepts. If none has, refund{' '}
-        <strong>{amountLabel}</strong>
-        {taxLabel} to <strong>{invoice.hostPracticeName}</strong>.
+        Replacement is only confirmed when another locum accepts. If none has,{' '}
+        {invoice.paidAt ? (
+          <>
+            refund <strong>{amountLabel}</strong>
+            {taxLabel} to <strong>{invoice.hostPracticeName}</strong>.
+          </>
+        ) : (
+          <>
+            cancel the unpaid invoice for <strong>{invoice.hostPracticeName}</strong>.
+          </>
+        )}
       </>
     ) : (
       <>

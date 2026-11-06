@@ -5,7 +5,7 @@ import FaqAccordion from '@/components/FaqAccordion';
 
 export default function PublicFaqPage() {
   return (
-    <PublicPageShell showSignIn={false}>
+    <PublicPageShell>
       <div className="support-page support-page--wide">
         <Suspense fallback={null}>
           <PublicPageBackLink />

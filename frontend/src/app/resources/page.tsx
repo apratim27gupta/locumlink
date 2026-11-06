@@ -5,7 +5,7 @@ import PublicResourcesList from '@/components/PublicResourcesList';
 
 export default function PublicResourcesPage() {
   return (
-    <PublicPageShell showSignIn={false}>
+    <PublicPageShell>
       <div className="support-page support-page--wide">
         <Suspense fallback={null}>
           <PublicPageBackLink />

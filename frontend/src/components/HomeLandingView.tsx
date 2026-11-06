@@ -134,23 +134,6 @@ export function HomeLandingView({
         </div>
 
         <footer className="home-landing-footer">
-          <p className="home-landing-founder-story">
-            I built LocumLink after experiencing how difficult it was to find coverage for my own
-            practice in Nova Scotia. It gives clinics a place to post their coverage needs and
-            physicians a way to find shifts that fit their schedules.
-          </p>
-
-          <div className="home-landing-footer-trust">
-            {[
-              'Built by a Nova Scotia family physician',
-              'CPSNS-ready verification',
-              'Designed for real clinic workflows',
-            ].map((t) => (
-              <span key={t} className="home-landing-footer-trust__item">
-                {t}
-              </span>
-            ))}
-          </div>
           <div className="home-landing-footer-credits">
             <div className="home-landing-footer-credits__inner">
               {interactive ? (

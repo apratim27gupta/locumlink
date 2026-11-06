@@ -76,6 +76,18 @@ export function daysUntilCalendarDate(
   return Math.floor((target - today) / (24 * 60 * 60 * 1000));
 }
 
+/**
+ * Host cancel-match is allowed after locum accept until the first matched shift
+ * calendar day has passed (daysUntilStart >= 0). Once that day is in the past,
+ * cancel is closed.
+ */
+export function isHostMatchCancelBeforeStart(
+  daysUntilStart: number | null,
+): boolean {
+  if (daysUntilStart == null) return true;
+  return daysUntilStart >= 0;
+}
+
 export function computeDueAt(
   invoiceCreatedAt: Date,
   earliestShiftDate: string | null,
@@ -149,13 +161,15 @@ export function evaluateCancellationPolicy(params: {
       return {
         daysUntilStart,
         withinLateWindow: true,
-        invoiceStatus: wasPaid ? 'PENDING_REPLACEMENT' : 'UNCHANGED',
+        // Seek replacement whether paid or unpaid. If none is found: refund paid /
+        // cancel unpaid (admin). If a replacement accepts, the original invoice stands.
+        invoiceStatus: 'PENDING_REPLACEMENT',
         refundResolution: wasPaid ? 'PENDING' : 'NONE',
-        replacementStatus: wasPaid ? 'SEARCHING' : 'NONE',
+        replacementStatus: 'SEARCHING',
         nonRefundable: false,
         reason: wasPaid
           ? 'Locum cancelled fewer than 14 days before start. LocumLink will seek a replacement before issuing a refund.'
-          : 'Locum cancelled fewer than 14 days before start. The match fee remains due.',
+          : 'Locum cancelled fewer than 14 days before start. LocumLink will seek a replacement; if none is found the unpaid invoice is cancelled.',
       };
     }
     return {

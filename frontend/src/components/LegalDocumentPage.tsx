@@ -57,7 +57,7 @@ export function LegalDocumentPage({
     footer,
 }: LegalDocumentPageProps) {
     return (
-        <PublicPageShell showSignIn={false}>
+        <PublicPageShell>
             <div className="support-page support-page--legal">
                 <Suspense fallback={null}>
                     <PublicPageBackLink />

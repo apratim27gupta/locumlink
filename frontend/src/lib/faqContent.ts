@@ -6,7 +6,6 @@ export type FaqItem = {
 };
 
 export const FAQ_AFTER_APPLYING_ID = 'after-applying';
-export const FAQ_PLACEMENT_FEEDBACK_ID = 'placement-feedback';
 
 export type FaqSection = {
   title: string;
@@ -183,7 +182,7 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
         id: 'host-refund-policy',
         question: 'When can I get a refund?',
         answer:
-          'If the fee was paid and the match is cancelled 14 days or more before the first shift, LocumLink reviews the cancellation and refunds the fee and HST to the original payment method after admin approval. Unpaid invoices in that window are cancelled.\nIf either party cancels fewer than 14 days before start and the fee was paid: host cancel keeps the fee (non-refundable); locum cancel triggers a replacement search, with a refund only if none is found.\nIf either party cancels fewer than 14 days before start and the invoice is unpaid, the invoice remains due.',
+          'Timing is counted from the first shift on that match.\n\n14 days or more left before the first shift (host or locum cancels):\n• Paid invoice - LocumLink reviews, then an admin refunds the fee and HST to the original payment method\n• Unpaid invoice - the invoice is cancelled (nothing to pay)\n\nFewer than 14 days left before the first shift:\n• Host cancels - no refund if paid; if unpaid, the invoice stays due (it is not cancelled)\n• Locum cancels - LocumLink looks for a replacement locum. If a replacement accepts, the original invoice stands. If none is found, an admin refunds a paid invoice, or cancels an unpaid invoice.',
       },
       {
         id: 'host-refund-timing',
@@ -197,12 +196,7 @@ export const LOCUMLINK_FAQ_SECTIONS: FaqSection[] = [
         answer:
           'After the last shift on an invoice is completed, you can raise a ticket from that invoice in Match Fees.\nLocumLink reviews tickets and may issue a discretionary refund where appropriate. You will hear from us in-app and by email.',
       },
-      {
-        id: FAQ_PLACEMENT_FEEDBACK_ID,
-        question: 'Will I be asked for feedback after a placement?',
-        answer:
-          'Yes. After a confirmed placement ends, the host may receive an email and in-app prompt to share brief confidential feedback about that locum match.\nFeedback stays private within LocumLink. It is not shown as a public rating on locum profiles.\nOne form is requested per accepted match (not per shift).',
-      },
     ],
   },
 ];
+

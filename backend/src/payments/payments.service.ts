@@ -1907,7 +1907,9 @@ export class PaymentsService {
     if (host?.userId && host.user?.email) {
       let hostReason = policy.reason;
       if (params.cancelledBy === 'LOCUM' && nextStatus === 'PENDING_REPLACEMENT') {
-        hostReason = `The locum cancelled ${app.jobPosting.title}. LocumLink is seeking a replacement. If none is found, your match fee will be refunded to your original payment method.`;
+        hostReason = wasPaid
+          ? `The locum cancelled ${app.jobPosting.title}. LocumLink is seeking a replacement. If none is found, your match fee will be refunded to your original payment method.`
+          : `The locum cancelled ${app.jobPosting.title}. LocumLink is seeking a replacement. If none is found, the unpaid match fee invoice will be cancelled.`;
       } else if (params.cancelledBy === 'LOCUM' && nextStatus === 'CANCELLED') {
         hostReason = `The locum cancelled ${app.jobPosting.title}. The unpaid match fee invoice was cancelled.`;
       } else if (
@@ -3097,7 +3099,32 @@ export class PaymentsService {
     }
     if (invoice.status === 'PENDING_REPLACEMENT') {
       // Replacement FOUND is set automatically when another locum accepts.
-      // Admin refunds here when no replacement accepted — not a manual "found / not found" decision.
+      // Admin resolves here when no replacement accepted: refund paid, cancel unpaid.
+      const unpaid = invoice.paidAt == null;
+      if (unpaid) {
+        await this.prisma.matchFeeInvoice.update({
+          where: { id: invoiceId },
+          data: {
+            status: 'CANCELLED',
+            cancelledAt: invoice.cancelledAt ?? new Date(),
+            cancelledBy: 'ADMIN',
+            cancellationReason: `No replacement locum accepted; unpaid invoice cancelled. ${notes}`,
+            refundResolution: 'NONE',
+            replacementStatus: 'NOT_FOUND',
+            adminNotes: notes,
+          },
+        });
+        await this.recordMatchFeeEvent(invoiceId, 'REPLACEMENT_NOT_FOUND', {
+          detail: notes,
+          actor: 'ADMIN',
+        });
+        await this.recordMatchFeeEvent(invoiceId, 'CANCELLED', {
+          detail: `No replacement locum accepted; unpaid invoice cancelled. ${notes}`,
+          actor: 'ADMIN',
+        });
+        await this.syncHostReviewFlag(invoice.hostProfileId);
+        return { success: true };
+      }
       await this.processRefund({
         invoiceId,
         kind: 'NO_REPLACEMENT',

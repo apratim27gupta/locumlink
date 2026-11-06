@@ -8,7 +8,7 @@ export default function SupportPage() {
     const mailtoHref = contactSupportMailtoHref();
 
     return (
-        <PublicPageShell showSignIn={false}>
+        <PublicPageShell>
             <div className="support-page">
                 <Suspense fallback={null}>
                     <PublicPageBackLink />
