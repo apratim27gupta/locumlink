@@ -9,32 +9,26 @@ type HowToVideoCardProps = {
   index: number;
 };
 
-/** Tiny ranged GET — works with GCS CORS and does not need a faststart moov atom. */
-async function probeVideoAvailable(url: string): Promise<boolean> {
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { Range: 'bytes=0-0' },
-      mode: 'cors',
-    });
-    return res.ok || res.status === 206;
-  } catch {
-    return false;
-  }
-}
-
 export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
   const publicSrc = howToVideoSrc(video);
   const apiSrc = `/api/how-to-videos/${encodeURIComponent(video.id)}`;
   const embedUrl = video.embedUrl || null;
   const titleId = useId();
 
+  // Catalog demos are expected in GCS. Do not fetch()-probe availability:
+  // cross-origin Range probes fail in some browsers / service-worker setups
+  // (staging showed every card as "coming soon" after that change).
+  // Safari also stalls on preload=metadata for large non-faststart MP4s, so the
+  // card never mounts a <video> — playback starts only in the lightbox.
   const [src, setSrc] = useState(video.providerSrc || publicSrc);
-  const [ready, setReady] = useState(Boolean(embedUrl));
+  const [usedFallback, setUsedFallback] = useState(false);
   const [failed, setFailed] = useState(false);
   const [selected, setSelected] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const lightboxVideoRef = useRef<HTMLVideoElement>(null);
+
+  const ready = Boolean(embedUrl) || !failed;
+  const canOpen = Boolean(embedUrl) || !failed;
 
   useEffect(() => {
     const syncSelected = () => {
@@ -45,42 +39,6 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
     window.addEventListener('hashchange', syncSelected);
     return () => window.removeEventListener('hashchange', syncSelected);
   }, [video.id]);
-
-  // Do not use <video preload="metadata"> for availability — Safari stalls on
-  // large non-faststart MP4s (moov at end). Probe with a 1-byte range instead.
-  useEffect(() => {
-    if (embedUrl) return;
-
-    let cancelled = false;
-    const primary = video.providerSrc || publicSrc;
-
-    (async () => {
-      if (await probeVideoAvailable(primary)) {
-        if (!cancelled) {
-          setSrc(primary);
-          setReady(true);
-          setFailed(false);
-        }
-        return;
-      }
-      if (primary !== apiSrc && (await probeVideoAvailable(apiSrc))) {
-        if (!cancelled) {
-          setSrc(apiSrc);
-          setReady(true);
-          setFailed(false);
-        }
-        return;
-      }
-      if (!cancelled) {
-        setFailed(true);
-        setReady(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [embedUrl, video.providerSrc, publicSrc, apiSrc]);
 
   useEffect(() => {
     if (!lightboxOpen) return;
@@ -98,14 +56,21 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
       document.body.style.overflow = prev;
       window.removeEventListener('keydown', onKey);
     };
-  }, [lightboxOpen]);
-
-  const showPlaceholder = !embedUrl && !ready;
-  const canOpen = Boolean(embedUrl) || (ready && !failed);
+  }, [lightboxOpen, src]);
 
   function openLightbox() {
     if (!canOpen) return;
     setLightboxOpen(true);
+  }
+
+  function onLightboxError() {
+    if (!usedFallback && src !== apiSrc) {
+      setUsedFallback(true);
+      setSrc(apiSrc);
+      return;
+    }
+    setFailed(true);
+    setLightboxOpen(false);
   }
 
   const lightbox =
@@ -148,6 +113,7 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
                   />
                 ) : (
                   <video
+                    key={src}
                     ref={lightboxVideoRef}
                     className="how-to-video-lightbox__media"
                     controls
@@ -156,6 +122,7 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
                     autoPlay
                     preload="auto"
                     title={video.title}
+                    onError={onLightboxError}
                   >
                     <source src={src} type="video/mp4" />
                   </video>
@@ -189,17 +156,13 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
               tabIndex={-1}
             />
           ) : null}
-          {showPlaceholder ? (
+          {!ready ? (
             <div className="how-to-video-card__placeholder">
               <span className="how-to-video-card__num">{String(index + 1).padStart(2, '0')}</span>
-              <span className="how-to-video-card__soon">
-                {failed ? 'Demo video coming soon' : 'Checking for video…'}
+              <span className="how-to-video-card__soon">Demo video coming soon</span>
+              <span className="how-to-video-card__file-hint">
+                Upload to <code>{howToVideoUploadHint(video)}</code>
               </span>
-              {failed ? (
-                <span className="how-to-video-card__file-hint">
-                  Upload to <code>{howToVideoUploadHint(video)}</code>
-                </span>
-              ) : null}
             </div>
           ) : null}
           {canOpen ? (
