@@ -2275,11 +2275,14 @@
 .how-to-video-card__video,
 .how-to-video-card__embed {
   display: block;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   background: #0a2540;
   border: none;
+  pointer-events: none;
 }
 
 .how-to-video-card__embed {

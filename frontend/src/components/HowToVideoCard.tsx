@@ -9,26 +9,41 @@ type HowToVideoCardProps = {
   index: number;
 };
 
+/** Nudge the first paintable frame for card thumbnails (Safari-friendly when moov is readable). */
+function paintPreviewFrame(el: HTMLVideoElement) {
+  try {
+    if (el.readyState < 1) return;
+    const duration = el.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    const t = Math.min(0.35, Math.max(0.05, duration * 0.02));
+    if (Math.abs(el.currentTime - t) > 0.02) {
+      el.currentTime = t;
+    }
+  } catch {
+    /* ignore seek errors on incomplete media */
+  }
+}
+
 export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
   const publicSrc = howToVideoSrc(video);
   const apiSrc = `/api/how-to-videos/${encodeURIComponent(video.id)}`;
   const embedUrl = video.embedUrl || null;
   const titleId = useId();
 
-  // Catalog demos are expected in GCS. Do not fetch()-probe availability:
-  // cross-origin Range probes fail in some browsers / service-worker setups
-  // (staging showed every card as "coming soon" after that change).
-  // Safari also stalls on preload=metadata for large non-faststart MP4s, so the
-  // card never mounts a <video> — playback starts only in the lightbox.
+  // Always offer Watch for catalog demos. Availability is not gated on preview load
+  // (that broke Safari / staging). Preview <video> is decorative thumbnail only.
   const [src, setSrc] = useState(video.providerSrc || publicSrc);
   const [usedFallback, setUsedFallback] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [previewReady, setPreviewReady] = useState(false);
   const [selected, setSelected] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
   const lightboxVideoRef = useRef<HTMLVideoElement>(null);
 
-  const ready = Boolean(embedUrl) || !failed;
   const canOpen = Boolean(embedUrl) || !failed;
+  // #t= seeks to a frame so browsers can show a thumbnail without full playback
+  const previewSrc = `${src}#t=0.1`;
 
   useEffect(() => {
     const syncSelected = () => {
@@ -39,6 +54,10 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
     window.addEventListener('hashchange', syncSelected);
     return () => window.removeEventListener('hashchange', syncSelected);
   }, [video.id]);
+
+  useEffect(() => {
+    setPreviewReady(false);
+  }, [src]);
 
   useEffect(() => {
     if (!lightboxOpen) return;
@@ -155,8 +174,33 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
               loading="lazy"
               tabIndex={-1}
             />
-          ) : null}
-          {!ready ? (
+          ) : !failed ? (
+            <video
+              key={previewSrc}
+              ref={previewVideoRef}
+              className={
+                previewReady
+                  ? 'how-to-video-card__video'
+                  : 'how-to-video-card__video how-to-video-card__video--pending'
+              }
+              controls={false}
+              playsInline
+              preload="metadata"
+              muted
+              title={video.title}
+              onLoadedMetadata={(e) => {
+                paintPreviewFrame(e.currentTarget);
+                setPreviewReady(true);
+              }}
+              onLoadedData={(e) => {
+                paintPreviewFrame(e.currentTarget);
+                setPreviewReady(true);
+              }}
+              onSeeked={() => setPreviewReady(true)}
+            >
+              <source src={previewSrc} type="video/mp4" />
+            </video>
+          ) : (
             <div className="how-to-video-card__placeholder">
               <span className="how-to-video-card__num">{String(index + 1).padStart(2, '0')}</span>
               <span className="how-to-video-card__soon">Demo video coming soon</span>
@@ -164,7 +208,7 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
                 Upload to <code>{howToVideoUploadHint(video)}</code>
               </span>
             </div>
-          ) : null}
+          )}
           {canOpen ? (
             <button
               type="button"
