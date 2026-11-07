@@ -173,7 +173,17 @@ export function HomeLandingView({
               <div className="home-landing-footer-credits__row home-landing-footer-credits__row--bottom">
                 <div className="home-landing-footer-credits-left">
                   <p className="home-landing-copyright">© LocumLink 2026</p>
-                  <p className="home-landing-powered-by">Developed by Aebeolle Consulting</p>
+                  <p className="home-landing-powered-by">
+                    Developed by{' '}
+                    <a
+                      href="https://www.aebeolleconsulting.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="home-landing-powered-by__link"
+                    >
+                      Aebeolle Consulting
+                    </a>
+                  </p>
                 </div>
                 {interactive ? (
                   <div className="home-landing-footer-bar__right home-landing-footer-bar__right--bottom">

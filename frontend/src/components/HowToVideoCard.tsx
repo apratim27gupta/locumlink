@@ -9,6 +9,20 @@ type HowToVideoCardProps = {
   index: number;
 };
 
+/** Tiny ranged GET — works with GCS CORS and does not need a faststart moov atom. */
+async function probeVideoAvailable(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { Range: 'bytes=0-0' },
+      mode: 'cors',
+    });
+    return res.ok || res.status === 206;
+  } catch {
+    return false;
+  }
+}
+
 export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
   const publicSrc = howToVideoSrc(video);
   const apiSrc = `/api/how-to-videos/${encodeURIComponent(video.id)}`;
@@ -16,7 +30,6 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
   const titleId = useId();
 
   const [src, setSrc] = useState(video.providerSrc || publicSrc);
-  const [usedFallback, setUsedFallback] = useState(false);
   const [ready, setReady] = useState(Boolean(embedUrl));
   const [failed, setFailed] = useState(false);
   const [selected, setSelected] = useState(false);
@@ -32,6 +45,42 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
     window.addEventListener('hashchange', syncSelected);
     return () => window.removeEventListener('hashchange', syncSelected);
   }, [video.id]);
+
+  // Do not use <video preload="metadata"> for availability — Safari stalls on
+  // large non-faststart MP4s (moov at end). Probe with a 1-byte range instead.
+  useEffect(() => {
+    if (embedUrl) return;
+
+    let cancelled = false;
+    const primary = video.providerSrc || publicSrc;
+
+    (async () => {
+      if (await probeVideoAvailable(primary)) {
+        if (!cancelled) {
+          setSrc(primary);
+          setReady(true);
+          setFailed(false);
+        }
+        return;
+      }
+      if (primary !== apiSrc && (await probeVideoAvailable(apiSrc))) {
+        if (!cancelled) {
+          setSrc(apiSrc);
+          setReady(true);
+          setFailed(false);
+        }
+        return;
+      }
+      if (!cancelled) {
+        setFailed(true);
+        setReady(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [embedUrl, video.providerSrc, publicSrc, apiSrc]);
 
   useEffect(() => {
     if (!lightboxOpen) return;
@@ -105,9 +154,11 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
                     controlsList="nodownload"
                     playsInline
                     autoPlay
-                    src={src}
+                    preload="auto"
                     title={video.title}
-                  />
+                  >
+                    <source src={src} type="video/mp4" />
+                  </video>
                 )}
               </div>
               <p className="how-to-video-lightbox__desc">{video.description}</p>
@@ -136,31 +187,6 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
               allowFullScreen
               loading="lazy"
               tabIndex={-1}
-            />
-          ) : !failed ? (
-            <video
-              key={src}
-              controls={false}
-              playsInline
-              preload="metadata"
-              muted
-              src={src}
-              title={video.title}
-              className={
-                ready
-                  ? 'how-to-video-card__video'
-                  : 'how-to-video-card__video how-to-video-card__video--pending'
-              }
-              onLoadedData={() => setReady(true)}
-              onError={() => {
-                if (!usedFallback && src !== apiSrc) {
-                  setUsedFallback(true);
-                  setReady(false);
-                  setSrc(apiSrc);
-                  return;
-                }
-                setFailed(true);
-              }}
             />
           ) : null}
           {showPlaceholder ? (
@@ -199,7 +225,6 @@ export default function HowToVideoCard({ video, index }: HowToVideoCardProps) {
             {video.title}
           </h2>
           <p className="how-to-video-card__desc">{video.description}</p>
-          
         </div>
       </section>
       {lightbox}

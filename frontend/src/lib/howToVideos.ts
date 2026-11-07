@@ -7,6 +7,9 @@
  * Default: direct public HTTPS URLs (browser-cache friendly).
  * Override with NEXT_PUBLIC_HOW_TO_VIDEOS_BASE_URL if the prefix changes.
  * Fallback: /api/how-to-videos/{id} signed URLs if public access is removed.
+ *
+ * Encode uploads with faststart so Safari can read metadata without downloading
+ * the whole file: ffmpeg -i in.mp4 -c copy -movflags +faststart out.mp4
  */
 export type HowToVideo = {
   id: string;

@@ -30,7 +30,11 @@ export default function AboutPage() {
                 <h1 className="about-page__section-title about-page__story-title">
                   {story.title}
                 </h1>
-                <p className="about-page__body">{story.body}</p>
+                {story.paragraphs.map((paragraph) => (
+                  <p key={paragraph.slice(0, 48)} className="about-page__body">
+                    {paragraph}
+                  </p>
+                ))}
                 <p className="about-page__attribution">
                   <span className="about-page__attribution-name">{story.attributionName}</span>
                   <span className="about-page__attribution-role">{story.attributionRole}</span>
