@@ -2,7 +2,7 @@
  * How it works / tutorial demos — titles align with the release bulletin features.
  *
  * GCS bucket: how-to-videos-l2 (public objectViewer)
- * Folder:     How to- LocumLink/
+ * Folder:     How-to-Locumlink2/
  *
  * Default: direct public HTTPS URLs (browser-cache friendly).
  * Override with NEXT_PUBLIC_HOW_TO_VIDEOS_BASE_URL if the prefix changes.
@@ -25,7 +25,7 @@ export type HowToVideo = {
 
 /** Public GCS HTTPS prefix (spaces in folder encoded). */
 export const DEFAULT_HOW_TO_VIDEOS_BASE_URL =
-  'https://storage.googleapis.com/how-to-videos-l2/How%20to-%20LocumLink';
+  'https://storage.googleapis.com/how-to-videos-l2/How-to-Locumlink2';
 
 export function howToVideosBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_HOW_TO_VIDEOS_BASE_URL?.trim();
@@ -40,7 +40,7 @@ export function howToVideoSrc(video: HowToVideo): string {
 }
 
 export function howToVideoUploadHint(video: HowToVideo): string {
-  return `gs://how-to-videos-l2/How to- LocumLink/${video.fileBase}.mp4`;
+  return `gs://how-to-videos-l2/How-to-Locumlink2/${video.fileBase}.mp4`;
 }
 
 export const HOW_TO_VIDEOS: HowToVideo[] = [

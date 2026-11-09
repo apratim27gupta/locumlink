@@ -7,7 +7,7 @@ export const HOW_TO_VIDEOS_BUCKET =
   process.env.GCS_HOW_TO_VIDEOS_BUCKET?.trim() || 'how-to-videos-l2';
 
 export const HOW_TO_VIDEOS_PREFIX =
-  process.env.GCS_HOW_TO_VIDEOS_PREFIX?.trim() || 'How to- LocumLink';
+  process.env.GCS_HOW_TO_VIDEOS_PREFIX?.trim() || 'How-to-Locumlink2';
 
 const SIGNED_URL_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (GCS V4 max)
 

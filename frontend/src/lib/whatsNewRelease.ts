@@ -11,10 +11,10 @@ export type WhatsNewFeature = {
 };
 
 export const WHATS_NEW_RELEASE = {
-  dateLabel: 'Friday, November 6, 2026',
+  dateLabel: 'Friday, November 8th, 2026',
   bulletinLabel: 'Release bulletin',
   sectionLabel: "What's changing",
-  eyebrow: 'Friday, November 6, 2026 | Release bulletin',
+  eyebrow: 'Friday, November 8th, 2026 | Release bulletin',
   headline: 'More flexibility. Better locum coverage.',
   tagline: 'CONNECT. COVER. CARE.',
   intro:
