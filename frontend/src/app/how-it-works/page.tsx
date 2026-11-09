@@ -20,8 +20,7 @@ export default function HowItWorksPage() {
         <article className="support-card">
           <h1 className="support-page__title">How it works</h1>
           <p className="support-page__lead">
-            Short demos for hosts and locums aligned with this release — Flexible dates I–III,
-            matching, fees, applications, and the pre-filled GP form.
+            Short demos for hosts and locums aligned with this release.
           </p>
           <p className="how-to-page__meta">
             <Link href="/news#release" className="support-text-link">
