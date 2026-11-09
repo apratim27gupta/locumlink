@@ -43,6 +43,8 @@ export function buildA003CredentialUploaded(params: {
     priority: 'HIGH' as AdminCopyPriority,
     actionLabel: 'Review Credential',
     href: '/admin/verifications',
+    emailSubject: 'New Verification Request - Action Required',
+    emailBody: `${params.doctorName} has uploaded ${params.credentialType} for verification. Please review it in the admin console.`,
   };
 }
 
@@ -64,6 +66,8 @@ export function buildA005CpsnsUpdated(params: {
     priority: 'HIGH' as AdminCopyPriority,
     actionLabel: 'Review Credential',
     href: '/admin/verifications',
+    emailSubject: 'Verification Update - Action Required',
+    emailBody: `${inAppBody} Please review it in the admin console.`,
   };
 }
 

@@ -42,7 +42,10 @@ export default function HowItWorksPage() {
                 <p className="how-it-works-page__column-intro">
                   Posting coverage, matching locums, fees, and MSI paperwork.
                 </p>
-                <nav className="how-it-works-page__jump" aria-label="Host demos">
+                <nav
+                  className="how-it-works-page__jump how-it-works-page__jump--two-col"
+                  aria-label="Host demos"
+                >
                   {hostVideos.map((video, index) => (
                     <a
                       key={video.id}

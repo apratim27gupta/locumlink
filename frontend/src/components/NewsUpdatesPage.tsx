@@ -47,6 +47,9 @@ export default function NewsUpdatesPage() {
                 {item.title}
               </span>
             )}
+            {item.summary ? (
+              <p className="news-updates-item__summary">{item.summary}</p>
+            ) : null}
           </li>
         ))}
       </ul>

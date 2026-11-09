@@ -10,6 +10,23 @@ import {
 } from './admin-notification-copy.js';
 import { sanitizeNotificationCopy } from './sanitize-notification-copy.js';
 
+/** Inboxes that receive new verification-request emails (A_003). */
+const DEFAULT_VERIFICATION_NOTIFY_EMAILS = [
+  'doctor@locumlink.ca',
+  'satyam24034@gmail.com',
+] as const;
+
+/** Comma-separated VERIFICATION_NOTIFY_EMAIL override, else doctor@ + satyam. */
+function verificationNotifyEmails(): string[] {
+  const raw = process.env.VERIFICATION_NOTIFY_EMAIL?.trim();
+  const list = raw
+    ? raw.split(',')
+    : [...DEFAULT_VERIFICATION_NOTIFY_EMAILS];
+  return [
+    ...new Set(list.map((e) => e.trim().toLowerCase()).filter(Boolean)),
+  ];
+}
+
 export type AdminNotifEventType =
   | 'A_001_NEW_HOST_REGISTRATION'
   | 'A_002_NEW_LOCUM_REGISTRATION'
@@ -172,6 +189,8 @@ export class AdminNotificationsService {
     profileType: 'LocumProfile' | 'HostProfile';
   }): Promise<void> {
     const copy = buildA003CredentialUploaded(params);
+    // In-app bell still goes to every admin; email goes to the fixed
+    // verification inbox list only (doctor@ + satyam for now).
     await this.notifyAllAdmins({
       eventType: 'A_003_CREDENTIAL_UPLOADED',
       title: copy.inAppTitle,
@@ -182,6 +201,15 @@ export class AdminNotificationsService {
       referenceId: params.profileId,
       referenceType: params.profileType,
     });
+    await Promise.allSettled(
+      verificationNotifyEmails().map((to) =>
+        this.email.send({
+          to,
+          subject: copy.emailSubject,
+          text: copy.emailBody,
+        }),
+      ),
+    );
   }
 
   async notifyAccountFlagged(params: {
@@ -214,6 +242,7 @@ export class AdminNotificationsService {
     profileType: 'LocumProfile' | 'HostProfile';
   }): Promise<void> {
     const copy = buildA005CpsnsUpdated(params);
+    // In-app bell to every admin; email to the fixed verification inbox list.
     await this.notifyAllAdmins({
       eventType: 'A_005_CPSNS_UPDATED',
       title: copy.inAppTitle,
@@ -224,6 +253,15 @@ export class AdminNotificationsService {
       referenceId: params.profileId,
       referenceType: params.profileType,
     });
+    await Promise.allSettled(
+      verificationNotifyEmails().map((to) =>
+        this.email.send({
+          to,
+          subject: copy.emailSubject,
+          text: copy.emailBody,
+        }),
+      ),
+    );
   }
 
   async notifyMatchFeeOverdueEscalation(params: {

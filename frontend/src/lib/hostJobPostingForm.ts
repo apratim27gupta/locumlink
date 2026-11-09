@@ -43,21 +43,21 @@ export type HostScheduleKind = 'range' | 'list' | 'ranges';
 export const HOST_SCHEDULE_KIND_OPTIONS = [
     {
         id: 'range' as const,
-        label: 'Flexible dates I',
+        label: 'Continuous dates',
         description:
-            'Continuous dates: one stretch of days from a start to an end date. Also covers how to add full-day and half-day slots.',
+            'One continuous stretch of days from a start to an end date.',
     },
     {
         id: 'list' as const,
-        label: 'Flexible dates II',
+        label: 'Specific days',
         description:
-            'Specific days: pick each day you need a locum. They do not have to be consecutive.',
+            'Pick each day you need a locum. They do not have to be consecutive.',
     },
     {
         id: 'ranges' as const,
-        label: 'Flexible dates III',
+        label: 'Multiple periods',
         description:
-            'Multiple periods: add one or more date periods, each with its own start, end, and time.',
+            'Add one or more date periods, each with its own start, end, and time.',
     },
 ] as const;
 

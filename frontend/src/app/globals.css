@@ -2128,6 +2128,9 @@
 .how-it-works-page__columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* Row 1 = both column heads (shared height), row 2 = both video grids,
+     so the host and locum videos always start on the same line. */
+  grid-template-rows: auto auto;
   gap: 28px 32px;
   align-items: start;
   margin-top: 28px;
@@ -2135,8 +2138,9 @@
 
 .how-it-works-page__column {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
   gap: 16px;
 }
 
@@ -2164,7 +2168,15 @@
 @media (max-width: 900px) {
   .how-it-works-page__columns {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
     gap: 36px;
+  }
+
+  /* Stacked: columns no longer share rows, so drop the subgrid span. */
+  .how-it-works-page__column {
+    display: flex;
+    flex-direction: column;
+    grid-row: auto;
   }
 }
 
@@ -3079,6 +3091,23 @@
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #f8fafc;
+}
+
+/* Host demo list splits into two columns (fills top-to-bottom) so its
+   height matches the shorter locum list and both video grids start level. */
+.how-it-works-page__jump--two-col {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(4, auto);
+  column-gap: 20px;
+  row-gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .how-it-works-page__jump--two-col {
+    grid-auto-flow: row;
+    grid-template-rows: none;
+  }
 }
 
 .how-it-works-page__jump-link {

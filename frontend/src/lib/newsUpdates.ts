@@ -6,6 +6,8 @@ export type NewsUpdateItem = {
   date: string;
   dateLabel: string;
   title: string;
+  /** Optional one-line summary shown under the headline in a smaller font */
+  summary?: string;
   /** Opens What's New modal when true */
   opensWhatsNewModal?: boolean;
 };
@@ -17,6 +19,8 @@ export const NEWS_UPDATES: NewsUpdateItem[] = [
     date: '2026-11-06',
     dateLabel: WHATS_NEW_RELEASE.dateLabel,
     title: 'Feature release - more flexibility, better locum coverage',
+    summary:
+      'Introducing flexible bookings, partial shift coverage, simplified paperwork and transparent match fees.',
     opensWhatsNewModal: true,
   },
 ];
