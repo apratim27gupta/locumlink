@@ -5942,6 +5942,17 @@ body.app-body {
     margin: 0;
   }
 
+  /* Footer legal links: left-aligned, stacked, no "|" on mobile (web unchanged). */
+  .home-landing-footer-credits .home-landing-doc-links {
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .home-landing-footer-credits .home-landing-doc-links .home-landing-doc-link + .home-landing-doc-link::before {
+    content: none;
+    margin: 0;
+  }
+
   .setup-page-shell {
     width: 100% !important;
     max-width: 100% !important;
