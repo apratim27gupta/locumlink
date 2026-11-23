@@ -1022,6 +1022,14 @@ export class AdminService {
           queuedAt: queuedState.queuedAt,
         };
         this.broadcastJobs.set(idempotencyKey, completed);
+        if (result.failed.length > 0) {
+          this.logger.warn(
+            `Broadcast partial delivery (key=${idempotencyKey}): ` +
+              `${result.failed.length}/${recipients.length} failed; ` +
+              `sentEmail=${result.sentEmail} sentNotification=${result.sentNotification}. ` +
+              `First error: ${result.failed[0]?.error ?? 'unknown'}`,
+          );
+        }
         this.audit.log({
           ...auditBase,
           outcome: result.failed.length === 0 ? 'SUCCESS' : 'PARTIAL',
@@ -1194,6 +1202,9 @@ export class AdminService {
                 subject,
                 text: bodyText,
                 html: emailHtml,
+                eventType: 'U_001_ADMIN_MESSAGE',
+                referenceType: 'UserBroadcast',
+                referenceId: user.id,
               });
               if (!result.ok) {
                 failed.push({ userId: user.id, error: result.error });
