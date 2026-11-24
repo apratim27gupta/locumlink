@@ -7,8 +7,8 @@
  * tier, INVOICED event and host notification are all produced by app logic.
  * A minimal module (PaymentsModule only) is booted so no cron scheduler runs.
  *
- * On prod (NODE_ENV=production) env comes from the process environment, so
- * source backend/.env + backend/.env.production before running.
+ * Env is loaded from backend/.env.production + backend/.env by ConfigModule,
+ * so just run from the backend/ directory — no shell `source` needed.
  *
  * Usage (from backend/, after build):
  *   # Discover application ids by locum name / posting / clinic:
@@ -35,8 +35,17 @@ import {
 } from '../payments/match-fee.constants.js';
 import { computeApplicationClaimedHours } from '../host/job-schedule.util.js';
 
+// Load env from the backend dir's files (run with cwd = backend). ConfigModule
+// uses dotenv, which parses quoted/space values correctly — no shell `source`
+// needed. .env.production is listed first so its values win over .env.
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: [] }), PaymentsModule],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: ['.env.production', '.env'],
+    }),
+    PaymentsModule,
+  ],
 })
 class BackfillModule {}
 
