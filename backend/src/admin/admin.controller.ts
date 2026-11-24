@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   DefaultValuePipe,
+  Delete,
   Get,
   Header,
   HttpCode,
@@ -32,6 +33,7 @@ import { AdminService } from './admin.service.js';
 import { AdminReportActionDto } from './dto/admin-report-action.dto.js';
 import { AdminRemindUserDto } from './dto/admin-remind-user.dto.js';
 import { AdminBroadcastUsersDto } from './dto/admin-broadcast-users.dto.js';
+import { AdminBroadcastDraftDto } from './dto/admin-broadcast-draft.dto.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
 import { PaymentsService } from '../payments/payments.service.js';
@@ -257,6 +259,40 @@ export class AdminController {
     @Body() dto: AdminBroadcastUsersDto,
   ) {
     return this.admin.broadcastUsers(req, admin, dto);
+  }
+
+  // Draft routes are declared before `users/:id` so the dynamic id route does
+  // not swallow `/users/broadcast/drafts`.
+  @Get('users/broadcast/drafts')
+  async listBroadcastDrafts(@CurrentAdmin() admin: AdminJwtPayload) {
+    return this.admin.listBroadcastDrafts(admin);
+  }
+
+  @Post('users/broadcast/drafts')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async createBroadcastDraft(
+    @CurrentAdmin() admin: AdminJwtPayload,
+    @Body() dto: AdminBroadcastDraftDto,
+  ) {
+    return this.admin.createBroadcastDraft(admin, dto);
+  }
+
+  @Patch('users/broadcast/drafts/:id')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async updateBroadcastDraft(
+    @CurrentAdmin() admin: AdminJwtPayload,
+    @Param('id') id: string,
+    @Body() dto: AdminBroadcastDraftDto,
+  ) {
+    return this.admin.updateBroadcastDraft(admin, id, dto);
+  }
+
+  @Delete('users/broadcast/drafts/:id')
+  async deleteBroadcastDraft(
+    @CurrentAdmin() admin: AdminJwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.admin.deleteBroadcastDraft(admin, id);
   }
 
   @Post('users/:id/remind')

@@ -130,6 +130,8 @@ export class EmailService {
     eventType?: string;
     referenceId?: string;
     referenceType?: string;
+    /** Extra addresses to copy. Invalid/suppressed/review entries are dropped. */
+    cc?: string[];
   }): Promise<EmailSendResult> {
     const meta = {
       eventType: params.eventType,
@@ -192,6 +194,23 @@ export class EmailService {
       logoUrl,
     );
 
+    // Clean the CC list with the same rules that protect `to`: valid shape,
+    // not the primary recipient, not suppressed, not a review-playground inbox.
+    const suppressed = getSuppressedEmails(this.config);
+    const cc = [
+      ...new Set(
+        (params.cc ?? [])
+          .map((address) => address?.trim().toLowerCase())
+          .filter((address): address is string => Boolean(address)),
+      ),
+    ].filter(
+      (address) =>
+        looksLikeEmail(address) &&
+        address !== to &&
+        !suppressed.has(address) &&
+        !isReviewPlaygroundEmail(address, reviewEmails),
+    );
+
     const credentials = Buffer.from(`${sid}:${secret}`).toString('base64');
     let res: Response;
     try {
@@ -205,6 +224,9 @@ export class EmailService {
         body: JSON.stringify({
           from: { address: from, name: fromName },
           to: [{ address: to }],
+          ...(cc.length > 0
+            ? { cc: cc.map((address) => ({ address })) }
+            : {}),
           content: {
             subject,
             html,

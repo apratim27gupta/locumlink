@@ -19,7 +19,18 @@ import {
 import AdminBroadcastComposeModal, {
   type BroadcastChannel,
   type BroadcastResult,
+  type BroadcastDraftSeed,
 } from './AdminBroadcastComposeModal';
+
+type BroadcastDraft = {
+  id: string;
+  subject: string;
+  bodyHtml: string;
+  bodyText: string;
+  channels: BroadcastChannel[];
+  createdAt: string;
+  updatedAt: string;
+};
 
 type CpsnsVerificationStatus =
   | 'UNVERIFIED'
@@ -192,6 +203,13 @@ export default function AdminUsersPage() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [broadcastSending, setBroadcastSending] = useState(false);
   const [broadcastConfirm, setBroadcastConfirm] = useState<BroadcastConfirm | null>(null);
+  // Drafts (unsent messages, private to this admin).
+  const [drafts, setDrafts] = useState<BroadcastDraft[]>([]);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [draftsLoading, setDraftsLoading] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const [draftSeed, setDraftSeed] = useState<BroadcastDraftSeed | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -483,6 +501,8 @@ export default function AdminUsersPage() {
     setBroadcastMode(false);
     setSelectedIds(new Set());
     setComposeOpen(false);
+    setEditingDraftId(null);
+    setDraftSeed(null);
   }
 
   const recipientLabel = `${selectedCount} selected`;
@@ -532,10 +552,89 @@ export default function AdminUsersPage() {
             .join('; ') + (result.failed.length > 3 ? '…' : ''),
         );
       }
+      // A draft that was just sent no longer needs to exist.
+      if (editingDraftId) {
+        void deleteDraft(editingDraftId, { silent: true });
+      }
+      setEditingDraftId(null);
+      setDraftSeed(null);
       setComposeOpen(false);
       exitBroadcastMode();
     } finally {
       setBroadcastSending(false);
+    }
+  }
+
+  const loadDrafts = useCallback(async () => {
+    setDraftsLoading(true);
+    try {
+      const res = await adminFetchJson<{ drafts: BroadcastDraft[] }>(
+        '/api/admin/users/broadcast/drafts',
+      );
+      setDrafts(res.drafts ?? []);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Failed to load drafts');
+    } finally {
+      setDraftsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDrafts();
+  }, [loadDrafts]);
+
+  async function handleSaveDraft(payload: {
+    subject: string;
+    bodyHtml: string;
+    bodyText: string;
+    channels: BroadcastChannel[];
+  }) {
+    setSavingDraft(true);
+    setErr(null);
+    try {
+      if (editingDraftId) {
+        await adminFetchJson<BroadcastDraft>(
+          `/api/admin/users/broadcast/drafts/${editingDraftId}`,
+          { method: 'PATCH', body: JSON.stringify(payload) },
+        );
+      } else {
+        const created = await adminFetchJson<BroadcastDraft>(
+          '/api/admin/users/broadcast/drafts',
+          { method: 'POST', body: JSON.stringify(payload) },
+        );
+        // Keep editing the same draft so further saves update, not duplicate.
+        setEditingDraftId(created.id);
+      }
+      await loadDrafts();
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+  function openDraftForEdit(draft: BroadcastDraft) {
+    setEditingDraftId(draft.id);
+    setDraftSeed({
+      subject: draft.subject,
+      bodyHtml: draft.bodyHtml,
+      channels: draft.channels.length > 0 ? draft.channels : ['notification', 'email'],
+    });
+    setDraftsOpen(false);
+    setBroadcastConfirm(null);
+    setBroadcastMode(true);
+    setComposeOpen(true);
+  }
+
+  async function deleteDraft(id: string, opts?: { silent?: boolean }) {
+    try {
+      await adminFetchJson(`/api/admin/users/broadcast/drafts/${id}`, {
+        method: 'DELETE',
+      });
+      setDrafts((prev) => prev.filter((d) => d.id !== id));
+      if (editingDraftId === id) setEditingDraftId(null);
+    } catch (e) {
+      if (!opts?.silent) {
+        setErr(e instanceof Error ? e.message : 'Failed to delete draft');
+      }
     }
   }
 
@@ -553,6 +652,8 @@ export default function AdminUsersPage() {
               className="btn btn-primary"
               onClick={() => {
                 setBroadcastConfirm(null);
+                setEditingDraftId(null);
+                setDraftSeed(null);
                 setBroadcastMode(true);
               }}
             >
@@ -560,6 +661,14 @@ export default function AdminUsersPage() {
               Broadcast
             </button>
           ) : null}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setDraftsOpen(true)}
+          >
+            <FileText size={16} />
+            Drafts{drafts.length > 0 ? ` (${drafts.length})` : ''}
+          </button>
           <button
             type="button"
             className="btn btn-secondary"
@@ -1415,11 +1524,120 @@ export default function AdminUsersPage() {
         open={composeOpen}
         recipientLabel={recipientLabel}
         sending={broadcastSending}
+        savingDraft={savingDraft}
+        initialDraft={draftSeed}
         onClose={() => {
-          if (!broadcastSending) setComposeOpen(false);
+          if (!broadcastSending && !savingDraft) setComposeOpen(false);
         }}
         onSend={sendBroadcast}
+        onSaveDraft={handleSaveDraft}
       />
+
+      {draftsOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="modal-overlay active"
+              style={{ zIndex: 1250 }}
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setDraftsOpen(false);
+              }}
+              onKeyDown={() => {}}
+              role="presentation"
+            >
+              <div
+                className="modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="drafts-title"
+                style={{ maxWidth: 560 }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="modal-header">
+                  <div>
+                    <h2 id="drafts-title" className="modal-title">
+                      Saved drafts
+                    </h2>
+                    <p className="modal-subtitle">
+                      Unsent messages you can finish later
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="modal-close"
+                    onClick={() => setDraftsOpen(false)}
+                    aria-label="Close"
+                  >
+                    <XCircle size={20} color="#64748b" />
+                  </button>
+                </div>
+                <div className="modal-body">
+                  {draftsLoading ? (
+                    <p className="text-muted">Loading…</p>
+                  ) : drafts.length === 0 ? (
+                    <p className="text-muted">
+                      No drafts yet. When you close a message without sending it,
+                      you can save it here.
+                    </p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {drafts.map((d) => (
+                        <div
+                          key={d.id}
+                          style={{
+                            border: '1px solid #E5E7EB',
+                            borderRadius: 8,
+                            padding: 12,
+                            display: 'flex',
+                            gap: 10,
+                            alignItems: 'flex-start',
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="font-medium" style={{ marginBottom: 2 }}>
+                              {d.subject.trim() || '(no subject)'}
+                            </div>
+                            <div
+                              className="text-sm text-muted"
+                              style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {d.bodyText.trim() || 'No message body'}
+                            </div>
+                            <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+                              Updated {new Date(d.updatedAt).toLocaleString('en-CA')}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 12px', fontSize: 13 }}
+                              onClick={() => openDraftForEdit(d)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 12px', fontSize: 13 }}
+                              onClick={() => void deleteDraft(d.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </AdminLayout>
   );
 }

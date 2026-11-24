@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAdminSession } from '@/lib/admin-auth-server';
+import {
+  isEligibleForCredentialQueueHost,
+  isEligibleForCredentialQueueLocum,
+} from '@/lib/cpsnsVerify';
+
+/**
+ * Statuses counted in the credential queue card. Mirrors the backend's
+ * VERIFICATION_PENDING_FILTER used by the verifications "pending" list, so the
+ * card and the list always agree. (REJECTED lives in its own tab, not here.)
+ */
+const CREDENTIAL_QUEUE_STATUSES = ['UNVERIFIED', 'PENDING_REVIEW'] as const;
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -19,8 +30,8 @@ export async function GET(req: Request) {
     verifiedHostUsers,
     locumUsers,
     verifiedLocumUsers,
-    pendingLocumVerifications,
-    pendingHostVerifications,
+    locumQueueCandidates,
+    hostQueueCandidates,
     activeJobPostings,
     totalJobPostings,
     openReports,
@@ -41,18 +52,29 @@ export async function GET(req: Request) {
         user: { role: 'LOCUM' },
       },
     }),
-    db.locumProfile.count({
-      where: {
-        cpsnsVerificationStatus: { in: ['UNVERIFIED', 'PENDING_REVIEW'] },
+    // Fetch every profile sitting at a queue status, then filter in JS with the
+    // SAME eligibility rule the verifications queue uses — so the card count can
+    // never drift from the list again. "Empty" profiles (no CPSNS / no submitted
+    // details) are excluded, matching "only the ones who filled out the form".
+    db.locumProfile.findMany({
+      where: { cpsnsVerificationStatus: { in: [...CREDENTIAL_QUEUE_STATUSES] } },
+      select: {
+        cpsnsVerificationStatus: true,
+        cpsnsId: true,
+        licenseFileName: true,
+        resumeFileName: true,
+        firstName: true,
+        lastName: true,
       },
     }),
-    db.hostProfile.count({
-      where: {
-        cpsnsVerificationStatus: { in: ['UNVERIFIED', 'PENDING_REVIEW'] },
-        OR: [
-          { cpsnsNumber: { not: null } },
-          { practiceName: { not: '' } },
-        ],
+    db.hostProfile.findMany({
+      where: { cpsnsVerificationStatus: { in: [...CREDENTIAL_QUEUE_STATUSES] } },
+      select: {
+        cpsnsVerificationStatus: true,
+        cpsnsNumber: true,
+        practiceName: true,
+        licenseFile: true,
+        photoIdFile: true,
       },
     }),
     db.jobPosting.count({
@@ -63,6 +85,14 @@ export async function GET(req: Request) {
     db.supportTicket.count({ where: { status: 'OPEN' } }),
   ]);
 
+  // Count only profiles that actually submitted something — identical rule to
+  // the credential/verifications queue list.
+  const pendingVerifications =
+    locumQueueCandidates.filter((p) => isEligibleForCredentialQueueLocum(p))
+      .length +
+    hostQueueCandidates.filter((p) => isEligibleForCredentialQueueHost(p))
+      .length;
+
   return NextResponse.json({
     admin: { email: session.actorEmail },
     stats: {
@@ -71,7 +101,7 @@ export async function GET(req: Request) {
       verifiedHostUsers,
       locumUsers,
       verifiedLocumUsers,
-      pendingVerifications: pendingLocumVerifications + pendingHostVerifications,
+      pendingVerifications,
       openReports,
       openHostTickets,
       activeJobPostings,

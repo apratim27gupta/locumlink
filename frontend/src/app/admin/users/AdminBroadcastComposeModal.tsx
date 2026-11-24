@@ -15,10 +15,20 @@ export type BroadcastResult = {
   failed: Array<{ userId: string; error: string }>;
 };
 
+export type BroadcastDraftSeed = {
+  subject: string;
+  bodyHtml: string;
+  channels: BroadcastChannel[];
+};
+
 type Props = {
   open: boolean;
   recipientLabel: string;
   sending: boolean;
+  /** Prefill the composer when editing an existing draft. */
+  initialDraft?: BroadcastDraftSeed | null;
+  /** True while a draft save is in flight. */
+  savingDraft?: boolean;
   onClose: () => void;
   onSend: (payload: {
     subject: string;
@@ -26,6 +36,13 @@ type Props = {
     bodyText: string;
     channels: BroadcastChannel[];
     idempotencyKey: string;
+  }) => Promise<void>;
+  /** Persist the current content as a draft. Enables the "Save as draft" flow. */
+  onSaveDraft?: (payload: {
+    subject: string;
+    bodyHtml: string;
+    bodyText: string;
+    channels: BroadcastChannel[];
   }) => Promise<void>;
 };
 
@@ -54,8 +71,11 @@ export default function AdminBroadcastComposeModal({
   open,
   recipientLabel,
   sending,
+  initialDraft,
+  savingDraft = false,
   onClose,
   onSend,
+  onSaveDraft,
 }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const idempotencyKeyRef = useRef<string>('');
@@ -65,6 +85,8 @@ export default function AdminBroadcastComposeModal({
   const [fontSize, setFontSize] = useState('3');
   const [fmt, setFmt] = useState({ bold: false, italic: false, underline: false });
   const [localErr, setLocalErr] = useState<string | null>(null);
+  // Shown when the admin tries to leave with unsaved text.
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   const syncFormatState = useCallback(() => {
     try {
@@ -80,20 +102,27 @@ export default function AdminBroadcastComposeModal({
 
   useEffect(() => {
     if (!open) return;
-    setSubject('');
-    setChannelNotification(true);
-    setChannelEmail(true);
+    const seedChannels = initialDraft?.channels;
+    setSubject(initialDraft?.subject ?? '');
+    setChannelNotification(seedChannels ? seedChannels.includes('notification') : true);
+    setChannelEmail(seedChannels ? seedChannels.includes('email') : true);
     setFontSize('3');
     setFmt({ bold: false, italic: false, underline: false });
     setLocalErr(null);
+    setConfirmLeave(false);
     idempotencyKeyRef.current =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `bcast-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const seedHtml = initialDraft?.bodyHtml?.trim();
     requestAnimationFrame(() => {
-      if (editorRef.current) editorRef.current.innerHTML = '<p><br></p>';
+      if (editorRef.current) {
+        editorRef.current.innerHTML = seedHtml || '<p><br></p>';
+      }
     });
-  }, [open]);
+    // Re-seed only when the modal opens or a different draft is loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialDraft]);
 
   useEffect(() => {
     if (!open) return;
@@ -141,6 +170,48 @@ export default function AdminBroadcastComposeModal({
     }
   }
 
+  function currentContent() {
+    const bodyHtml = (editorRef.current?.innerHTML ?? '').trim();
+    const bodyText = stripHtml(bodyHtml);
+    const channels: BroadcastChannel[] = [];
+    if (channelNotification) channels.push('notification');
+    if (channelEmail) channels.push('email');
+    return { subject: subject.trim(), bodyHtml, bodyText, channels };
+  }
+
+  /** Has the admin typed anything worth keeping? */
+  function hasContent() {
+    const { subject: s, bodyText } = currentContent();
+    return Boolean(s || bodyText);
+  }
+
+  async function handleSaveDraft() {
+    if (!onSaveDraft) return;
+    setLocalErr(null);
+    const { subject: s, bodyHtml, bodyText, channels } = currentContent();
+    try {
+      await onSaveDraft({ subject: s, bodyHtml, bodyText, channels });
+    } catch (e) {
+      setLocalErr(e instanceof Error ? e.message : 'Failed to save draft');
+    }
+  }
+
+  // Leaving with unsaved text: offer Save/Discard instead of dropping it.
+  function requestClose() {
+    if (sending || savingDraft) return;
+    if (onSaveDraft && hasContent()) {
+      setConfirmLeave(true);
+      return;
+    }
+    onClose();
+  }
+
+  async function saveDraftAndClose() {
+    await handleSaveDraft();
+    setConfirmLeave(false);
+    onClose();
+  }
+
   if (!open) return null;
 
   return (
@@ -148,7 +219,7 @@ export default function AdminBroadcastComposeModal({
       className="modal-overlay active"
       style={{ zIndex: 1200 }}
       onClick={(e) => {
-        if (e.target === e.currentTarget && !sending) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
       onKeyDown={() => {}}
       role="presentation"
@@ -171,8 +242,8 @@ export default function AdminBroadcastComposeModal({
           <button
             type="button"
             className="modal-close"
-            onClick={onClose}
-            disabled={sending}
+            onClick={requestClose}
+            disabled={sending || savingDraft}
             aria-label="Close"
           >
             <XCircle size={20} color="#64748b" />
@@ -327,27 +398,106 @@ export default function AdminBroadcastComposeModal({
             </label>
           </div>
 
-          <div className="grid-2">
+          <div
+            style={{
+              display: 'flex',
+              gap: 10,
+              flexWrap: 'wrap',
+              justifyContent: 'flex-end',
+            }}
+          >
             <button
               type="button"
               className="btn btn-secondary"
               style={{ padding: 12 }}
-              disabled={sending}
-              onClick={onClose}
+              disabled={sending || savingDraft}
+              onClick={requestClose}
             >
               Cancel
             </button>
+            {onSaveDraft ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ padding: 12 }}
+                disabled={sending || savingDraft}
+                onClick={() => void handleSaveDraft()}
+              >
+                {savingDraft ? 'Saving…' : 'Save as draft'}
+              </button>
+            ) : null}
             <button
               type="button"
               className="btn btn-primary"
               style={{ padding: 12 }}
-              disabled={sending}
+              disabled={sending || savingDraft}
               onClick={() => void handleSend()}
             >
               {sending ? 'Sending…' : 'Send'}
             </button>
           </div>
         </div>
+
+        {confirmLeave ? (
+          <div
+            className="modal-overlay active"
+            style={{ zIndex: 1300 }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setConfirmLeave(false);
+            }}
+            onKeyDown={() => {}}
+            role="presentation"
+          >
+            <div
+              className="modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Save this message as a draft?"
+              style={{ maxWidth: 420 }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="modal-body" style={{ padding: 24 }}>
+                <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>
+                  Save this message?
+                </h3>
+                <p style={{ margin: '0 0 20px', color: '#475569', fontSize: 14 }}>
+                  You have an unsent message. Save it as a draft to finish later,
+                  or discard it.
+                </p>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    justifyContent: 'flex-end',
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: 12 }}
+                    disabled={savingDraft}
+                    onClick={() => {
+                      setConfirmLeave(false);
+                      onClose();
+                    }}
+                  >
+                    Discard
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ padding: 12 }}
+                    disabled={savingDraft}
+                    onClick={() => void saveDraftAndClose()}
+                  >
+                    {savingDraft ? 'Saving…' : 'Save as draft'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
