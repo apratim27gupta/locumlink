@@ -1166,6 +1166,9 @@ export class LocumService {
         totalAppliedShifts: 0,
         totalAcceptedShifts: 0,
         completedShifts: 0,
+        appliedPosts: 0,
+        acceptedPosts: 0,
+        completedPosts: 0,
       };
     }
     const now = new Date();
@@ -1204,6 +1207,10 @@ export class LocumService {
     let totalAppliedShifts = 0;
     let totalAcceptedShifts = 0;
     let completedShifts = 0;
+    // Post-level counts (one unit per application/posting, not per shift/day).
+    let appliedPosts = 0;
+    let acceptedPosts = 0;
+    let completedPosts = 0;
 
     for (const app of apps) {
       const posting = app.jobPosting;
@@ -1246,8 +1253,10 @@ export class LocumService {
         appliedCount = applicationClaimedDates(app, required).length;
       }
       totalAppliedShifts += appliedCount;
+      appliedPosts += 1;
 
       if (!accepted) continue;
+      acceptedPosts += 1;
 
       let acceptedIds: string[] = [];
       let acceptedDays: string[] = [];
@@ -1260,30 +1269,37 @@ export class LocumService {
         totalAcceptedShifts += acceptedDays.length;
       }
 
+      let completedForApp = 0;
       const postingDone =
         posting.status === 'COMPLETED' ||
         (posting.endDate != null &&
           platformCalendarDateOf(posting.endDate) < today);
       if (postingDone) {
-        completedShifts += isSlots ? acceptedIds.length : acceptedDays.length;
-        continue;
-      }
-
-      if (isSlots) {
+        completedForApp = isSlots ? acceptedIds.length : acceptedDays.length;
+      } else if (isSlots) {
         const claimed = new Set(acceptedIds);
         for (const s of slots) {
           if (!s.id || !claimed.has(s.id)) continue;
           const cal = formatCalendarDateForApi(s.date);
-          if (cal && cal < today) completedShifts += 1;
+          if (cal && cal < today) completedForApp += 1;
         }
       } else {
         for (const day of acceptedDays) {
-          if (day < today) completedShifts += 1;
+          if (day < today) completedForApp += 1;
         }
       }
+      completedShifts += completedForApp;
+      if (completedForApp > 0) completedPosts += 1;
     }
 
-    return { totalAppliedShifts, totalAcceptedShifts, completedShifts };
+    return {
+      totalAppliedShifts,
+      totalAcceptedShifts,
+      completedShifts,
+      appliedPosts,
+      acceptedPosts,
+      completedPosts,
+    };
   }
 
   private parseAvailabilityInput(

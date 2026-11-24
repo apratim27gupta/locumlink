@@ -748,6 +748,9 @@ export const locumApi = {
         totalAppliedShifts: number;
         totalAcceptedShifts: number;
         completedShifts: number;
+        appliedPosts: number;
+        acceptedPosts: number;
+        completedPosts: number;
     }> => {
         const res = await trackedFetch(`${NEST_BASE}/api/locum/stats`, {
             cache: 'no-store',
@@ -761,6 +764,9 @@ export const locumApi = {
             totalAppliedShifts: number;
             totalAcceptedShifts: number;
             completedShifts: number;
+            appliedPosts: number;
+            acceptedPosts: number;
+            completedPosts: number;
         }>;
     },
     getMyApplications: async (params?: PaginationQuery): Promise<PaginatedResult<MyApplication>> => {

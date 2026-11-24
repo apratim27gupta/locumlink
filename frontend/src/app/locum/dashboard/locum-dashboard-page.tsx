@@ -509,6 +509,9 @@ export default function LocumDashboard(props: {
         totalAppliedShifts: number;
         totalAcceptedShifts: number;
         completedShifts: number;
+        appliedPosts: number;
+        acceptedPosts: number;
+        completedPosts: number;
     } | null>(null);
     const [loading, setLoading] = useState(true);
     const [respondingAppId, setRespondingAppId] = useState<string | null>(null);
@@ -707,6 +710,13 @@ export default function LocumDashboard(props: {
     const appliedCount = shiftStats?.totalAppliedShifts ?? appliedFromApps;
     const acceptedCount = shiftStats?.totalAcceptedShifts ?? acceptedFromApps;
     const completedCount = shiftStats?.completedShifts ?? completedFromApps;
+    // Post-level counts (one unit per posting applied to), mirror the shift row above it.
+    const appliedPostsFromApps = visibleApplications.length;
+    const acceptedPostsFromApps = visibleApplications.filter(locumAcceptedApplication).length;
+    const completedPostsFromApps = visibleApplications.filter(isCompletedApplication).length;
+    const appliedPostsCount = shiftStats?.appliedPosts ?? appliedPostsFromApps;
+    const acceptedPostsCount = shiftStats?.acceptedPosts ?? acceptedPostsFromApps;
+    const completedPostsCount = shiftStats?.completedPosts ?? completedPostsFromApps;
     const locumTabCounts: Record<(typeof LOCUM_TABS)[number]['id'], number> = {
         recent: recentCount,
         upcoming: upcomingCount,
@@ -845,6 +855,56 @@ export default function LocumDashboard(props: {
       />
 
       
+      <div style={{
+            display: 'flex',
+            border: '1px solid #e2e5ee',
+            borderRadius: 8,
+            overflow: 'hidden',
+            marginBottom: 8,
+            background: '#fff',
+            flexShrink: 0,
+        }}>
+        <div style={{ flex: 1, flexShrink: 0, padding: '18px 14px', borderRight: '1px solid #e2e5ee' }}>
+          <p style={{
+            margin: 0,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 'var(--font-weight-bold)',
+            fontSize: 'var(--font-heading)',
+            lineHeight: '140%',
+            color: '#4A4A4A',
+        }}>
+            Total Posts Applied :{' '}
+            <span style={{ color: '#000' }}>{loading ? '-' : appliedPostsCount}</span>
+          </p>
+        </div>
+        <div style={{ flex: 1, flexShrink: 0, padding: '18px 14px', borderRight: '1px solid #e2e5ee' }}>
+          <p style={{
+            margin: 0,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 'var(--font-weight-bold)',
+            fontSize: 'var(--font-heading)',
+            lineHeight: '140%',
+            color: '#4A4A4A',
+        }}>
+            Total Posts Accepted :{' '}
+            <span style={{ color: '#000' }}>{loading ? '-' : acceptedPostsCount}</span>
+          </p>
+        </div>
+        <div style={{ flex: 1, flexShrink: 0, padding: '18px 14px' }}>
+          <p style={{
+            margin: 0,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 'var(--font-weight-bold)',
+            fontSize: 'var(--font-heading)',
+            lineHeight: '140%',
+            color: '#4A4A4A',
+        }}>
+            Total Posts Completed :{' '}
+            <span style={{ color: '#000' }}>{loading ? '-' : completedPostsCount}</span>
+          </p>
+        </div>
+      </div>
+
       <div style={{
             display: 'flex',
             border: '1px solid #e2e5ee',
