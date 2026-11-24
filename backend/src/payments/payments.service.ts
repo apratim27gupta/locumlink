@@ -1134,7 +1134,15 @@ export class PaymentsService {
     return result;
   }
 
-  async createMatchFeeInvoice(applicationId: string): Promise<void> {
+  async createMatchFeeInvoice(
+    applicationId: string,
+    opts?: {
+      /** Create even for postings grandfathered out of match fees (backfill). */
+      ignoreGrandfather?: boolean;
+      /** Override the computed due date (e.g. backfilling a past placement). */
+      dueAtOverride?: Date;
+    },
+  ): Promise<void> {
     const existingByApp = await this.prisma.matchFeeInvoice.findUnique({
       where: {
         applicationId_kind: { applicationId, kind: 'PRIMARY' },
@@ -1192,7 +1200,10 @@ export class PaymentsService {
     });
     if (!app?.locumAcceptedAt) return;
 
-    if (isPostingGrandfatheredFromMatchFee(app.jobPosting.createdAt)) {
+    if (
+      !opts?.ignoreGrandfather &&
+      isPostingGrandfatheredFromMatchFee(app.jobPosting.createdAt)
+    ) {
       return;
     }
 
@@ -1241,7 +1252,8 @@ export class PaymentsService {
 
     const createdAt = new Date();
     const earliestShiftDate = computeEarliestShiftDate(app.jobPosting, app);
-    const dueAt = computeDueAt(createdAt, earliestShiftDate);
+    const dueAt =
+      opts?.dueAtOverride ?? computeDueAt(createdAt, earliestShiftDate);
 
     const invoiceData = {
       hostProfileId: app.jobPosting.hostProfileId,
