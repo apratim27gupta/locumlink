@@ -154,6 +154,16 @@ function appUrl(path: string): string {
   return `${base}${path}`;
 }
 
+/** Escape user-supplied text for safe inclusion in HTML email bodies. */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function formatCents(cents: number): string {
   return `CA$${(cents / 100).toFixed(2)}`;
 }
@@ -1434,14 +1444,25 @@ export class NotificationsService {
     const eventType = overdue ? 'H_016_MATCH_FEE_OVERDUE' : 'H_015_MATCH_FEE_DUE_SOON';
     const invoiceHref = `/host/invoices?invoiceId=${encodeURIComponent(params.invoiceId)}`;
     const jobHref = `/host/applicants/${encodeURIComponent(params.jobPostingId)}`;
+    // One-hop pay link: opens the app, mints a fresh Stripe session, redirects to Stripe.
+    const payHref = `/host/invoices/${encodeURIComponent(params.invoiceId)}/pay`;
+    const payUrl = appUrl(payHref);
     const emailSubject = `${title}: ${params.jobTitle}`;
     const emailBody = [
       body,
       '',
-      `View and pay the invoice: ${appUrl(invoiceHref)}`,
+      `Pay now (${fee}): ${payUrl}`,
+      '',
+      `Or view the invoice: ${appUrl(invoiceHref)}`,
       `View the job: ${appUrl(jobHref)}`,
       '',
       'You will be asked to sign in if you are not already.',
+    ].join('\n');
+    const emailHtml = [
+      `<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#1f2937">${escapeHtml(body)}</p>`,
+      `<p style="margin:20px 0"><a href="${payUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold">Pay now (${escapeHtml(fee)})</a></p>`,
+      `<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#475569">Or view the invoice: <a href="${appUrl(invoiceHref)}">${appUrl(invoiceHref)}</a><br>View the job: <a href="${appUrl(jobHref)}">${appUrl(jobHref)}</a></p>`,
+      `<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#64748b">You will be asked to sign in if you are not already.</p>`,
     ].join('\n');
 
     if (params.sendNotification) {
@@ -1468,6 +1489,7 @@ export class NotificationsService {
           to: params.recipientEmail,
           subject: emailSubject,
           text: emailBody,
+          html: emailHtml,
         });
       }
     }
