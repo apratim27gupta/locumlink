@@ -28,6 +28,8 @@ function AdminLoginInner() {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const digitsRef = useRef(digits);
   digitsRef.current = digits;
+  const verifyingRef = useRef(false);
+  const lastSubmittedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -83,6 +85,13 @@ function AdminLoginInner() {
       setFormError('Please enter the full 6-digit code.');
       return;
     }
+    // Guard against re-firing: auto-submit runs on every keystroke while all
+    // boxes are full, so skip if a request is already in flight or this exact
+    // code was already submitted (prevents burning the attempt rate limit).
+    if (verifyingRef.current) return;
+    if (lastSubmittedRef.current === otp) return;
+    verifyingRef.current = true;
+    lastSubmittedRef.current = otp;
     setFormError(null);
     setBusy(true);
     try {
@@ -106,6 +115,7 @@ function AdminLoginInner() {
       setFormError('Invalid or expired verification code.');
     } finally {
       setBusy(false);
+      verifyingRef.current = false;
     }
   }
 

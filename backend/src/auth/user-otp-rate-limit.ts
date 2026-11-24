@@ -22,7 +22,7 @@ function assertAllowed(email: string, ip: string): void {
   const rec = verifyAttempts.get(key);
   if (!rec) return;
   if (rec.lockedUntil && now < rec.lockedUntil) {
-    throw new UserOtpRateLimitError();
+    throw new UserOtpRateLimitError(rec.lockedUntil - now);
   }
   if (now - rec.windowStart > WINDOW_MS) {
     verifyAttempts.delete(key);
@@ -57,8 +57,11 @@ export function clearUserOtpVerifyAttempts(email: string, ip: string): void {
 }
 
 export class UserOtpRateLimitError extends Error {
-  constructor() {
+  /** Milliseconds remaining until the lockout clears (0 when unknown). */
+  readonly retryAfterMs: number;
+  constructor(retryAfterMs = 0) {
     super('Too many attempts. Please try again later.');
     this.name = 'UserOtpRateLimitError';
+    this.retryAfterMs = retryAfterMs;
   }
 }

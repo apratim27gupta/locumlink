@@ -4,6 +4,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -511,8 +513,12 @@ export class AuthService {
       assertUserOtpVerifyAllowed(normalizedEmail, ip);
     } catch (err) {
       if (err instanceof UserOtpRateLimitError) {
-        throw new UnauthorizedException(
-          'Invalid or expired verification code.',
+        const minutes = Math.max(1, Math.ceil(err.retryAfterMs / 60000));
+        throw new HttpException(
+          `Too many attempts. Please wait about ${minutes} minute${
+            minutes === 1 ? '' : 's'
+          } and try again.`,
+          HttpStatus.TOO_MANY_REQUESTS,
         );
       }
       throw err;

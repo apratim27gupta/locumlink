@@ -42,6 +42,8 @@ export default function VerifyPage(props: {
     const refs = useRef<(HTMLInputElement | null)[]>([]);
     const digitsRef = useRef(digits);
     digitsRef.current = digits;
+    const verifyingRef = useRef(false);
+    const lastSubmittedRef = useRef<string | null>(null);
     useEffect(() => {
         if (resendCooldown <= 0)
             return;
@@ -123,11 +125,18 @@ export default function VerifyPage(props: {
             setError('Please enter the full 6-digit code.');
             return;
         }
+        // Guard against re-firing: auto-submit runs on every keystroke while all
+        // boxes are full, so skip if a request is in flight or this exact code
+        // was already submitted (prevents burning the attempt rate limit).
+        if (verifyingRef.current) return;
+        if (lastSubmittedRef.current === otp) return;
         const email = getEmail();
         if (!email) {
             router.replace(authHref());
             return;
         }
+        verifyingRef.current = true;
+        lastSubmittedRef.current = otp;
         // Lock role from the URL before calling the API (avoids Host→Locum drift).
         saveRole(accentRole);
         setError('');
@@ -143,6 +152,7 @@ export default function VerifyPage(props: {
         }
         finally {
             setBusy(false);
+            verifyingRef.current = false;
         }
     }
     async function handleResend() {

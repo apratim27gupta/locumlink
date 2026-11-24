@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -147,7 +149,13 @@ export class AdminAuthService {
       assertAdminVerifyAllowed(email, ip);
     } catch (err) {
       if (err instanceof AdminLoginRateLimitError) {
-        throw new UnauthorizedException(ADMIN_OTP_VERIFY_GENERIC);
+        const minutes = Math.max(1, Math.ceil(err.retryAfterMs / 60000));
+        throw new HttpException(
+          `Too many attempts. Please wait about ${minutes} minute${
+            minutes === 1 ? '' : 's'
+          } and try again.`,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
       }
       throw err;
     }
