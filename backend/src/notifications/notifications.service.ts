@@ -1430,6 +1430,9 @@ export class NotificationsService {
     invoiceId: string;
     amountCents: number;
     taxCents?: number;
+    currency?: string;
+    issuedAt?: Date;
+    locumName?: string;
     status: 'PENDING' | 'OVERDUE';
     sendEmail: boolean;
     sendNotification: boolean;
@@ -1448,21 +1451,84 @@ export class NotificationsService {
     const payHref = `/host/invoices/${encodeURIComponent(params.invoiceId)}/pay`;
     const payUrl = appUrl(payHref);
     const emailSubject = `${title}: ${params.jobTitle}`;
+
+    // Richer payment summary for the email.
+    const currency = params.currency ?? 'CAD';
+    const taxCents = params.taxCents ?? 0;
+    const subtotalStr = formatCents(params.amountCents - taxCents);
+    const taxStr = formatCents(taxCents);
+    const totalStr = formatCents(params.amountCents);
+    const invoiceRef = params.invoiceId.slice(-8).toUpperCase();
+    const issuedStr = params.issuedAt
+      ? params.issuedAt.toLocaleDateString('en-CA')
+      : null;
+    const locumTrimmed = params.locumName?.trim();
+    const physician = locumTrimmed
+      ? /^dr\.?\s/i.test(locumTrimmed)
+        ? locumTrimmed
+        : `Dr. ${locumTrimmed}`
+      : 'Assigned locum';
+    const dayMs = 86_400_000;
+    const diffDays = Math.round((params.dueAt.getTime() - Date.now()) / dayMs);
+    const dueContext = overdue
+      ? diffDays <= -1
+        ? `${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? '' : 's'} overdue`
+        : 'overdue'
+      : diffDays <= 0
+        ? 'due today'
+        : `due in ${diffDays} day${diffDays === 1 ? '' : 's'}`;
+
+    // Label/value rows shared by the text and HTML renderings.
+    const summaryRows: Array<[string, string]> = [
+      ['Physician', physician],
+      ['Position', params.jobTitle],
+      ['Invoice', `#${invoiceRef}`],
+      ...(issuedStr ? [['Issued', issuedStr] as [string, string]] : []),
+      ['Due', `${dueStr} (${dueContext})`],
+      ['Match fee', subtotalStr],
+      ['HST', taxStr],
+      ['Total due', `${totalStr} ${currency}`],
+    ];
+
+    const explainer =
+      'This match fee is charged when a locum is confirmed for your posting. ' +
+      'Once paid, your invoice is marked paid and a receipt is available in Match Fees.';
+
     const emailBody = [
       body,
       '',
-      `Pay now (${fee}): ${payUrl}`,
+      'Payment summary',
+      ...summaryRows.map(([label, value]) => `  ${label}: ${value}`),
+      '',
+      `Pay now: ${payUrl}`,
       '',
       `Or view the invoice: ${appUrl(invoiceHref)}`,
       `View the job: ${appUrl(jobHref)}`,
       '',
+      explainer,
       'You will be asked to sign in if you are not already.',
     ].join('\n');
+
+    const summaryHtmlRows = summaryRows
+      .map(([label, value], i) => {
+        const emphasize = label === 'Total due';
+        const weight = emphasize ? 'font-weight:bold;' : '';
+        const border = i === 0 ? '' : 'border-top:1px solid #E5E7EB;';
+        return (
+          `<tr>` +
+          `<td style="padding:8px 12px;${border}font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#64748b">${escapeHtml(label)}</td>` +
+          `<td style="padding:8px 12px;${border}font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1f2937;text-align:right;${weight}">${escapeHtml(value)}</td>` +
+          `</tr>`
+        );
+      })
+      .join('');
+
     const emailHtml = [
       `<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#1f2937">${escapeHtml(body)}</p>`,
-      `<p style="margin:20px 0"><a href="${payUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold">Pay now (${escapeHtml(fee)})</a></p>`,
+      `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:440px;border:1px solid #E5E7EB;border-radius:8px;margin:16px 0">${summaryHtmlRows}</table>`,
+      `<p style="margin:20px 0"><a href="${payUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold">Pay now (${escapeHtml(totalStr)})</a></p>`,
       `<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#475569">Or view the invoice: <a href="${appUrl(invoiceHref)}">${appUrl(invoiceHref)}</a><br>View the job: <a href="${appUrl(jobHref)}">${appUrl(jobHref)}</a></p>`,
-      `<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#64748b">You will be asked to sign in if you are not already.</p>`,
+      `<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#64748b">${escapeHtml(explainer)}<br>You will be asked to sign in if you are not already.</p>`,
     ].join('\n');
 
     if (params.sendNotification) {

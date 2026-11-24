@@ -2216,6 +2216,11 @@ export class PaymentsService {
       where: { id: invoiceId },
       include: {
         jobPosting: { select: { title: true } },
+        application: {
+          select: {
+            locumProfile: { select: { firstName: true, lastName: true } },
+          },
+        },
         hostProfile: {
           select: {
             userId: true,
@@ -2242,6 +2247,14 @@ export class PaymentsService {
     const reminderStatus = invoice.status as 'PENDING' | 'OVERDUE';
 
     if (options.sendNotification || options.sendEmail) {
+      const locumName =
+        [
+          invoice.application?.locumProfile?.firstName,
+          invoice.application?.locumProfile?.lastName,
+        ]
+          .map((s) => s?.trim())
+          .filter(Boolean)
+          .join(' ') || undefined;
       await this.notifications.notifyHostMatchFeePaymentReminder({
         recipientId: host.userId,
         recipientEmail: host.user.email,
@@ -2251,6 +2264,9 @@ export class PaymentsService {
         invoiceId: invoice.id,
         amountCents: matchFeeTotalCents(invoice),
         taxCents: invoice.taxCents,
+        currency: invoice.currency,
+        issuedAt: invoice.createdAt,
+        locumName,
         status: reminderStatus,
         sendEmail: options.sendEmail,
         sendNotification: options.sendNotification,

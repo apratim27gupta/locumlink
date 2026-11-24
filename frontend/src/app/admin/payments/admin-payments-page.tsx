@@ -73,6 +73,13 @@ type RefundConfirmState = {
   attempt?: AdminMatchFeePaymentAttempt;
 };
 
+/** Prefix a person's name with "Dr." unless it is empty or already titled. */
+function withDoctorTitle(name: string | null | undefined): string {
+  const trimmed = (name ?? '').trim();
+  if (!trimmed) return '';
+  return /^dr\.?\s/i.test(trimmed) ? trimmed : `Dr. ${trimmed}`;
+}
+
 export default function AdminPaymentsPage() {
   const [items, setItems] = useState<AdminMatchFeeInvoice[]>([]);
   const [statusGuide, setStatusGuide] = useState<AdminMatchFeeStatusGuide[]>([]);
@@ -361,20 +368,21 @@ export default function AdminPaymentsPage() {
                       ) : null}
                     </div>
                     <div style={{ fontSize: 13, color: '#6B7280' }}>
-                      {invoice.hostPracticeName}
+                      {withDoctorTitle(invoice.hostPracticeName)}
                       {invoice.hostEmail ? ` · ${invoice.hostEmail}` : ''}
                     </div>
                     <div style={{ fontSize: 13, color: '#111827', marginTop: 6, fontWeight: 600 }}>
-                      Locum: {invoice.locumName}
+                      Locum: {withDoctorTitle(invoice.locumName)}
                     </div>
                     {invoice.replacedByLocumName ? (
                       <div style={{ fontSize: 13, color: '#374151', marginTop: 4 }}>
-                        {invoice.replacedByLocumName} replaced {invoice.locumName}
+                        {withDoctorTitle(invoice.replacedByLocumName)} replaced{' '}
+                        {withDoctorTitle(invoice.locumName)}
                       </div>
                     ) : invoice.replacementStatus === 'SEARCHING' ||
                       invoice.status === 'PENDING_REPLACEMENT' ? (
                       <div style={{ fontSize: 13, color: '#B45309', marginTop: 4 }}>
-                        Seeking replacement for {invoice.locumName}
+                        Seeking replacement for {withDoctorTitle(invoice.locumName)}
                       </div>
                     ) : null}
                     {guide && !invoice.refundPendingReview ? (
