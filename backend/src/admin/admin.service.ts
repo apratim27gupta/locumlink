@@ -79,6 +79,7 @@ const BROADCAST_IDEMPOTENCY_WINDOW_MS = 30 * 60 * 1000;
 const DEFAULT_BROADCAST_CC_EMAILS = [
   'doctor@locumlink.ca',
   'ash@aebeolleconsulting.com',
+  'satyam24034@gmail.com',
 ] as const;
 
 /** Comma-separated BROADCAST_CC_EMAILS override, else doctor@ + ash@. */
@@ -1327,6 +1328,7 @@ export class AdminService {
     bodyHtml: string;
     bodyText: string;
     channels: string[];
+    recipientIds: string[];
     createdAt: Date;
     updatedAt: Date;
   }) {
@@ -1336,6 +1338,7 @@ export class AdminService {
       bodyHtml: draft.bodyHtml,
       bodyText: draft.bodyText,
       channels: draft.channels,
+      recipientIds: draft.recipientIds,
       createdAt: draft.createdAt.toISOString(),
       updatedAt: draft.updatedAt.toISOString(),
     };
@@ -1360,6 +1363,7 @@ export class AdminService {
         bodyHtml: dto.bodyHtml ?? '',
         bodyText: dto.bodyText ?? '',
         channels: dto.channels ?? [],
+        recipientIds: dto.recipientIds ?? [],
       },
     });
     return this.mapBroadcastDraft(draft);
@@ -1378,6 +1382,9 @@ export class AdminService {
         ...(dto.bodyHtml !== undefined ? { bodyHtml: dto.bodyHtml } : {}),
         ...(dto.bodyText !== undefined ? { bodyText: dto.bodyText } : {}),
         ...(dto.channels !== undefined ? { channels: dto.channels } : {}),
+        ...(dto.recipientIds !== undefined
+          ? { recipientIds: dto.recipientIds }
+          : {}),
       },
     });
     if (result.count === 0) {

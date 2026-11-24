@@ -767,6 +767,8 @@ model BroadcastDraft {
   bodyHtml  String   @default("") @map("body_html")
   bodyText  String   @default("") @map("body_text")
   channels  String[] @default([])
+  // Selected recipient user ids, so reusing a draft restores the audience.
+  recipientIds String[] @default([]) @map("recipient_ids")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

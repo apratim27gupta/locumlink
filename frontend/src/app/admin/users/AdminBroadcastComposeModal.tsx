@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Bold, Italic, Underline, XCircle } from 'lucide-react';
+import { Bold, ChevronDown, ChevronRight, Italic, Underline, XCircle } from 'lucide-react';
 
 export type BroadcastChannel = 'notification' | 'email';
 
@@ -21,9 +21,26 @@ export type BroadcastDraftSeed = {
   channels: BroadcastChannel[];
 };
 
+export type BroadcastRecipient = {
+  id: string;
+  email: string;
+  role: string;
+};
+
 type Props = {
   open: boolean;
-  recipientLabel: string;
+  /** Selected recipients shown as removable chips (may be a subset of count). */
+  recipients: BroadcastRecipient[];
+  /** Total selected count (can exceed `recipients` when some are off-page). */
+  recipientCount: number;
+  onRemoveRecipient: (id: string) => void;
+  onClearRecipients: () => void;
+  /** Step back to the table checklist to add/remove recipients, keeping text. */
+  onEditRecipients: (current: {
+    subject: string;
+    bodyHtml: string;
+    channels: BroadcastChannel[];
+  }) => void;
   sending: boolean;
   /** Prefill the composer when editing an existing draft. */
   initialDraft?: BroadcastDraftSeed | null;
@@ -69,7 +86,11 @@ const activeBtnStyle: CSSProperties = {
 
 export default function AdminBroadcastComposeModal({
   open,
-  recipientLabel,
+  recipients,
+  recipientCount,
+  onRemoveRecipient,
+  onClearRecipients,
+  onEditRecipients,
   sending,
   initialDraft,
   savingDraft = false,
@@ -87,6 +108,18 @@ export default function AdminBroadcastComposeModal({
   const [localErr, setLocalErr] = useState<string | null>(null);
   // Shown when the admin tries to leave with unsaved text.
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // Content changed since the last open/seed/save. Drives the leave guard so we
+  // never re-prompt right after a save.
+  const [dirty, setDirty] = useState(false);
+  // Brief "Saved ✓" acknowledgement before the modal closes on save.
+  const [justSaved, setJustSaved] = useState(false);
+  // Recipients list is collapsed by default; expand to see every chip.
+  const [recipientsExpanded, setRecipientsExpanded] = useState(false);
+
+  const markDirty = useCallback(() => {
+    setDirty(true);
+    setJustSaved(false);
+  }, []);
 
   const syncFormatState = useCallback(() => {
     try {
@@ -110,6 +143,9 @@ export default function AdminBroadcastComposeModal({
     setFmt({ bold: false, italic: false, underline: false });
     setLocalErr(null);
     setConfirmLeave(false);
+    setDirty(false);
+    setJustSaved(false);
+    setRecipientsExpanded(false);
     idempotencyKeyRef.current =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
@@ -135,6 +171,7 @@ export default function AdminBroadcastComposeModal({
     editorRef.current?.focus();
     document.execCommand(command, false, value);
     syncFormatState();
+    markDirty();
   }
 
   async function handleSend() {
@@ -185,21 +222,39 @@ export default function AdminBroadcastComposeModal({
     return Boolean(s || bodyText);
   }
 
-  async function handleSaveDraft() {
-    if (!onSaveDraft) return;
+  function editRecipients() {
+    const { subject: s, bodyHtml, channels } = currentContent();
+    onEditRecipients({ subject: s, bodyHtml, channels });
+  }
+
+  /** Save; returns true on success so callers can then close. */
+  async function handleSaveDraft(): Promise<boolean> {
+    if (!onSaveDraft) return false;
     setLocalErr(null);
     const { subject: s, bodyHtml, bodyText, channels } = currentContent();
     try {
       await onSaveDraft({ subject: s, bodyHtml, bodyText, channels });
+      setDirty(false);
+      setJustSaved(true);
+      return true;
     } catch (e) {
       setLocalErr(e instanceof Error ? e.message : 'Failed to save draft');
+      return false;
     }
   }
 
-  // Leaving with unsaved text: offer Save/Discard instead of dropping it.
+  // Footer "Save as draft": save, flash "Saved ✓", then close.
+  async function saveDraftFromButton() {
+    const ok = await handleSaveDraft();
+    if (!ok) return;
+    setConfirmLeave(false);
+    window.setTimeout(() => onClose(), 650);
+  }
+
+  // Leaving: only prompt when there are genuinely unsaved changes.
   function requestClose() {
     if (sending || savingDraft) return;
-    if (onSaveDraft && hasContent()) {
+    if (onSaveDraft && dirty && hasContent()) {
       setConfirmLeave(true);
       return;
     }
@@ -207,9 +262,9 @@ export default function AdminBroadcastComposeModal({
   }
 
   async function saveDraftAndClose() {
-    await handleSaveDraft();
+    const ok = await handleSaveDraft();
     setConfirmLeave(false);
-    onClose();
+    if (ok) onClose();
   }
 
   if (!open) return null;
@@ -237,7 +292,7 @@ export default function AdminBroadcastComposeModal({
             <h2 id="admin-broadcast-title" className="modal-title">
               Send message
             </h2>
-            <p className="modal-subtitle">{recipientLabel}</p>
+            <p className="modal-subtitle">Compose a broadcast to the selected users</p>
           </div>
           <button
             type="button"
@@ -256,6 +311,160 @@ export default function AdminBroadcastComposeModal({
             </div>
           ) : null}
 
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: recipientsExpanded && recipientCount > 0 ? 6 : 14,
+              gap: 8,
+            }}
+          >
+            <button
+              type="button"
+              aria-expanded={recipientsExpanded}
+              disabled={recipientCount === 0}
+              onClick={() => setRecipientsExpanded((v) => !v)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                border: 'none',
+                background: 'transparent',
+                padding: 0,
+                cursor: recipientCount === 0 ? 'default' : 'pointer',
+                minWidth: 0,
+              }}
+            >
+              {recipientCount > 0 ? (
+                recipientsExpanded ? (
+                  <ChevronDown size={15} color="#64748b" />
+                ) : (
+                  <ChevronRight size={15} color="#64748b" />
+                )
+              ) : null}
+              <span
+                className="text-xs font-medium"
+                style={{ color: recipientCount === 0 ? '#B91C1C' : '#334155' }}
+              >
+                Recipients ({recipientCount})
+              </span>
+              {recipientCount > 0 && !recipientsExpanded ? (
+                <span
+                  className="text-xs text-muted"
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: 220,
+                  }}
+                >
+                  — {recipients.slice(0, 2).map((r) => r.email).join(', ')}
+                  {recipientCount > 2 ? ` +${recipientCount - 2} more` : ''}
+                </span>
+              ) : null}
+            </button>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ padding: '2px 10px', fontSize: 12 }}
+                disabled={sending || savingDraft}
+                onClick={editRecipients}
+              >
+                {recipientCount > 0 ? 'Add / change' : 'Choose recipients'}
+              </button>
+              {recipientCount > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: '2px 10px', fontSize: 12 }}
+                  disabled={sending || savingDraft}
+                  onClick={onClearRecipients}
+                >
+                  Clear all
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {recipientCount === 0 ? (
+            <p
+              className="text-sm"
+              style={{ margin: '0 0 14px', color: '#B91C1C' }}
+            >
+              No recipients selected. Use “Choose recipients” to pick users
+              from the table, then come back here.
+            </p>
+          ) : recipientsExpanded ? (
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 6,
+                maxHeight: 160,
+                overflowY: 'auto',
+                padding: 8,
+                border: '1px solid #E5E7EB',
+                borderRadius: 8,
+                marginBottom: 14,
+                background: '#F8FAFC',
+              }}
+            >
+              {recipients.map((r) => (
+                <span
+                  key={r.id}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '3px 6px 3px 10px',
+                    background: '#fff',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: 999,
+                    fontSize: 12,
+                    maxWidth: '100%',
+                  }}
+                  title={`${r.email} · ${r.role}`}
+                >
+                  <span
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      maxWidth: 220,
+                    }}
+                  >
+                    {r.email}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${r.email}`}
+                    disabled={sending || savingDraft}
+                    onClick={() => onRemoveRecipient(r.id)}
+                    style={{
+                      display: 'inline-flex',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      padding: 0,
+                      color: '#64748b',
+                    }}
+                  >
+                    <XCircle size={14} />
+                  </button>
+                </span>
+              ))}
+              {recipientCount > recipients.length ? (
+                <span
+                  className="text-xs text-muted"
+                  style={{ alignSelf: 'center', padding: '0 4px' }}
+                >
+                  +{recipientCount - recipients.length} more on other pages
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
           <label className="text-xs font-medium text-muted" htmlFor="broadcast-subject">
             Subject
           </label>
@@ -266,7 +475,10 @@ export default function AdminBroadcastComposeModal({
             style={{ marginTop: 4, marginBottom: 14 }}
             maxLength={200}
             value={subject}
-            onChange={(e) => setSubject(e.target.value)}
+            onChange={(e) => {
+              setSubject(e.target.value);
+              markDirty();
+            }}
             placeholder="Message subject"
             disabled={sending}
           />
@@ -360,6 +572,7 @@ export default function AdminBroadcastComposeModal({
               role="textbox"
               aria-multiline
               aria-label="Message body"
+              onInput={markDirty}
               onKeyUp={syncFormatState}
               onMouseUp={syncFormatState}
               style={{
@@ -383,7 +596,10 @@ export default function AdminBroadcastComposeModal({
                 type="checkbox"
                 checked={channelNotification}
                 disabled={sending}
-                onChange={(e) => setChannelNotification(e.target.checked)}
+                onChange={(e) => {
+                  setChannelNotification(e.target.checked);
+                  markDirty();
+                }}
               />
               In-app notification
             </label>
@@ -392,7 +608,10 @@ export default function AdminBroadcastComposeModal({
                 type="checkbox"
                 checked={channelEmail}
                 disabled={sending}
-                onChange={(e) => setChannelEmail(e.target.checked)}
+                onChange={(e) => {
+                  setChannelEmail(e.target.checked);
+                  markDirty();
+                }}
               />
               Email
             </label>
@@ -420,20 +639,21 @@ export default function AdminBroadcastComposeModal({
                 type="button"
                 className="btn btn-secondary"
                 style={{ padding: 12 }}
-                disabled={sending || savingDraft}
-                onClick={() => void handleSaveDraft()}
+                disabled={sending || savingDraft || !hasContent()}
+                onClick={() => void saveDraftFromButton()}
               >
-                {savingDraft ? 'Saving…' : 'Save as draft'}
+                {savingDraft ? 'Saving…' : justSaved ? 'Saved ✓' : 'Save as draft'}
               </button>
             ) : null}
             <button
               type="button"
               className="btn btn-primary"
               style={{ padding: 12 }}
-              disabled={sending || savingDraft}
+              disabled={sending || savingDraft || recipientCount === 0}
               onClick={() => void handleSend()}
+              title={recipientCount === 0 ? 'Select at least one recipient' : undefined}
             >
-              {sending ? 'Sending…' : 'Send'}
+              {sending ? 'Sending…' : `Send${recipientCount > 0 ? ` (${recipientCount})` : ''}`}
             </button>
           </div>
         </div>

@@ -30,4 +30,9 @@ export class AdminBroadcastDraftDto {
   @IsArray()
   @IsIn(['notification', 'email'], { each: true })
   channels?: Array<'notification' | 'email'>;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  recipientIds?: string[];
 }

@@ -28,6 +28,7 @@ type BroadcastDraft = {
   bodyHtml: string;
   bodyText: string;
   channels: BroadcastChannel[];
+  recipientIds: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -201,6 +202,9 @@ export default function AdminUsersPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [broadcastMode, setBroadcastMode] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  // True while the admin stepped back to the table to change recipients; the
+  // in-progress message is stashed in `draftSeed` so they can resume it.
+  const [resumeComposer, setResumeComposer] = useState(false);
   const [broadcastSending, setBroadcastSending] = useState(false);
   const [broadcastConfirm, setBroadcastConfirm] = useState<BroadcastConfirm | null>(null);
   // Drafts (unsent messages, private to this admin).
@@ -501,11 +505,50 @@ export default function AdminUsersPage() {
     setBroadcastMode(false);
     setSelectedIds(new Set());
     setComposeOpen(false);
+    setResumeComposer(false);
     setEditingDraftId(null);
     setDraftSeed(null);
   }
 
-  const recipientLabel = `${selectedCount} selected`;
+  // From the composer, step back to the table to add/remove recipients while
+  // keeping the message. `draftSeed` stashes the content so it can resume.
+  function editRecipientsInTable(current: {
+    subject: string;
+    bodyHtml: string;
+    channels: BroadcastChannel[];
+  }) {
+    setDraftSeed({
+      subject: current.subject,
+      bodyHtml: current.bodyHtml,
+      channels: current.channels,
+    });
+    setComposeOpen(false);
+    setResumeComposer(true);
+  }
+
+  function resumeComposerFromTable() {
+    setResumeComposer(false);
+    setBroadcastConfirm(null);
+    setComposeOpen(true);
+  }
+
+  // Recipients shown as removable chips inside the composer. Limited to rows
+  // currently loaded; any selected id not on the page still counts and sends.
+  const selectedRecipients = eligibleFiltered
+    .filter((r) => selectedIds.has(r.id))
+    .map((r) => ({ id: r.id, email: r.email, role: r.role }));
+
+  function removeRecipient(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  function clearRecipients() {
+    setSelectedIds(new Set());
+  }
 
   async function sendBroadcast(payload: {
     subject: string;
@@ -591,16 +634,20 @@ export default function AdminUsersPage() {
   }) {
     setSavingDraft(true);
     setErr(null);
+    // Persist the current audience alongside the message, so reusing the draft
+    // restores who it was going to.
+    const recipientIds = Array.from(selectedIds);
+    const body = JSON.stringify({ ...payload, recipientIds });
     try {
       if (editingDraftId) {
         await adminFetchJson<BroadcastDraft>(
           `/api/admin/users/broadcast/drafts/${editingDraftId}`,
-          { method: 'PATCH', body: JSON.stringify(payload) },
+          { method: 'PATCH', body },
         );
       } else {
         const created = await adminFetchJson<BroadcastDraft>(
           '/api/admin/users/broadcast/drafts',
-          { method: 'POST', body: JSON.stringify(payload) },
+          { method: 'POST', body },
         );
         // Keep editing the same draft so further saves update, not duplicate.
         setEditingDraftId(created.id);
@@ -618,8 +665,11 @@ export default function AdminUsersPage() {
       bodyHtml: draft.bodyHtml,
       channels: draft.channels.length > 0 ? draft.channels : ['notification', 'email'],
     });
+    // Restore the saved audience so the admin can send or tweak it.
+    setSelectedIds(new Set(draft.recipientIds ?? []));
     setDraftsOpen(false);
     setBroadcastConfirm(null);
+    setResumeComposer(false);
     setBroadcastMode(true);
     setComposeOpen(true);
   }
@@ -950,7 +1000,11 @@ export default function AdminUsersPage() {
           }}
         >
           <span className="text-sm font-medium">
-            {selectedCount > 0 ? `${selectedCount} selected` : 'Select users to message'}
+            {resumeComposer
+              ? `${selectedCount} selected — tick users to add, then resume`
+              : selectedCount > 0
+                ? `${selectedCount} selected`
+                : 'Select users to message'}
           </span>
           <button
             type="button"
@@ -964,14 +1018,18 @@ export default function AdminUsersPage() {
             type="button"
             className="btn btn-primary"
             style={{ padding: '6px 12px', fontSize: 13, marginLeft: 'auto' }}
-            disabled={selectedCount === 0}
+            disabled={selectedCount === 0 && !resumeComposer}
             onClick={() => {
-              setBroadcastConfirm(null);
-              setComposeOpen(true);
+              if (resumeComposer) {
+                resumeComposerFromTable();
+              } else {
+                setBroadcastConfirm(null);
+                setComposeOpen(true);
+              }
             }}
           >
             <MessageSquare size={14} />
-            Send message
+            {resumeComposer ? 'Back to message' : 'Send message'}
           </button>
         </div>
       ) : null}
@@ -1522,7 +1580,11 @@ export default function AdminUsersPage() {
 
       <AdminBroadcastComposeModal
         open={composeOpen}
-        recipientLabel={recipientLabel}
+        recipients={selectedRecipients}
+        recipientCount={selectedCount}
+        onRemoveRecipient={removeRecipient}
+        onClearRecipients={clearRecipients}
+        onEditRecipients={editRecipientsInTable}
         sending={broadcastSending}
         savingDraft={savingDraft}
         initialDraft={draftSeed}
@@ -1535,6 +1597,9 @@ export default function AdminUsersPage() {
 
       {draftsOpen && typeof document !== 'undefined'
         ? createPortal(
+            // Portal escapes the table's overflow, but the overlay styles are
+            // scoped to `.admin-portal`, so wrap the portaled content in it.
+            <div className="admin-portal">
             <div
               className="modal-overlay active"
               style={{ zIndex: 1250 }}
@@ -1634,6 +1699,7 @@ export default function AdminUsersPage() {
                   )}
                 </div>
               </div>
+            </div>
             </div>,
             document.body,
           )
