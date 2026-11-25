@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 
 import { displayMatchFeeEventDetail } from '@/components/payments/MatchFeePolicy';
 
@@ -54,7 +55,7 @@ export function MatchFeeEventTimeline({
           <li key={ev.id} style={{ fontSize: 12, color: '#111827' }}>
             <div style={{ fontWeight: 600 }}>{ev.label}</div>
             <div style={{ color: '#6B7280', marginTop: 2 }}>
-              {new Date(ev.occurredAt).toLocaleString('en-CA')}
+              {new Date(ev.occurredAt).toLocaleString('en-CA', { timeZone: APP_TIME_ZONE })}
               {detail ? ` · ${detail}` : ''}
             </div>
           </li>

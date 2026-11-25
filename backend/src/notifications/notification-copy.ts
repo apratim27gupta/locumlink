@@ -206,7 +206,6 @@ export function formatSubmittedAt(date: Date, timeZone: string): string {
     hour: 'numeric',
     minute: '2-digit',
     timeZone,
-    timeZoneName: 'short',
   });
 }
 

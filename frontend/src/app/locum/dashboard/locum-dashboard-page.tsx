@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE, astWallPartsOf } from '@/lib/appTimezone';
 import { useState, useEffect, useRef } from 'react';
 import { useResizableDrawer } from '@/lib/useResizableDrawer';
 import { useRouter } from 'next/navigation';
@@ -241,11 +242,10 @@ function fmtTime(t: string | null): string {
     if (!t) return '';
     const [h, m] = t.split(':').map(Number);
     if (Number.isNaN(h) || Number.isNaN(m)) return '';
-    // Convert UTC HH:mm to local time using today's date as carrier
+    // Convert stored UTC HH:mm to platform (AST) time using today as carrier.
     const utcDate = new Date();
     utcDate.setUTCHours(h, m, 0, 0);
-    const localH = utcDate.getHours();
-    const localM = utcDate.getMinutes();
+    const { hours: localH, minutes: localM } = astWallPartsOf(utcDate.getTime());
     const ampm = localH >= 12 ? 'PM' : 'AM';
     const h12 = localH % 12 || 12;
     return `${String(h12).padStart(2, '0')}:${String(localM).padStart(2, '0')} ${ampm}`;
@@ -312,8 +312,8 @@ function fmtDateTime(iso: string): string {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime()))
         return '';
-    const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: APP_TIME_ZONE });
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: APP_TIME_ZONE });
     return `${date} at ${time}`;
 }
 /** Hosts only act on applicants after opening them, so any status past APPLIED implies a view. */

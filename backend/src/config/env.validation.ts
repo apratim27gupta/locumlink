@@ -95,7 +95,10 @@ class EnvironmentVariables {
   @IsOptional()
   ALLOWED_ORIGINS: string = 'http://localhost:3001';
 
-  /** IANA timezone for shift start/end comparisons (e.g. America/Halifax). */
+  /**
+   * IANA timezone for shift start/end comparisons and all displayed times.
+   * Atlantic time, DST-aware (AST in winter, ADT in summer).
+   */
   @IsString()
   @IsOptional()
   PLATFORM_TIMEZONE: string = 'America/Halifax';

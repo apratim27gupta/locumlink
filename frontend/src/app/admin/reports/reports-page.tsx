@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 import { showAlert } from '@/components/ui/AppDialog';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -29,6 +30,7 @@ function fmtDate(iso: string): string {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: APP_TIME_ZONE,
   });
 }
 

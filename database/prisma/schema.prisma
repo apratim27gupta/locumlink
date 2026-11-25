@@ -942,6 +942,8 @@ model MatchFeeInvoice {
   /** Cents refunded or reserved for in-flight refunds, including HST. */
   refundedCents      Int                       @default(0) @map("refunded_cents")
   lastReminderAt     DateTime?                 @map("last_reminder_at")
+  /** Secret for one-click pay links in reminder emails (no sign-in required). */
+  payAccessToken     String?                   @unique @map("pay_access_token")
   createdAt          DateTime                  @default(now()) @map("created_at")
   updatedAt          DateTime                  @updatedAt @map("updated_at")
 

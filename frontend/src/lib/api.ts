@@ -1369,6 +1369,21 @@ export const hostApi = {
         }
         return res.json() as Promise<{ success: boolean; url: string }>;
     },
+    /** One-click email pay link: authorizes via the per-invoice token, no sign-in needed. */
+    payMatchFeeStripeByToken: async (
+        invoiceId: string,
+        token: string,
+    ): Promise<{ success: boolean; url: string }> => {
+        const res = await trackedFetch(
+            `${NEST_BASE}/api/public/match-fees/${encodeURIComponent(invoiceId)}/pay-stripe?token=${encodeURIComponent(token)}`,
+            { method: 'POST', headers: nestHeaders(true) },
+        );
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Starting Stripe checkout');
+        }
+        return res.json() as Promise<{ success: boolean; url: string }>;
+    },
     downloadMatchFeeReceipt: async (invoiceId: string): Promise<void> => {
         const res = await trackedFetch(
             `${NEST_BASE}/api/host/match-fees/${encodeURIComponent(invoiceId)}/receipt.pdf`,

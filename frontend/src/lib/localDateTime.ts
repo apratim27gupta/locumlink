@@ -2,6 +2,11 @@
  * Local date/time from the user's device (browser uses OS timezone).
  * Use these helpers instead of UTC-only APIs for posting schedules and expiry UI.
  */
+import {
+    astTodayIso,
+    astWallPartsOf,
+    astWallToUtcMs,
+} from './appTimezone';
 
 /** Current instant on the user's machine. */
 export function getLocalNow(): Date {
@@ -48,6 +53,21 @@ export function endOfLocalCalendarDay(isoDate: string): Date | null {
     return Number.isNaN(end.getTime()) ? null : end;
 }
 
+/** Last moment (23:59:59.999 AST) of a calendar day, as UTC epoch ms. */
+function astEndOfCalendarDayMs(isoDate: string): number {
+    const m = isoDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return Number.NaN;
+    return astWallToUtcMs(
+        Number(m[1]),
+        Number(m[2]),
+        Number(m[3]),
+        23,
+        59,
+        59,
+        999,
+    );
+}
+
 /** Start of a local calendar day from YYYY-MM-DD. */
 export function startOfLocalCalendarDay(isoDate: string): Date | null {
     const m = isoDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -70,15 +90,13 @@ export function isLocalPostingEndDatePassed(
         const raw = endDate.trim();
         const iso = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : '';
         if (iso) {
-            const end = endOfLocalCalendarDay(iso);
-            return end != null && end.getTime() < getLocalNowMs();
+            return astEndOfCalendarDayMs(iso) < getLocalNowMs();
         }
     }
     const d = new Date(endDate as string | Date);
     if (Number.isNaN(d.getTime()))
         return false;
-    const end = endOfLocalCalendarDay(localCalendarDateToIso(d));
-    return end != null && end.getTime() < getLocalNowMs();
+    return astEndOfCalendarDayMs(localCalendarDateToIso(d)) < getLocalNowMs();
 }
 
 /**
@@ -112,10 +130,18 @@ export function isLocalPostingStartDateTimePassed(
     const timeForCombine = startTime?.trim()
         ? startTime
         : '23:59';
-    const shiftStart = localDateTimeFromCalendarAndTime(dateIso, timeForCombine);
-    if (!shiftStart)
+    const dm = dateIso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const tm = parseLocalTimeHm(timeForCombine);
+    if (!dm || !tm)
         return false;
-    return shiftStart.getTime() < getLocalNowMs();
+    const shiftStartMs = astWallToUtcMs(
+        Number(dm[1]),
+        Number(dm[2]),
+        Number(dm[3]),
+        tm.hours,
+        tm.minutes,
+    );
+    return shiftStartMs < getLocalNowMs();
 }
 
 /** Compare local calendar days only (YYYY-MM-DD). */
@@ -233,32 +259,43 @@ export function localDateTimeFromCalendarAndTime(
     );
 }
 
-function formatLocalOffsetForDate(d: Date): string {
-    const offsetMin = -d.getTimezoneOffset();
-    const sign = offsetMin >= 0 ? '+' : '-';
-    const abs = Math.abs(offsetMin);
-    const oh = String(Math.floor(abs / 60)).padStart(2, '0');
-    const om = String(abs % 60).padStart(2, '0');
-    return `${sign}${oh}:${om}`;
-}
-
 /**
- * ISO 8601 instant with the browser's local offset, e.g. 2026-06-04T09:30:00-04:00.
+ * ISO 8601 instant in platform time (AST, UTC-4), e.g. 2026-06-04T09:30:00-04:00.
  * Use when sending schedule fields to the API.
  */
-/** Convert local browser date + time to UTC date/time parts for API storage. */
+/**
+ * Convert entered date + time (interpreted in platform time, AST/UTC-4) to UTC
+ * date/time parts for API storage.
+ */
 export function localDateTimeToUtcParts(
     localDateStr: string,
     localTimeStr: string,
 ): { utcDate: string; utcTime: string } {
-    const localIso = `${localDateStr}T${localTimeStr}:00`;
-    const d = new Date(localIso);
-    const utcDate = d.toISOString().split('T')[0];
-    const utcTime = d.toISOString().split('T')[1].slice(0, 5);
-    return { utcDate, utcTime };
+    const dm = localDateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const tm = parseLocalTimeHm(localTimeStr);
+    if (!dm || !tm) {
+        // Fall back to a direct parse so callers still get a value.
+        const d = new Date(`${localDateStr}T${localTimeStr}:00`);
+        return {
+            utcDate: d.toISOString().split('T')[0],
+            utcTime: d.toISOString().split('T')[1].slice(0, 5),
+        };
+    }
+    const ms = astWallToUtcMs(
+        Number(dm[1]),
+        Number(dm[2]),
+        Number(dm[3]),
+        tm.hours,
+        tm.minutes,
+    );
+    const iso = new Date(ms).toISOString();
+    return { utcDate: iso.split('T')[0], utcTime: iso.split('T')[1].slice(0, 5) };
 }
 
-/** Convert stored UTC date/time parts to local values for form inputs. */
+/**
+ * Convert stored UTC date/time parts to platform-time (AST) values for form
+ * inputs, so a time shows and re-saves in the same zone it is displayed in.
+ */
 export function utcPartsToLocalInputValues(
     utcDateStr: string | null | undefined,
     utcTimeStr: string | null | undefined,
@@ -267,8 +304,9 @@ export function utcPartsToLocalInputValues(
     const time = utcTimeStr?.trim() ? utcTimeStr : '00:00';
     const d = new Date(`${utcDateStr.split('T')[0]}T${time}:00Z`);
     if (isNaN(d.getTime())) return null;
-    const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const localTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const p = astWallPartsOf(d.getTime());
+    const localDate = `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+    const localTime = `${String(p.hours).padStart(2, '0')}:${String(p.minutes).padStart(2, '0')}`;
     return { localDate, localTime };
 }
 
@@ -276,11 +314,19 @@ export function toTimezoneAwareIso(
     dateIso: string,
     timeHm?: string | null,
 ): string | null {
-    const dt = localDateTimeFromCalendarAndTime(dateIso, timeHm);
-    if (!dt) return null;
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const cal = localCalendarDateToIso(dt);
-    return `${cal}T${pad(dt.getHours())}:${pad(dt.getMinutes())}:00${formatLocalOffsetForDate(dt)}`;
+    const dm = dateIso.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!dm) return null;
+    const tm = parseLocalTimeHm(timeHm);
+    // Entered wall time is platform (Atlantic) time; resolve to the actual
+    // instant so the DST-correct offset (AST -04:00 or ADT -03:00) is attached.
+    const utcMs = astWallToUtcMs(
+        Number(dm[1]),
+        Number(dm[2]),
+        Number(dm[3]),
+        tm ? tm.hours : 0,
+        tm ? tm.minutes : 0,
+    );
+    return new Date(utcMs).toISOString();
 }
 
 export type JobScheduleValidationResult =
@@ -296,7 +342,7 @@ export function validateJobPostingSchedule(params: {
     /** When true, only checks ordering — not "in the past" (draft save). */
     allowPastDates?: boolean;
 }): JobScheduleValidationResult {
-    const today = localCalendarDateToIso();
+    const today = astTodayIso();
     const { startDateIso, endDateIso, startTime, endTime, allowPastDates } =
         params;
 
@@ -334,19 +380,27 @@ export function validateJobPostingSchedule(params: {
         return { valid: false, message: 'End time is invalid.' };
     }
 
-    const startDt = localDateTimeFromCalendarAndTime(startDateIso, startTime);
-    const endDt = localDateTimeFromCalendarAndTime(endDateIso, endTime);
-    if (!startDt || !endDt) {
+    const startDm = startDateIso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const endDm = endDateIso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const startTm = parseLocalTimeHm(startTime);
+    const endTm = parseLocalTimeHm(endTime);
+    if (!startDm || !endDm || !startTm || !endTm) {
         return { valid: false, message: 'Schedule dates are invalid.' };
     }
+    const startMs = astWallToUtcMs(
+        Number(startDm[1]), Number(startDm[2]), Number(startDm[3]), startTm.hours, startTm.minutes,
+    );
+    const endMs = astWallToUtcMs(
+        Number(endDm[1]), Number(endDm[2]), Number(endDm[3]), endTm.hours, endTm.minutes,
+    );
 
-    if (!allowPastDates && startDt.getTime() < getLocalNowMs()) {
+    if (!allowPastDates && startMs < getLocalNowMs()) {
         return {
             valid: false,
             message: 'Start date and time cannot be in the past.',
         };
     }
-    if (endDt.getTime() <= startDt.getTime()) {
+    if (endMs <= startMs) {
         return {
             valid: false,
             message: 'End time must be after start time.',

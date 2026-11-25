@@ -20,6 +20,8 @@ export {
   matchFeeTierFromHours,
 };
 
+// Atlantic time (DST-aware): AST (UTC-4) in winter, ADT (UTC-3) in summer.
+// Never surface the zone abbreviation to end users.
 const DEFAULT_PLATFORM_TIMEZONE = 'America/Halifax';
 
 /** IANA zone for interpreting stored calendar date + clock time (from PLATFORM_TIMEZONE env). */

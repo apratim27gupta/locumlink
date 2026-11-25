@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 import { showPrompt } from '@/components/ui/AppDialog';
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
@@ -408,9 +409,9 @@ export default function AdminPaymentsPage() {
                           Policy: {tl.duePolicyText}
                         </div>
                         <div style={{ color: '#6B7280', marginTop: 4, fontSize: 12 }}>
-                          Invoiced {new Date(tl.invoiceCreatedAt).toLocaleDateString('en-CA')}
+                          Invoiced {new Date(tl.invoiceCreatedAt).toLocaleDateString('en-CA', { timeZone: APP_TIME_ZONE })}
                           {invoice.lastReminderAt
-                            ? ` · Last reminder ${new Date(invoice.lastReminderAt).toLocaleString('en-CA')}`
+                            ? ` · Last reminder ${new Date(invoice.lastReminderAt).toLocaleString('en-CA', { timeZone: APP_TIME_ZONE })}`
                             : ''}
                         </div>
                       </div>
@@ -443,7 +444,7 @@ export default function AdminPaymentsPage() {
                                 {ATTEMPT_STATUS_LABEL[a.status] ?? a.status}
                               </span>
                               {' - '}
-                              {new Date(a.createdAt).toLocaleString('en-CA')}
+                              {new Date(a.createdAt).toLocaleString('en-CA', { timeZone: APP_TIME_ZONE })}
                               {a.stripeCheckoutSessionId
                                 ? ` - ${a.stripeCheckoutSessionId.slice(0, 24)}…`
                                 : ''}
@@ -480,7 +481,7 @@ export default function AdminPaymentsPage() {
                               </span>
                               {` - ${REFUND_KIND_LABEL[r.kind] ?? r.kind} - ${formatCents(r.amountCents)}`}
                               {r.taxCents > 0 ? ` (incl. ${formatCents(r.taxCents)} HST)` : ''}
-                              {` - ${new Date(r.createdAt).toLocaleString('en-CA')}`}
+                              {` - ${new Date(r.createdAt).toLocaleString('en-CA', { timeZone: APP_TIME_ZONE })}`}
                               {r.requestedByAdminEmail ? ` - by ${r.requestedByAdminEmail}` : ''}
                               {r.reason ? <div>{r.reason}</div> : null}
                               {r.failureReason && r.status !== 'SUCCEEDED' ? (
@@ -543,7 +544,7 @@ export default function AdminPaymentsPage() {
                         >
                           <span style={{ fontWeight: 600 }}>
                             Extra payment of {formatCents(a.amountCents)} received on{' '}
-                            {new Date(a.createdAt).toLocaleDateString('en-CA')}.
+                            {new Date(a.createdAt).toLocaleDateString('en-CA', { timeZone: APP_TIME_ZONE })}.
                           </span>
                           <button
                             type="button"
@@ -564,7 +565,7 @@ export default function AdminPaymentsPage() {
                     ) : null}
                     {invoice.escalatedAt ? (
                       <div style={{ marginTop: 4, fontSize: 12, color: '#B91C1C' }}>
-                        Escalated {new Date(invoice.escalatedAt).toLocaleDateString('en-CA')}
+                        Escalated {new Date(invoice.escalatedAt).toLocaleDateString('en-CA', { timeZone: APP_TIME_ZONE })}
                       </div>
                     ) : null}
                   </div>

@@ -1428,6 +1428,8 @@ export class NotificationsService {
     jobPostingId: string;
     dueAt: Date;
     invoiceId: string;
+    /** Secret that lets the emailed pay link mint Stripe checkout without sign-in. */
+    payToken?: string;
     amountCents: number;
     taxCents?: number;
     currency?: string;
@@ -1437,7 +1439,9 @@ export class NotificationsService {
     sendEmail: boolean;
     sendNotification: boolean;
   }): Promise<void> {
-    const dueStr = params.dueAt.toLocaleDateString('en-CA');
+    const dueStr = params.dueAt.toLocaleDateString('en-CA', {
+      timeZone: getPlatformTimezone(),
+    });
     const fee = formatMatchFee(params.amountCents, params.taxCents);
     const overdue = params.status === 'OVERDUE';
     const title = overdue ? 'Match fee overdue reminder' : 'Match fee payment reminder';
@@ -1446,9 +1450,12 @@ export class NotificationsService {
       : `Reminder: your ${fee} match fee for ${params.jobTitle} is due by ${dueStr}.`;
     const eventType = overdue ? 'H_016_MATCH_FEE_OVERDUE' : 'H_015_MATCH_FEE_DUE_SOON';
     const invoiceHref = `/host/invoices?invoiceId=${encodeURIComponent(params.invoiceId)}`;
-    const jobHref = `/host/applicants/${encodeURIComponent(params.jobPostingId)}`;
     // One-hop pay link: opens the app, mints a fresh Stripe session, redirects to Stripe.
-    const payHref = `/host/invoices/${encodeURIComponent(params.invoiceId)}/pay`;
+    // The token lets the host pay straight from the email without signing in first.
+    const payQuery = params.payToken
+      ? `?t=${encodeURIComponent(params.payToken)}`
+      : '';
+    const payHref = `/host/invoices/${encodeURIComponent(params.invoiceId)}/pay${payQuery}`;
     const payUrl = appUrl(payHref);
     const emailSubject = `${title}: ${params.jobTitle}`;
 
@@ -1493,6 +1500,9 @@ export class NotificationsService {
     const explainer =
       'This match fee is charged when a locum is confirmed for your posting. ' +
       'Once paid, your invoice is marked paid and a receipt is available in Match Fees.';
+    const signInNote = params.payToken
+      ? 'Pay now takes you straight to secure checkout — no sign-in needed. Viewing the invoice will ask you to sign in.'
+      : 'You will be asked to sign in if you are not already.';
 
     const emailBody = [
       body,
@@ -1502,11 +1512,10 @@ export class NotificationsService {
       '',
       `Pay now: ${payUrl}`,
       '',
-      `Or view the invoice: ${appUrl(invoiceHref)}`,
-      `View the job: ${appUrl(jobHref)}`,
+      `View invoice: ${appUrl(invoiceHref)}`,
       '',
       explainer,
-      'You will be asked to sign in if you are not already.',
+      signInNote,
     ].join('\n');
 
     const summaryHtmlRows = summaryRows
@@ -1526,9 +1535,9 @@ export class NotificationsService {
     const emailHtml = [
       `<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;color:#1f2937">${escapeHtml(body)}</p>`,
       `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:440px;border:1px solid #E5E7EB;border-radius:8px;margin:16px 0">${summaryHtmlRows}</table>`,
-      `<p style="margin:20px 0"><a href="${payUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold">Pay now (${escapeHtml(totalStr)})</a></p>`,
-      `<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#475569">Or view the invoice: <a href="${appUrl(invoiceHref)}">${appUrl(invoiceHref)}</a><br>View the job: <a href="${appUrl(jobHref)}">${appUrl(jobHref)}</a></p>`,
-      `<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#64748b">${escapeHtml(explainer)}<br>You will be asked to sign in if you are not already.</p>`,
+      `<p style="margin:20px 0"><a href="${payUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold">Pay now (${escapeHtml(totalStr)})</a>` +
+        `&nbsp;&nbsp;<a href="${appUrl(invoiceHref)}" style="display:inline-block;background:#ffffff;color:#4f46e5;text-decoration:none;padding:12px 28px;border:1px solid #4f46e5;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold">View invoice</a></p>`,
+      `<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#64748b">${escapeHtml(explainer)}<br>${escapeHtml(signInNote)}</p>`,
     ].join('\n');
 
     if (params.sendNotification) {

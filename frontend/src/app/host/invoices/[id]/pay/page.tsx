@@ -1,19 +1,30 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { hostApi } from '@/lib/api';
 import { requestNativeStripeCheckout } from '@/lib/nativeShell';
 
 /**
  * One-hop "pay now" page the match-fee reminder email links to.
- * Middleware under /host/* has already ensured the host is signed in, so here we
- * just mint a fresh Stripe Checkout session and redirect straight to Stripe.
+ * When the email link carries a `?t=` token we mint checkout via the tokenized
+ * public endpoint (no sign-in). Otherwise we fall back to the authenticated
+ * endpoint (middleware ensures the host is signed in for that path).
  */
 export default function HostInvoicePayRedirect() {
+  return (
+    <Suspense fallback={null}>
+      <HostInvoicePayRedirectInner />
+    </Suspense>
+  );
+}
+
+function HostInvoicePayRedirectInner() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const invoiceId = params?.id;
+  const payToken = searchParams?.get('t') ?? '';
   const started = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +34,9 @@ export default function HostInvoicePayRedirect() {
 
     (async () => {
       try {
-        const { url } = await hostApi.payMatchFeeStripe(invoiceId);
+        const { url } = payToken
+          ? await hostApi.payMatchFeeStripeByToken(invoiceId, payToken)
+          : await hostApi.payMatchFeeStripe(invoiceId);
         // Native shell handles Checkout + 3DS more reliably than an in-app webview.
         if (requestNativeStripeCheckout(url)) return;
         window.location.href = url;
@@ -35,7 +48,7 @@ export default function HostInvoicePayRedirect() {
         );
       }
     })();
-  }, [invoiceId]);
+  }, [invoiceId, payToken]);
 
   return (
     <div

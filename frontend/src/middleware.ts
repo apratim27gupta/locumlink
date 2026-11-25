@@ -85,6 +85,8 @@ export async function middleware(request: NextRequest) {
   const isPublic =
     PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
     pathname.startsWith('/host/feedback') ||
+    // Tokenized one-click pay link from match-fee reminder emails.
+    (pathname.startsWith('/host/invoices/') && pathname.endsWith('/pay')) ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/favicon');

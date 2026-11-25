@@ -1,3 +1,5 @@
+import { APP_TIME_ZONE } from './appTimezone';
+
 export function relativeHoursOrDaysAgo(iso: string | null | undefined): string {
     if (!iso)
         return '—';
@@ -32,6 +34,7 @@ export function toLocalDateTime(iso: string | null | undefined): string {
   return d.toLocaleString(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
+    timeZone: APP_TIME_ZONE,
   });
 }
 
@@ -39,7 +42,11 @@ export function toLocalTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: APP_TIME_ZONE,
+  });
 }
 
 export function notifCategory(type: string): string {

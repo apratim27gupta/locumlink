@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 import { showAlert } from '@/components/ui/AppDialog';
 import { HOST_DASH_NAV } from '@/lib/hostNav';
 import EmojiPicker from 'emoji-picker-react';
@@ -140,6 +141,7 @@ function fmtTime(iso: string): string {
     return new Date(iso).toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
+        timeZone: APP_TIME_ZONE,
     });
 }
 function fmtDate(iso: string): string {
@@ -150,7 +152,7 @@ function fmtDate(iso: string): string {
         return 'Today';
     if (diff === 1)
         return 'Yesterday';
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: APP_TIME_ZONE });
 }
 function fmtConvDate(iso: string): string {
     const d = new Date(iso);
@@ -160,8 +162,9 @@ function fmtConvDate(iso: string): string {
         return d.toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
+            timeZone: APP_TIME_ZONE,
         });
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: APP_TIME_ZONE });
 }
 function isImageMime(mime: string): boolean {
     return /^image\//i.test(mime);
@@ -2394,6 +2397,7 @@ function MessagesPageInner({ role }: MessagesPageProps) {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric',
+                            timeZone: APP_TIME_ZONE,
                         })}
                         </div>) : null}
                     </button>))}

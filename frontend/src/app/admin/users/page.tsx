@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -153,6 +154,7 @@ function fmtDate(iso: string): string {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
+      timeZone: APP_TIME_ZONE,
     });
   } catch {
     return iso;
@@ -1672,7 +1674,7 @@ export default function AdminUsersPage() {
                               {d.bodyText.trim() || 'No message body'}
                             </div>
                             <div className="text-xs text-muted" style={{ marginTop: 4 }}>
-                              Updated {new Date(d.updatedAt).toLocaleString('en-CA')}
+                              Updated {new Date(d.updatedAt).toLocaleString('en-CA', { timeZone: APP_TIME_ZONE })}
                             </div>
                           </div>
                           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>

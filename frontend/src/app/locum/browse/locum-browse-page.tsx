@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 import { showConfirm } from '@/components/ui/AppDialog';
 import {
   useEffect,
@@ -1552,9 +1553,9 @@ export default function LocumBrowsePage(props: {
               Your application for <strong>{submittedApplication.jobTitle}</strong>
               {submittedApplication.practiceName ? ` at ${submittedApplication.practiceName}` : ''} was
               sent on{' '}
-              {submittedApplication.submittedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {submittedApplication.submittedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: APP_TIME_ZONE })}
               {' at '}
-              {submittedApplication.submittedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.
+              {submittedApplication.submittedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: APP_TIME_ZONE })}.
             </p>
             <p style={{ margin: '0 0 22px 0', fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
               The host will review it. You can track its status from My Applications.

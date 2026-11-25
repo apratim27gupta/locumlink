@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 import { showAlert } from '@/components/ui/AppDialog';
 import { ReactNode, useEffect, useRef, useState, useCallback, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -122,7 +123,7 @@ function fmtNotifTime(iso: string): string {
     const hrs = Math.floor(diff / 60);
     if (hrs < 24)
         return `${hrs}h ago`;
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: APP_TIME_ZONE });
 }
 function readNotifPrefs(): Record<string, boolean> | null {
     try {

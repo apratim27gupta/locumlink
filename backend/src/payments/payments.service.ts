@@ -65,7 +65,9 @@ import {
   ConflictException,
   NotFoundException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 
 const PAYABLE_INVOICE_STATUSES: MatchFeeInvoiceStatus[] = ['PENDING', 'OVERDUE'];
 /** An open Checkout session is handed out again only if it has at least this long left. */
@@ -2056,6 +2058,7 @@ export class PaymentsService {
         jobPostingId: invoice.jobPostingId,
         dueAt: invoice.dueAt,
         invoiceId: invoice.id,
+        payToken: await this.ensureInvoicePayAccessToken(invoice.id),
         amountCents: matchFeeTotalCents(invoice),
         taxCents: invoice.taxCents,
         status: 'OVERDUE',
@@ -2274,6 +2277,9 @@ export class PaymentsService {
         jobPostingId: invoice.jobPostingId,
         dueAt: invoice.dueAt,
         invoiceId: invoice.id,
+        payToken: options.sendEmail
+          ? await this.ensureInvoicePayAccessToken(invoice.id)
+          : undefined,
         amountCents: matchFeeTotalCents(invoice),
         taxCents: invoice.taxCents,
         currency: invoice.currency,
@@ -2303,25 +2309,66 @@ export class PaymentsService {
     return { success: true };
   }
 
+  /** Lazily mint and persist a per-invoice secret for one-click email pay links. */
+  async ensureInvoicePayAccessToken(invoiceId: string): Promise<string> {
+    const existing = await this.prisma.matchFeeInvoice.findUnique({
+      where: { id: invoiceId },
+      select: { payAccessToken: true },
+    });
+    if (existing?.payAccessToken) return existing.payAccessToken;
+    const token = randomBytes(24).toString('base64url');
+    const updated = await this.prisma.matchFeeInvoice.update({
+      where: { id: invoiceId },
+      data: { payAccessToken: token },
+      select: { payAccessToken: true },
+    });
+    return updated.payAccessToken ?? token;
+  }
+
   async createStripeCheckoutForHost(userId: string, invoiceId: string) {
+    const hostProfile = await this.prisma.hostProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!hostProfile) throw new NotFoundException('Host profile not found');
+    return this.createStripeCheckout(invoiceId, { hostProfileId: hostProfile.id });
+  }
+
+  /** Tokenized email-link payment: no host sign-in required when the token matches. */
+  async createStripeCheckoutByPayToken(invoiceId: string, payToken: string) {
+    const token = payToken?.trim();
+    if (!token) {
+      throw new UnauthorizedException('Payment link is missing its access token.');
+    }
+    const invoice = await this.prisma.matchFeeInvoice.findUnique({
+      where: { id: invoiceId },
+      select: { payAccessToken: true },
+    });
+    if (!invoice?.payAccessToken || invoice.payAccessToken !== token) {
+      throw new UnauthorizedException('This payment link is invalid or has expired.');
+    }
+    return this.createStripeCheckout(invoiceId, {});
+  }
+
+  private async createStripeCheckout(
+    invoiceId: string,
+    scope: { hostProfileId?: string },
+  ) {
     if (!this.stripeService.isEnabled()) {
       throw new BadRequestException(
         'Online payments are not available right now. Please try again later.',
       );
     }
 
-    const hostProfile = await this.prisma.hostProfile.findUnique({
-      where: { userId },
-      select: { id: true },
-    });
-    if (!hostProfile) throw new NotFoundException('Host profile not found');
-
     // Serialize checkout creation per invoice so parallel clicks cannot open two sessions.
     const claim = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM match_fee_invoices WHERE id = ${invoiceId} FOR UPDATE`;
 
       const invoice = await tx.matchFeeInvoice.findFirst({
-        where: { id: invoiceId, hostProfileId: hostProfile.id },
+        where: {
+          id: invoiceId,
+          ...(scope.hostProfileId ? { hostProfileId: scope.hostProfileId } : {}),
+        },
         include: { jobPosting: { select: { title: true } } },
       });
       if (!invoice) throw new NotFoundException('Invoice not found');

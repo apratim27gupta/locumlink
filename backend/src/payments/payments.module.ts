@@ -5,6 +5,7 @@ import { StripeService } from './stripe.service.js';
 import {
   HostPaymentsController,
   LocumPaymentsController,
+  PublicPaymentsController,
 } from './payments.controller.js';
 import { StripeWebhookController } from './stripe.webhook.controller.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
@@ -15,6 +16,7 @@ import { PrismaModule } from '../prisma/prisma.module.js';
   controllers: [
     HostPaymentsController,
     LocumPaymentsController,
+    PublicPaymentsController,
     StripeWebhookController,
   ],
   providers: [PaymentsService, StripeService],
