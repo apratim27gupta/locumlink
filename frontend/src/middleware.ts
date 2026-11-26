@@ -85,6 +85,8 @@ export async function middleware(request: NextRequest) {
   const isPublic =
     PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
     pathname.startsWith('/host/feedback') ||
+    // Tokenized one-click pay link from match-fee reminder emails.
+    (pathname.startsWith('/host/invoices/') && pathname.endsWith('/pay')) ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/favicon');
@@ -100,6 +102,16 @@ export async function middleware(request: NextRequest) {
     if (!token) {
       redirectUrl = new URL('/auth', request.url);
       redirectUrl.searchParams.set('next', pathname);
+      // Anyone bounced off a protected route already has an account, so land
+      // them on sign-in (the page defaults to the sign-up/create view).
+      redirectUrl.searchParams.set('mode', 'signin');
+      // Seed the role from the destination so the correct context shows and
+      // saveLastPath keys the return path to the right role bucket.
+      if (pathname.startsWith('/host')) {
+        redirectUrl.searchParams.set('role', 'clinic');
+      } else if (pathname.startsWith('/locum')) {
+        redirectUrl.searchParams.set('role', 'locum');
+      }
     } else if (pathname.startsWith('/host') && role === 'locum') {
       redirectUrl = new URL('/locum/dashboard', request.url);
     } else if (pathname.startsWith('/locum') && role === 'clinic') {

@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 
 import { ReactNode, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -45,7 +46,7 @@ function fmtAdminNotifTime(iso: string): string {
   if (diff < 60) return `${diff}m ago`;
   const hrs = Math.floor(diff / 60);
   if (hrs < 24) return `${hrs}h ago`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: APP_TIME_ZONE });
 }
 
 function adminInitials(email: string): string {

@@ -14,6 +14,7 @@ import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
 import { Roles } from '../auth/decorators/roles.decorator.js';
+import { Public } from '../auth/decorators/public.decorator.js';
 import { PaymentsService } from './payments.service.js';
 
 interface JwtRequest {
@@ -90,5 +91,18 @@ export class LocumPaymentsController {
   @Get('policy')
   getPolicy() {
     return this.payments.getPolicy('LOCUM');
+  }
+}
+
+/** Tokenized email-link payment — no host sign-in required when the token matches. */
+@Public()
+@Controller('public/match-fees')
+export class PublicPaymentsController {
+  constructor(private readonly payments: PaymentsService) {}
+
+  @Post(':id/pay-stripe')
+  @HttpCode(HttpStatus.OK)
+  payStripe(@Param('id') id: string, @Query('token') token: string) {
+    return this.payments.createStripeCheckoutByPayToken(id, token);
   }
 }

@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
@@ -254,7 +255,7 @@ export function GpLocumApplicationModal({ applicationId, open, onClose }: Props)
             {savedAt ? (
               <>
                 {' '}
-                Last saved {new Date(savedAt).toLocaleString()}.
+                Last saved {new Date(savedAt).toLocaleString(undefined, { timeZone: APP_TIME_ZONE })}.
               </>
             ) : null}
             {dirty ? ' Unsaved changes.' : null}

@@ -748,6 +748,9 @@ export const locumApi = {
         totalAppliedShifts: number;
         totalAcceptedShifts: number;
         completedShifts: number;
+        appliedPosts: number;
+        acceptedPosts: number;
+        completedPosts: number;
     }> => {
         const res = await trackedFetch(`${NEST_BASE}/api/locum/stats`, {
             cache: 'no-store',
@@ -761,6 +764,9 @@ export const locumApi = {
             totalAppliedShifts: number;
             totalAcceptedShifts: number;
             completedShifts: number;
+            appliedPosts: number;
+            acceptedPosts: number;
+            completedPosts: number;
         }>;
     },
     getMyApplications: async (params?: PaginationQuery): Promise<PaginatedResult<MyApplication>> => {
@@ -1357,6 +1363,21 @@ export const hostApi = {
             method: 'POST',
             headers: nestHeaders(true),
         });
+        if (!res.ok) {
+            const text = await res.text();
+            throw nestHttpError(text, res.status, 'Starting Stripe checkout');
+        }
+        return res.json() as Promise<{ success: boolean; url: string }>;
+    },
+    /** One-click email pay link: authorizes via the per-invoice token, no sign-in needed. */
+    payMatchFeeStripeByToken: async (
+        invoiceId: string,
+        token: string,
+    ): Promise<{ success: boolean; url: string }> => {
+        const res = await trackedFetch(
+            `${NEST_BASE}/api/public/match-fees/${encodeURIComponent(invoiceId)}/pay-stripe?token=${encodeURIComponent(token)}`,
+            { method: 'POST', headers: nestHeaders(true) },
+        );
         if (!res.ok) {
             const text = await res.text();
             throw nestHttpError(text, res.status, 'Starting Stripe checkout');

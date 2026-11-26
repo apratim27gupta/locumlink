@@ -27,6 +27,7 @@ import type { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import type { AdminUpdateVerificationDto } from './dto/admin-update-verification.dto.js';
 import type { AdminReportActionDto } from './dto/admin-report-action.dto.js';
 import type { AdminBroadcastUsersDto } from './dto/admin-broadcast-users.dto.js';
+import type { AdminBroadcastDraftDto } from './dto/admin-broadcast-draft.dto.js';
 import {
   analyticsSummaryToCsv,
   buildAnalyticsSummary,
@@ -73,6 +74,20 @@ const BROADCAST_EMAIL_BATCH_DELAY_MS = 2000;
 const BROADCAST_MAX_RECIPIENTS = 2000;
 /** Suppress duplicate broadcasts (same key/content) within this window. */
 const BROADCAST_IDEMPOTENCY_WINDOW_MS = 30 * 60 * 1000;
+
+/** Addresses CC'd on a single archive copy of every email broadcast. */
+const DEFAULT_BROADCAST_CC_EMAILS = [
+  'doctor@locumlink.ca',
+  'ash@aebeolleconsulting.com',
+  'satyam24034@gmail.com',
+] as const;
+
+/** Comma-separated BROADCAST_CC_EMAILS override, else doctor@ + ash@. */
+function broadcastCcEmails(): string[] {
+  const raw = process.env.BROADCAST_CC_EMAILS?.trim();
+  const list = raw ? raw.split(',') : [...DEFAULT_BROADCAST_CC_EMAILS];
+  return [...new Set(list.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+}
 
 type BroadcastRecipient = {
   id: string;
@@ -1022,6 +1037,24 @@ export class AdminService {
           queuedAt: queuedState.queuedAt,
         };
         this.broadcastJobs.set(idempotencyKey, completed);
+        if (result.failed.length > 0) {
+          this.logger.warn(
+            `Broadcast partial delivery (key=${idempotencyKey}): ` +
+              `${result.failed.length}/${recipients.length} failed; ` +
+              `sentEmail=${result.sentEmail} sentNotification=${result.sentNotification}. ` +
+              `First error: ${result.failed[0]?.error ?? 'unknown'}`,
+          );
+        }
+        // Email the admin who sent it a confirmation with the delivery counts.
+        void this.sendBroadcastConfirmationToAdmin({
+          adminEmail: adminPayload.email,
+          subject,
+          channels: dto.channels,
+          recipientCount: recipients.length,
+          sentNotification: result.sentNotification,
+          sentEmail: result.sentEmail,
+          failedCount: result.failed.length,
+        });
         this.audit.log({
           ...auditBase,
           outcome: result.failed.length === 0 ? 'SUCCESS' : 'PARTIAL',
@@ -1194,6 +1227,9 @@ export class AdminService {
                 subject,
                 text: bodyText,
                 html: emailHtml,
+                eventType: 'U_001_ADMIN_MESSAGE',
+                referenceType: 'UserBroadcast',
+                referenceId: user.id,
               });
               if (!result.ok) {
                 failed.push({ userId: user.id, error: result.error });
@@ -1212,9 +1248,162 @@ export class AdminService {
           await sleep(BROADCAST_EMAIL_BATCH_DELAY_MS);
         }
       }
+
+      // One archive copy of the broadcast, with the oversight inboxes in CC.
+      // Addressed to the noreply sender so both configured addresses stay in CC.
+      const ccEmails = broadcastCcEmails();
+      if (ccEmails.length > 0) {
+        const archiveTo =
+          process.env.MAIL_FROM_ADDRESS?.trim() || ccEmails[0];
+        try {
+          const result = await this.email.send({
+            to: archiveTo,
+            cc: ccEmails,
+            subject,
+            text: bodyText,
+            html: emailHtml,
+          });
+          if (!result.ok) {
+            failed.push({ userId: 'broadcast-cc', error: result.error });
+          }
+        } catch (err: unknown) {
+          failed.push({
+            userId: 'broadcast-cc',
+            error: err instanceof Error ? err.message : 'Archive email failed',
+          });
+        }
+      }
     }
 
     return { sentNotification, sentEmail, failed };
+  }
+
+  /** Confirmation email to the admin who just sent a broadcast. Best-effort. */
+  private async sendBroadcastConfirmationToAdmin(params: {
+    adminEmail: string;
+    subject: string;
+    channels: Array<'notification' | 'email'>;
+    recipientCount: number;
+    sentNotification: number;
+    sentEmail: number;
+    failedCount: number;
+  }): Promise<void> {
+    const to = params.adminEmail?.trim();
+    if (!to) return;
+    const channelList = params.channels.join(', ') || 'none';
+    const lines = [
+      `Your broadcast "${params.subject}" has been sent.`,
+      '',
+      `Recipients: ${params.recipientCount}`,
+      `Channels: ${channelList}`,
+      `In-app notifications delivered: ${params.sentNotification}`,
+      `Emails delivered: ${params.sentEmail}`,
+      `Failed: ${params.failedCount}`,
+    ];
+    const text = lines.join('\n');
+    const html = `<p>${lines
+      .map((l) => (l === '' ? '<br>' : escapeHtmlText(l)))
+      .join('<br>')}</p>`;
+    try {
+      await this.email.send({
+        to,
+        subject: `Broadcast sent: ${params.subject}`,
+        text,
+        html,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Broadcast confirmation email to admin failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  // ----- Broadcast drafts (unsent messages, private to the author) -----
+
+  private mapBroadcastDraft(draft: {
+    id: string;
+    subject: string;
+    bodyHtml: string;
+    bodyText: string;
+    channels: string[];
+    recipientIds: string[];
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: draft.id,
+      subject: draft.subject,
+      bodyHtml: draft.bodyHtml,
+      bodyText: draft.bodyText,
+      channels: draft.channels,
+      recipientIds: draft.recipientIds,
+      createdAt: draft.createdAt.toISOString(),
+      updatedAt: draft.updatedAt.toISOString(),
+    };
+  }
+
+  async listBroadcastDrafts(adminPayload: AdminJwtPayload) {
+    const drafts = await this.prisma.broadcastDraft.findMany({
+      where: { adminId: adminPayload.sub },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return { drafts: drafts.map((d) => this.mapBroadcastDraft(d)) };
+  }
+
+  async createBroadcastDraft(
+    adminPayload: AdminJwtPayload,
+    dto: AdminBroadcastDraftDto,
+  ) {
+    const draft = await this.prisma.broadcastDraft.create({
+      data: {
+        adminId: adminPayload.sub,
+        subject: dto.subject?.trim() ?? '',
+        bodyHtml: dto.bodyHtml ?? '',
+        bodyText: dto.bodyText ?? '',
+        channels: dto.channels ?? [],
+        recipientIds: dto.recipientIds ?? [],
+      },
+    });
+    return this.mapBroadcastDraft(draft);
+  }
+
+  async updateBroadcastDraft(
+    adminPayload: AdminJwtPayload,
+    id: string,
+    dto: AdminBroadcastDraftDto,
+  ) {
+    // Scope the update to the author so one admin cannot edit another's draft.
+    const result = await this.prisma.broadcastDraft.updateMany({
+      where: { id, adminId: adminPayload.sub },
+      data: {
+        ...(dto.subject !== undefined ? { subject: dto.subject.trim() } : {}),
+        ...(dto.bodyHtml !== undefined ? { bodyHtml: dto.bodyHtml } : {}),
+        ...(dto.bodyText !== undefined ? { bodyText: dto.bodyText } : {}),
+        ...(dto.channels !== undefined ? { channels: dto.channels } : {}),
+        ...(dto.recipientIds !== undefined
+          ? { recipientIds: dto.recipientIds }
+          : {}),
+      },
+    });
+    if (result.count === 0) {
+      throw new NotFoundException('Draft not found');
+    }
+    const draft = await this.prisma.broadcastDraft.findUniqueOrThrow({
+      where: { id },
+    });
+    return this.mapBroadcastDraft(draft);
+  }
+
+  async deleteBroadcastDraft(adminPayload: AdminJwtPayload, id: string) {
+    const result = await this.prisma.broadcastDraft.deleteMany({
+      where: { id, adminId: adminPayload.sub },
+    });
+    if (result.count === 0) {
+      throw new NotFoundException('Draft not found');
+    }
+    return { ok: true };
   }
 
   private async resolveBroadcastRecipients(dto: AdminBroadcastUsersDto) {

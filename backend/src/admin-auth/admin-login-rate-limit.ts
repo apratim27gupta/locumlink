@@ -27,7 +27,7 @@ function assertAllowed(
   const rec = store.get(key);
   if (!rec) return;
   if (rec.lockedUntil && now < rec.lockedUntil) {
-    throw new AdminLoginRateLimitError();
+    throw new AdminLoginRateLimitError(rec.lockedUntil - now);
   }
   if (now - rec.windowStart > WINDOW_MS) {
     store.delete(key);
@@ -85,8 +85,11 @@ export function clearAdminVerifyAttempts(email: string, ip: string): void {
 }
 
 export class AdminLoginRateLimitError extends Error {
-  constructor() {
+  /** Milliseconds remaining until the lockout clears (0 when unknown). */
+  readonly retryAfterMs: number;
+  constructor(retryAfterMs = 0) {
     super('Too many attempts. Please try again later.');
     this.name = 'AdminLoginRateLimitError';
+    this.retryAfterMs = retryAfterMs;
   }
 }

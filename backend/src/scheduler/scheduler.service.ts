@@ -290,7 +290,7 @@ export class SchedulerService {
             WHERE a."jobPostingId" = job_postings.id
               AND (
                 a."locumResponse" = 'ACCEPTED'::"LocumResponse"
-                OR a."locumAcceptedAt" IS NOT NULL
+                OR a."locum_accepted_at" IS NOT NULL
               )
           )
       `;

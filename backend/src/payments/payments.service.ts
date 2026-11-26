@@ -65,7 +65,9 @@ import {
   ConflictException,
   NotFoundException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 
 const PAYABLE_INVOICE_STATUSES: MatchFeeInvoiceStatus[] = ['PENDING', 'OVERDUE'];
 /** An open Checkout session is handed out again only if it has at least this long left. */
@@ -1134,7 +1136,15 @@ export class PaymentsService {
     return result;
   }
 
-  async createMatchFeeInvoice(applicationId: string): Promise<void> {
+  async createMatchFeeInvoice(
+    applicationId: string,
+    opts?: {
+      /** Create even for postings grandfathered out of match fees (backfill). */
+      ignoreGrandfather?: boolean;
+      /** Override the computed due date (e.g. backfilling a past placement). */
+      dueAtOverride?: Date;
+    },
+  ): Promise<void> {
     const existingByApp = await this.prisma.matchFeeInvoice.findUnique({
       where: {
         applicationId_kind: { applicationId, kind: 'PRIMARY' },
@@ -1192,7 +1202,10 @@ export class PaymentsService {
     });
     if (!app?.locumAcceptedAt) return;
 
-    if (isPostingGrandfatheredFromMatchFee(app.jobPosting.createdAt)) {
+    if (
+      !opts?.ignoreGrandfather &&
+      isPostingGrandfatheredFromMatchFee(app.jobPosting.createdAt)
+    ) {
       return;
     }
 
@@ -1241,7 +1254,8 @@ export class PaymentsService {
 
     const createdAt = new Date();
     const earliestShiftDate = computeEarliestShiftDate(app.jobPosting, app);
-    const dueAt = computeDueAt(createdAt, earliestShiftDate);
+    const dueAt =
+      opts?.dueAtOverride ?? computeDueAt(createdAt, earliestShiftDate);
 
     const invoiceData = {
       hostProfileId: app.jobPosting.hostProfileId,
@@ -2044,6 +2058,7 @@ export class PaymentsService {
         jobPostingId: invoice.jobPostingId,
         dueAt: invoice.dueAt,
         invoiceId: invoice.id,
+        payToken: await this.ensureInvoicePayAccessToken(invoice.id),
         amountCents: matchFeeTotalCents(invoice),
         taxCents: invoice.taxCents,
         status: 'OVERDUE',
@@ -2216,6 +2231,11 @@ export class PaymentsService {
       where: { id: invoiceId },
       include: {
         jobPosting: { select: { title: true } },
+        application: {
+          select: {
+            locumProfile: { select: { firstName: true, lastName: true } },
+          },
+        },
         hostProfile: {
           select: {
             userId: true,
@@ -2242,6 +2262,14 @@ export class PaymentsService {
     const reminderStatus = invoice.status as 'PENDING' | 'OVERDUE';
 
     if (options.sendNotification || options.sendEmail) {
+      const locumName =
+        [
+          invoice.application?.locumProfile?.firstName,
+          invoice.application?.locumProfile?.lastName,
+        ]
+          .map((s) => s?.trim())
+          .filter(Boolean)
+          .join(' ') || undefined;
       await this.notifications.notifyHostMatchFeePaymentReminder({
         recipientId: host.userId,
         recipientEmail: host.user.email,
@@ -2249,8 +2277,14 @@ export class PaymentsService {
         jobPostingId: invoice.jobPostingId,
         dueAt: invoice.dueAt,
         invoiceId: invoice.id,
+        payToken: options.sendEmail
+          ? await this.ensureInvoicePayAccessToken(invoice.id)
+          : undefined,
         amountCents: matchFeeTotalCents(invoice),
         taxCents: invoice.taxCents,
+        currency: invoice.currency,
+        issuedAt: invoice.createdAt,
+        locumName,
         status: reminderStatus,
         sendEmail: options.sendEmail,
         sendNotification: options.sendNotification,
@@ -2275,25 +2309,66 @@ export class PaymentsService {
     return { success: true };
   }
 
+  /** Lazily mint and persist a per-invoice secret for one-click email pay links. */
+  async ensureInvoicePayAccessToken(invoiceId: string): Promise<string> {
+    const existing = await this.prisma.matchFeeInvoice.findUnique({
+      where: { id: invoiceId },
+      select: { payAccessToken: true },
+    });
+    if (existing?.payAccessToken) return existing.payAccessToken;
+    const token = randomBytes(24).toString('base64url');
+    const updated = await this.prisma.matchFeeInvoice.update({
+      where: { id: invoiceId },
+      data: { payAccessToken: token },
+      select: { payAccessToken: true },
+    });
+    return updated.payAccessToken ?? token;
+  }
+
   async createStripeCheckoutForHost(userId: string, invoiceId: string) {
+    const hostProfile = await this.prisma.hostProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!hostProfile) throw new NotFoundException('Host profile not found');
+    return this.createStripeCheckout(invoiceId, { hostProfileId: hostProfile.id });
+  }
+
+  /** Tokenized email-link payment: no host sign-in required when the token matches. */
+  async createStripeCheckoutByPayToken(invoiceId: string, payToken: string) {
+    const token = payToken?.trim();
+    if (!token) {
+      throw new UnauthorizedException('Payment link is missing its access token.');
+    }
+    const invoice = await this.prisma.matchFeeInvoice.findUnique({
+      where: { id: invoiceId },
+      select: { payAccessToken: true },
+    });
+    if (!invoice?.payAccessToken || invoice.payAccessToken !== token) {
+      throw new UnauthorizedException('This payment link is invalid or has expired.');
+    }
+    return this.createStripeCheckout(invoiceId, {});
+  }
+
+  private async createStripeCheckout(
+    invoiceId: string,
+    scope: { hostProfileId?: string },
+  ) {
     if (!this.stripeService.isEnabled()) {
       throw new BadRequestException(
         'Online payments are not available right now. Please try again later.',
       );
     }
 
-    const hostProfile = await this.prisma.hostProfile.findUnique({
-      where: { userId },
-      select: { id: true },
-    });
-    if (!hostProfile) throw new NotFoundException('Host profile not found');
-
     // Serialize checkout creation per invoice so parallel clicks cannot open two sessions.
     const claim = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM match_fee_invoices WHERE id = ${invoiceId} FOR UPDATE`;
 
       const invoice = await tx.matchFeeInvoice.findFirst({
-        where: { id: invoiceId, hostProfileId: hostProfile.id },
+        where: {
+          id: invoiceId,
+          ...(scope.hostProfileId ? { hostProfileId: scope.hostProfileId } : {}),
+        },
         include: { jobPosting: { select: { title: true } } },
       });
       if (!invoice) throw new NotFoundException('Invoice not found');

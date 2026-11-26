@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service.js';
 import {
   getReviewPlaygroundEmails,
   isReviewPlaygroundEmail,
@@ -77,18 +78,74 @@ function withTeamSignoff(
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  /**
+   * Persist a per-recipient delivery record to `email_logs`. No-op unless the
+   * caller supplies `eventType` (so OTP flows that log themselves are untouched).
+   * Never throws — a logging failure must not fail the send.
+   */
+  private async recordEmailLog(
+    meta: {
+      eventType?: string;
+      referenceId?: string;
+      referenceType?: string;
+    },
+    recipient: string,
+    status: 'SENT' | 'FAILED' | 'SKIPPED',
+    fields: { provider?: string; providerMessageId?: string; error?: string } = {},
+  ): Promise<void> {
+    if (!meta.eventType) return;
+    try {
+      await this.prisma.emailLog.create({
+        data: {
+          recipient,
+          eventType: meta.eventType,
+          status,
+          provider: fields.provider ?? 'twilio',
+          providerMessageId: fields.providerMessageId,
+          error: fields.error,
+          referenceId: meta.referenceId,
+          referenceType: meta.referenceType,
+        },
+      });
+    } catch (err: unknown) {
+      this.logger.error(
+        `Failed to write email_logs row for ${recipient}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
 
   async send(params: {
     to: string;
     subject: string;
     text: string;
     html?: string;
+    /** When set, each attempt is recorded to `email_logs` for tracking. */
+    eventType?: string;
+    referenceId?: string;
+    referenceType?: string;
+    /** Extra addresses to copy. Invalid/suppressed/review entries are dropped. */
+    cc?: string[];
   }): Promise<EmailSendResult> {
+    const meta = {
+      eventType: params.eventType,
+      referenceId: params.referenceId,
+      referenceType: params.referenceType,
+    };
     const to = params.to?.trim().toLowerCase() ?? '';
     if (!to || !looksLikeEmail(to)) {
       const error = `Invalid recipient address: ${params.to ?? '(empty)'}`;
       this.logger.warn(`Skipping email: ${error}`);
+      await this.recordEmailLog(meta, to || (params.to ?? ''), 'FAILED', {
+        provider: 'validation',
+        error,
+      });
       return { ok: false, error };
     }
 
@@ -99,6 +156,9 @@ export class EmailService {
       this.logger.log(
         `Skipping email to review playground address ${to} (subject: ${params.subject})`,
       );
+      await this.recordEmailLog(meta, to, 'SKIPPED', {
+        provider: 'review_playground',
+      });
       return { ok: true, skipped: true };
     }
 
@@ -106,6 +166,7 @@ export class EmailService {
       this.logger.log(
         `Skipping email to suppressed address ${to} (subject: ${params.subject})`,
       );
+      await this.recordEmailLog(meta, to, 'SKIPPED', { provider: 'suppressed' });
       return { ok: true, skipped: true };
     }
 
@@ -116,6 +177,10 @@ export class EmailService {
       const error =
         'Email not configured (set TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET and MAIL_FROM_ADDRESS)';
       this.logger.warn(`Skipping email to ${to}: ${error}`);
+      await this.recordEmailLog(meta, to, 'FAILED', {
+        provider: 'unconfigured',
+        error,
+      });
       return { ok: false, error };
     }
 
@@ -127,6 +192,23 @@ export class EmailService {
       sanitizeNotificationCopy(params.text),
       params.html ? sanitizeNotificationCopy(params.html) : undefined,
       logoUrl,
+    );
+
+    // Clean the CC list with the same rules that protect `to`: valid shape,
+    // not the primary recipient, not suppressed, not a review-playground inbox.
+    const suppressed = getSuppressedEmails(this.config);
+    const cc = [
+      ...new Set(
+        (params.cc ?? [])
+          .map((address) => address?.trim().toLowerCase())
+          .filter((address): address is string => Boolean(address)),
+      ),
+    ].filter(
+      (address) =>
+        looksLikeEmail(address) &&
+        address !== to &&
+        !suppressed.has(address) &&
+        !isReviewPlaygroundEmail(address, reviewEmails),
     );
 
     const credentials = Buffer.from(`${sid}:${secret}`).toString('base64');
@@ -142,6 +224,9 @@ export class EmailService {
         body: JSON.stringify({
           from: { address: from, name: fromName },
           to: [{ address: to }],
+          ...(cc.length > 0
+            ? { cc: cc.map((address) => ({ address })) }
+            : {}),
           content: {
             subject,
             html,
@@ -153,6 +238,7 @@ export class EmailService {
       recordDependencyFailure('twilio');
       const error = err instanceof Error ? err.message : String(err);
       this.logger.error(`Twilio Email API request failed: ${error}`);
+      await this.recordEmailLog(meta, to, 'FAILED', { error });
       return { ok: false, error };
     }
 
@@ -161,18 +247,21 @@ export class EmailService {
       const detail = await res.text();
       const error = `Twilio Email API error (${res.status}): ${detail}`;
       this.logger.error(error);
+      await this.recordEmailLog(meta, to, 'FAILED', { error });
       return { ok: false, error };
     }
 
+    let messageId: string | undefined;
     try {
       const body = (await res.json()) as {
         operationId?: string;
         operationLocation?: string;
       };
-      const messageId = body.operationId;
-      return { ok: true, messageId };
+      messageId = body.operationId;
     } catch {
-      return { ok: true };
+      messageId = undefined;
     }
+    await this.recordEmailLog(meta, to, 'SENT', { providerMessageId: messageId });
+    return { ok: true, messageId };
   }
 }

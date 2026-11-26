@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 
 import Image from 'next/image';
 import { Fragment } from 'react';
@@ -58,10 +59,12 @@ export function formatBrowseJobUtcDateTimeToLocal(
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+      timeZone: APP_TIME_ZONE,
     }),
     localTime: d.toLocaleTimeString(undefined, {
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: APP_TIME_ZONE,
     }),
   };
 }

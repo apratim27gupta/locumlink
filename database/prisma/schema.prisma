@@ -735,6 +735,7 @@ model Admin {
   auditLogs         AuditLog[]
   notifications     AdminNotificationEvent[]
   reviewedReports   UserReport[]
+  broadcastDrafts   BroadcastDraft[]
 
   @@map("admins")
 }
@@ -755,6 +756,27 @@ model AdminNotificationEvent {
   @@index([adminId])
   @@map("admin_notification_events")
 }
+
+/** Unsent broadcast messages an admin saved to finish later. Private to the author. */
+model BroadcastDraft {
+  id        String   @id @default(cuid())
+  adminId   String   @map("admin_id")
+  admin     Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  subject   String   @default("")
+  bodyHtml  String   @default("") @map("body_html")
+  bodyText  String   @default("") @map("body_text")
+  channels  String[] @default([])
+  // Selected recipient user ids, so reusing a draft restores the audience.
+  recipientIds String[] @default([]) @map("recipient_ids")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([adminId])
+  @@map("broadcast_drafts")
+}
+
 model PushSubscription {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
@@ -920,6 +942,8 @@ model MatchFeeInvoice {
   /** Cents refunded or reserved for in-flight refunds, including HST. */
   refundedCents      Int                       @default(0) @map("refunded_cents")
   lastReminderAt     DateTime?                 @map("last_reminder_at")
+  /** Secret for one-click pay links in reminder emails (no sign-in required). */
+  payAccessToken     String?                   @unique @map("pay_access_token")
   createdAt          DateTime                  @default(now()) @map("created_at")
   updatedAt          DateTime                  @updatedAt @map("updated_at")
 

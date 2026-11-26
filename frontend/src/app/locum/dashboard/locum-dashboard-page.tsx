@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE, astWallPartsOf } from '@/lib/appTimezone';
 import { useState, useEffect, useRef } from 'react';
 import { useResizableDrawer } from '@/lib/useResizableDrawer';
 import { useRouter } from 'next/navigation';
@@ -241,11 +242,10 @@ function fmtTime(t: string | null): string {
     if (!t) return '';
     const [h, m] = t.split(':').map(Number);
     if (Number.isNaN(h) || Number.isNaN(m)) return '';
-    // Convert UTC HH:mm to local time using today's date as carrier
+    // Convert stored UTC HH:mm to platform (AST) time using today as carrier.
     const utcDate = new Date();
     utcDate.setUTCHours(h, m, 0, 0);
-    const localH = utcDate.getHours();
-    const localM = utcDate.getMinutes();
+    const { hours: localH, minutes: localM } = astWallPartsOf(utcDate.getTime());
     const ampm = localH >= 12 ? 'PM' : 'AM';
     const h12 = localH % 12 || 12;
     return `${String(h12).padStart(2, '0')}:${String(localM).padStart(2, '0')} ${ampm}`;
@@ -312,8 +312,8 @@ function fmtDateTime(iso: string): string {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime()))
         return '';
-    const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: APP_TIME_ZONE });
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: APP_TIME_ZONE });
     return `${date} at ${time}`;
 }
 /** Hosts only act on applicants after opening them, so any status past APPLIED implies a view. */
@@ -509,6 +509,9 @@ export default function LocumDashboard(props: {
         totalAppliedShifts: number;
         totalAcceptedShifts: number;
         completedShifts: number;
+        appliedPosts: number;
+        acceptedPosts: number;
+        completedPosts: number;
     } | null>(null);
     const [loading, setLoading] = useState(true);
     const [respondingAppId, setRespondingAppId] = useState<string | null>(null);
@@ -707,6 +710,13 @@ export default function LocumDashboard(props: {
     const appliedCount = shiftStats?.totalAppliedShifts ?? appliedFromApps;
     const acceptedCount = shiftStats?.totalAcceptedShifts ?? acceptedFromApps;
     const completedCount = shiftStats?.completedShifts ?? completedFromApps;
+    // Post-level counts (one unit per posting applied to), mirror the shift row above it.
+    const appliedPostsFromApps = visibleApplications.length;
+    const acceptedPostsFromApps = visibleApplications.filter(locumAcceptedApplication).length;
+    const completedPostsFromApps = visibleApplications.filter(isCompletedApplication).length;
+    const appliedPostsCount = shiftStats?.appliedPosts ?? appliedPostsFromApps;
+    const acceptedPostsCount = shiftStats?.acceptedPosts ?? acceptedPostsFromApps;
+    const completedPostsCount = shiftStats?.completedPosts ?? completedPostsFromApps;
     const locumTabCounts: Record<(typeof LOCUM_TABS)[number]['id'], number> = {
         recent: recentCount,
         upcoming: upcomingCount,
@@ -845,6 +855,56 @@ export default function LocumDashboard(props: {
       />
 
       
+      <div style={{
+            display: 'flex',
+            border: '1px solid #e2e5ee',
+            borderRadius: 8,
+            overflow: 'hidden',
+            marginBottom: 8,
+            background: '#fff',
+            flexShrink: 0,
+        }}>
+        <div style={{ flex: 1, flexShrink: 0, padding: '18px 14px', borderRight: '1px solid #e2e5ee' }}>
+          <p style={{
+            margin: 0,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 'var(--font-weight-bold)',
+            fontSize: 'var(--font-heading)',
+            lineHeight: '140%',
+            color: '#4A4A4A',
+        }}>
+            Total Posts Applied :{' '}
+            <span style={{ color: '#000' }}>{loading ? '-' : appliedPostsCount}</span>
+          </p>
+        </div>
+        <div style={{ flex: 1, flexShrink: 0, padding: '18px 14px', borderRight: '1px solid #e2e5ee' }}>
+          <p style={{
+            margin: 0,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 'var(--font-weight-bold)',
+            fontSize: 'var(--font-heading)',
+            lineHeight: '140%',
+            color: '#4A4A4A',
+        }}>
+            Total Posts Accepted :{' '}
+            <span style={{ color: '#000' }}>{loading ? '-' : acceptedPostsCount}</span>
+          </p>
+        </div>
+        <div style={{ flex: 1, flexShrink: 0, padding: '18px 14px' }}>
+          <p style={{
+            margin: 0,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: 'var(--font-weight-bold)',
+            fontSize: 'var(--font-heading)',
+            lineHeight: '140%',
+            color: '#4A4A4A',
+        }}>
+            Total Posts Completed :{' '}
+            <span style={{ color: '#000' }}>{loading ? '-' : completedPostsCount}</span>
+          </p>
+        </div>
+      </div>
+
       <div style={{
             display: 'flex',
             border: '1px solid #e2e5ee',

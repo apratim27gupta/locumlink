@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle, Download, Search } from 'lucide-react';
@@ -26,6 +27,7 @@ function fmtTimestamp(ts: string): string {
       minute: '2-digit',
       second: '2-digit',
       hour12: false,
+      timeZone: APP_TIME_ZONE,
     });
   } catch {
     return ts;

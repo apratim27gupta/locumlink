@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -87,6 +88,7 @@ function fmtActivityTime(iso: string): string {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
+      timeZone: APP_TIME_ZONE,
     });
   } catch {
     return iso;

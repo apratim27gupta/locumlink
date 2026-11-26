@@ -2,6 +2,7 @@ import {
   formatLocalCalendarDateForDisplay,
   utcPartsToLocalInputValues,
 } from '@/lib/localDateTime';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 
 /**
  * Single source of truth for reading and describing a job's schedule.
@@ -804,7 +805,11 @@ export function formatDateRange(range: JobDateRange): string {
 function utcClockToLocal(dateIso: string, hhmm: string): string | null {
   const d = new Date(`${dateIso}T${hhmm}:00Z`);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: APP_TIME_ZONE,
+  });
 }
 
 /** True when a specific-dates posting's days don't all share one start/end time. */

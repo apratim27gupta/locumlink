@@ -1,4 +1,5 @@
 'use client';
+import { APP_TIME_ZONE } from '@/lib/appTimezone';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -82,6 +83,7 @@ function fmtDate(iso: string | null | undefined): string {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+      timeZone: APP_TIME_ZONE,
     });
   } catch {
     return iso;
