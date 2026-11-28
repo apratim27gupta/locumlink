@@ -3069,11 +3069,13 @@ export class PaymentsService {
     const invoice = await this.prisma.matchFeeInvoice.findUniqueOrThrow({
       where: { id: params.invoiceId },
       include: {
-        jobPosting: { select: { title: true } },
+        jobPosting: { select: { title: true, location: true } },
         hostProfile: {
           select: {
             userId: true,
             practiceName: true,
+            contactFirstName: true,
+            contactLastName: true,
             user: { select: { email: true } },
           },
         },
@@ -3099,6 +3101,27 @@ export class PaymentsService {
     });
 
     const host = invoice.hostProfile;
+
+    // Ops notification: email doctor@ + ash@ whenever any invoice is paid.
+    try {
+      const contactName = [host?.contactFirstName, host?.contactLastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      await this.adminNotifications.notifyMatchFeePaid({
+        invoiceId: params.invoiceId,
+        hostPracticeName: host?.practiceName ?? '',
+        hostContactName: contactName || null,
+        jobTitle: invoice.jobPosting.title,
+        jobLocation: invoice.jobPosting.location,
+        amountCents: matchFeeTotalCents(invoice),
+        taxCents: invoice.taxCents,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Ops match-fee-paid email failed for invoice ${params.invoiceId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     if (host?.userId && host.user?.email) {
       try {
         await this.notifications.notifyHostMatchFeePaid({

@@ -32,6 +32,20 @@ export const HEALTH_CHECK_LOG_PREFIX = 'HEALTH_CHECK_FAILED:';
 
 export const DEFAULT_SLOW_API_THRESHOLD_MS = 1500;
 
+/**
+ * Routes that call slow external APIs (e.g. Stripe webhooks) get a higher slow-request
+ * threshold, since round-trips to the provider legitimately take longer.
+ */
+export const DEFAULT_SLOW_EXTERNAL_API_THRESHOLD_MS = 3000;
+
+/** Case-insensitive path fragments treated as external-API-bound routes. */
+export const EXTERNAL_API_PATH_PATTERNS = ['/payments/stripe'];
+
+export function isExternalApiPath(path: string): boolean {
+  const lower = (path ?? '').toLowerCase();
+  return EXTERNAL_API_PATH_PATTERNS.some((p) => lower.includes(p));
+}
+
 export function isNoiseError(statusCode: number, message: string): boolean {
   if (statusCode >= 500) return false;
   const lower = (message ?? '').toLowerCase();

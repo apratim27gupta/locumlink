@@ -1,6 +1,18 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { AnalyticsDateRange } from './adminAnalyticsSummary';
 
+export type AdminJobInvoiceSummary = {
+  /** Number of match-fee invoices on the job. */
+  count: number;
+  /** Most recent invoice's status. */
+  status: string;
+  /** Most recent invoice's total including HST, in cents. */
+  amountCents: number;
+  currency: string;
+  /** Most recent invoice's paidAt (ISO), null when unpaid. */
+  paidAt: string | null;
+};
+
 export type AdminJobListItem = {
   id: string;
   title: string;
@@ -8,6 +20,7 @@ export type AdminJobListItem = {
   location: string;
   isRural: boolean;
   isDeleted?: boolean;
+  invoice?: AdminJobInvoiceSummary | null;
   startDate: string | null;
   endDate: string | null;
   startTime: string | null;

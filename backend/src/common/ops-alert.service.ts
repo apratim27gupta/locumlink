@@ -4,8 +4,10 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { EmailService } from '../notifications/email.service.js';
 import {
   DEFAULT_SLOW_API_THRESHOLD_MS,
+  DEFAULT_SLOW_EXTERNAL_API_THRESHOLD_MS,
   HEALTH_CHECK_LOG_PREFIX,
   SLOW_API_LOG_PREFIX,
+  isExternalApiPath,
   isNoiseError,
   shouldOpsAlert,
 } from './ops-alert.constants.js';
@@ -36,6 +38,17 @@ export class OpsAlertService {
     return Number.isFinite(parsed) && parsed > 0
       ? parsed
       : DEFAULT_SLOW_API_THRESHOLD_MS;
+  }
+
+  /** Higher threshold for routes bound to slow external APIs (e.g. Stripe webhooks). */
+  getSlowExternalApiThresholdMs(): number {
+    const raw = this.config.get<string>('API_SLOW_EXTERNAL_THRESHOLD_MS');
+    const parsed = raw
+      ? parseInt(raw, 10)
+      : DEFAULT_SLOW_EXTERNAL_API_THRESHOLD_MS;
+    return Number.isFinite(parsed) && parsed > 0
+      ? parsed
+      : DEFAULT_SLOW_EXTERNAL_API_THRESHOLD_MS;
   }
 
   parseAdminEmails(): string[] {
@@ -101,7 +114,9 @@ export class OpsAlertService {
     statusCode: number;
     durationMs: number;
   }): Promise<void> {
-    const threshold = this.getSlowApiThresholdMs();
+    const threshold = isExternalApiPath(params.path)
+      ? this.getSlowExternalApiThresholdMs()
+      : this.getSlowApiThresholdMs();
     if (params.durationMs < threshold) return;
     if (params.path.includes('/health')) return;
 

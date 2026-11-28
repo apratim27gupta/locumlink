@@ -1,6 +1,18 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { AnalyticsDateRange } from './admin-analytics.js';
 
+export type AdminJobInvoiceSummary = {
+  /** Number of match-fee invoices on the job. */
+  count: number;
+  /** Most recent invoice's status. */
+  status: string;
+  /** Most recent invoice's total including HST, in cents. */
+  amountCents: number;
+  currency: string;
+  /** Most recent invoice's paidAt (ISO), null when unpaid. */
+  paidAt: string | null;
+};
+
 export type AdminJobListItem = {
   id: string;
   title: string;
@@ -8,6 +20,7 @@ export type AdminJobListItem = {
   location: string;
   isRural: boolean;
   isDeleted?: boolean;
+  invoice?: AdminJobInvoiceSummary | null;
   startDate: string | null;
   endDate: string | null;
   startTime: string | null;
@@ -171,11 +184,33 @@ export async function listAdminJobs(
             locumAcceptedAt: true,
           },
         },
+        matchFeeInvoices: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            status: true,
+            amountCents: true,
+            taxCents: true,
+            currency: true,
+            paidAt: true,
+          },
+        },
       },
     }),
   ]);
 
   const items: AdminJobListItem[] = rows.map((row) => {
+    const latestInvoice = row.matchFeeInvoices[0] ?? null;
+    const invoice: AdminJobInvoiceSummary | null = latestInvoice
+      ? {
+          count: row.matchFeeInvoices.length,
+          status: latestInvoice.status,
+          amountCents: latestInvoice.amountCents + latestInvoice.taxCents,
+          currency: latestInvoice.currency,
+          paidAt: latestInvoice.paidAt
+            ? latestInvoice.paidAt.toISOString()
+            : null,
+        }
+      : null;
     const selectedCount = row.applications.filter(
       (a) => a.status === 'SHORTLISTED' || a.status === 'CONFIRMED',
     ).length;
@@ -188,6 +223,7 @@ export async function listAdminJobs(
       status: row.status,
       location: row.location,
       isRural: row.isRural,
+      invoice,
       startDate: row.startDate ? row.startDate.toISOString().slice(0, 10) : null,
       endDate: row.endDate ? row.endDate.toISOString().slice(0, 10) : null,
       startTime: row.startTime,

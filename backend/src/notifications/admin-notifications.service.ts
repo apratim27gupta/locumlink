@@ -27,6 +27,21 @@ function verificationNotifyEmails(): string[] {
   ];
 }
 
+/** Inboxes that receive a copy whenever any match-fee invoice is paid. */
+const DEFAULT_PAYMENT_NOTIFY_EMAILS = [
+  'doctor@locumlink.ca',
+  'ash@aebeolleconsulting.com',
+] as const;
+
+/** Comma-separated PAYMENT_NOTIFY_EMAIL override, else doctor@ + ash@. */
+function paymentNotifyEmails(): string[] {
+  const raw = process.env.PAYMENT_NOTIFY_EMAIL?.trim();
+  const list = raw ? raw.split(',') : [...DEFAULT_PAYMENT_NOTIFY_EMAILS];
+  return [
+    ...new Set(list.map((e) => e.trim().toLowerCase()).filter(Boolean)),
+  ];
+}
+
 export type AdminNotifEventType =
   | 'A_001_NEW_HOST_REGISTRATION'
   | 'A_002_NEW_LOCUM_REGISTRATION'
@@ -358,6 +373,53 @@ export class AdminNotificationsService {
       emailSubject: `${titles[params.outcome]}: ${params.hostPracticeName}`,
       emailBody: `${params.hostPracticeName} - ${params.jobTitle}. ${params.detail} Review in admin Match Fees.`,
     });
+  }
+
+  /**
+   * Emails a fixed ops inbox (doctor@ + ash@, or PAYMENT_NOTIFY_EMAIL) whenever any
+   * match-fee invoice is paid. Includes the host name + clinic, the post, and the amount.
+   */
+  async notifyMatchFeePaid(params: {
+    invoiceId: string;
+    hostPracticeName: string;
+    hostContactName?: string | null;
+    jobTitle: string;
+    jobLocation?: string | null;
+    /** Total paid including HST. */
+    amountCents: number;
+    taxCents?: number;
+  }): Promise<void> {
+    const amount = `CA$${(params.amountCents / 100).toFixed(2)}`;
+    const contact = params.hostContactName?.trim();
+    const subject = sanitizeNotificationCopy(
+      `Invoice paid: ${params.hostPracticeName} - ${amount}`,
+    );
+    const taxNote =
+      params.taxCents && params.taxCents > 0
+        ? ` (incl. CA$${(params.taxCents / 100).toFixed(2)} HST)`
+        : '';
+    const text = sanitizeNotificationCopy(
+      [
+        'A LocumLink match-fee invoice has been paid.',
+        '',
+        `Host: ${contact ? `${contact} · ` : ''}${params.hostPracticeName}`,
+        `Post: ${params.jobTitle}${params.jobLocation ? ` (${params.jobLocation})` : ''}`,
+        `Amount paid: ${amount}${taxNote}`,
+        `Invoice: ${params.invoiceId}`,
+      ].join('\n'),
+    );
+    await Promise.allSettled(
+      paymentNotifyEmails().map((to) =>
+        this.email.send({
+          to,
+          subject,
+          text,
+          eventType: 'A_009_MATCH_FEE_PAID',
+          referenceId: params.invoiceId,
+          referenceType: 'MatchFeeInvoice',
+        }),
+      ),
+    );
   }
 
   async getNotifications(adminId: string): Promise<{

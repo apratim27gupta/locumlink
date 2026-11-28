@@ -18,6 +18,7 @@ import { adminDownloadAnalyticsReport, adminFetchJson } from '@/lib/adminApi';
 import type { AnalyticsSummary } from '@/lib/adminAnalyticsSummary';
 import type {
   AdminApplicationItem,
+  AdminJobInvoiceSummary,
   AdminJobListItem,
 } from '@/lib/adminMarketplace';
 
@@ -88,6 +89,21 @@ function fmtDate(iso: string | null | undefined): string {
   } catch {
     return iso;
   }
+}
+
+function invoiceCell(invoice: AdminJobInvoiceSummary | null | undefined) {
+  if (!invoice) return <span className="text-muted">—</span>;
+  const amount = `CA$${(invoice.amountCents / 100).toFixed(2)}`;
+  return (
+    <div>
+      <span className="status-badge">{invoice.status}</span>
+      <div className="text-sm text-muted">
+        {amount}
+        {invoice.paidAt ? ` · paid ${fmtDate(invoice.paidAt)}` : ''}
+        {invoice.count > 1 ? ` · +${invoice.count - 1} more` : ''}
+      </div>
+    </div>
+  );
 }
 
 function scheduleLabel(job: {
@@ -576,19 +592,20 @@ export default function AdminAnalyticsPage() {
                 <th>Apps</th>
                 <th>Selected</th>
                 <th>Accepted</th>
+                <th>Invoice</th>
                 <th>Posted</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="text-muted">
+                  <td colSpan={10} className="text-muted">
                     Loading…
                   </td>
                 </tr>
               ) : jobs.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-muted">
+                  <td colSpan={10} className="text-muted">
                     No jobs in this period.
                   </td>
                 </tr>
@@ -629,13 +646,14 @@ export default function AdminAnalyticsPage() {
                       <td>{job.applicationCount}</td>
                       <td>{job.selectedCount}</td>
                       <td>{job.acceptedCount}</td>
+                      <td className="text-sm">{invoiceCell(job.invoice)}</td>
                       <td className="text-sm">{fmtDate(job.createdAt)}</td>
                     </tr>,
                   ];
                   if (expandedJobId === job.id) {
                     rows.push(
                       <tr key={`${job.id}-detail`}>
-                        <td colSpan={9}>
+                        <td colSpan={10}>
                           {jobDetailLoading ? (
                             <p className="text-sm text-muted">Loading applicants…</p>
                           ) : jobDetail && jobDetail.job.id === job.id ? (
